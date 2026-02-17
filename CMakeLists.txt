@@ -62,9 +62,11 @@ if(NOT FFMPEG_FOUND)
 endif()
     
     # 查找 Quill (日志库) - header-only，无需链接库
+    # 注意: 由于 Quill v6.x API 变化，暂不启用 Quill 支持
+    # 如果需要启用，请确保 Quill 版本兼容
 find_package(quill CONFIG QUIET)
 
-if(quill_FOUND)
+if(quill_FOUND AND FALSE)  # 暂时禁用 Quill
     # 如果找到 CMake 配置，通常 quill 会提供目标 quill::quill (也是头文件仅用)
     if(TARGET quill::quill)
         set(QUILL_LIBRARIES quill::quill)
@@ -78,11 +80,11 @@ else()
     if(EXISTS ${QUILL_PATH})
         include_directories(${QUILL_PATH}/include)
         set(QUILL_LIBRARIES "")
-        set(quill_FOUND TRUE)
+        # set(quill_FOUND TRUE)  # 暂时禁用
         # 将路径存入缓存，以便用户修改（可选）
         set(QUILL_DIR ${QUILL_PATH} CACHE PATH "Quill directory" FORCE)
     else()
-        message(WARNING "Quill not found at ${QUILL_PATH}. Logging will be disabled.")
+        message(STATUS "Quill not found at ${QUILL_PATH}. Using std::cout for logging.")
         set(quill_FOUND FALSE)
     endif()
 endif()
@@ -110,8 +112,8 @@ else()
         libswresample
     )
     
-    # 查找 Quill
-    pkg_check_modules(QUILL QUIET quill)
+    # 查找 Quill - 暂时禁用，因为 v6.x API 不兼容
+    # pkg_check_modules(QUILL QUIET quill)
     
     # Linux/macOS 编译选项
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
@@ -173,14 +175,14 @@ else()
     )
 endif()
 
-# 如果找到 Quill，定义宏
-if(quill_FOUND OR QUILL_FOUND)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
-endif()
+# 如果找到 Quill，定义宏 - 暂时禁用
+# if(quill_FOUND OR QUILL_FOUND)
+#     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
+# endif()
 
 # 输出构建信息
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
-message(STATUS "Quill found: ${quill_FOUND}${QUILL_FOUND}")
+message(STATUS "Quill found: disabled (using std::cout)")
