@@ -1,5 +1,9 @@
 #pragma once
 
+extern "C" {
+#include <libavutil/frame.h>
+}
+
 #include <SDL2/SDL.h>
 #include <string>
 #include <memory>

@@ -211,7 +211,8 @@ void VideoPlayer::playLoop() {
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             start_time = Clock::now() - 
-                         std::chrono::duration<double>(current_time_.load() / playback_speed_);
+                         std::chrono::duration_cast<std::chrono::nanoseconds>(
+                             std::chrono::duration<double>(current_time_.load() / playback_speed_));
             continue;
         }
         

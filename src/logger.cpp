@@ -7,22 +7,7 @@ bool Logger::initialized_ = false;
 void Logger::init() {
 #ifdef USE_QUILL_LOGGING
     if (!initialized_) {
-        quill::configure();
-        
-        quill::Handler* file_handler = quill::FileHandler(
-            "video_player.log",
-            []() { 
-                quill::RotatingFileHandlerConfig config;
-                config.set_open_mode('w');
-                return config;
-            });
-        file_handler->set_log_level(quill::LogLevel::Info);
-        
-        quill::Logger* logger = quill::create_logger("root", {file_handler});
-        logger->add_handler(quill::stdout_handler(quill::LogLevel::Debug));
-        
         quill::start();
-        
         initialized_ = true;
     }
 #else
@@ -33,7 +18,7 @@ void Logger::init() {
 void Logger::shutdown() {
 #ifdef USE_QUILL_LOGGING
     if (initialized_) {
-        quill::flush_log();
+        quill::flush();
         initialized_ = false;
     }
 #else
@@ -43,7 +28,7 @@ void Logger::shutdown() {
 
 void Logger::info(const std::string& msg) {
 #ifdef USE_QUILL_LOGGING
-    LOG_INFO("{}", msg);
+    LOG_INFO("%s", msg.c_str());
 #else
     std::cout << "[INFO] " << msg << std::endl;
 #endif
@@ -51,7 +36,7 @@ void Logger::info(const std::string& msg) {
 
 void Logger::warning(const std::string& msg) {
 #ifdef USE_QUILL_LOGGING
-    LOG_WARNING("{}", msg);
+    LOG_WARNING("%s", msg.c_str());
 #else
     std::cout << "[WARNING] " << msg << std::endl;
 #endif
@@ -59,7 +44,7 @@ void Logger::warning(const std::string& msg) {
 
 void Logger::error(const std::string& msg) {
 #ifdef USE_QUILL_LOGGING
-    LOG_ERROR("{}", msg);
+    LOG_ERROR("%s", msg.c_str());
 #else
     std::cerr << "[ERROR] " << msg << std::endl;
 #endif
@@ -67,7 +52,7 @@ void Logger::error(const std::string& msg) {
 
 void Logger::debug(const std::string& msg) {
 #ifdef USE_QUILL_LOGGING
-    LOG_DEBUG("{}", msg);
+    LOG_DEBUG("%s", msg.c_str());
 #else
     std::cout << "[DEBUG] " << msg << std::endl;
 #endif
