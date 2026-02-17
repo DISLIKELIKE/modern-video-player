@@ -54,9 +54,10 @@ public:
     
     bool convertToS16(AVFrame* src_frame, uint8_t** dst_data, int* dst_linesize);
 
-private:
+ private:
     AVCodecContext* codec_ctx_;
     SwrContext* swr_ctx_;
+    AVFormatContext* format_ctx_;
     int stream_idx_;
     
     int sample_rate_;

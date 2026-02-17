@@ -27,6 +27,7 @@ void VideoFrame::setData(int width, int height, AVPixelFormat pix_fmt) {
 VideoDecoder::VideoDecoder()
     : codec_ctx_(nullptr)
     , sws_ctx_(nullptr)
+    , format_ctx_(nullptr)
     , stream_idx_(-1)
     , width_(0)
     , height_(0)
@@ -44,6 +45,7 @@ bool VideoDecoder::open(AVFormatContext* fmt_ctx, int stream_idx) {
         return false;
     }
     
+    format_ctx_ = fmt_ctx;
     stream_idx_ = stream_idx;
     AVStream* stream = fmt_ctx->streams[stream_idx];
     AVCodecParameters* codecpar = stream->codecpar;
@@ -96,6 +98,7 @@ void VideoDecoder::close() {
         codec_ctx_ = nullptr;
     }
     
+    format_ctx_ = nullptr;
     width_ = 0;
     height_ = 0;
     pix_fmt_ = AV_PIX_FMT_NONE;
@@ -105,7 +108,7 @@ void VideoDecoder::close() {
 bool VideoDecoder::decodeFrame(VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (!codec_ctx_) {
+    if (!codec_ctx_ || !format_ctx_) {
         return false;
     }
     
@@ -114,8 +117,7 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
         return false;
     }
     
-    int ret = av_read_frame(codec_ctx_->avctx->priv_data ? 
-                           (AVFormatContext*)codec_ctx_->avctx->priv_data : nullptr, packet);
+    int ret = av_read_frame(format_ctx_, packet);
     
     if (ret < 0) {
         av_packet_free(&packet);

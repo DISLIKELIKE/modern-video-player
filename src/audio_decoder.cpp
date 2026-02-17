@@ -32,6 +32,7 @@ int AudioFrame::getSize() const {
 AudioDecoder::AudioDecoder()
     : codec_ctx_(nullptr)
     , swr_ctx_(nullptr)
+    , format_ctx_(nullptr)
     , stream_idx_(-1)
     , sample_rate_(0)
     , channels_(0)
@@ -49,6 +50,7 @@ bool AudioDecoder::open(AVFormatContext* fmt_ctx, int stream_idx) {
         return false;
     }
     
+    format_ctx_ = fmt_ctx;
     stream_idx_ = stream_idx;
     AVStream* stream = fmt_ctx->streams[stream_idx];
     AVCodecParameters* codecpar = stream->codecpar;
@@ -102,6 +104,7 @@ void AudioDecoder::close() {
         codec_ctx_ = nullptr;
     }
     
+    format_ctx_ = nullptr;
     sample_rate_ = 0;
     channels_ = 0;
     sample_fmt_ = AV_SAMPLE_FMT_NONE;
@@ -111,7 +114,7 @@ void AudioDecoder::close() {
 bool AudioDecoder::decodeFrame(AudioFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     
-    if (!codec_ctx_) {
+    if (!codec_ctx_ || !format_ctx_) {
         return false;
     }
     
@@ -120,12 +123,7 @@ bool AudioDecoder::decodeFrame(AudioFrame& frame) {
         return false;
     }
     
-    AVFormatContext* fmt_ctx = nullptr;
-    if (codec_ctx_->avctx && codec_ctx_->avctx->priv_data) {
-        fmt_ctx = (AVFormatContext*)codec_ctx_->avctx->priv_data;
-    }
-    
-    int ret = fmt_ctx ? av_read_frame(fmt_ctx, packet) : AVERROR_EOF;
+    int ret = av_read_frame(format_ctx_, packet);
     
     if (ret < 0) {
         av_packet_free(&packet);

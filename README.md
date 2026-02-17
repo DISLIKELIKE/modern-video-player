@@ -15,8 +15,9 @@ A modern C++17 video player using FFmpeg and SDL2, supporting both Windows and L
 ## Tech Stack
 
 - **Language**: C++17
-- **Video Library**: FFmpeg 6.x / 7.x
-- **Display/Audio Library**: SDL2
+- **Video Library**: FFmpeg 8.0.1
+- **Display/Audio Library**: SDL2 2.30.11
+- **Logging Library**: Quill 6.0.0
 - **Build System**: CMake 3.15+
 - **Compilers**: 
   - Windows: MSVC 2017+ / MinGW-w64
@@ -56,7 +57,7 @@ modern-video-player/
 1. Install [vcpkg](https://github.com/microsoft/vcpkg)
 2. Install dependencies:
 ```bash
-vcpkg install sdl2 ffmpeg:x64-windows
+vcpkg install sdl2 ffmpeg:x64-windows quill:x64-windows
 ```
 
 3. Set vcpkg toolchain:
@@ -193,6 +194,7 @@ build\Release\modern-video-player.exe your_video.mp4
 
 - [Implementation Guide](docs/IMPLEMENTATION.md) - Detailed step-by-step implementation
 - [Architecture Design](docs/ARCHITECTURE.md) - System architecture and design patterns
+- [Version History](docs/VERSION.md) - Project version and dependency information
 
 ## Learning Roadmap
 

@@ -1,6 +1,12 @@
 # Quill 日志库集成指南
 
-本指南说明如何安装和使用 Quill 日志库。
+## 项目依赖版本
+
+| 组件 | 版本 |
+|------|------|
+| Quill | 6.0.0 |
+
+本指南说明如何安装和使用 Quill 6.0.0 日志库。
 
 ## 什么是 Quill？
 
@@ -25,7 +31,7 @@ vcpkg install quill:x64-windows
 
 #### 手动安装
 
-1. 从 [Quill Releases](https://github.com/odygrd/quill/releases) 下载最新版本
+1. 从 [Quill Releases](https://github.com/odygrd/quill/releases) 下载 6.0.0 版本
 2. 解压到 `external/quill/` 目录
 3. 在 CMakeLists.txt 中会自动找到
 
@@ -121,10 +127,10 @@ Logger::debug("This is a debug message");
 
 ```cpp
 // 如果未定义 USE_QUILL_LOGGING
-LOG_INFO(msg)    → std::cout << "[INFO] " << msg << std::endl
-LOG_WARNING(msg) → std::cout << "[WARNING] " << msg << std::endl
-LOG_ERROR(msg)  → std::cerr << "[ERROR] " << msg << std::endl
-LOG_DEBUG(msg)  → std::cout << "[DEBUG] " << msg << std::endl
+LOG_INFO("{}", msg)    → std::cout << "[INFO] " << msg << std::endl
+LOG_WARNING("{}", msg) → std::cout << "[WARNING] " << msg << std::endl
+LOG_ERROR("{}", msg)  → std::cerr << "[ERROR] " << msg << std::endl
+LOG_DEBUG("{}", msg)  → std::cout << "[DEBUG] " << msg << std::endl
 ```
 
 ## 配置选项
@@ -134,11 +140,13 @@ LOG_DEBUG(msg)  → std::cout << "[DEBUG] " << msg << std::endl
 在 `src/logger.cpp` 中修改：
 
 ```cpp
-auto file_handler = quill::FileHandler(
+quill::Handler* file_handler = quill::FileHandler(
     "your_custom_log.log",  // 修改这里
-    []() { return quill::RotatingFileHandlerConfig(); },
-    FileHandlerNotifier{}
-);
+    []() { 
+        quill::RotatingFileHandlerConfig config;
+        config.set_open_mode('w');
+        return config;
+    });
 ```
 
 ### 修改日志级别
@@ -153,13 +161,13 @@ file_handler->set_log_level(quill::LogLevel::Info);  // 修改这里
 #### 控制台输出级别
 
 ```cpp
-console_handler->set_log_level(quill::LogLevel::Debug);  // 修改这里
+logger->add_handler(quill::stdout_handler(quill::LogLevel::Debug));  // 修改这里
 ```
 
 ### 修改日志轮转策略
 
 ```cpp
-auto config = quill::RotatingFileHandlerConfig();
+quill::RotatingFileHandlerConfig config;
 config.set_rotation_max_file_size(100 * 1024 * 1024);  // 100MB
 config.set_rotation_max_backup_files(10);               // 保留 10 个备份
 ```
