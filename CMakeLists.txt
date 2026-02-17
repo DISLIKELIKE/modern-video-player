@@ -161,12 +161,26 @@ if(WIN32)
     
     # 添加 DLL 到输出目录（Windows）
     if(SDL2_DIR)
-        # SDL2 DLL 通常在 lib/x64 目录
+        # SDL2 DLL
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${SDL2_DIR}/lib/x64/SDL2.dll
             $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
+    endif()
+    
+    # 复制 FFmpeg DLL
+    if(FFMPEG_DIR)
+        # 查找 FFmpeg bin 目录中的所有 DLL
+        file(GLOB_RECURSE FFMPEG_DLLS "${FFMPEG_DIR}/bin/*.dll")
+        foreach(dll ${FFMPEG_DLLS})
+            get_filename_component(dll_name ${dll} NAME)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${dll}
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endforeach()
     endif()
 else()
     target_link_libraries(${PROJECT_NAME}
