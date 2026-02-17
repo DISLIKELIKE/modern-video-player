@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.15)
+set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
 
 # 设置 C++17 标准
@@ -11,63 +12,84 @@ if(WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
     
     # 查找 SDL2
-    # 方法1: 使用 vcpkg
-    find_package(SDL2 CONFIG QUIET)
+find_package(SDL2 CONFIG QUIET)
+
+if(NOT SDL2_FOUND)
+    # 直接使用普通变量保存路径，避免缓存变量作用域问题
+    set(SDL2_PATH "${CMAKE_SOURCE_DIR}/external/SDL2")
+    message(STATUS "Looking for SDL2 at: ${SDL2_PATH}")
     
-    # 方法2: 手动指定 SDL2 路径
-    if(NOT SDL2_FOUND)
-        set(SDL2_DIR "${CMAKE_SOURCE_DIR}/external/SDL2" CACHE PATH "SDL2 directory")
-        if(EXISTS ${SDL2_DIR})
-            include_directories(${SDL2_DIR}/include)
-            link_directories(${SDL2_DIR}/lib/x64)
-        else()
-            message(FATAL_ERROR "SDL2 not found. Please install SDL2 and set SDL2_DIR")
-        endif()
+    if(EXISTS ${SDL2_PATH})
+        include_directories(${SDL2_PATH}/include)
+        link_directories(${SDL2_PATH}/lib/x64)
+        # 将路径存入缓存，以便用户修改（可选）
+        set(SDL2_DIR ${SDL2_PATH} CACHE PATH "SDL2 directory" FORCE)
+    else()
+        message(FATAL_ERROR "SDL2 not found at ${SDL2_PATH}. Please install SDL2 and set SDL2_DIR")
     endif()
+endif()
     
     # 查找 FFmpeg
-    # 方法1: 使用 vcpkg
-    find_package(FFMPEG CONFIG QUIET)
+find_package(FFMPEG CONFIG QUIET)
+if(NOT FFMPEG_FOUND)
+    # 直接使用普通变量保存路径，避免缓存变量作用域问题
+    set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/external/ffmpeg")
+    message(STATUS "Looking for FFmpeg at: ${FFMPEG_PATH}")
     
-    # 方法2: 手动指定 FFmpeg 路径
-    if(NOT FFMPEG_FOUND)
-        set(FFMPEG_DIR "${CMAKE_SOURCE_DIR}/external/ffmpeg" CACHE PATH "FFmpeg directory")
-        if(EXISTS ${FFMPEG_DIR})
-            include_directories(${FFMPEG_DIR}/include)
-            link_directories(${FFMPEG_DIR}/lib)
+    if(EXISTS ${FFMPEG_PATH})
+        set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PATH}/include)
+        include_directories(${FFMPEG_INCLUDE_DIRS})
+        
+        # 查找各个库（使用find_library精确定位）
+        find_library(AVFORMAT_LIBRARY avformat PATHS ${FFMPEG_PATH}/lib NO_DEFAULT_PATH)
+        find_library(AVCODEC_LIBRARY avcodec PATHS ${FFMPEG_PATH}/lib NO_DEFAULT_PATH)
+        find_library(AVUTIL_LIBRARY avutil PATHS ${FFMPEG_PATH}/lib NO_DEFAULT_PATH)
+        find_library(SWSCALE_LIBRARY swscale PATHS ${FFMPEG_PATH}/lib NO_DEFAULT_PATH)
+        find_library(SWRESAMPLE_LIBRARY swresample PATHS ${FFMPEG_PATH}/lib NO_DEFAULT_PATH)
+        
+        if(AVFORMAT_LIBRARY AND AVCODEC_LIBRARY AND AVUTIL_LIBRARY AND SWSCALE_LIBRARY AND SWRESAMPLE_LIBRARY)
+            set(FFMPEG_LIBRARIES ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWRESAMPLE_LIBRARY})
+            set(FFMPEG_FOUND TRUE)
+            # 将路径存入缓存，以便用户修改
+            set(FFMPEG_DIR ${FFMPEG_PATH} CACHE PATH "FFmpeg directory" FORCE)
+            message(STATUS "Found FFmpeg libraries: ${FFMPEG_LIBRARIES}")
         else()
-            message(FATAL_ERROR "FFmpeg not found. Please install FFmpeg and set FFMPEG_DIR")
+            message(FATAL_ERROR "FFmpeg libraries not found in ${FFMPEG_PATH}/lib")
         endif()
+    else()
+        message(FATAL_ERROR "FFmpeg directory not found: ${FFMPEG_PATH}")
     endif()
+endif()
     
-    # 查找 Quill (日志库)
-    find_package(quill CONFIG QUIET)
-    
-    # 方法2: 手动指定 Quill 路径
-    if(NOT quill_FOUND)
-        set(QUILL_DIR "${CMAKE_SOURCE_DIR}/external/quill" CACHE PATH "Quill directory")
-        if(EXISTS ${QUILL_DIR})
-            include_directories(${QUILL_DIR}/include)
-            link_directories(${QUILL_DIR}/lib)
-        else()
-            message(WARNING "Quill not found. Logging will be disabled.")
-            set(QUILL_FOUND FALSE)
-        endif()
+    # 查找 Quill (日志库) - header-only，无需链接库
+find_package(quill CONFIG QUIET)
+
+if(quill_FOUND)
+    # 如果找到 CMake 配置，通常 quill 会提供目标 quill::quill (也是头文件仅用)
+    if(TARGET quill::quill)
+        set(QUILL_LIBRARIES quill::quill)
+    else()
+        set(QUILL_LIBRARIES "")
     endif()
+else()
+    # 手动指定路径模式
+    set(QUILL_PATH "${CMAKE_SOURCE_DIR}/external/quill")
+    message(STATUS "Looking for Quill at: ${QUILL_PATH}")
+    if(EXISTS ${QUILL_PATH})
+        include_directories(${QUILL_PATH}/include)
+        set(QUILL_LIBRARIES "")
+        set(quill_FOUND TRUE)
+        # 将路径存入缓存，以便用户修改（可选）
+        set(QUILL_DIR ${QUILL_PATH} CACHE PATH "Quill directory" FORCE)
+    else()
+        message(WARNING "Quill not found at ${QUILL_PATH}. Logging will be disabled.")
+        set(quill_FOUND FALSE)
+    endif()
+endif()
     
     # Windows 链接库
     set(SDL2_LIBRARIES SDL2main SDL2 SDL2)
-    set(FFMPEG_LIBRARIES 
-        avformat 
-        avcodec 
-        avutil 
-        swscale 
-        swresample
-    )
     
-    if(quill_FOUND)
-        set(QUILL_LIBRARIES quill)
-    endif()
     
     # 添加 Windows 子系统
     if(MSVC)
