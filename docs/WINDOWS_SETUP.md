@@ -1,5 +1,15 @@
 # Windows Setup Guide
 
+## 项目依赖版本
+
+| 组件 | 版本 |
+|------|------|
+| FFmpeg | 8.0.1 |
+| SDL2 | 2.30.11 |
+| Quill | 6.0.0 |
+| CMake | 3.15+ |
+| C++ | C++17 |
+
 ## Windows 环境配置指南
 
 本指南详细说明如何在 Windows 系统上配置和编译本项目。
@@ -75,10 +85,10 @@ cmake --build . --config Release
 
 ## 方法二：手动安装
 
-### 1. 下载 FFmpeg
+### 1. 下载 FFmpeg 8.0.1
 
 1. 访问 [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
-2. 下载最新版本的 "ffmpeg-git-full.7z"
+2. 下载 `ffmpeg-8.0.1-full_build.7z`
 3. 解压到项目目录的 `external/ffmpeg/`
 
 目录结构应该是：
@@ -94,10 +104,10 @@ modern-video-player/
 └── ...
 ```
 
-### 2. 下载 SDL2
+### 2. 下载 SDL2 2.30.11
 
 1. 访问 [SDL2 GitHub Releases](https://github.com/libsdl-org/SDL/releases)
-2. 下载最新版本的 `SDL2-devel-VC.zip` (Visual Studio) 或 `SDL2-devel-mingw.zip` (MinGW)
+2. 下载 `SDL2-devel-2.30.11-VC.zip` (Visual Studio) 或 `SDL2-devel-mingw.zip` (MinGW)
 3. 解压到项目目录的 `external/SDL2/`
 
 目录结构应该是：

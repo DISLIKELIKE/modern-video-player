@@ -53,9 +53,10 @@ public:
     bool convertFrame(AVFrame* src_frame, AVFrame* dst_frame, 
                      AVPixelFormat dst_pix_fmt);
 
-private:
+ private:
     AVCodecContext* codec_ctx_;
     SwsContext* sws_ctx_;
+    AVFormatContext* format_ctx_;
     int stream_idx_;
     
     int width_;

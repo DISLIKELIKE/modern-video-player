@@ -15,9 +15,9 @@
 ## 技术栈
 
 - **编程语言**: C++17
-- **音视频库**: FFmpeg 6.x / 7.x
-- **显示/音频库**: SDL2
-- **日志库**: Quill (可选）
+- **音视频库**: FFmpeg 8.0.1
+- **显示/音频库**: SDL2 2.30.11
+- **日志库**: Quill 6.0.0
 - **构建工具**: CMake 3.15+
 - **编译器**: 
   - Windows: MSVC 2017+ / MinGW-w64
@@ -232,6 +232,7 @@ build\Release\modern-video-player.exe your_video.mp4
 - [实现步骤指南](docs/IMPLEMENTATION.md) - 详细的分步实现指南
 - [架构设计文档](docs/ARCHITECTURE.md) - 系统架构和设计模式
 - [Windows 配置指南](docs/WINDOWS_SETUP.md) - Windows 环境配置详情
+- [版本记录](docs/VERSION.md) - 项目版本和依赖信息
 
 ## 学习路线
 
