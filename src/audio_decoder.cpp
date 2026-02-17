@@ -181,8 +181,11 @@ bool AudioDecoder::convertToS16(AVFrame* src_frame, uint8_t** dst_data, int* dst
     int dst_sample_rate = src_frame->sample_rate;
     
     if (!swr_ctx_) {
+        AVChannelLayout dst_ch_layout;
+        av_channel_layout_default(&dst_ch_layout, dst_channels);
+        
         swr_alloc_set_opts2(&swr_ctx_,
-                           src_frame->ch_layout.nb_channels, (AVSampleFormat)dst_sample_fmt, dst_sample_rate,
+                           &dst_ch_layout, (AVSampleFormat)dst_sample_fmt, dst_sample_rate,
                            &src_frame->ch_layout, (AVSampleFormat)src_frame->format, src_frame->sample_rate,
                            0, nullptr);
         
