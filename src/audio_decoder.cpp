@@ -80,7 +80,7 @@ bool AudioDecoder::open(AVFormatContext* fmt_ctx, int stream_idx) {
     }
     
     sample_rate_ = codec_ctx_->sample_rate;
-    channels_ = codec_ctx_->channels;
+    channels_ = codec_ctx_->ch_layout.nb_channels;
     sample_fmt_ = codec_ctx_->sample_fmt;
     time_base_ = stream->time_base;
     
@@ -177,13 +177,13 @@ bool AudioDecoder::convertToS16(AVFrame* src_frame, uint8_t** dst_data, int* dst
     }
     
     int dst_sample_fmt = AV_SAMPLE_FMT_S16;
-    int dst_channels = src_frame->channels;
+    int dst_channels = src_frame->ch_layout.nb_channels;
     int dst_sample_rate = src_frame->sample_rate;
     
     if (!swr_ctx_) {
         swr_alloc_set_opts2(&swr_ctx_,
-                           &dst_channels, (AVSampleFormat)dst_sample_fmt, dst_sample_rate,
-                           &src_frame->channels, (AVSampleFormat)src_frame->format, src_frame->sample_rate,
+                           src_frame->ch_layout.nb_channels, (AVSampleFormat)dst_sample_fmt, dst_sample_rate,
+                           &src_frame->ch_layout, (AVSampleFormat)src_frame->format, src_frame->sample_rate,
                            0, nullptr);
         
         if (!swr_ctx_ || swr_init(swr_ctx_) < 0) {

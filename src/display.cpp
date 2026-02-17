@@ -1,6 +1,10 @@
 #include "display.h"
 #include <iostream>
 
+extern "C" {
+#include <libavutil/frame.h>
+}
+
 namespace vp {
 
 Display::Display()
