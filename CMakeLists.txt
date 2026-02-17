@@ -160,11 +160,14 @@ if(WIN32)
     )
     
     # 添加 DLL 到输出目录（Windows）
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        ${SDL2_DIR}/bin/SDL2.dll
-        $<TARGET_FILE_DIR:${PROJECT_NAME}>
-    )
+    # 只有当 SDL2_DIR 已设置时才复制
+    if(SDL2_DIR)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${SDL2_DIR}/bin/SDL2.dll
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()
 else()
     target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
