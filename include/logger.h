@@ -15,15 +15,18 @@
 #define LOG_ERROR(msg) std::cerr << "[ERROR] " << msg << std::endl
 #ifdef DEBUG_MODE
 #define LOG_DEBUG(msg) std::cerr << "[DEBUG] " << msg << std::endl
+#define LOG_TRACE_VIDEO(msg) std::cerr << "[DEBUG] [VIDEO] " << msg << std::endl
+#define LOG_TRACE_AUDIO(msg) std::cerr << "[DEBUG] [AUDIO] " << msg << std::endl
+#define LOG_TRACE_EVENT(msg) std::cerr << "[DEBUG] [EVENT] " << msg << std::endl
+#define LOG_TRACE_LOOP(msg) std::cerr << "[DEBUG] [LOOP] " << msg << std::endl
 #else
 #define LOG_DEBUG(msg) do {} while(0)
+#define LOG_TRACE_VIDEO(msg) do {} while(0)
+#define LOG_TRACE_AUDIO(msg) do {} while(0)
+#define LOG_TRACE_EVENT(msg) do {} while(0)
+#define LOG_TRACE_LOOP(msg) do {} while(0)
 #endif
 #endif
-
-#define LOG_TRACE_VIDEO(msg) LOG_DEBUG("[VIDEO] " << msg)
-#define LOG_TRACE_AUDIO(msg) LOG_DEBUG("[AUDIO] " << msg)
-#define LOG_TRACE_EVENT(msg) LOG_DEBUG("[EVENT] " << msg)
-#define LOG_TRACE_LOOP(msg) LOG_DEBUG("[LOOP] " << msg)
 
 namespace vp {
 
