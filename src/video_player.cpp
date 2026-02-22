@@ -207,6 +207,10 @@ void VideoPlayer::playLoop() {
     auto start_time = Clock::now();
     double video_pts = 0.0;
     
+    std::cerr << "[DEBUG] playLoop started, stopped=" << stopped_.load() 
+              << ", display=" << (display_ ? "valid" : "null")
+              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false) << std::endl;
+    
     while (!stopped_.load() && display_ && !display_->shouldQuit()) {
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -238,6 +242,8 @@ void VideoPlayer::playLoop() {
                 if (delay > 0.01) {
                     std::this_thread::sleep_for(std::chrono::duration<double>(delay));
                 }
+            } else {
+                std::cerr << "[DEBUG] decodeFrame failed or frame invalid, stopped=" << stopped_.load() << std::endl;
             }
         }
         
