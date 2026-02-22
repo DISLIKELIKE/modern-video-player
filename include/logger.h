@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <iostream>
 
 #ifdef USE_QUILL_LOGGING
 #include <quill/Quill.h>
@@ -9,12 +10,20 @@
 #define LOG_ERROR(msg) LOG_ERROR_L(msg)
 #define LOG_DEBUG(msg) LOG_DEBUG_L(msg)
 #else
-#include <iostream>
 #define LOG_INFO(msg) std::cout << "[INFO] " << msg << std::endl
 #define LOG_WARNING(msg) std::cout << "[WARNING] " << msg << std::endl
 #define LOG_ERROR(msg) std::cerr << "[ERROR] " << msg << std::endl
-#define LOG_DEBUG(msg) std::cout << "[DEBUG] " << msg << std::endl
+#ifdef DEBUG_MODE
+#define LOG_DEBUG(msg) std::cerr << "[DEBUG] " << msg << std::endl
+#else
+#define LOG_DEBUG(msg) do {} while(0)
 #endif
+#endif
+
+#define LOG_TRACE_VIDEO(msg) LOG_DEBUG("[VIDEO] " << msg)
+#define LOG_TRACE_AUDIO(msg) LOG_DEBUG("[AUDIO] " << msg)
+#define LOG_TRACE_EVENT(msg) LOG_DEBUG("[EVENT] " << msg)
+#define LOG_TRACE_LOOP(msg) LOG_DEBUG("[LOOP] " << msg)
 
 namespace vp {
 

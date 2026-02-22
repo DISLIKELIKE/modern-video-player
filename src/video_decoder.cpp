@@ -1,4 +1,5 @@
 #include "video_decoder.h"
+#include "logger.h"
 #include <iostream>
 
 namespace vp {
@@ -109,22 +110,28 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     
     if (!codec_ctx_ || !format_ctx_) {
+        LOG_TRACE_VIDEO("decodeFrame: codec_ctx_ or format_ctx_ is null");
         return false;
     }
     
     AVPacket* packet = av_packet_alloc();
     if (!packet) {
+        LOG_TRACE_VIDEO("decodeFrame: failed to allocate packet");
         return false;
     }
     
     int ret = av_read_frame(format_ctx_, packet);
     
     if (ret < 0) {
+        LOG_TRACE_VIDEO("decodeFrame: av_read_frame failed, ret=" << ret << " (EOF or error)");
         av_packet_free(&packet);
         return false;
     }
     
+    LOG_TRACE_VIDEO("decodeFrame: read packet, stream_index=" << packet->stream_index << ", expected=" << stream_idx_);
+    
     if (packet->stream_index != stream_idx_) {
+        LOG_TRACE_VIDEO("decodeFrame: packet stream mismatch, skipping");
         av_packet_unref(packet);
         av_packet_free(&packet);
         return false;
@@ -135,11 +142,13 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
     av_packet_free(&packet);
     
     if (ret < 0) {
+        LOG_TRACE_VIDEO("decodeFrame: avcodec_send_packet failed, ret=" << ret);
         return false;
     }
     
     ret = avcodec_receive_frame(codec_ctx_, frame.get());
     if (ret < 0) {
+        LOG_TRACE_VIDEO("decodeFrame: avcodec_receive_frame failed, ret=" << ret);
         return false;
     }
     
@@ -149,6 +158,7 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
         frame.setPts(frame.get()->pkt_dts * av_q2d(time_base_));
     }
     
+    LOG_TRACE_VIDEO("decodeFrame: success, pts=" << frame.pts());
     return true;
 }
 
