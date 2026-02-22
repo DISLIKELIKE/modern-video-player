@@ -3,6 +3,7 @@
 #include "audio_decoder.h"
 #include "display.h"
 #include "audio_player.h"
+#include "logger.h"
 #include <iostream>
 #include <algorithm>
 
