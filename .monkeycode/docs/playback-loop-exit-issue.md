@@ -10,6 +10,44 @@
 
 调试信息显示循环条件满足，但循环立即退出。
 
+## 调试系统使用说明
+
+### 启用调试日志
+
+在 CMake 配置时设置 `DEBUG_MODE` 选项：
+
+```bash
+# 启用调试日志（默认开启）
+cmake -B build -DDEBUG_MODE=ON
+
+# 禁用调试日志
+cmake -B build -DDEBUG_MODE=OFF
+```
+
+### 调试日志分类
+
+| 宏 | 说明 |
+|---|---|
+| `LOG_DEBUG(msg)` | 通用调试日志 |
+| `LOG_TRACE_VIDEO(msg)` | 视频相关日志（解码、渲染） |
+| `LOG_TRACE_AUDIO(msg)` | 音频相关日志 |
+| `LOG_TRACE_EVENT(msg)` | SDL 事件日志 |
+| `LOG_TRACE_LOOP(msg)` | 播放循环日志 |
+
+### 调试输出示例
+
+启用调试后，运行程序会输出详细日志：
+
+```
+[DEBUG] [LOOP] playLoop started, stopped=0, display=valid, shouldQuit=0
+[DEBUG] [LOOP] Loop iteration 0, shouldQuit=0
+[DEBUG] [VIDEO] Calling decodeFrame...
+[DEBUG] [VIDEO] decodeFrame: read packet, stream_index=0, expected=0
+[DEBUG] [VIDEO] decodeFrame: success, pts=0.04
+[DEBUG] [EVENT] Received event type: 32852
+[DEBUG] [EVENT] SDL_WINDOWEVENT, window event: 5
+```
+
 ## 问题分析
 
 ### 可能原因
@@ -132,30 +170,31 @@ void VideoPlayer::playLoop() {
 
 ## 调试步骤
 
-1. 添加更详细的日志，确定循环退出的具体原因：
+### 1. 重新编译并运行
 
-```cpp
-while (!stopped_.load() && display_ && !display_->shouldQuit()) {
-    std::cerr << "[DEBUG] Loop iteration, shouldQuit=" << display_->shouldQuit() << std::endl;
-    // ...
-}
-std::cerr << "[DEBUG] Loop exited, stopped=" << stopped_.load() 
-          << ", display=" << (display_ ? "valid" : "null")
-          << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false) << std::endl;
+```bash
+cd build
+cmake --build . --config Release
+.\Release\modern-video-player.exe .\juren-30s.mp4
 ```
 
-2. 在 `handleEvents()` 中记录接收到的事件类型：
+### 2. 分析日志输出
 
-```cpp
-void Display::handleEvents() {
-    SDL_Event event;
-    
-    while (SDL_PollEvent(&event)) {
-        std::cerr << "[DEBUG] Received event type: " << event.type << std::endl;
-        // ...
-    }
-}
-```
+根据日志输出判断问题：
+
+- **如果看到 `[EVENT] SDL_QUIT event received`**：说明窗口立即收到关闭事件
+- **如果看到 `[VIDEO] decodeFrame: av_read_frame failed`**：说明解码失败
+- **如果看到 `[LOOP] Loop iteration 0` 后立即退出**：说明条件判断有问题
+- **如果没有任何 `[VIDEO]` 日志**：说明没进入视频解码分支
+
+### 3. 常见 SDL 事件类型
+
+| 事件类型值 | 事件名称 |
+|-----------|---------|
+| 256 (0x100) | SDL_QUIT |
+| 512 (0x200) | SDL_WINDOWEVENT |
+| 768 (0x300) | SDL_KEYDOWN |
+| 1024 (0x400) | SDL_MOUSEMOTION |
 
 ## 推荐修复步骤
 

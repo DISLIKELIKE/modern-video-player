@@ -1,4 +1,5 @@
 #include "display.h"
+#include "logger.h"
 #include <iostream>
 
 extern "C" {
@@ -186,15 +187,19 @@ void Display::handleEvents() {
     SDL_Event event;
     
     while (SDL_PollEvent(&event)) {
+        LOG_TRACE_EVENT("Received event type: " << event.type);
         switch (event.type) {
             case SDL_QUIT:
+                LOG_TRACE_EVENT("SDL_QUIT event received, setting should_quit_=true");
                 should_quit_ = true;
                 break;
                 
             case SDL_KEYDOWN:
+                LOG_TRACE_EVENT("SDL_KEYDOWN event, key: " << event.key.keysym.sym);
                 switch (event.key.keysym.sym) {
                     case SDLK_ESCAPE:
                     case SDLK_q:
+                        LOG_TRACE_EVENT("Exit key pressed, setting should_quit_=true");
                         should_quit_ = true;
                         break;
                     case SDLK_SPACE:
@@ -208,6 +213,7 @@ void Display::handleEvents() {
                 break;
                 
             case SDL_WINDOWEVENT:
+                LOG_TRACE_EVENT("SDL_WINDOWEVENT, window event: " << event.window.event);
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                     width_ = event.window.data1;
                     height_ = event.window.data2;

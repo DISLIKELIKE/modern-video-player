@@ -6,6 +6,9 @@ project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 调试模式选项
+option(DEBUG_MODE "Enable debug logging" ON)
+
 # Windows 特定配置
 if(WIN32)
     # Windows 编译选项
@@ -196,6 +199,14 @@ endif()
 # if(quill_FOUND OR QUILL_FOUND)
 #     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
 # endif()
+
+# 调试模式定义
+if(DEBUG_MODE)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE DEBUG_MODE)
+    message(STATUS "Debug mode: ON")
+else()
+    message(STATUS "Debug mode: OFF")
+endif()
 
 # 输出构建信息
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

@@ -207,11 +207,14 @@ void VideoPlayer::playLoop() {
     auto start_time = Clock::now();
     double video_pts = 0.0;
     
-    std::cerr << "[DEBUG] playLoop started, stopped=" << stopped_.load() 
+    LOG_TRACE_LOOP("playLoop started, stopped=" << stopped_.load() 
               << ", display=" << (display_ ? "valid" : "null")
-              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false) << std::endl;
+              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
+    
+    int loop_count = 0;
     
     while (!stopped_.load() && display_ && !display_->shouldQuit()) {
+        LOG_TRACE_LOOP("Loop iteration " << loop_count++ << ", shouldQuit=" << display_->shouldQuit());
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             start_time = Clock::now() - 
@@ -230,7 +233,9 @@ void VideoPlayer::playLoop() {
         current_time_ = elapsed * playback_speed_;
         
         if (video_decoder_ && !seeking_.load()) {
+            LOG_TRACE_VIDEO("Calling decodeFrame...");
             if (video_decoder_->decodeFrame(video_frame) && video_frame.isValid()) {
+                LOG_TRACE_VIDEO("decodeFrame success, pts=" << video_frame.pts());
                 video_pts = video_frame.pts();
                 display_->handleEvents();
                 
@@ -243,13 +248,18 @@ void VideoPlayer::playLoop() {
                     std::this_thread::sleep_for(std::chrono::duration<double>(delay));
                 }
             } else {
-                std::cerr << "[DEBUG] decodeFrame failed or frame invalid, stopped=" << stopped_.load() << std::endl;
+                LOG_TRACE_VIDEO("decodeFrame failed or frame invalid");
             }
+        } else if (!video_decoder_) {
+            LOG_TRACE_VIDEO("video_decoder_ is null");
         }
         
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
+    LOG_TRACE_LOOP("Loop exited, stopped=" << stopped_.load() 
+              << ", display=" << (display_ ? "valid" : "null")
+              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
     playing_.store(false);
 }
 
