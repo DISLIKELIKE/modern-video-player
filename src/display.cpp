@@ -27,6 +27,11 @@ bool Display::init(int width, int height, const std::string& title) {
         close();
     }
     
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
+        std::cerr << "Error: Could not initialize SDL: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    
     width_ = width;
     height_ = height;
     
@@ -83,6 +88,8 @@ void Display::close() {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
     }
+    
+    SDL_Quit();
     
     width_ = 0;
     height_ = 0;
