@@ -144,7 +144,7 @@ bool Display::updateTexture(const uint8_t* data, int width, int height) {
 
 void Display::renderFrame(const uint8_t* data, int width, int height) {
     if (!renderer_ || !texture_ || !data) {
-        LOG_TRACE_EVENT("renderFrame: early return, renderer=" << renderer_ << ", texture=" << texture_ << ", data=" << data);
+        LOG_TRACE_EVENT("renderFrame: early return, renderer={}, texture={}, data={}", (void*)renderer_, (void*)texture_, (void*)data);
         return;
     }
     
@@ -152,12 +152,10 @@ void Display::renderFrame(const uint8_t* data, int width, int height) {
     
     AVFrame* frame = (AVFrame*)data;
     
-    LOG_TRACE_EVENT("renderFrame: frame data[0]=" << frame->data[0] 
-                     << " linesize[0]=" << frame->linesize[0]
-                     << " data[1]=" << frame->data[1]
-                     << " linesize[1]=" << frame->linesize[1]
-                     << " data[2]=" << frame->data[2]
-                     << " linesize[2]=" << frame->linesize[2]);
+    LOG_TRACE_EVENT("renderFrame: frame data[0]={} linesize[0]={} data[1]={} linesize[1]={} data[2]={} linesize[2]={}",
+                     (void*)frame->data[0], frame->linesize[0],
+                     (void*)frame->data[1], frame->linesize[1],
+                     (void*)frame->data[2], frame->linesize[2]);
     
     int ret = SDL_UpdateYUVTexture(
         texture_,
@@ -198,7 +196,7 @@ void Display::handleEvents() {
     SDL_Event event;
     
     while (SDL_PollEvent(&event)) {
-        LOG_TRACE_EVENT("Received event type: " << event.type);
+        LOG_TRACE_EVENT("Received event type: {}", event.type);
         switch (event.type) {
             case SDL_QUIT:
                 LOG_TRACE_EVENT("SDL_QUIT event received, setting should_quit_=true");
@@ -206,7 +204,7 @@ void Display::handleEvents() {
                 break;
                 
             case SDL_KEYDOWN:
-                LOG_TRACE_EVENT("SDL_KEYDOWN event, key: " << event.key.keysym.sym);
+                LOG_TRACE_EVENT("SDL_KEYDOWN event, key: {}", event.key.keysym.sym);
                 switch (event.key.keysym.sym) {
                     case SDLK_ESCAPE:
                     case SDLK_q:
@@ -224,7 +222,7 @@ void Display::handleEvents() {
                 break;
                 
             case SDL_WINDOWEVENT:
-                LOG_TRACE_EVENT("SDL_WINDOWEVENT, window event: " << event.window.event);
+                LOG_TRACE_EVENT("SDL_WINDOWEVENT, window event: {}", event.window.event);
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                     width_ = event.window.data1;
                     height_ = event.window.data2;
@@ -235,7 +233,7 @@ void Display::handleEvents() {
                 break;
         }
     }
-    LOG_TRACE_EVENT("handleEvents: end, should_quit_=" << should_quit_);
+    LOG_TRACE_EVENT("handleEvents: end, should_quit_={}", should_quit_);
 }
 
 void Display::toggleFullscreen() {
