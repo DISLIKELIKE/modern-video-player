@@ -8,7 +8,6 @@
 #include <quill/Backend.h>
 #include <quill/Frontend.h>
 #include <quill/Logger.h>
-#include <quill/LogMacros.h>
 #include <quill/sinks/FileSink.h>
 #include <quill/sinks/ConsoleSink.h>
 #endif
@@ -32,11 +31,8 @@ public:
         auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>(
             "console", true, "stdout");
 
-        quill::FileSinkConfig file_config;
-        file_config.set_open_mode('w');
-
         auto file_sink = quill::Frontend::create_or_get_sink<quill::FileSink>(
-            "file_sink", "logs/video_player.log", file_config);
+            "file_sink", "logs/video_player.log");
 
         logger_ = quill::Frontend::create_or_get_logger(
             "video_player", { console_sink, file_sink });
@@ -78,18 +74,46 @@ public:
     }
     
     static void info(const std::string& msg) {
+#ifdef USE_QUILL_LOGGING
+        auto logger = QuillLogger::instance().getLogger();
+        if (logger) {
+            LOG_INFO(logger, "{}", msg);
+            return;
+        }
+#endif
         std::cout << "[INFO] " << msg << std::endl;
     }
     
     static void warning(const std::string& msg) {
+#ifdef USE_QUILL_LOGGING
+        auto logger = QuillLogger::instance().getLogger();
+        if (logger) {
+            LOG_WARNING(logger, "{}", msg);
+            return;
+        }
+#endif
         std::cout << "[WARNING] " << msg << std::endl;
     }
     
     static void error(const std::string& msg) {
+#ifdef USE_QUILL_LOGGING
+        auto logger = QuillLogger::instance().getLogger();
+        if (logger) {
+            LOG_ERROR(logger, "{}", msg);
+            return;
+        }
+#endif
         std::cerr << "[ERROR] " << msg << std::endl;
     }
     
     static void debug(const std::string& msg) {
+#ifdef USE_QUILL_LOGGING
+        auto logger = QuillLogger::instance().getLogger();
+        if (logger) {
+            LOG_DEBUG(logger, "{}", msg);
+            return;
+        }
+#endif
         std::cout << "[DEBUG] " << msg << std::endl;
     }
 };
@@ -97,70 +121,55 @@ public:
 }
 
 #ifdef USE_QUILL_LOGGING
+#include <quill/LogMacros.h>
 
 #define LOG_INFO(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_INFO(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_INFO(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_WARNING(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_WARNING(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_WARNING(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_ERROR(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_ERROR(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_ERROR(_logger, "{}", _oss.str()); \
 } while(0)
 
 #ifdef DEBUG_MODE
 #define LOG_DEBUG(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_DEBUG(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_DEBUG(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_TRACE_VIDEO(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_TRACE_L1(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_TRACE_L1(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_TRACE_AUDIO(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_TRACE_L1(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_TRACE_L1(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_TRACE_EVENT(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_TRACE_L1(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_TRACE_L1(_logger, "{}", _oss.str()); \
 } while(0)
 
 #define LOG_TRACE_LOOP(msg) do { \
+    std::ostringstream _oss; _oss << msg; \
     auto _logger = vp::QuillLogger::instance().getLogger(); \
-    if (_logger) { \
-        std::ostringstream _oss; _oss << msg; \
-        LOG_TRACE_L1(_logger, "{}", _oss.str()); \
-    } \
+    if (_logger) LOG_TRACE_L1(_logger, "{}", _oss.str()); \
 } while(0)
 #else
 #define LOG_DEBUG(msg) do {} while(0)
