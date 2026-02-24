@@ -8,16 +8,17 @@
 namespace vp {
 
 bool Logger::initialized_ = false;
+#ifdef USE_QUILL_LOGGING
 quill::Logger* Logger::logger_ = nullptr;
+#endif
 
 void Logger::init() {
 #ifdef USE_QUILL_LOGGING
     if (!initialized_) {
-        auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>();
+        auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>("console");
         
-        logger_ = quill::Frontend::create_or_get_logger("video_player", std::move(console_sink));
+        logger_ = quill::Frontend::create_or_get_logger("video_player", console_sink);
         
-        quill::Frontend::start();
         initialized_ = true;
     }
 #else
@@ -28,7 +29,6 @@ void Logger::init() {
 void Logger::shutdown() {
 #ifdef USE_QUILL_LOGGING
     if (initialized_) {
-        quill::Frontend::flush_log();
         initialized_ = false;
     }
 #else
