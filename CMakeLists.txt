@@ -194,18 +194,18 @@ else()
     )
 endif()
 
-# 启用 Quill 日志库
-if(QUILL_FOUND)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE QUILL_DISABLE_ASSERTIONS)
-    
-    # 创建 logs 目录用于存放日志文件
-    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/logs")
-    
-    message(STATUS "Quill: enabled")
-else()
+# Quill 日志库 - 暂时禁用，与当前代码风格不兼容
+# if(QUILL_FOUND)
+#     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
+#     target_compile_definitions(${PROJECT_NAME} PRIVATE QUILL_DISABLE_ASSERTIONS)
+#     
+#     # 创建 logs 目录用于存放日志文件
+#     file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/logs")
+#     
+#     message(STATUS "Quill: enabled")
+# else()
     message(STATUS "Quill: disabled (using std::cout)")
-endif()
+# endif()
 
 # 调试模式定义
 if(DEBUG_MODE)
