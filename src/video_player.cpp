@@ -208,17 +208,19 @@ void VideoPlayer::playLoop() {
     auto start_time = Clock::now();
     double video_pts = 0.0;
     
-    LOG_TRACE_LOOP("playLoop started, stopped=" << stopped_.load() 
-              << ", display=" << (display_ ? "valid" : "null")
-              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
+    LOG_TRACE_LOOP("playLoop started, stopped={}, display={}, shouldQuit={}", 
+              stopped_.load(),
+              (display_ ? "valid" : "null"),
+              (display_ ? display_->shouldQuit() : false));
     
     int loop_count = 0;
     
     while (!stopped_.load() && display_ && !display_->shouldQuit()) {
-        LOG_TRACE_LOOP("========== Loop iteration " << loop_count++ << " ==========");
-        LOG_TRACE_LOOP("Condition: stopped=" << stopped_.load() 
-                  << ", display=" << (display_ ? "valid" : "null") 
-                  << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
+        LOG_TRACE_LOOP("========== Loop iteration {} ==========", loop_count++);
+        LOG_TRACE_LOOP("Condition: stopped={}, display={}, shouldQuit={}", 
+                  stopped_.load(),
+                  (display_ ? "valid" : "null"),
+                  (display_ ? display_->shouldQuit() : false));
                   
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
