@@ -65,8 +65,10 @@ if(NOT FFMPEG_FOUND)
 endif()
     
     # 查找 Quill (日志库) - header-only，无需链接库
-    # 注意: Quill v6.x 需要从外部下载
-    find_package(quill CONFIG QUIET)
+    # 统一使用 QUILL_ROOT 变量指定 Quill 根目录
+    set(QUILL_ROOT "${CMAKE_SOURCE_DIR}/external/quill" CACHE PATH "Quill installation directory")
+    
+    find_package(quill CONFIG QUIET PATHS ${QUILL_ROOT})
     
     if(quill_FOUND)
         message(STATUS "Found Quill via CMake config")
@@ -76,17 +78,14 @@ endif()
             set(QUILL_LIBRARIES "")
         endif()
     else()
-        # 手动指定路径模式
-        set(QUILL_PATH "${CMAKE_SOURCE_DIR}/external/quill")
-        message(STATUS "Looking for Quill at: ${QUILL_PATH}")
-        if(EXISTS ${QUILL_PATH})
-            include_directories(${QUILL_PATH}/include)
+        message(STATUS "Looking for Quill at: ${QUILL_ROOT}")
+        if(EXISTS ${QUILL_ROOT})
+            include_directories(${QUILL_ROOT}/include)
             set(QUILL_LIBRARIES "")
             set(QUILL_FOUND TRUE)
-            set(QUILL_DIR ${QUILL_PATH} CACHE PATH "Quill directory" FORCE)
-            message(STATUS "Found Quill at: ${QUILL_PATH}")
+            message(STATUS "Found Quill at: ${QUILL_ROOT}")
         else()
-            message(STATUS "Quill not found at ${QUILL_PATH}. Using std::cout for logging.")
+            message(STATUS "Quill not found at ${QUILL_ROOT}. Using std::cout for logging.")
             set(QUILL_FOUND FALSE)
         endif()
     endif()
