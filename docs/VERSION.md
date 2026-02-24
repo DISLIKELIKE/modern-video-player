@@ -10,11 +10,11 @@
 |------|------|------|
 | FFmpeg | 8.0.1 | 多媒体处理框架 |
 | SDL2 | 2.30.11 | 多媒体库（显示和音频） |
-| Quill | 已禁用 | 使用 std::cout 日志替代 |
+| Quill | 6.0.0 | 异步 Console + Rotating 日志 |
 | CMake | 3.15+ | 构建系统 |
 | C++ 标准 | C++17 | 编译标准 |
 
-**注意**: Quill 日志库已被禁用，改用标准 std::cout 进行日志输出。
+**注意**: Quill 由 `external/quill` 提供，或通过设置 `QUILL_ROOT` 指向系统安装的 v6.0.0+ 版本。
 
 ### 项目版本
 
@@ -39,7 +39,7 @@
 - [x] 项目结构搭建
 - [x] FFmpeg 8.0.1 集成
 - [x] SDL2 2.30.11 集成
-- [x] 日志系统（使用 std::cout）
+- [x] 日志系统（Quill 双通道 + Fallback）
 - [x] 视频解码模块
 - [x] 音频解码模块
 - [x] 视频显示模块
@@ -61,12 +61,12 @@
   - `src/video_decoder.cpp`
   - `src/audio_decoder.cpp`
 
-#### 日志系统更新 (Quill 已被禁用)
-- 由于 Quill v6.x API 不兼容，项目暂时禁用 Quill
-- 使用 `Logger` 类替代，内部实现为标准 std::cout/cerr
-- 修改文件：
-  - `src/logger.cpp`
-- 编译时会输出：`Quill found: disabled (using std::cout)`
+#### 日志系统更新（企业级 Quill 管道）
+- 重新启用 Quill，构建 ConsoleSink + RotatingFileSink 异步日志通道，并保持 stdout/stderr 备援。
+- `config/logging.conf` 与 `MVP_LOG_*` 环境变量支持运行时调整 `log_dir`、轮转大小/数量及日志等级。
+- 初始化失败或目录不可写时自动告警并降级；宏接口与 `DEBUG_MODE` 行为保持兼容。
+- 修改文件：`include/logger.h`、`src/logger.cpp`、`config/logging.conf`、`docs/LOGGING.md`、`docs/CHANGELOG.md`、`docs/VERSION.md`
+- 编译输出示例：`Quill: enabled`，运行期日志写入 `logs/modern-video-player.log`
 
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
@@ -194,7 +194,7 @@ vcpkg install sdl2:x64-windows
 # 下载 SDL2-devel-2.30.11-VC.zip
 ```
 
-**注意**: 不需要安装 Quill 日志库，项目使用 std::cout 替代。
+**注意**: 若未单独安装 Quill，可将源码解压到 `external/quill`；也可以通过包管理器安装后设置 `QUILL_ROOT`。
 
 ### Linux
 
@@ -216,7 +216,7 @@ brew install ffmpeg
 brew install sdl2
 ```
 
-**注意**: 不需要安装 Quill 日志库。
+**注意**: Quill 为 header-only 库，可通过 `brew` 安装或直接下载源码后配置 `QUILL_ROOT`。
 
 ---
 
@@ -245,6 +245,6 @@ make -j$(nproc)
 | 日期 | 更新内容 |
 |------|----------|
 | 2026-02-17 | 创建版本记录文档，记录第一阶段完成情况 |
-| 2026-02-24 | 更新 Quill 禁用状态，记录视频流索引问题修复 |
+| 2026-02-24 | 更新日志系统为企业级 Quill 管道，记录视频流索引问题修复 |
 | 2026-02-24 | 记录音频流索引问题和 YUV 渲染问题修复 |
 | 2026-02-24 | 创建 CHANGELOG.md 问题修复记录文档 |
