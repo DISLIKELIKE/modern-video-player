@@ -26,7 +26,7 @@
 #include <quill/Frontend.h>
 #include <quill/Logger.h>
 #include <quill/LogMacros.h>
-#include <quill/QuillError.h>
+#include <quill/core/QuillError.h>
 #include <quill/sinks/ConsoleSink.h>
 #include <quill/sinks/RotatingFileSink.h>
 #endif
@@ -366,9 +366,8 @@ bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
         auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>(
             "mvp_console_sink", true, "stdout");
 
-        const auto log_file = state.config.log_dir / "modern-video-player.log";
         auto rotating_sink = quill::Frontend::create_or_get_sink<quill::RotatingFileSink>(
-            log_file.string(),
+            (state.config.log_dir / "modern-video-player.log").string(),
             [&state]() {
                 quill::RotatingFileSinkConfig cfg;
                 cfg.set_open_mode('a');
@@ -378,7 +377,7 @@ bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
                 return cfg;
             }());
 
-        std::string pattern = "%(time) [%(log_level)] [%(thread_id)] [%(logger)] %(message)";
+        std::string pattern = "%(time_point) [%(log_level)] [%(thread_id)] [%(logger)] %(message)";
         std::string time_fmt = "%Y-%m-%d %H:%M:%S.%Qms";
 
         state.quill_logger = quill::Frontend::create_or_get_logger(
@@ -386,7 +385,7 @@ bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
         state.quill_logger->set_log_level(toQuillLevel(state.config.min_severity));
         state.quill_ready = true;
 
-        notes.push_back({LogSeverity::Info, "Quill logging enabled; writing to " + log_file.string()});
+        notes.push_back({LogSeverity::Info, "Quill logging enabled; writing to " + (state.config.log_dir / "modern-video-player.log").string()});
         return true;
     } catch (const quill::QuillError& error) {
         notes.push_back({LogSeverity::Error, std::string("Failed to start Quill backend: ") + error.what()});
