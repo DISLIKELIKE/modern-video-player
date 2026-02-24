@@ -1,1 +1,500 @@
+#if __has_include("logger.h")
 #include "logger.h"
+#else
+#include "../include/logger.h"
+#endif
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <system_error>
+#include <utility>
+#include <vector>
+
+#ifdef USE_QUILL_LOGGING
+#define QUILL_DISABLE_NON_PREFIXED_MACROS
+#include <quill/Backend.h>
+#include <quill/Frontend.h>
+#include <quill/Logger.h>
+#include <quill/LogMacros.h>
+#include <quill/QuillError.h>
+#include <quill/sinks/ConsoleSink.h>
+#include <quill/sinks/RotatingFileSink.h>
+#endif
+
+namespace vp {
+namespace {
+
+constexpr size_t kDefaultMaxFileSizeMb = 10;
+constexpr size_t kDefaultMaxFiles = 5;
+constexpr size_t kMinFileSizeMb = 1;
+constexpr size_t kMaxFileSizeMb = 1024;
+constexpr size_t kMinFileCount = 1;
+constexpr size_t kMaxFileCount = 50;
+
+struct ConfigNote {
+    LogSeverity severity;
+    std::string message;
+};
+
+struct LoggingConfig {
+    std::filesystem::path log_dir{"logs"};
+    size_t max_file_size_bytes{kDefaultMaxFileSizeMb * 1024ull * 1024ull};
+    size_t max_files{kDefaultMaxFiles};
+    LogSeverity min_severity{LogSeverity::Info};
+    bool enable_quill{
+#ifdef USE_QUILL_LOGGING
+        true
+#else
+        false
+#endif
+    };
+};
+
+struct ConfigResult {
+    LoggingConfig config;
+    std::vector<ConfigNote> notes;
+};
+
+struct LoggerState {
+    LoggingConfig config{};
+    bool initialized{false};
+    bool backend_started{false};
+    bool quill_ready{false};
+    bool shutdown_requested{false};
+#ifdef USE_QUILL_LOGGING
+    quill::Logger* quill_logger{nullptr};
+#endif
+};
+
+LoggerState& globalState() {
+    static LoggerState state;
+    return state;
+}
+
+std::once_flag& initFlag() {
+    static std::once_flag flag;
+    return flag;
+}
+
+int severityRank(LogSeverity severity) {
+    switch (severity) {
+        case LogSeverity::Trace: return 0;
+        case LogSeverity::Debug: return 1;
+        case LogSeverity::Info: return 2;
+        case LogSeverity::Warning: return 3;
+        case LogSeverity::Error: return 4;
+    }
+    return 2;
+}
+
+bool shouldEmit(LogSeverity severity, LogSeverity threshold) {
+    return severityRank(severity) >= severityRank(threshold);
+}
+
+const char* severityLabel(LogSeverity severity) {
+    switch (severity) {
+        case LogSeverity::Trace: return "TRACE";
+        case LogSeverity::Debug: return "DEBUG";
+        case LogSeverity::Info: return "INFO";
+        case LogSeverity::Warning: return "WARN";
+        case LogSeverity::Error: return "ERROR";
+    }
+    return "INFO";
+}
+
+void writeToStdStreams(LogSeverity severity, std::string_view category, const std::string& message) {
+    static std::mutex fallback_mutex;
+    std::lock_guard<std::mutex> lock(fallback_mutex);
+    std::ostream& stream = (severity == LogSeverity::Error) ? std::cerr : std::cout;
+    stream << '[' << severityLabel(severity) << "]";
+    if (!category.empty()) {
+        stream << " [" << category << "]";
+    }
+    stream << ' ' << message << std::endl;
+}
+
+std::string trimCopy(std::string_view view) {
+    size_t start = 0;
+    size_t end = view.size();
+    while (start < end && std::isspace(static_cast<unsigned char>(view[start])) != 0) {
+        ++start;
+    }
+    while (end > start && std::isspace(static_cast<unsigned char>(view[end - 1])) != 0) {
+        --end;
+    }
+    return std::string(view.substr(start, end - start));
+}
+
+std::string toLower(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+std::optional<size_t> parseUnsigned(const std::string& text) {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    try {
+        size_t idx = 0;
+        size_t value = std::stoull(text, &idx, 10);
+        if (idx != text.size()) {
+            return std::nullopt;
+        }
+        return value;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
+size_t clampWithWarning(size_t value,
+                        size_t min_value,
+                        size_t max_value,
+                        const std::string& key,
+                        std::vector<ConfigNote>& notes) {
+    if (value < min_value) {
+        notes.push_back({LogSeverity::Warning, key + " is below minimum; clamping to " + std::to_string(min_value)});
+        return min_value;
+    }
+    if (value > max_value) {
+        notes.push_back({LogSeverity::Warning, key + " exceeds maximum; clamping to " + std::to_string(max_value)});
+        return max_value;
+    }
+    return value;
+}
+
+std::optional<std::filesystem::path> locateConfigFile() {
+    auto resolveIfExists = [](const std::filesystem::path& candidate) -> std::optional<std::filesystem::path> {
+        std::error_code ec;
+        if (!std::filesystem::exists(candidate, ec) || ec) {
+            return std::nullopt;
+        }
+
+        std::error_code abs_ec;
+        auto absolute_path = std::filesystem::absolute(candidate, abs_ec);
+        if (abs_ec) {
+            return candidate;
+        }
+        return absolute_path;
+    };
+
+    if (const char* env_path = std::getenv("MVP_LOG_CONFIG")) {
+        if (auto resolved = resolveIfExists(std::filesystem::path(env_path))) {
+            return resolved;
+        }
+    }
+
+    const std::array<std::filesystem::path, 3> candidates = {
+        std::filesystem::path("config/logging.conf"),
+        std::filesystem::path("../config/logging.conf"),
+        std::filesystem::path("../../config/logging.conf")
+    };
+
+    for (const auto& candidate : candidates) {
+        if (auto resolved = resolveIfExists(candidate)) {
+            return resolved;
+        }
+    }
+    return std::nullopt;
+}
+
+LogSeverity parseLogLevel(const std::string& raw, std::vector<ConfigNote>& notes) {
+    static const std::unordered_map<std::string, LogSeverity> level_map = {
+        {"trace", LogSeverity::Trace},
+        {"debug", LogSeverity::Debug},
+        {"info", LogSeverity::Info},
+        {"warning", LogSeverity::Warning},
+        {"warn", LogSeverity::Warning},
+        {"error", LogSeverity::Error}
+    };
+
+    auto it = level_map.find(raw);
+    if (it != level_map.end()) {
+        return it->second;
+    }
+
+    notes.push_back({LogSeverity::Warning, "Unknown log_level '" + raw + "'; using INFO"});
+    return LogSeverity::Info;
+}
+
+void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
+    if (const char* log_dir = std::getenv("MVP_LOG_DIR")) {
+        config.log_dir = trimCopy(log_dir);
+        notes.push_back({LogSeverity::Info, "MVP_LOG_DIR override applied"});
+    }
+    if (const char* level = std::getenv("MVP_LOG_LEVEL")) {
+        config.min_severity = parseLogLevel(toLower(trimCopy(level)), notes);
+        notes.push_back({LogSeverity::Info, "MVP_LOG_LEVEL override applied"});
+    }
+    if (const char* size_mb = std::getenv("MVP_LOG_MAX_FILE_MB")) {
+        auto parsed = parseUnsigned(trimCopy(size_mb));
+        if (parsed) {
+            size_t clamped = clampWithWarning(*parsed, kMinFileSizeMb, kMaxFileSizeMb,
+                                              "MVP_LOG_MAX_FILE_MB", notes);
+            config.max_file_size_bytes = clamped * 1024ull * 1024ull;
+            notes.push_back({LogSeverity::Info, "MVP_LOG_MAX_FILE_MB override applied"});
+        } else {
+            notes.push_back({LogSeverity::Warning, "Invalid MVP_LOG_MAX_FILE_MB value"});
+        }
+    }
+    if (const char* files = std::getenv("MVP_LOG_MAX_FILES")) {
+        auto parsed = parseUnsigned(trimCopy(files));
+        if (parsed) {
+            size_t clamped = clampWithWarning(*parsed, kMinFileCount, kMaxFileCount,
+                                              "MVP_LOG_MAX_FILES", notes);
+            config.max_files = clamped;
+            notes.push_back({LogSeverity::Info, "MVP_LOG_MAX_FILES override applied"});
+        } else {
+            notes.push_back({LogSeverity::Warning, "Invalid MVP_LOG_MAX_FILES value"});
+        }
+    }
+}
+
+ConfigResult loadLoggingConfig() {
+    ConfigResult result;
+
+#ifndef USE_QUILL_LOGGING
+    result.config.enable_quill = false;
+    result.notes.push_back({LogSeverity::Info, "USE_QUILL_LOGGING not defined; using stdout/stderr logging."});
+    return result;
+#else
+    auto config_path = locateConfigFile();
+    if (config_path) {
+        result.notes.push_back({LogSeverity::Info, "Loading logging config from " + config_path->string()});
+        std::ifstream input(*config_path);
+        if (input.good()) {
+            std::string line;
+            while (std::getline(input, line)) {
+                std::string trimmed = trimCopy(line);
+                if (trimmed.empty() || trimmed[0] == '#') {
+                    continue;
+                }
+                auto delimiter = trimmed.find('=');
+                if (delimiter == std::string::npos) {
+                    result.notes.push_back({LogSeverity::Warning, "Ignoring malformed line in logging.conf: " + trimmed});
+                    continue;
+                }
+                std::string key = toLower(trimCopy(trimmed.substr(0, delimiter)));
+                std::string value = trimCopy(trimmed.substr(delimiter + 1));
+
+                if (key == "log_dir") {
+                    if (!value.empty()) {
+                        result.config.log_dir = value;
+                    }
+                } else if (key == "max_file_size_mb") {
+                    auto parsed = parseUnsigned(value);
+                    if (parsed) {
+                        size_t clamped = clampWithWarning(*parsed, kMinFileSizeMb, kMaxFileSizeMb,
+                                                          "max_file_size_mb", result.notes);
+                        result.config.max_file_size_bytes = clamped * 1024ull * 1024ull;
+                    } else {
+                        result.notes.push_back({LogSeverity::Warning, "Invalid max_file_size_mb value"});
+                    }
+                } else if (key == "max_files") {
+                    auto parsed = parseUnsigned(value);
+                    if (parsed) {
+                        size_t clamped = clampWithWarning(*parsed, kMinFileCount, kMaxFileCount,
+                                                          "max_files", result.notes);
+                        result.config.max_files = clamped;
+                    } else {
+                        result.notes.push_back({LogSeverity::Warning, "Invalid max_files value"});
+                    }
+                } else if (key == "log_level") {
+                    result.config.min_severity = parseLogLevel(toLower(value), result.notes);
+                } else {
+                    result.notes.push_back({LogSeverity::Warning, "Unknown logging key '" + key + "'"});
+                }
+            }
+        } else {
+            result.notes.push_back({LogSeverity::Warning, "Unable to read logging config file"});
+        }
+    }
+
+    applyEnvOverrides(result.config, result.notes);
+
+    if (!result.config.log_dir.is_absolute()) {
+        std::error_code ec;
+        auto absolute_path = std::filesystem::absolute(result.config.log_dir, ec);
+        if (!ec) {
+            result.config.log_dir = absolute_path;
+        }
+    }
+
+    return result;
+#endif
+}
+
+#ifdef USE_QUILL_LOGGING
+quill::LogLevel toQuillLevel(LogSeverity severity) {
+    switch (severity) {
+        case LogSeverity::Trace: return quill::LogLevel::TraceL1;
+        case LogSeverity::Debug: return quill::LogLevel::Debug;
+        case LogSeverity::Info: return quill::LogLevel::Info;
+        case LogSeverity::Warning: return quill::LogLevel::Warning;
+        case LogSeverity::Error: return quill::LogLevel::Error;
+    }
+    return quill::LogLevel::Info;
+}
+
+bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
+    std::error_code ec;
+    if (!std::filesystem::exists(state.config.log_dir, ec)) {
+        std::filesystem::create_directories(state.config.log_dir, ec);
+    }
+
+    if (ec) {
+        notes.push_back({LogSeverity::Warning, "Cannot create log directory '" + state.config.log_dir.string() + "': " + ec.message()});
+        return false;
+    }
+
+    try {
+        quill::BackendOptions backend_options;
+        quill::Backend::start(backend_options);
+        state.backend_started = true;
+
+        auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>(
+            "mvp_console_sink", true, "stdout");
+
+        const auto log_file = state.config.log_dir / "modern-video-player.log";
+        auto rotating_sink = quill::Frontend::create_or_get_sink<quill::RotatingFileSink>(
+            log_file.string(),
+            [&state]() {
+                quill::RotatingFileSinkConfig cfg;
+                cfg.set_open_mode('a');
+                cfg.set_rotation_max_file_size(state.config.max_file_size_bytes);
+                cfg.set_max_backup_files(static_cast<uint32_t>(state.config.max_files));
+                cfg.set_overwrite_rolled_files(true);
+                return cfg;
+            }());
+
+        std::string pattern = "%(time) [%(log_level)] [%(thread_id)] [%(logger)] %(message)";
+        std::string time_fmt = "%Y-%m-%d %H:%M:%S.%Qms";
+
+        state.quill_logger = quill::Frontend::create_or_get_logger(
+            "video_player", {std::move(console_sink), std::move(rotating_sink)}, pattern, time_fmt);
+        state.quill_logger->set_log_level(toQuillLevel(state.config.min_severity));
+        state.quill_ready = true;
+
+        notes.push_back({LogSeverity::Info, "Quill logging enabled; writing to " + log_file.string()});
+        return true;
+    } catch (const quill::QuillError& error) {
+        notes.push_back({LogSeverity::Error, std::string("Failed to start Quill backend: ") + error.what()});
+    }
+
+    state.backend_started = false;
+    state.quill_logger = nullptr;
+    state.quill_ready = false;
+    return false;
+}
+#endif
+
+void initializeLogger() {
+    auto result = loadLoggingConfig();
+    auto& state = globalState();
+    state.config = result.config;
+    state.initialized = true;
+
+#ifdef USE_QUILL_LOGGING
+    if (state.config.enable_quill) {
+        if (!startQuill(state, result.notes)) {
+            result.notes.push_back({LogSeverity::Warning, "Falling back to stdout/stderr logging"});
+        }
+    }
+#endif
+
+    for (const auto& note : result.notes) {
+        writeToStdStreams(note.severity, "LOGGER", note.message);
+    }
+}
+
+void dispatchLog(LogSeverity severity, std::string_view category, const std::string& message) {
+    auto& state = globalState();
+    if (state.shutdown_requested) {
+        writeToStdStreams(severity, category, message);
+        return;
+    }
+
+    if (!shouldEmit(severity, state.config.min_severity)) {
+        return;
+    }
+
+#ifdef USE_QUILL_LOGGING
+    if (state.quill_ready && state.quill_logger != nullptr) {
+        std::string_view safe_category = category.empty() ? std::string_view("GENERAL") : category;
+        QUILL_LOG_DYNAMIC(state.quill_logger, toQuillLevel(severity), "[{}] {}", safe_category, message);
+        return;
+    }
+#endif
+
+    writeToStdStreams(severity, category, message);
+}
+
+} // namespace
+
+void Logger::ensureInitialized() {
+    std::call_once(initFlag(), []() { initializeLogger(); });
+}
+
+void Logger::init() {
+    ensureInitialized();
+}
+
+void Logger::shutdown() {
+    auto& state = globalState();
+    if (!state.initialized || state.shutdown_requested) {
+        return;
+    }
+
+    state.shutdown_requested = true;
+
+#ifdef USE_QUILL_LOGGING
+    if (state.backend_started) {
+        quill::Backend::stop();
+    }
+    state.backend_started = false;
+    state.quill_ready = false;
+    state.quill_logger = nullptr;
+#endif
+}
+
+void Logger::info(const std::string& msg) {
+    ensureInitialized();
+    dispatchLog(LogSeverity::Info, "GENERAL", msg);
+}
+
+void Logger::warning(const std::string& msg) {
+    ensureInitialized();
+    dispatchLog(LogSeverity::Warning, "GENERAL", msg);
+}
+
+void Logger::error(const std::string& msg) {
+    ensureInitialized();
+    dispatchLog(LogSeverity::Error, "GENERAL", msg);
+}
+
+void Logger::debug(const std::string& msg) {
+#ifdef DEBUG_MODE
+    ensureInitialized();
+    dispatchLog(LogSeverity::Debug, "GENERAL", msg);
+#else
+    (void)msg;
+#endif
+}
+
+void Logger::log(LogSeverity severity, std::string_view category, const std::string& message) {
+    ensureInitialized();
+    dispatchLog(severity, category, message);
+}
+
+} // namespace vp

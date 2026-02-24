@@ -12,6 +12,7 @@
 | 2 | 2026-02-24 | 视频流索引不匹配 | ✅ 已修复 |
 | 3 | 2026-02-24 | 音频流索引不匹配 | ✅ 已修复 |
 | 4 | 2026-02-24 | YUV 数据渲染错误 | ✅ 已修复 |
+| 5 | 2026-02-24 | 企业级 Quill 日志通道 | ✅ 已修复 |
 
 ---
 
@@ -171,9 +172,42 @@ int ret = SDL_UpdateYUVTexture(
 
 ---
 
+## 问题 5: 企业级 Quill 日志通道
+
+**日期**: 2026-02-24
+
+### 问题描述
+
+- 旧日志系统只使用 `std::cout/std::cerr`，无法满足企业记录、异步写盘与轮转需求。
+- 无运行时配置通道，无法根据环境调整日志目录、文件大小与等级阈值。
+- 缺乏健壮性：目录不可写或 Quill 初始化失败时没有明确告警与降级逻辑。
+
+### 原因分析
+
+- 为规避 Quill v6.x API 变更曾临时禁用 Quill，引起功能倒退。
+- Logger 逻辑集中在头文件宏内，扩展点有限，新增配置与降级路径困难。
+
+### 解决方案
+
+- 重新启用 Quill，构建异步 Backend + ConsoleSink + RotatingFileSink 双通道；日志按照 `[time][level][thread][logger][category] message` 统一格式输出。
+- 新增 `LoggingConfigLoader`，解析 `config/logging.conf` 及 `MVP_LOG_*` 环境变量，非法值自动纠正并输出 `LOG_WARNING`。
+- 当 `USE_QUILL_LOGGING` 未定义、目录不可写或 Quill 抛出异常时，自动降级到 stdout/stderr，并保留旧宏行为。
+- 同步更新文档（LOGGING.md、VERSION.md、CHANGELOG.md）并提供默认配置文件。
+
+### 修改文件
+
+- `include/logger.h`
+- `src/logger.cpp`
+- `config/logging.conf`
+- `docs/LOGGING.md`
+- `docs/CHANGELOG.md`
+- `docs/VERSION.md`
+
+---
+
 ## 待解决的问题
 
-### 问题 5: 音频播放未实现
+### 问题 6: 音频播放未实现
 
 **状态**: 未实现
 
