@@ -215,7 +215,11 @@ void VideoPlayer::playLoop() {
     int loop_count = 0;
     
     while (!stopped_.load() && display_ && !display_->shouldQuit()) {
-        LOG_TRACE_LOOP("Loop iteration " << loop_count++ << ", shouldQuit=" << display_->shouldQuit());
+        LOG_TRACE_LOOP("========== Loop iteration " << loop_count++ << " ==========");
+        LOG_TRACE_LOOP("Condition: stopped=" << stopped_.load() 
+                  << ", display=" << (display_ ? "valid" : "null") 
+                  << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
+                  
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
             start_time = Clock::now() - 
@@ -238,11 +242,24 @@ void VideoPlayer::playLoop() {
             if (video_decoder_->decodeFrame(video_frame) && video_frame.isValid()) {
                 LOG_TRACE_VIDEO("decodeFrame success, pts=" << video_frame.pts());
                 video_pts = video_frame.pts();
-                display_->handleEvents();
                 
+                LOG_TRACE_LOOP("Calling handleEvents...");
+                display_->handleEvents();
+                LOG_TRACE_LOOP("After handleEvents, shouldQuit=" << display_->shouldQuit());
+                
+                if (display_->shouldQuit()) {
+                    LOG_TRACE_LOOP("shouldQuit is true, will exit loop");
+                    break;
+                }
+                
+                LOG_TRACE_LOOP("Calling renderFrame...");
                 AVFrame* frame = video_frame.get();
-                display_->renderFrame(frame->data[0], frame->width, frame->height);
+                display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
+                LOG_TRACE_LOOP("renderFrame done");
+                
+                LOG_TRACE_LOOP("Calling present...");
                 display_->present();
+                LOG_TRACE_LOOP("present done");
                 
                 double delay = (video_pts - current_time_) / playback_speed_;
                 if (delay > 0.01) {
