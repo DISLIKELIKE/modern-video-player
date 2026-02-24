@@ -153,9 +153,12 @@ add_executable(${PROJECT_NAME}
     src/logger.cpp
 )
 
-# 链接库
-if(WIN32)
-    target_link_libraries(${PROJECT_NAME}
+    # 链接库
+    if(WIN32)
+        # 添加预处理器定义来禁用 Quill
+        add_compile_definitions(QUILL_DISABLE Assertions)
+        
+        target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
         ${FFMPEG_LIBRARIES}
         ${QUILL_LIBRARIES}
