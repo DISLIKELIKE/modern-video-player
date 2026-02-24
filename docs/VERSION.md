@@ -104,6 +104,54 @@
 [DEBUG] [VIDEO] decodeFrame: success, pts=0
 ```
 
+#### 音频流索引不匹配问题 (2026-02-24)
+
+**问题描述**:
+- 与视频流索引相同的问题，音频无法正常解码
+
+**问题原因**:
+- 同样的问题：音频包可能不是第一个被读取的流
+
+**解决方案**:
+- 修改 `src/audio_decoder.cpp` 的 `decodeFrame()` 方法
+- 应用与视频解码器相同的修复
+
+**修改文件**:
+- `src/audio_decoder.cpp`
+
+#### YUV 数据渲染错误 (2026-02-24)
+
+**问题描述**:
+- 解码成功后程序立即退出，没有画面显示
+
+**问题原因**:
+- `renderFrame` 函数使用错误的 YUV 数据
+- 原来传递的是 `frame->data[0]`（只是 Y 平面指针）
+- 然后错误地假设 Y/U/V 是连续存储的
+
+**解决方案**:
+1. 传递整个 AVFrame 指针而不是 `data[0]`
+2. 正确使用 Y/U/V 平面的数据和行大小
+
+**修改文件**:
+- `src/display.cpp`
+- `src/video_player.cpp`
+
+**代码变更**:
+```cpp
+// video_player.cpp
+display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
+
+// display.cpp
+AVFrame* frame = (AVFrame*)data;
+SDL_UpdateYUVTexture(
+    texture_, nullptr,
+    frame->data[0], frame->linesize[0],
+    frame->data[1], frame->linesize[1],
+    frame->data[2], frame->linesize[2]
+);
+```
+
 ### 下一步计划
 - [ ] 完善音视频同步机制
 - [ ] 添加更多的播放控制（快进、快退）
@@ -198,3 +246,5 @@ make -j$(nproc)
 |------|----------|
 | 2026-02-17 | 创建版本记录文档，记录第一阶段完成情况 |
 | 2026-02-24 | 更新 Quill 禁用状态，记录视频流索引问题修复 |
+| 2026-02-24 | 记录音频流索引问题和 YUV 渲染问题修复 |
+| 2026-02-24 | 创建 CHANGELOG.md 问题修复记录文档 |
