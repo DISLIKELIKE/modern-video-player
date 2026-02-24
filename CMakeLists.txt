@@ -72,6 +72,7 @@ endif()
     
     if(quill_FOUND)
         message(STATUS "Found Quill via CMake config")
+        set(QUILL_FOUND TRUE)
         if(TARGET quill::quill)
             set(QUILL_LIBRARIES quill::quill)
         else()
