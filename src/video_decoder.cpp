@@ -126,12 +126,12 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
         ret = av_read_frame(format_ctx_, packet);
         
         if (ret < 0) {
-            LOG_TRACE_VIDEO("decodeFrame: av_read_frame failed, ret=" << ret << " (EOF or error)");
+            LOG_TRACE_VIDEO("decodeFrame: av_read_frame failed, ret={} (EOF or error)", ret);
             av_packet_free(&packet);
             return false;
         }
         
-        LOG_TRACE_VIDEO("decodeFrame: read packet, stream_index=" << packet->stream_index << ", expected=" << stream_idx_);
+        LOG_TRACE_VIDEO("decodeFrame: read packet, stream_index={}, expected={}", packet->stream_index, stream_idx_);
         
         if (packet->stream_index != stream_idx_) {
             LOG_TRACE_VIDEO("decodeFrame: packet stream mismatch, skipping");
@@ -147,13 +147,13 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
     av_packet_free(&packet);
     
     if (ret < 0) {
-        LOG_TRACE_VIDEO("decodeFrame: avcodec_send_packet failed, ret=" << ret);
+        LOG_TRACE_VIDEO("decodeFrame: avcodec_send_packet failed, ret={}", ret);
         return false;
     }
     
     ret = avcodec_receive_frame(codec_ctx_, frame.get());
     if (ret < 0) {
-        LOG_TRACE_VIDEO("decodeFrame: avcodec_receive_frame failed, ret=" << ret);
+        LOG_TRACE_VIDEO("decodeFrame: avcodec_receive_frame failed, ret={}", ret);
         return false;
     }
     
@@ -163,7 +163,7 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
         frame.setPts(frame.get()->pkt_dts * av_q2d(time_base_));
     }
     
-    LOG_TRACE_VIDEO("decodeFrame: success, pts=" << frame.pts());
+    LOG_TRACE_VIDEO("decodeFrame: success, pts={}", frame.pts());
     return true;
 }
 

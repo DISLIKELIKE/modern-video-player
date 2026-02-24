@@ -242,12 +242,12 @@ void VideoPlayer::playLoop() {
         if (video_decoder_ && !seeking_.load()) {
             LOG_TRACE_VIDEO("Calling decodeFrame...");
             if (video_decoder_->decodeFrame(video_frame) && video_frame.isValid()) {
-                LOG_TRACE_VIDEO("decodeFrame success, pts=" << video_frame.pts());
+                LOG_TRACE_VIDEO("decodeFrame success, pts={}", video_frame.pts());
                 video_pts = video_frame.pts();
                 
                 LOG_TRACE_LOOP("Calling handleEvents...");
                 display_->handleEvents();
-                LOG_TRACE_LOOP("After handleEvents, shouldQuit=" << display_->shouldQuit());
+                LOG_TRACE_LOOP("After handleEvents, shouldQuit={}", display_->shouldQuit());
                 
                 if (display_->shouldQuit()) {
                     LOG_TRACE_LOOP("shouldQuit is true, will exit loop");
@@ -277,9 +277,10 @@ void VideoPlayer::playLoop() {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     
-    LOG_TRACE_LOOP("Loop exited, stopped=" << stopped_.load() 
-              << ", display=" << (display_ ? "valid" : "null")
-              << ", shouldQuit=" << (display_ ? display_->shouldQuit() : false));
+    LOG_TRACE_LOOP("Loop exited, stopped={}, display={}, shouldQuit={}", 
+              stopped_.load(),
+              (display_ ? "valid" : "null"),
+              (display_ ? display_->shouldQuit() : false));
     playing_.store(false);
 }
 

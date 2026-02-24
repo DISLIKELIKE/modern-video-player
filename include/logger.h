@@ -8,6 +8,15 @@
 #include <quill/LogMacros.h>
 #include <quill/Logger.h>
 
+#undef LOG_INFO
+#undef LOG_WARNING
+#undef LOG_ERROR
+#undef LOG_DEBUG
+#undef LOG_TRACE_L1
+#undef LOG_TRACE_L2
+#undef LOG_TRACE_L3
+#undef LOG_CRITICAL
+
 #define LOG_INFO(msg) LOG_INFO(vp::Logger::getLogger(), "{}", msg)
 #define LOG_WARNING(msg) LOG_WARNING(vp::Logger::getLogger(), "{}", msg)
 #define LOG_ERROR(msg) LOG_ERROR(vp::Logger::getLogger(), "{}", msg)
