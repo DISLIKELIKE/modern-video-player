@@ -8,6 +8,7 @@
 #include <quill/Backend.h>
 #include <quill/Frontend.h>
 #include <quill/Logger.h>
+#include <quill/LogMacros.h>
 #include <quill/sinks/FileSink.h>
 #include <quill/sinks/ConsoleSink.h>
 #endif
