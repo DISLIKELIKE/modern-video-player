@@ -6,9 +6,10 @@
 |------|------|
 | FFmpeg | 8.0.1 |
 | SDL2 | 2.30.11 |
-| Quill | 6.0.0 |
 | CMake | 3.15+ |
 | C++ | C++17 |
+
+**注意**: 项目使用 std::cout 日志系统，不需要安装 Quill 日志库。
 
 ## Windows 环境配置指南
 
@@ -54,7 +55,7 @@ cd vcpkg
 ### 2. 安装依赖库
 
 ```powershell
-# 安装 SDL2 和 FFmpeg
+# 安装 SDL2 和 FFmpeg（不需要安装 Quill）
 .\vcpkg install sdl2 ffmpeg:x64-windows
 
 # 如果使用 MinGW，使用 x64-mingw-static

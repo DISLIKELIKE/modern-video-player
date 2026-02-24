@@ -120,21 +120,26 @@ bool VideoDecoder::decodeFrame(VideoFrame& frame) {
         return false;
     }
     
-    int ret = av_read_frame(format_ctx_, packet);
+    int ret;
     
-    if (ret < 0) {
-        LOG_TRACE_VIDEO("decodeFrame: av_read_frame failed, ret=" << ret << " (EOF or error)");
-        av_packet_free(&packet);
-        return false;
-    }
-    
-    LOG_TRACE_VIDEO("decodeFrame: read packet, stream_index=" << packet->stream_index << ", expected=" << stream_idx_);
-    
-    if (packet->stream_index != stream_idx_) {
-        LOG_TRACE_VIDEO("decodeFrame: packet stream mismatch, skipping");
-        av_packet_unref(packet);
-        av_packet_free(&packet);
-        return false;
+    while (true) {
+        ret = av_read_frame(format_ctx_, packet);
+        
+        if (ret < 0) {
+            LOG_TRACE_VIDEO("decodeFrame: av_read_frame failed, ret=" << ret << " (EOF or error)");
+            av_packet_free(&packet);
+            return false;
+        }
+        
+        LOG_TRACE_VIDEO("decodeFrame: read packet, stream_index=" << packet->stream_index << ", expected=" << stream_idx_);
+        
+        if (packet->stream_index != stream_idx_) {
+            LOG_TRACE_VIDEO("decodeFrame: packet stream mismatch, skipping");
+            av_packet_unref(packet);
+            continue;
+        }
+        
+        break;
     }
     
     ret = avcodec_send_packet(codec_ctx_, packet);

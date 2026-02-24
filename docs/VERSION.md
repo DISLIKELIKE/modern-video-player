@@ -10,11 +10,11 @@
 |------|------|------|
 | FFmpeg | 8.0.1 | 多媒体处理框架 |
 | SDL2 | 2.30.11 | 多媒体库（显示和音频） |
-| Quill | v6.x | 异步日志库 |
+| Quill | 已禁用 | 使用 std::cout 日志替代 |
 | CMake | 3.15+ | 构建系统 |
 | C++ 标准 | C++17 | 编译标准 |
 
-**注意**: Quill 版本为 v6.x 系列，API 与 6.0.0 有差异。
+**注意**: Quill 日志库已被禁用，改用标准 std::cout 进行日志输出。
 
 ### 项目版本
 
@@ -39,13 +39,14 @@
 - [x] 项目结构搭建
 - [x] FFmpeg 8.0.1 集成
 - [x] SDL2 2.30.11 集成
-- [x] Quill 6.0.0 日志集成
+- [x] 日志系统（使用 std::cout）
 - [x] 视频解码模块
 - [x] 音频解码模块
 - [x] 视频显示模块
 - [x] 音频播放模块
 - [x] 主播放器逻辑
 - [x] 版本兼容性修复
+- [x] 视频流索引不匹配问题修复
 
 ### 版本兼容性修改
 
@@ -60,18 +61,48 @@
   - `src/video_decoder.cpp`
   - `src/audio_decoder.cpp`
 
-#### Quill 6.0.0 API 更新
-- 更新 `quill::start()` 调用方式
-- 日志宏格式变更：`LOG_INFO(msg)` → `LOG_INFO("{}", msg)`
-- `quill::flush()` → `quill::flush_log()`
-- Handler 创建方式更新
+#### 日志系统更新 (Quill 已被禁用)
+- 由于 Quill v6.x API 不兼容，项目暂时禁用 Quill
+- 使用 `Logger` 类替代，内部实现为标准 std::cout/cerr
 - 修改文件：
   - `src/logger.cpp`
+- 编译时会输出：`Quill found: disabled (using std::cout)`
 
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频
 - seek 功能需要进一步完善
+
+### 问题修复记录
+
+#### 视频流索引不匹配问题 (2026-02-24)
+
+**问题描述**:
+- 播放 mp4 文件时，视频无法正常显示
+- 日志显示 `stream_index=0, expected=1` 反复出现
+- 程序循环 48 次才能读到正确的视频帧
+
+**问题原因**:
+- MP4 文件的流顺序是音频流(索引0)在视频流(索引1)之前
+- `av_read_frame()` 返回的包可能是任意流的（通常是第一个流 - 音频流）
+- 原代码遇到不匹配的流时直接返回 false，导致视频帧无法解码
+
+**解决方案**:
+- 修改 `src/video_decoder.cpp` 的 `decodeFrame()` 方法
+- 将遇到不匹配流时返回 false，改为 continue 跳过该包
+- 循环读取直到找到正确流索引的包
+
+**修改文件**:
+- `src/video_decoder.cpp`
+
+**日志示例**:
+```
+[DEBUG] [VIDEO] decodeFrame: read packet, stream_index=0, expected=1
+[DEBUG] [VIDEO] decodeFrame: packet stream mismatch, skipping
+... (重复 48 次)
+[DEBUG] [VIDEO] decodeFrame: read packet, stream_index=1, expected=1
+[DEBUG] [VIDEO] decodeFrame: success, pts=0
+```
 
 ### 下一步计划
 - [ ] 完善音视频同步机制
@@ -115,15 +146,7 @@ vcpkg install sdl2:x64-windows
 # 下载 SDL2-devel-2.30.11-VC.zip
 ```
 
-#### Quill 6.0.0
-```powershell
-# 使用 vcpkg
-vcpkg install quill:x64-windows
-
-# 或手动下载
-# 访问 https://github.com/odygrd/quill/releases
-# 下载 quill-6.0.0.zip
-```
+**注意**: 不需要安装 Quill 日志库，项目使用 std::cout 替代。
 
 ### Linux
 
@@ -135,13 +158,6 @@ sudo make install
 
 # SDL2 通常通过包管理器安装
 sudo apt install libsdl2-dev
-
-# Quill 从源码编译
-git clone https://github.com/odygrd/quill.git
-cd quill && mkdir build && cd build
-cmake ..
-make -j$(nproc)
-sudo make install
 ```
 
 ### macOS
@@ -150,8 +166,9 @@ sudo make install
 # 使用 Homebrew
 brew install ffmpeg
 brew install sdl2
-brew install quill
 ```
+
+**注意**: 不需要安装 Quill 日志库。
 
 ---
 
@@ -180,3 +197,4 @@ make -j$(nproc)
 | 日期 | 更新内容 |
 |------|----------|
 | 2026-02-17 | 创建版本记录文档，记录第一阶段完成情况 |
+| 2026-02-24 | 更新 Quill 禁用状态，记录视频流索引问题修复 |
