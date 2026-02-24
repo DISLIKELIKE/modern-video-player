@@ -50,7 +50,9 @@ public:
     
 private:
     static bool initialized_;
+#ifdef USE_QUILL_LOGGING
     static quill::Logger* logger_;
+#endif
 };
 
 } // namespace vp
