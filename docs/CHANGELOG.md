@@ -1,0 +1,189 @@
+# 问题修复记录
+
+本文档记录开发过程中遇到的问题及其解决方案。
+
+---
+
+## 问题列表
+
+| # | 日期 | 问题 | 状态 |
+|---|------|------|------|
+| 1 | 2026-02-17 | FFmpeg 8.0 兼容性问题 | ✅ 已修复 |
+| 2 | 2026-02-24 | 视频流索引不匹配 | ✅ 已修复 |
+| 3 | 2026-02-24 | 音频流索引不匹配 | ✅ 已修复 |
+| 4 | 2026-02-24 | YUV 数据渲染错误 | ✅ 已修复 |
+
+---
+
+## 问题 1: FFmpeg 8.0 兼容性问题
+
+**日期**: 2026-02-17
+
+### 问题描述
+
+编译时报错，`codec_ctx_->avctx->priv_data` 在 FFmpeg 8.0 中不可用。
+
+### 原因
+
+FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
+
+### 解决方案
+
+修改 `video_decoder.cpp` 和 `audio_decoder.cpp`：
+- 在解码器类中添加 `format_ctx_` 成员变量
+- 直接使用传入的 format context 而非从 codec context 获取
+
+### 修改文件
+
+- `include/video_decoder.h`
+- `include/audio_decoder.h`
+- `src/video_decoder.cpp`
+- `src/audio_decoder.cpp`
+
+---
+
+## 问题 2: 视频流索引不匹配
+
+**日期**: 2026-02-24
+
+### 问题描述
+
+播放 mp4 文件时，视频无法正常显示。日志显示：
+```
+decodeFrame: read packet, stream_index=0, expected=1
+decodeFrame: packet stream mismatch, skipping
+```
+程序循环 48 次才能读到正确的视频帧。
+
+### 原因
+
+MP4 文件的流顺序是：音频流(索引 0) 在前，视频流(索引 1) 在后。`av_read_frame()` 返回的包可能是任意流的（通常是第一个流 - 音频流）。原代码遇到不匹配的流时直接返回 false，导致视频帧无法解码。
+
+### 解决方案
+
+修改 `src/video_decoder.cpp` 的 `decodeFrame()` 方法：
+- 将遇到不匹配流时返回 false，改为 continue 跳过该包
+- 循环读取直到找到正确流索引的包
+
+### 修改文件
+
+- `src/video_decoder.cpp`
+
+### 代码变更
+
+```cpp
+// 修改前
+if (packet->stream_index != stream_idx_) {
+    av_packet_unref(packet);
+    av_packet_free(&packet);
+    return false;
+}
+
+// 修改后
+while (true) {
+    ret = av_read_frame(format_ctx_, packet);
+    // ...
+    if (packet->stream_index != stream_idx_) {
+        av_packet_unref(packet);
+        continue;  // 继续循环读取
+    }
+    break;  // 找到正确的流
+}
+```
+
+---
+
+## 问题 3: 音频流索引不匹配
+
+**日期**: 2026-02-24
+
+### 问题描述
+
+与视频流索引相同的问题，但出现在音频解码器中。
+
+### 原因
+
+同样的问题：音频包可能不是第一个被读取的流。
+
+### 解决方案
+
+修改 `src/audio_decoder.cpp` 的 `decodeFrame()` 方法，应用与视频解码器相同的修复。
+
+### 修改文件
+
+- `src/audio_decoder.cpp`
+
+---
+
+## 问题 4: YUV 数据渲染错误
+
+**日期**: 2026-02-24
+
+### 问题描述
+
+解码成功后程序立即退出，没有画面显示。
+
+### 原因
+
+`renderFrame` 函数使用错误的 YUV 数据：
+- 原来传递的是 `frame->data[0]`（只是 Y 平面指针）
+- 然后错误地假设 Y/U/V 是连续存储的
+
+实际上 AVFrame 中 Y/U/V 是分开存储的，使用 `linesize` 来计算每行的步长。
+
+### 解决方案
+
+1. 传递整个 AVFrame 指针而不是 `data[0]`
+2. 正确使用 Y/U/V 平面的数据和行大小
+
+### 修改文件
+
+- `src/display.cpp`
+- `src/video_player.cpp`
+
+### 代码变更
+
+```cpp
+// video_player.cpp - 修改前
+display_->renderFrame(frame->data[0], frame->width, frame->height);
+
+// video_player.cpp - 修改后
+display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
+
+// display.cpp - renderFrame 函数
+// 修改前
+int ret = SDL_UpdateYUVTexture(
+    texture_, nullptr,
+    data, width,
+    data + width * height, width / 2,
+    data + width * height * 5 / 4, width / 2
+);
+
+// 修改后
+AVFrame* frame = (AVFrame*)data;
+int ret = SDL_UpdateYUVTexture(
+    texture_, nullptr,
+    frame->data[0], frame->linesize[0],
+    frame->data[1], frame->linesize[1],
+    frame->data[2], frame->linesize[2]
+);
+```
+
+---
+
+## 待解决的问题
+
+### 问题 5: 音频播放未实现
+
+**状态**: 未实现
+
+playLoop 中没有音频播放代码，视频可以播放但没有声音。需要在 playLoop 中添加音频解码和播放逻辑。
+
+---
+
+## 相关文档
+
+- [VERSION.md](./VERSION.md) - 版本记录
+- [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构设计
+- [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) - Windows 配置指南
+- [LOGGING.md](./LOGGING.md) - 日志系统说明
