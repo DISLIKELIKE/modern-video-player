@@ -22,28 +22,20 @@ void Logger::init() {
 
     auto console_sink = quill::Frontend::create_or_get_sink<quill::ConsoleSink>(
         "console",
-        []()
-        {
-            quill::ConsoleSinkConfig config;
-            config.set_colourise(true);
-            config.set_flush_level(quill::LogLevel::TraceL1);
-            return config;
-        }());
+        true,
+        "stdout");
+
+    quill::FileSinkConfig file_config;
+    file_config.set_open_mode('w');
 
     auto file_sink = quill::Frontend::create_or_get_sink<quill::FileSink>(
+        "file_sink",
         "logs/video_player.log",
-        []
-        {
-            quill::FileSinkConfig config;
-            config.set_open_mode('w');
-            config.set_flush_interval(100);
-            return config;
-        }());
+        file_config);
 
     logger_ = quill::Frontend::create_or_get_logger(
         "video_player",
-        std::move(console_sink),
-        std::move(file_sink));
+        { console_sink, file_sink });
 
     logger_->set_log_level(quill::LogLevel::TraceL1);
 
