@@ -153,12 +153,9 @@ add_executable(${PROJECT_NAME}
     src/logger.cpp
 )
 
-    # 链接库
-    if(WIN32)
-        # 添加预处理器定义来禁用 Quill
-        add_compile_definitions(QUILL_DISABLE Assertions)
-        
-        target_link_libraries(${PROJECT_NAME}
+# 链接库
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
         ${FFMPEG_LIBRARIES}
         ${QUILL_LIBRARIES}
@@ -197,14 +194,18 @@ else()
     )
 endif()
 
-# 暂时禁用 Quill，使用 std::cout
-# if(QUILL_FOUND)
-#     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
-#     message(STATUS "Quill: enabled")
-# else()
-#     message(STATUS "Quill: disabled (using std::cout)")
-# endif()
-message(STATUS "Quill: disabled (using std::cout)")
+# 启用 Quill 日志库
+if(QUILL_FOUND)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE QUILL_DISABLE_ASSERTIONS)
+    
+    # 创建 logs 目录用于存放日志文件
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/logs")
+    
+    message(STATUS "Quill: enabled")
+else()
+    message(STATUS "Quill: disabled (using std::cout)")
+endif()
 
 # 调试模式定义
 if(DEBUG_MODE)

@@ -28,6 +28,7 @@ Makefile
 # External libraries (Windows)
 external/
 !external/.gitkeep
+!external/quill
 
 # Visual Studio
 .vs/
