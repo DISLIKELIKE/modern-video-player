@@ -194,13 +194,14 @@ else()
     )
 endif()
 
-# 如果找到 Quill，启用 Quill 日志
-if(QUILL_FOUND)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
-    message(STATUS "Quill: enabled")
-else()
-    message(STATUS "Quill: disabled (using std::cout)")
-endif()
+# 暂时禁用 Quill，使用 std::cout
+# if(QUILL_FOUND)
+#     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
+#     message(STATUS "Quill: enabled")
+# else()
+#     message(STATUS "Quill: disabled (using std::cout)")
+# endif()
+message(STATUS "Quill: disabled (using std::cout)")
 
 # 调试模式定义
 if(DEBUG_MODE)
