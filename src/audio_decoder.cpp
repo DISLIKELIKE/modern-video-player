@@ -123,17 +123,22 @@ bool AudioDecoder::decodeFrame(AudioFrame& frame) {
         return false;
     }
     
-    int ret = av_read_frame(format_ctx_, packet);
+    int ret;
     
-    if (ret < 0) {
-        av_packet_free(&packet);
-        return false;
-    }
-    
-    if (packet->stream_index != stream_idx_) {
-        av_packet_unref(packet);
-        av_packet_free(&packet);
-        return false;
+    while (true) {
+        ret = av_read_frame(format_ctx_, packet);
+        
+        if (ret < 0) {
+            av_packet_free(&packet);
+            return false;
+        }
+        
+        if (packet->stream_index != stream_idx_) {
+            av_packet_unref(packet);
+            continue;
+        }
+        
+        break;
     }
     
     ret = avcodec_send_packet(codec_ctx_, packet);
