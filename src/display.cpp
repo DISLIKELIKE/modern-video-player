@@ -144,17 +144,27 @@ bool Display::updateTexture(const uint8_t* data, int width, int height) {
 
 void Display::renderFrame(const uint8_t* data, int width, int height) {
     if (!renderer_ || !texture_ || !data) {
+        LOG_TRACE_EVENT("renderFrame: early return, renderer=" << renderer_ << ", texture=" << texture_ << ", data=" << data);
         return;
     }
     
     SDL_RenderClear(renderer_);
     
+    AVFrame* frame = (AVFrame*)data;
+    
+    LOG_TRACE_EVENT("renderFrame: frame data[0]=" << frame->data[0] 
+                     << " linesize[0]=" << frame->linesize[0]
+                     << " data[1]=" << frame->data[1]
+                     << " linesize[1]=" << frame->linesize[1]
+                     << " data[2]=" << frame->data[2]
+                     << " linesize[2]=" << frame->linesize[2]);
+    
     int ret = SDL_UpdateYUVTexture(
         texture_,
         nullptr,
-        data, width,
-        data + width * height, width / 2,
-        data + width * height * 5 / 4, width / 2
+        frame->data[0], frame->linesize[0],
+        frame->data[1], frame->linesize[1],
+        frame->data[2], frame->linesize[2]
     );
     
     if (ret < 0) {
@@ -184,6 +194,7 @@ void Display::clear() {
 }
 
 void Display::handleEvents() {
+    LOG_TRACE_EVENT("handleEvents: start");
     SDL_Event event;
     
     while (SDL_PollEvent(&event)) {
@@ -224,6 +235,7 @@ void Display::handleEvents() {
                 break;
         }
     }
+    LOG_TRACE_EVENT("handleEvents: end, should_quit_=" << should_quit_);
 }
 
 void Display::toggleFullscreen() {
