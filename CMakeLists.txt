@@ -65,32 +65,31 @@ if(NOT FFMPEG_FOUND)
 endif()
     
     # 查找 Quill (日志库) - header-only，无需链接库
-    # 注意: 由于 Quill v6.x API 变化，暂不启用 Quill 支持
-    # 如果需要启用，请确保 Quill 版本兼容
-find_package(quill CONFIG QUIET)
-
-if(quill_FOUND AND FALSE)  # 暂时禁用 Quill
-    # 如果找到 CMake 配置，通常 quill 会提供目标 quill::quill (也是头文件仅用)
-    if(TARGET quill::quill)
-        set(QUILL_LIBRARIES quill::quill)
+    # 注意: Quill v6.x 需要从外部下载
+    find_package(quill CONFIG QUIET)
+    
+    if(quill_FOUND)
+        message(STATUS "Found Quill via CMake config")
+        if(TARGET quill::quill)
+            set(QUILL_LIBRARIES quill::quill)
+        else()
+            set(QUILL_LIBRARIES "")
+        endif()
     else()
-        set(QUILL_LIBRARIES "")
+        # 手动指定路径模式
+        set(QUILL_PATH "${CMAKE_SOURCE_DIR}/external/quill")
+        message(STATUS "Looking for Quill at: ${QUILL_PATH}")
+        if(EXISTS ${QUILL_PATH})
+            include_directories(${QUILL_PATH}/include)
+            set(QUILL_LIBRARIES "")
+            set(QUILL_FOUND TRUE)
+            set(QUILL_DIR ${QUILL_PATH} CACHE PATH "Quill directory" FORCE)
+            message(STATUS "Found Quill at: ${QUILL_PATH}")
+        else()
+            message(STATUS "Quill not found at ${QUILL_PATH}. Using std::cout for logging.")
+            set(QUILL_FOUND FALSE)
+        endif()
     endif()
-else()
-    # 手动指定路径模式
-    set(QUILL_PATH "${CMAKE_SOURCE_DIR}/external/quill")
-    message(STATUS "Looking for Quill at: ${QUILL_PATH}")
-    if(EXISTS ${QUILL_PATH})
-        include_directories(${QUILL_PATH}/include)
-        set(QUILL_LIBRARIES "")
-        # set(quill_FOUND TRUE)  # 暂时禁用
-        # 将路径存入缓存，以便用户修改（可选）
-        set(QUILL_DIR ${QUILL_PATH} CACHE PATH "Quill directory" FORCE)
-    else()
-        message(STATUS "Quill not found at ${QUILL_PATH}. Using std::cout for logging.")
-        set(quill_FOUND FALSE)
-    endif()
-endif()
     
     # Windows 链接库
     set(SDL2_LIBRARIES SDL2main SDL2 SDL2)
@@ -195,10 +194,13 @@ else()
     )
 endif()
 
-# 如果找到 Quill，定义宏 - 暂时禁用
-# if(quill_FOUND OR QUILL_FOUND)
-#     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
-# endif()
+# 如果找到 Quill，启用 Quill 日志
+if(QUILL_FOUND)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
+    message(STATUS "Quill: enabled")
+else()
+    message(STATUS "Quill: disabled (using std::cout)")
+endif()
 
 # 调试模式定义
 if(DEBUG_MODE)
@@ -213,4 +215,3 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
-message(STATUS "Quill found: disabled (using std::cout)")
