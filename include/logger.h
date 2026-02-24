@@ -4,11 +4,19 @@
 #include <iostream>
 
 #ifdef USE_QUILL_LOGGING
-#include <quill/Quill.h>
-#define LOG_INFO(msg) LOG_INFO_L(msg)
-#define LOG_WARNING(msg) LOG_WARNING_L(msg)
-#define LOG_ERROR(msg) LOG_ERROR_L(msg)
-#define LOG_DEBUG(msg) LOG_DEBUG_L(msg)
+#include <quill/Frontend.h>
+#include <quill/LogMacros.h>
+#include <quill/Logger.h>
+#include <quill/sinks/ConsoleSink.h>
+
+#define LOG_INFO(msg) LOG_INFO_L1(msg)
+#define LOG_WARNING(msg) LOG_WARNING_L1(msg)
+#define LOG_ERROR(msg) LOG_ERROR_L1(msg)
+#define LOG_DEBUG(msg) LOG_DEBUG_L1(msg)
+#define LOG_TRACE_VIDEO(msg) LOG_DEBUG_L1(std::string("[VIDEO] ") + msg)
+#define LOG_TRACE_AUDIO(msg) LOG_DEBUG_L1(std::string("[AUDIO] ") + msg)
+#define LOG_TRACE_EVENT(msg) LOG_DEBUG_L1(std::string("[EVENT] ") + msg)
+#define LOG_TRACE_LOOP(msg) LOG_DEBUG_L1(std::string("[LOOP] ") + msg)
 #else
 #define LOG_INFO(msg) std::cout << "[INFO] " << msg << std::endl
 #define LOG_WARNING(msg) std::cout << "[WARNING] " << msg << std::endl
@@ -42,6 +50,7 @@ public:
     
 private:
     static bool initialized_;
+    static quill::Logger* logger_;
 };
 
 } // namespace vp
