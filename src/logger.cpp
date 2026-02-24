@@ -26,7 +26,7 @@
 #include <quill/Frontend.h>
 #include <quill/Logger.h>
 #include <quill/LogMacros.h>
-#include <quill/QuillError.h>
+#include <quill/core/QuillError.h>
 #include <quill/sinks/ConsoleSink.h>
 #include <quill/sinks/RotatingFileSink.h>
 #endif
