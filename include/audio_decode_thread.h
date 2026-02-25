@@ -14,13 +14,16 @@ extern "C" {
 
 namespace vp {
 
+class AudioPlayer;
+
 class AudioDecodeThread {
 public:
     AudioDecodeThread();
     ~AudioDecodeThread();
 
     bool start(AVFormatContext* fmt_ctx, int stream_idx, 
-               FrameQueue<AudioFrame>* output_queue);
+               FrameQueue<AudioFrame>* output_queue,
+               AudioPlayer* audio_player = nullptr);
     void stop();
     void pause();
     void resume();
@@ -35,6 +38,7 @@ private:
     std::unique_ptr<AudioDecoder> decoder_;
     std::thread thread_;
     FrameQueue<AudioFrame>* output_queue_;
+    AudioPlayer* audio_player_;
 
     std::atomic<bool> running_;
     std::atomic<bool> paused_;
