@@ -27,7 +27,16 @@ graph TB
     E --> I[SDL2 Window/Renderer]
     F --> J[SDL2 Audio Device]
     
-    B --> K[Play Thread]
+    B --> K[RenderThread]
+    B --> L[VideoDecodeThread]
+    B --> M[AudioDecodeThread]
+    
+    L --> N[VideoFrameQueue]
+    M --> O[AudioFrameQueue]
+    N --> K
+    O --> K
+    
+    K --> P[SyncManager]
     
     style A fill:#e1f5ff
     style B fill:#ffe1e1
@@ -36,9 +45,103 @@ graph TB
     style E fill:#fff5e1
     style F fill:#fff5e1
     style K fill:#f5e1ff
+    style L fill:#e1e1ff
+    style M fill:#e1e1ff
+    style N fill:#ffffe1
+    style O fill:#ffffe1
+    style P fill:#ffe1ff
 ```
 
 ## 2. 模块设计
+
+### 2.0 FrameQueue (帧队列)
+
+**职责**:
+- 线程安全的帧数据传输
+- 解码线程与渲染线程之间的缓冲
+- 带超时等待的 push/pop 操作
+
+**关键接口**:
+```cpp
+template<typename T>
+class FrameQueue {
+    bool push(T&& frame);                    // 非阻塞 push
+    bool pushWithWait(T&& frame, int timeout_ms);  // 带等待的 push
+    bool pop(T& frame, int timeout_ms);     // 带等待的 pop
+    bool tryPop(T& frame);                   // 非阻塞 pop
+    void clear();                            // 清空队列
+    void stop();                             // 停止队列
+};
+```
+
+**特性**:
+- 使用 `std::mutex` 和 `std::condition_variable` 实现线程安全
+- 支持队列满/空时的超时等待，避免 CPU 忙轮询
+- 默认队列大小为 10 帧
+
+### 2.0.1 VideoDecodeThread (视频解码线程)
+
+**职责**:
+- 独立于主线程进行视频解码
+- 将解码后的帧放入视频帧队列
+- 支持暂停/恢复/停止控制
+
+**关键接口**:
+```cpp
+class VideoDecodeThread {
+    bool start(AVFormatContext* fmt_ctx, int stream_idx, FrameQueue<VideoFrame>* output_queue);
+    void stop();
+    void pause();
+    void resume();
+    void flush();
+};
+```
+
+### 2.0.2 AudioDecodeThread (音频解码线程)
+
+**职责**:
+- 独立于主线程进行音频解码
+- 将解码后的帧转换为 SDL 可播放格式
+- 将转换后的帧放入音频帧队列
+
+**关键接口**:
+```cpp
+class AudioDecodeThread {
+    bool start(AVFormatContext* fmt_ctx, int stream_idx, FrameQueue<AudioFrame>* output_queue);
+    void stop();
+    void pause();
+    void resume();
+    void flush();
+};
+```
+
+### 2.0.3 SyncManager (同步管理器)
+
+**职责**:
+- 管理音视频同步
+- 计算帧延迟
+- 决定是否跳帧或重复帧
+
+**同步模式**:
+```cpp
+enum class SyncMode {
+    AudioMaster,   // 音频为主时钟
+    VideoMaster,  // 视频为主时钟
+    Free          // 自由播放
+};
+```
+
+**关键接口**:
+```cpp
+class SyncManager {
+    void setMode(SyncMode mode);
+    void updateVideoPts(double pts);
+    void updateAudioPts(double pts);
+    double calculateDelay(double current_pts);
+    bool shouldSkipFrame(double frame_pts);
+    bool shouldRepeatFrame(double frame_pts);
+};
+```
 
 ### 2.1 VideoPlayer (主播放器)
 
@@ -241,89 +344,103 @@ graph LR
 
 ## 4. 线程模型
 
-### 4.1 单线程版本 (当前实现)
-
-```
-主线程:
-├── 处理用户输入
-├── 解码视频帧
-├── 解码音频帧
-├── 渲染视频
-└── 播放音频
-```
-
-**优点**:
-- 简单易懂
-- 资源占用少
-
-**缺点**:
-- 音视频同步较难
-- 性能可能受限
-
-### 4.2 多线程版本 (改进方向)
+### 4.1 多线程版本 (当前实现)
 
 ```
 主线程:
 └── 处理用户输入
 
 视频解码线程:
-└── 解码视频帧 → 视频队列
+└── 解码视频帧 → 视频帧队列
 
 音频解码线程:
-└── 解码音频帧 → 音频队列
+└── 解码音频帧 → 音频帧队列
 
-渲染线程:
-├── 从视频队列取帧
+渲染线程 (主循环):
+├── 从视频帧队列取帧
 ├── 渲染视频
-└── 控制同步
+├── 从音频帧队列取帧
+├── 播放音频
+└── 控制音视频同步
+```
 
-音频播放线程:
-└── SDL 音频回调
+**多线程架构图**:
+
+```mermaid
+graph TB
+    subgraph DecodeThreads["解码线程"]
+        L1[VideoDecodeThread]
+        L2[AudioDecodeThread]
+    end
+    
+    subgraph Queues["帧队列"]
+        Q1[VideoFrameQueue]
+        Q2[AudioFrameQueue]
+    end
+    
+    subgraph RenderThread["渲染线程"]
+        R1[renderLoop]
+        R2[SyncManager]
+    end
+    
+    L1 --> Q1
+    L2 --> Q2
+    Q1 --> R1
+    Q2 --> R1
+    R1 --> R2
+    
+    style DecodeThreads fill:#e1e1ff
+    style Queues fill:#ffffe1
+    style RenderThread fill:#f5e1ff
 ```
 
 **优点**:
 - 音视频同步更准确
-- 性能更好
+- 性能更好，解码不阻塞渲染
+- 支持预解码机制
 
-**缺点**:
-- 复杂度增加
-- 需要线程同步
+**实现细节**:
+- FrameQueue 使用条件变量实现阻塞等待，避免 CPU 忙轮询
+- 解码线程和渲染线程通过帧队列解耦
+- SyncManager 统一管理音视频同步
 
 ## 5. 音视频同步
 
 ### 5.1 同步策略
 
-当前使用基于视频时钟的简单同步：
+当前使用基于 SyncManager 的多模式同步：
 
 ```cpp
-double video_pts = frame.pts();
-double delay = video_pts - current_time_;
-if (delay > 0.01) {
-    sleep(delay);
-}
+enum class SyncMode {
+    AudioMaster,   // 音频为主时钟
+    VideoMaster,  // 视频为主时钟
+    Free          // 自由播放
+};
 ```
 
-### 5.2 改进策略
+**默认模式**: AudioMaster - 以音频时钟为基准
 
-**主时钟选择**:
-- 如果有音频: 使用音频时钟
-- 如果无音频: 使用视频时钟
-
-**时钟同步算法**:
+### 5.2 同步实现
 
 ```cpp
-double getMasterClock() {
-    if (audio_enabled) {
-        return audio_clock;
+double SyncManager::calculateDelay(double current_pts) {
+    double diff = current_pts - master_clock_.load();
+    
+    if (std::abs(diff) < sync_threshold_) {
+        return 0.0;  // 同步，无需等待
     }
-    return video_clock;
+    
+    return diff;  // 等待或加速
 }
 
-void syncVideo(double pts) {
-    double delay = pts - getMasterClock();
-    if (delay > 0) {
-        sleep(delay);
-    }
+bool SyncManager::shouldSkipFrame(double frame_pts) {
+    double diff = frame_pts - master_clock_.load();
+    return diff > sync_threshold_ * 2;  // 落后太多，跳帧
+}
+
+bool SyncManager::shouldRepeatFrame(double frame_pts) {
+    double diff = master_clock_.load() - frame_pts;
+    return diff > sync_threshold_ * 2;  // 领先太多，重复帧
 }
 ```
 

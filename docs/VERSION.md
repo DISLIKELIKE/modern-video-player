@@ -68,6 +68,35 @@
 - 修改文件：`include/logger.h`、`src/logger.cpp`、`config/logging.conf`、`docs/LOGGING.md`、`docs/CHANGELOG.md`、`docs/VERSION.md`
 - 编译输出示例：`Quill: enabled`，运行期日志写入 `logs/modern-video-player.log`
 
+#### 多线程播放架构重构 (2026-02-25)
+- 实现独立视频解码线程（VideoDecodeThread）
+- 实现独立音频解码线程（AudioDecodeThread）
+- 实现线程安全帧队列（FrameQueue），支持条件变量等待
+- 实现音视频同步管理器（SyncManager），支持 AudioMaster/VideoMaster/Free 三种模式
+- 重构 VideoPlayer，从单线程 playLoop 改为多线程 renderLoop
+- 新增文件：
+  - `include/frame_queue.h`
+  - `include/video_decode_thread.h`
+  - `include/audio_decode_thread.h`
+  - `include/sync_manager.h`
+  - `src/video_decode_thread.cpp`
+  - `src/audio_decode_thread.cpp`
+  - `src/sync_manager.cpp`
+- 修改文件：
+  - `include/video_player.h`
+  - `include/audio_decoder.h` (添加 setConvertedData 方法)
+  - `src/video_player.cpp`
+  - `CMakeLists.txt`
+
+#### 音频播放架构修复 (2026-02-25)
+- 修复音频播放断断续续的问题
+- AudioDecodeThread 解码后直接调用 AudioPlayer::play() 将数据放入 SDL 队列
+- 确保 SDL 音频回调能持续获取数据
+- 修改文件：
+  - `include/audio_decode_thread.h`
+  - `src/audio_decode_thread.cpp`
+  - `src/video_player.cpp`
+
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频

@@ -1,0 +1,51 @@
+#pragma once
+
+#include "audio_decoder.h"
+#include "frame_queue.h"
+#include <memory>
+#include <thread>
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+
+extern "C" {
+#include <libavformat/avformat.h>
+}
+
+namespace vp {
+
+class AudioPlayer;
+
+class AudioDecodeThread {
+public:
+    AudioDecodeThread();
+    ~AudioDecodeThread();
+
+    bool start(AVFormatContext* fmt_ctx, int stream_idx, 
+               FrameQueue<AudioFrame>* output_queue,
+               AudioPlayer* audio_player = nullptr);
+    void stop();
+    void pause();
+    void resume();
+    void flush();
+
+    bool isRunning() const { return running_.load(); }
+    bool isPaused() const { return paused_.load(); }
+
+private:
+    void decodeLoop();
+
+    std::unique_ptr<AudioDecoder> decoder_;
+    std::thread thread_;
+    FrameQueue<AudioFrame>* output_queue_;
+    AudioPlayer* audio_player_;
+
+    std::atomic<bool> running_;
+    std::atomic<bool> paused_;
+    std::atomic<bool> stop_requested_;
+
+    std::mutex mutex_;
+    std::condition_variable cv_;
+};
+
+}
