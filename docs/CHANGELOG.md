@@ -255,9 +255,33 @@ int ret = SDL_UpdateYUVTexture(
 
 ---
 
+## 问题 7: 音频播放架构修复
+
+**日期**: 2026-02-25
+
+### 问题描述
+
+- AudioDecodeThread 解码后的音频通过 FrameQueue 传递给 renderLoop
+- renderLoop 逐帧调用 AudioPlayer::play()，导致音频断断续续
+- SDL 回调机制需要持续的数据流，当前实现无法满足
+
+### 解决方案
+
+1. 修改 AudioDecodeThread::start() 方法，增加 AudioPlayer* 参数
+2. 解码线程解码完成后，直接调用 audio_player_->play() 将数据放入 SDL 队列
+3. 移除 renderLoop 中的音频播放代码，由解码线程直接处理
+
+### 修改文件
+
+- `include/audio_decode_thread.h`
+- `src/audio_decode_thread.cpp`
+- `src/video_player.cpp`
+
+---
+
 ## 待解决的问题
 
-### 问题 7: 硬件加速解码支持
+### 问题 8: 硬件加速解码支持
 
 **状态**: 待实现
 

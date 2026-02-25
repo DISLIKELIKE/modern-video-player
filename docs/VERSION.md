@@ -88,6 +88,15 @@
   - `src/video_player.cpp`
   - `CMakeLists.txt`
 
+#### 音频播放架构修复 (2026-02-25)
+- 修复音频播放断断续续的问题
+- AudioDecodeThread 解码后直接调用 AudioPlayer::play() 将数据放入 SDL 队列
+- 确保 SDL 音频回调能持续获取数据
+- 修改文件：
+  - `include/audio_decode_thread.h`
+  - `src/audio_decode_thread.cpp`
+  - `src/video_player.cpp`
+
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频

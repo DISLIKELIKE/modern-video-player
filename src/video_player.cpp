@@ -125,7 +125,7 @@ bool VideoPlayer::initDecodeThreads(AVFormatContext* fmt_ctx, int video_stream_i
     
     if (audio_stream_idx >= 0) {
         audio_decode_thread_ = std::make_unique<AudioDecodeThread>();
-        if (!audio_decode_thread_->start(fmt_ctx, audio_stream_idx, audio_frame_queue_.get())) {
+        if (!audio_decode_thread_->start(fmt_ctx, audio_stream_idx, audio_frame_queue_.get(), audio_player_.get())) {
             LOG_ERROR("Failed to start audio decode thread");
             if (video_decode_thread_) {
                 video_decode_thread_->stop();
@@ -371,15 +371,6 @@ void VideoPlayer::renderLoop() {
                 if (audio_frame.isValid()) {
                     double audio_pts = audio_frame.pts();
                     sync_manager_.updateAudioPts(audio_pts);
-                    
-                    if (audio_player_) {
-                        const uint8_t* data = audio_frame.getData();
-                        int size = audio_frame.getSize();
-                        if (data && size > 0) {
-                            std::vector<uint8_t> audio_data(data, data + size);
-                            audio_player_->play(audio_data);
-                        }
-                    }
                 }
             }
         }

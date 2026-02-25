@@ -1,10 +1,12 @@
 #include "audio_decode_thread.h"
+#include "audio_player.h"
 #include "logger.h"
 
 namespace vp {
 
 AudioDecodeThread::AudioDecodeThread()
     : output_queue_(nullptr)
+    , audio_player_(nullptr)
     , running_(false)
     , paused_(false)
     , stop_requested_(false) {
@@ -15,7 +17,8 @@ AudioDecodeThread::~AudioDecodeThread() {
 }
 
 bool AudioDecodeThread::start(AVFormatContext* fmt_ctx, int stream_idx, 
-                             FrameQueue<AudioFrame>* output_queue) {
+                             FrameQueue<AudioFrame>* output_queue,
+                             AudioPlayer* audio_player) {
     if (running_.load()) {
         return false;
     }
@@ -27,6 +30,7 @@ bool AudioDecodeThread::start(AVFormatContext* fmt_ctx, int stream_idx,
     }
 
     output_queue_ = output_queue;
+    audio_player_ = audio_player;
     stop_requested_.store(false);
     paused_.store(false);
     running_.store(true);
@@ -95,11 +99,19 @@ void AudioDecodeThread::decodeLoop() {
                     
                     frame.setConvertedData(converted_data, converted_size);
                     
-                    if (!output_queue_->pushWithWait(std::move(frame), 50)) {
-                        frame = AudioFrame();
-                    } else {
-                        frame = AudioFrame();
+                    if (audio_player_) {
+                        const uint8_t* data = frame.getData();
+                        int size = frame.getSize();
+                        if (data && size > 0) {
+                            std::vector<uint8_t> audio_data(data, data + size);
+                            audio_player_->play(audio_data);
+                        }
                     }
+                    
+                    if (output_queue_ && !output_queue_->full()) {
+                        output_queue_->pushWithWait(std::move(frame), 10);
+                    }
+                    frame = AudioFrame();
                 }
             }
         } else {
