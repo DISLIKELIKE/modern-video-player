@@ -97,6 +97,17 @@
   - `src/audio_decode_thread.cpp`
   - `src/video_player.cpp`
 
+#### Frame 移动语义修复 (2026-02-25)
+- 修复 VideoFrame 和 AudioFrame 类缺少移动语义导致的崩溃问题
+- 为 VideoFrame 添加移动构造函数和移动赋值运算符
+- 为 AudioFrame 添加移动构造函数和移动赋值运算符
+- 显式删除拷贝构造函数和拷贝赋值运算符，防止浅拷贝
+- 修改文件：
+  - `include/video_decoder.h`
+  - `src/video_decoder.cpp`
+  - `include/audio_decoder.h`
+  - `src/audio_decoder.cpp`
+
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频
@@ -277,3 +288,5 @@ make -j$(nproc)
 | 2026-02-24 | 更新日志系统为企业级 Quill 管道，记录视频流索引问题修复 |
 | 2026-02-24 | 记录音频流索引问题和 YUV 渲染问题修复 |
 | 2026-02-24 | 创建 CHANGELOG.md 问题修复记录文档 |
+| 2026-02-25 | 记录多线程播放架构重构和音频播放架构修复 |
+| 2026-02-25 | 记录 Frame 移动语义修复 |

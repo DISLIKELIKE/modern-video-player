@@ -21,6 +21,35 @@ AudioFrame::~AudioFrame() {
     }
 }
 
+AudioFrame::AudioFrame(AudioFrame&& other) noexcept
+    : frame_(other.frame_)
+    , pts_(other.pts_)
+    , converted_data_(other.converted_data_)
+    , converted_size_(other.converted_size_) {
+    other.frame_ = nullptr;
+    other.converted_data_ = nullptr;
+    other.converted_size_ = 0;
+}
+
+AudioFrame& AudioFrame::operator=(AudioFrame&& other) noexcept {
+    if (this != &other) {
+        if (frame_) {
+            av_frame_free(&frame_);
+        }
+        if (converted_data_) {
+            av_free(converted_data_);
+        }
+        frame_ = other.frame_;
+        pts_ = other.pts_;
+        converted_data_ = other.converted_data_;
+        converted_size_ = other.converted_size_;
+        other.frame_ = nullptr;
+        other.converted_data_ = nullptr;
+        other.converted_size_ = 0;
+    }
+    return *this;
+}
+
 const uint8_t* AudioFrame::getData() const {
     return converted_data_;
 }

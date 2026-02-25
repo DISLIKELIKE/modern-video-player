@@ -20,6 +20,12 @@ public:
     VideoFrame();
     ~VideoFrame();
     
+    VideoFrame(VideoFrame&& other) noexcept;
+    VideoFrame& operator=(VideoFrame&& other) noexcept;
+    
+    VideoFrame(const VideoFrame&) = delete;
+    VideoFrame& operator=(const VideoFrame&) = delete;
+    
     bool isValid() const { return frame_ != nullptr; }
     AVFrame* get() { return frame_; }
     const AVFrame* get() const { return frame_; }

@@ -16,6 +16,24 @@ VideoFrame::~VideoFrame() {
     }
 }
 
+VideoFrame::VideoFrame(VideoFrame&& other) noexcept
+    : frame_(other.frame_)
+    , pts_(other.pts_) {
+    other.frame_ = nullptr;
+}
+
+VideoFrame& VideoFrame::operator=(VideoFrame&& other) noexcept {
+    if (this != &other) {
+        if (frame_) {
+            av_frame_free(&frame_);
+        }
+        frame_ = other.frame_;
+        pts_ = other.pts_;
+        other.frame_ = nullptr;
+    }
+    return *this;
+}
+
 void VideoFrame::setData(int width, int height, AVPixelFormat pix_fmt) {
     if (frame_) {
         frame_->width = width;

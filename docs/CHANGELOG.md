@@ -14,6 +14,8 @@
 | 4 | 2026-02-24 | YUV 数据渲染错误 | ✅ 已修复 |
 | 5 | 2026-02-24 | 企业级 Quill 日志通道 | ✅ 已修复 |
 | 6 | 2026-02-25 | 多线程播放架构重构 | ✅ 已完成 |
+| 7 | 2026-02-25 | 音频播放架构修复 | ✅ 已修复 |
+| 9 | 2026-02-25 | VideoFrame/AudioFrame 移动语义缺陷 | ✅ 已修复 |
 
 ---
 
@@ -286,6 +288,65 @@ int ret = SDL_UpdateYUVTexture(
 **状态**: 待实现
 
 需要添加 CUDA/D3D11VA 硬件加速解码支持，提升解码性能。
+
+---
+
+## 问题 9: VideoFrame/AudioFrame 移动语义缺陷导致崩溃
+
+**日期**: 2026-02-25
+
+### 问题描述
+
+程序启动播放后立即崩溃，错误信息：
+```
+modern-video-player.exe - 应用程序错误
+0x00007FFF7A80DA4C 指令引用了 0xFFFFFFFFFFFFFFFF 内存。该内存不能为 read
+```
+
+### 原因分析
+
+`VideoFrame` 和 `AudioFrame` 类缺少正确的移动语义实现。
+
+在 `FrameQueue::pop()` 中使用 `std::move` 将帧移动出队列：
+```cpp
+frame = std::move(queue_.front());
+queue_.pop();
+```
+
+由于没有定义移动构造函数和移动赋值运算符，默认的移动操作只是浅拷贝 `frame_` 指针。当原对象析构时调用 `av_frame_free(&frame_)` 释放内存，目标对象的 `frame_` 变成悬空指针。渲染循环访问此悬空指针时导致崩溃。
+
+### 解决方案
+
+1. 为 `VideoFrame` 类添加移动构造函数和移动赋值运算符
+2. 为 `AudioFrame` 类添加移动构造函数和移动赋值运算符
+3. 显式删除拷贝构造函数和拷贝赋值运算符
+4. 移动时将原对象的 `frame_` 指针置为 nullptr，防止析构时释放仍被使用的内存
+
+### 修改文件
+
+- `include/video_decoder.h`
+- `src/video_decoder.cpp`
+- `include/audio_decoder.h`
+- `src/audio_decoder.cpp`
+
+### 代码变更
+
+```cpp
+// video_decoder.h - 添加移动语义声明
+VideoFrame(VideoFrame&& other) noexcept;
+VideoFrame& operator=(VideoFrame&& other) noexcept;
+VideoFrame(const VideoFrame&) = delete;
+VideoFrame& operator=(const VideoFrame&) = delete;
+
+// video_decoder.cpp - 实现移动构造函数
+VideoFrame::VideoFrame(VideoFrame&& other) noexcept
+    : frame_(other.frame_)
+    , pts_(other.pts_) {
+    other.frame_ = nullptr;
+}
+
+// audio_decoder.h/cpp - 类似实现
+```
 
 ---
 

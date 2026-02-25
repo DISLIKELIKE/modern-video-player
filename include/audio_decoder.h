@@ -19,6 +19,12 @@ public:
     AudioFrame();
     ~AudioFrame();
     
+    AudioFrame(AudioFrame&& other) noexcept;
+    AudioFrame& operator=(AudioFrame&& other) noexcept;
+    
+    AudioFrame(const AudioFrame&) = delete;
+    AudioFrame& operator=(const AudioFrame&) = delete;
+    
     bool isValid() const { return frame_ != nullptr; }
     AVFrame* get() { return frame_; }
     const AVFrame* get() const { return frame_; }
