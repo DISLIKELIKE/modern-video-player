@@ -108,6 +108,12 @@
   - `include/audio_decoder.h`
   - `src/audio_decoder.cpp`
 
+#### 多解码器实例竞争读取修复 (2026-02-25)
+- 修复播放时多个解码器竞争读取同一 AVFormatContext 导致的解码错误
+- 在 play() 前重置 video_decoder_ 和 audio_decoder_，避免竞争
+- 修改文件：
+  - `src/video_player.cpp`
+
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频
@@ -290,3 +296,4 @@ make -j$(nproc)
 | 2026-02-24 | 创建 CHANGELOG.md 问题修复记录文档 |
 | 2026-02-25 | 记录多线程播放架构重构和音频播放架构修复 |
 | 2026-02-25 | 记录 Frame 移动语义修复 |
+| 2026-02-25 | 记录多解码器实例竞争读取修复 |
