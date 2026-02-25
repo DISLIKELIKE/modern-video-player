@@ -16,8 +16,11 @@
 | 6 | 2026-02-25 | 多线程播放架构重构 | ✅ 已完成 |
 | 7 | 2026-02-25 | 音频播放架构修复 | ✅ 已修复 |
 | 9 | 2026-02-25 | VideoFrame/AudioFrame 移动语义缺陷 | ✅ 已修复 |
+| 10 | 2026-02-25 | 多解码器实例竞争读取导致解码错误 | ✅ 已修复 |
 
 ---
+
+## 问题 10: 多解码器实例竞争读取导致解码错误
 
 ## 问题 1: FFmpeg 8.0 兼容性问题
 
@@ -347,6 +350,50 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 // audio_decoder.h/cpp - 类似实现
 ```
+
+---
+
+## 问题 10: 多解码器实例竞争读取导致解码错误
+
+**日期**: 2026-02-25
+
+### 问题描述
+
+播放视频时出现大量 FFmpeg 解码错误：
+```
+[h264 @ ...] Invalid NAL unit size (0 > 1045).
+[h264 @ ...] missing picture in access unit with size 1049
+[aac @ ...] channel element 0.0 duplicate
+[mov,mp4,m4a,3gp,3g2,mj2 @ ...] DTS 2625751 < 2632415 out of order
+```
+
+### 原因分析
+
+在 `VideoPlayer::open()` 中创建了 `video_decoder_` 和 `audio_decoder_` 解码器实例用于获取视频信息。然后在 `play()` -> `initDecodeThreads()` 中又创建了 `VideoDecodeThread` 和 `AudioDecodeThread`，这两个类内部又各自创建了新的解码器实例。
+
+两个解码器同时从同一个 `AVFormatContext` 读取 packet，造成数据竞争，导致解码错误和数据损坏。
+
+### 解决方案
+
+在 `play()` 方法中，调用 `initDecodeThreads()` 之前，先关闭并释放 `video_decoder_` 和 `audio_decoder_`：
+
+```cpp
+void VideoPlayer::play() {
+    // ...
+    playing_.store(true);
+    
+    video_decoder_.reset();
+    audio_decoder_.reset();
+    
+    if (!initDecodeThreads(format_ctx_, video_stream_idx_, audio_stream_idx_)) {
+        // ...
+    }
+}
+```
+
+### 修改文件
+
+- `src/video_player.cpp`
 
 ---
 

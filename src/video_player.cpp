@@ -202,6 +202,9 @@ void VideoPlayer::play() {
     paused_.store(false);
     stopped_.store(false);
     
+    video_decoder_.reset();
+    audio_decoder_.reset();
+    
     if (!initDecodeThreads(format_ctx_, video_stream_idx_, audio_stream_idx_)) {
         LOG_ERROR("Failed to initialize decode threads");
         playing_.store(false);
