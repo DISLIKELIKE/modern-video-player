@@ -19,6 +19,11 @@ extern "C" {
 #include <queue>
 #include <functional>
 
+#include "frame_queue.h"
+#include "video_decode_thread.h"
+#include "audio_decode_thread.h"
+#include "sync_manager.h"
+
 namespace vp {
 
 using Clock = std::chrono::steady_clock;
@@ -53,15 +58,29 @@ public:
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const { return playback_speed_; }
 
+    void setSyncMode(SyncMode mode);
+    SyncMode getSyncMode() const { return sync_manager_.getMode(); }
+
 private:
-    void playLoop();
+    void renderLoop();
     void updateClock();
     double getMasterClock();
     
+    bool initDecodeThreads(AVFormatContext* fmt_ctx, int video_stream_idx, int audio_stream_idx);
+    void stopDecodeThreads();
+
     std::unique_ptr<VideoDecoder> video_decoder_;
     std::unique_ptr<AudioDecoder> audio_decoder_;
     std::unique_ptr<Display> display_;
     std::unique_ptr<AudioPlayer> audio_player_;
+    
+    std::unique_ptr<VideoDecodeThread> video_decode_thread_;
+    std::unique_ptr<AudioDecodeThread> audio_decode_thread_;
+    
+    std::unique_ptr<FrameQueue<VideoFrame>> video_frame_queue_;
+    std::unique_ptr<FrameQueue<AudioFrame>> audio_frame_queue_;
+    
+    SyncManager sync_manager_;
     
     std::atomic<bool> playing_;
     std::atomic<bool> paused_;
@@ -73,9 +92,13 @@ private:
     float volume_;
     double playback_speed_;
     
-    std::thread play_thread_;
+    std::thread render_thread_;
     std::mutex mutex_;
     std::condition_variable cv_;
+    
+    AVFormatContext* format_ctx_;
+    int video_stream_idx_;
+    int audio_stream_idx_;
 };
 
-} // namespace vp
+}

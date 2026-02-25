@@ -151,6 +151,9 @@ add_executable(${PROJECT_NAME}
     src/display.cpp
     src/audio_player.cpp
     src/logger.cpp
+    src/video_decode_thread.cpp
+    src/audio_decode_thread.cpp
+    src/sync_manager.cpp
 )
 
 # 链接库

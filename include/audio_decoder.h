@@ -28,6 +28,14 @@ public:
     
     const uint8_t* getData() const;
     int getSize() const;
+    
+    void setConvertedData(uint8_t* data, int size) {
+        if (converted_data_) {
+            av_free(converted_data_);
+        }
+        converted_data_ = data;
+        converted_size_ = size;
+    }
 
 private:
     AVFrame* frame_;

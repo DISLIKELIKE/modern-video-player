@@ -13,6 +13,7 @@
 | 3 | 2026-02-24 | 音频流索引不匹配 | ✅ 已修复 |
 | 4 | 2026-02-24 | YUV 数据渲染错误 | ✅ 已修复 |
 | 5 | 2026-02-24 | 企业级 Quill 日志通道 | ✅ 已修复 |
+| 6 | 2026-02-25 | 多线程播放架构重构 | ✅ 已完成 |
 
 ---
 
@@ -205,13 +206,62 @@ int ret = SDL_UpdateYUVTexture(
 
 ---
 
+## 问题 6: 多线程播放架构重构
+
+**日期**: 2026-02-25
+
+### 问题描述
+
+- 原有架构为单线程 playLoop，解码和渲染在同一线程
+- 视频解码会阻塞渲染线程，导致画面卡顿
+- 音视频同步实现困难
+- 队列满时 CPU 忙轮询导致占用过高
+
+### 解决方案
+
+1. **新增 FrameQueue 模板类**
+   - 实现线程安全的帧队列
+   - 使用 condition_variable 实现阻塞等待，避免 CPU 忙轮询
+   - 支持 push/pop/clear/stop 操作
+
+2. **新增 VideoDecodeThread 和 AudioDecodeThread**
+   - 独立的视频/音频解码线程
+   - 解码后的帧通过 FrameQueue 传递给渲染线程
+   - 支持 pause/resume/flush 控制
+
+3. **新增 SyncManager 同步管理器**
+   - 支持 AudioMaster/VideoMaster/Free 三种同步模式
+   - 实现帧延迟计算
+   - 实现跳帧/重复帧策略
+
+4. **重构 VideoPlayer**
+   - 从单线程 playLoop 改为多线程 renderLoop
+   - 添加 setSyncMode 方法支持同步模式切换
+   - 修复 AudioPlayer::play 签名不匹配问题
+
+### 修改文件
+
+- 新增 `include/frame_queue.h`
+- 新增 `include/video_decode_thread.h`
+- 新增 `include/audio_decode_thread.h`
+- 新增 `include/sync_manager.h`
+- 新增 `src/video_decode_thread.cpp`
+- 新增 `src/audio_decode_thread.cpp`
+- 新增 `src/sync_manager.cpp`
+- 修改 `include/video_player.h`
+- 修改 `include/audio_decoder.h`
+- 修改 `src/video_player.cpp`
+- 修改 `CMakeLists.txt`
+
+---
+
 ## 待解决的问题
 
-### 问题 6: 音频播放未实现
+### 问题 7: 硬件加速解码支持
 
-**状态**: 未实现
+**状态**: 待实现
 
-playLoop 中没有音频播放代码，视频可以播放但没有声音。需要在 playLoop 中添加音频解码和播放逻辑。
+需要添加 CUDA/D3D11VA 硬件加速解码支持，提升解码性能。
 
 ---
 
