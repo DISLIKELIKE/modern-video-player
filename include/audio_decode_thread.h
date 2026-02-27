@@ -2,6 +2,7 @@
 
 #include "audio_decoder.h"
 #include "frame_queue.h"
+#include "packet_reader.h"
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -21,7 +22,8 @@ public:
     AudioDecodeThread();
     ~AudioDecodeThread();
 
-    bool start(AVFormatContext* fmt_ctx, int stream_idx, 
+    bool start(AVFormatContext* fmt_ctx, int stream_idx,
+               PacketQueue<PacketRef>* packet_queue,
                FrameQueue<AudioFrame>* output_queue,
                AudioPlayer* audio_player = nullptr);
     void stop();
@@ -37,6 +39,7 @@ private:
 
     std::unique_ptr<AudioDecoder> decoder_;
     std::thread thread_;
+    PacketQueue<PacketRef>* packet_queue_;
     FrameQueue<AudioFrame>* output_queue_;
     AudioPlayer* audio_player_;
 

@@ -154,6 +154,7 @@ add_executable(${PROJECT_NAME}
     src/video_decode_thread.cpp
     src/audio_decode_thread.cpp
     src/sync_manager.cpp
+    src/packet_reader.cpp
 )
 
 # 链接库

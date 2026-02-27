@@ -124,6 +124,41 @@ void VideoDecoder::close() {
     stream_idx_ = -1;
 }
 
+bool VideoDecoder::decodePacket(AVPacket* packet, VideoFrame& frame) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!codec_ctx_) {
+        LOG_TRACE_VIDEO("decodePacket: codec_ctx_ is null");
+        return false;
+    }
+
+    if (!packet) {
+        LOG_TRACE_VIDEO("decodePacket: packet is null");
+        return false;
+    }
+
+    int ret = avcodec_send_packet(codec_ctx_, packet);
+    if (ret < 0) {
+        LOG_TRACE_VIDEO("decodePacket: avcodec_send_packet failed, ret={}", ret);
+        return false;
+    }
+
+    ret = avcodec_receive_frame(codec_ctx_, frame.get());
+    if (ret < 0) {
+        LOG_TRACE_VIDEO("decodePacket: avcodec_receive_frame failed, ret={}", ret);
+        return false;
+    }
+
+    if (frame.get()->pts != AV_NOPTS_VALUE) {
+        frame.setPts(frame.get()->pts * av_q2d(time_base_));
+    } else if (frame.get()->pkt_dts != AV_NOPTS_VALUE) {
+        frame.setPts(frame.get()->pkt_dts * av_q2d(time_base_));
+    }
+
+    LOG_TRACE_VIDEO("decodePacket: success, pts={}", frame.pts());
+    return true;
+}
+
 bool VideoDecoder::decodeFrame(VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     

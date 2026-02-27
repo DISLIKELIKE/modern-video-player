@@ -2,6 +2,7 @@
 
 #include "video_decoder.h"
 #include "frame_queue.h"
+#include "packet_reader.h"
 #include <memory>
 #include <thread>
 #include <atomic>
@@ -19,7 +20,8 @@ public:
     VideoDecodeThread();
     ~VideoDecodeThread();
 
-    bool start(AVFormatContext* fmt_ctx, int stream_idx, 
+    bool start(AVFormatContext* fmt_ctx, int stream_idx,
+               PacketQueue<PacketRef>* packet_queue,
                FrameQueue<VideoFrame>* output_queue);
     void stop();
     void pause();
@@ -34,6 +36,7 @@ private:
 
     std::unique_ptr<VideoDecoder> decoder_;
     std::thread thread_;
+    PacketQueue<PacketRef>* packet_queue_;
     FrameQueue<VideoFrame>* output_queue_;
 
     std::atomic<bool> running_;

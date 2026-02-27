@@ -58,6 +58,7 @@ public:
     bool open(AVFormatContext* fmt_ctx, int stream_idx);
     void close();
     
+    bool decodePacket(AVPacket* packet, AudioFrame& frame);
     bool decodeFrame(AudioFrame& frame);
     void flush();
     

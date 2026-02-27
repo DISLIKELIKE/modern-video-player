@@ -140,6 +140,36 @@ void AudioDecoder::close() {
     stream_idx_ = -1;
 }
 
+bool AudioDecoder::decodePacket(AVPacket* packet, AudioFrame& frame) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!codec_ctx_) {
+        return false;
+    }
+
+    if (!packet) {
+        return false;
+    }
+
+    int ret = avcodec_send_packet(codec_ctx_, packet);
+    if (ret < 0) {
+        return false;
+    }
+
+    ret = avcodec_receive_frame(codec_ctx_, frame.get());
+    if (ret < 0) {
+        return false;
+    }
+
+    if (frame.get()->pts != AV_NOPTS_VALUE) {
+        frame.setPts(frame.get()->pts * av_q2d(time_base_));
+    } else if (frame.get()->pkt_dts != AV_NOPTS_VALUE) {
+        frame.setPts(frame.get()->pkt_dts * av_q2d(time_base_));
+    }
+
+    return true;
+}
+
 bool AudioDecoder::decodeFrame(AudioFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     

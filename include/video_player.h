@@ -20,6 +20,7 @@ extern "C" {
 #include <functional>
 
 #include "frame_queue.h"
+#include "packet_reader.h"
 #include "video_decode_thread.h"
 #include "audio_decode_thread.h"
 #include "sync_manager.h"
@@ -73,6 +74,10 @@ private:
     std::unique_ptr<AudioDecoder> audio_decoder_;
     std::unique_ptr<Display> display_;
     std::unique_ptr<AudioPlayer> audio_player_;
+    
+    std::unique_ptr<PacketReaderThread> packet_reader_;
+    std::unique_ptr<PacketQueue<PacketRef>> video_packet_queue_;
+    std::unique_ptr<PacketQueue<PacketRef>> audio_packet_queue_;
     
     std::unique_ptr<VideoDecodeThread> video_decode_thread_;
     std::unique_ptr<AudioDecodeThread> audio_decode_thread_;
