@@ -3,45 +3,6 @@
 
 namespace vp {
 
-PacketRef::PacketRef()
-    : packet_(nullptr)
-    , stream_index_(-1) {
-    packet_ = av_packet_alloc();
-}
-
-PacketRef::~PacketRef() {
-    if (packet_) {
-        av_packet_free(&packet_);
-    }
-}
-
-PacketRef::PacketRef(PacketRef&& other) noexcept
-    : packet_(other.packet_)
-    , stream_index_(other.stream_index_) {
-    other.packet_ = nullptr;
-    other.stream_index_ = -1;
-}
-
-PacketRef& PacketRef::operator=(PacketRef&& other) noexcept {
-    if (this != &other) {
-        if (packet_) {
-            av_packet_free(&packet_);
-        }
-        packet_ = other.packet_;
-        stream_index_ = other.stream_index_;
-        other.packet_ = nullptr;
-        other.stream_index_ = -1;
-    }
-    return *this;
-}
-
-void PacketRef::reset() {
-    if (packet_) {
-        av_packet_unref(packet_);
-    }
-    stream_index_ = -1;
-}
-
 PacketReaderThread::PacketReaderThread()
     : format_ctx_(nullptr)
     , video_stream_idx_(-1)
@@ -138,7 +99,7 @@ void PacketReaderThread::flush() {
 
 void PacketReaderThread::readLoop() {
     int packet_count = 0;
-    
+
     while (!stop_requested_.load()) {
         if (paused_.load()) {
             std::unique_lock<std::mutex> lock(mutex_);
@@ -176,37 +137,37 @@ void PacketReaderThread::readLoop() {
                 audio_queue_->setEof(true);
             }
 
-            LOG_INFO("PacketReaderThread: EOF reached");
+            LOG_INFO("PacketReaderThread: EOF reached, total packets={}", packet_count);
             break;
         }
 
         packet_count++;
-        
+
         if (packet_count <= 5) {
-            LOG_INFO("PacketReaderThread: read packet {}, stream_index={}, size={}", 
+            LOG_INFO("PacketReaderThread: read packet {}, stream_index={}, size={}",
                      packet_count, packet->stream_index, packet->size);
         }
 
-        PacketRef packet_ref;
-        ret = av_packet_move_ref(packet_ref.get(), packet);
-        if (ret < 0) {
-            LOG_ERROR("PacketReaderThread: av_packet_move_ref failed, ret={}", ret);
-        }
-        av_packet_free(&packet);
-        packet_ref.setStreamIndex(packet_ref.get()->stream_index);
+        PacketRef packet_ref = PacketRef::fromPacket(packet);
 
-        if (packet_ref.get()->stream_index == video_stream_idx_) {
+        if (packet->stream_index == video_stream_idx_) {
             if (video_queue_ && !video_queue_full) {
                 if (!video_queue_->pushWithWait(std::move(packet_ref), 10)) {
                     LOG_TRACE_VIDEO("PacketReaderThread: video queue push failed");
                 }
+            } else {
+                av_packet_free(&packet);
             }
-        } else if (packet_ref.get()->stream_index == audio_stream_idx_) {
+        } else if (packet->stream_index == audio_stream_idx_) {
             if (audio_queue_ && !audio_queue_full) {
                 if (!audio_queue_->pushWithWait(std::move(packet_ref), 10)) {
                     LOG_TRACE_VIDEO("PacketReaderThread: audio queue push failed");
                 }
+            } else {
+                av_packet_free(&packet);
             }
+        } else {
+            av_packet_free(&packet);
         }
     }
 }

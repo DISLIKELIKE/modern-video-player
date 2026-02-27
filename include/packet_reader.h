@@ -17,27 +17,48 @@ namespace vp {
 
 class PacketRef {
 public:
-    PacketRef();
-    ~PacketRef();
+    PacketRef() : packet_(nullptr) {}
+    
+    ~PacketRef() {
+        if (packet_) {
+            av_packet_free(&packet_);
+        }
+    }
 
-    PacketRef(PacketRef&& other) noexcept;
-    PacketRef& operator=(PacketRef&& other) noexcept;
+    PacketRef(PacketRef&& other) noexcept : packet_(other.packet_) {
+        other.packet_ = nullptr;
+    }
+
+    PacketRef& operator=(PacketRef&& other) noexcept {
+        if (this != &other) {
+            if (packet_) {
+                av_packet_free(&packet_);
+            }
+            packet_ = other.packet_;
+            other.packet_ = nullptr;
+        }
+        return *this;
+    }
 
     PacketRef(const PacketRef&) = delete;
     PacketRef& operator=(const PacketRef&) = delete;
+
+    static PacketRef fromPacket(AVPacket* pkt) {
+        PacketRef ref;
+        ref.packet_ = pkt;
+        return ref;
+    }
 
     bool isValid() const { return packet_ != nullptr; }
     AVPacket* get() { return packet_; }
     const AVPacket* get() const { return packet_; }
 
-    int getStreamIndex() const { return stream_index_; }
-    void setStreamIndex(int idx) { stream_index_ = idx; }
-
-    void reset();
+    int getStreamIndex() const { 
+        return packet_ ? packet_->stream_index : -1; 
+    }
 
 private:
     AVPacket* packet_;
-    int stream_index_;
 };
 
 template<typename T>
