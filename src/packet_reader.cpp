@@ -80,6 +80,8 @@ bool PacketReaderThread::start(AVFormatContext* fmt_ctx, int video_stream_idx, i
     video_queue_ = video_queue;
     audio_queue_ = audio_queue;
 
+    av_seek_frame(format_ctx_, -1, 0, AVSEEK_FLAG_BACKWARD);
+
     stop_requested_.store(false);
     paused_.store(false);
     eof_reached_.store(false);
@@ -135,6 +137,8 @@ void PacketReaderThread::flush() {
 }
 
 void PacketReaderThread::readLoop() {
+    int packet_count = 0;
+    
     while (!stop_requested_.load()) {
         if (paused_.load()) {
             std::unique_lock<std::mutex> lock(mutex_);
@@ -161,6 +165,7 @@ void PacketReaderThread::readLoop() {
         int ret = av_read_frame(format_ctx_, packet);
 
         if (ret < 0) {
+            LOG_ERROR("PacketReaderThread: av_read_frame failed, ret={}, packet_count={}", ret, packet_count);
             av_packet_free(&packet);
             eof_reached_.store(true);
 
@@ -175,8 +180,18 @@ void PacketReaderThread::readLoop() {
             break;
         }
 
+        packet_count++;
+        
+        if (packet_count <= 5) {
+            LOG_INFO("PacketReaderThread: read packet {}, stream_index={}, size={}", 
+                     packet_count, packet->stream_index, packet->size);
+        }
+
         PacketRef packet_ref;
-        av_packet_move_ref(packet_ref.get(), packet);
+        ret = av_packet_move_ref(packet_ref.get(), packet);
+        if (ret < 0) {
+            LOG_ERROR("PacketReaderThread: av_packet_move_ref failed, ret={}", ret);
+        }
         av_packet_free(&packet);
         packet_ref.setStreamIndex(packet_ref.get()->stream_index);
 
