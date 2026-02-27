@@ -17,6 +17,62 @@
 | 7 | 2026-02-25 | 音频播放架构修复 | ✅ 已修复 |
 | 9 | 2026-02-25 | VideoFrame/AudioFrame 移动语义缺陷 | ✅ 已修复 |
 | 10 | 2026-02-25 | 多解码器实例竞争读取导致解码错误 | ✅ 已修复 |
+| 11 | 2026-02-27 | 并发读取 AVFormatContext 导致崩溃 | ✅ 已修复 |
+
+---
+
+## 问题 11: 并发读取 AVFormatContext 导致崩溃
+
+**日期**: 2026-02-27
+
+### 问题描述
+
+播放视频时出现大量 FFmpeg 解码错误和访问冲突崩溃：
+```
+[h264 @ ...] Invalid NAL unit size (-299142208 > 12338).
+[h264 @ ...] missing picture in access unit with size 12342
+0xC0000005: 写入位置 0x... 时发生访问冲突
+```
+
+### 原因分析
+
+视频解码线程 (`VideoDecodeThread`) 和音频解码线程 (`AudioDecodeThread`) 各自拥有独立的解码器实例，但共享同一个 `AVFormatContext`。两个线程并发调用 `av_read_frame(format_ctx_, packet)` 导致数据竞争，读取到的 packet 数据错乱，引发 H264 解码错误和内存访问冲突。
+
+### 解决方案
+
+引入统一的 `PacketReaderThread` 作为唯一的 packet 读取入口：
+
+1. **新增 PacketReaderThread 类**
+   - 作为唯一的 `av_read_frame()` 调用点
+   - 根据 stream_index 将 packet 分发到对应的 PacketQueue
+
+2. **新增 PacketRef 和 PacketQueue 类**
+   - `PacketRef`: 包装 AVPacket 的智能结构体，支持移动语义
+   - `PacketQueue`: 线程安全的 packet 队列，支持阻塞等待
+
+3. **修改解码器接口**
+   - `VideoDecoder` 和 `AudioDecoder` 新增 `decodePacket()` 方法
+   - 接收外部传入的 packet，而非内部读取
+
+4. **重构解码线程**
+   - `VideoDecodeThread` 和 `AudioDecodeThread` 从 `PacketQueue` 获取 packet
+   - 不再直接调用 `av_read_frame()`
+
+### 修改文件
+
+- 新增 `include/packet_reader.h`
+- 新增 `src/packet_reader.cpp`
+- 修改 `include/video_decoder.h`
+- 修改 `src/video_decoder.cpp`
+- 修改 `include/audio_decoder.h`
+- 修改 `src/audio_decoder.cpp`
+- 修改 `include/video_decode_thread.h`
+- 修改 `src/video_decode_thread.cpp`
+- 修改 `include/audio_decode_thread.h`
+- 修改 `src/audio_decode_thread.cpp`
+- 修改 `include/video_player.h`
+- 修改 `src/video_player.cpp`
+- 修改 `CMakeLists.txt`
 
 ---
 

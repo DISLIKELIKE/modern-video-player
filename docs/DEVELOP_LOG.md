@@ -1,5 +1,53 @@
 # 开发日志
 
+## 问题 11: 并发读取 AVFormatContext 导致崩溃
+
+**日期**: 2026-02-27
+**状态**: 已解决
+
+### 问题描述
+播放视频时出现大量 FFmpeg 解码错误和访问冲突崩溃：
+```
+[h264 @ ...] Invalid NAL unit size (-299142208 > 12338).
+[h264 @ ...] missing picture in access unit with size 12342
+[aac @ ...] Number of scalefactor bands in group (53) exceeds limit (49).
+0xC0000005: 写入位置 0x0000022947799000 时发生访问冲突
+```
+调用堆栈显示错误在 `av_read_frame(format_ctx_, packet)` 处。
+
+### 日志输出
+```
+Video decoder opened: 1920x1080, format: yuv420p
+Audio decoder opened: 48000Hz, 2 channels, fltp
+Video decode thread started
+Audio decode thread started
+[h264 @ ...] Invalid NAL unit size (-299142208 > 12338).
+[h264 @ ...] missing picture in access unit with size 12342
+... (大量类似错误)
+```
+
+### 分析记录
+1. 问题出现在视频解码线程和音频解码线程同时运行时
+2. 两个线程各自拥有独立的 VideoDecoder/AudioDecoder 实例
+3. 两个实例共享同一个 `AVFormatContext* format_ctx_`
+4. 在 `decodeFrame()` 中都调用了 `av_read_frame(format_ctx_, packet)`
+5. 并发读取导致 packet 数据错乱，H264 解码器读取到错误的 NAL 单元
+
+### 根本原因
+**并发调用 `av_read_frame()` 导致数据竞争**。`AVFormatContext` 不是线程安全的，两个线程同时读取会导致：
+- 读取位置错乱
+- Packet 数据被覆盖
+- 解码器收到损坏的数据
+
+### 解决方案
+引入统一的 `PacketReaderThread` 作为唯一的 packet 读取入口：
+1. `PacketReaderThread` 是唯一调用 `av_read_frame()` 的地方
+2. 读取到的 packet 根据 stream_index 分发到 `PacketQueue`
+3. `VideoDecodeThread` 和 `AudioDecodeThread` 从各自的 `PacketQueue` 获取 packet
+4. 解码器新增 `decodePacket()` 方法接收外部传入的 packet
+
+---
+
 ## 问题 9: VideoFrame/AudioFrame 移动语义缺陷导致崩溃
 
 **日期**: 2026-02-25

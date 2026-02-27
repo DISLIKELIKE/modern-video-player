@@ -79,17 +79,44 @@ class FrameQueue {
 - 支持队列满/空时的超时等待，避免 CPU 忙轮询
 - 默认队列大小为 10 帧
 
-### 2.0.1 VideoDecodeThread (视频解码线程)
+### 2.0.1 PacketReaderThread (Packet 读取线程)
+
+**职责**:
+- 作为唯一调用 `av_read_frame()` 的入口
+- 根据流索引将 packet 分发到对应的队列
+- 支持暂停/恢复/停止控制
+
+**关键接口**:
+```cpp
+class PacketReaderThread {
+    bool start(AVFormatContext* fmt_ctx, int video_stream_idx, int audio_stream_idx,
+               PacketQueue<PacketRef>* video_queue, PacketQueue<PacketRef>* audio_queue);
+    void stop();
+    void pause();
+    void resume();
+    void flush();
+};
+```
+
+**特性**:
+- 解决多线程并发读取 `AVFormatContext` 的数据竞争问题
+- 使用两个 `PacketQueue` 分别缓存视频和音频 packet
+- 支持 EOF 检测和队列停止
+
+### 2.0.3 VideoDecodeThread (视频解码线程)
 
 **职责**:
 - 独立于主线程进行视频解码
+- 从 PacketQueue 获取 packet 并解码
 - 将解码后的帧放入视频帧队列
 - 支持暂停/恢复/停止控制
 
 **关键接口**:
 ```cpp
 class VideoDecodeThread {
-    bool start(AVFormatContext* fmt_ctx, int stream_idx, FrameQueue<VideoFrame>* output_queue);
+    bool start(AVFormatContext* fmt_ctx, int stream_idx, 
+               PacketQueue<PacketRef>* packet_queue,
+               FrameQueue<VideoFrame>* output_queue);
     void stop();
     void pause();
     void resume();
@@ -97,17 +124,21 @@ class VideoDecodeThread {
 };
 ```
 
-### 2.0.2 AudioDecodeThread (音频解码线程)
+### 2.0.4 AudioDecodeThread (音频解码线程)
 
 **职责**:
 - 独立于主线程进行音频解码
+- 从 PacketQueue 获取 packet 并解码
 - 将解码后的帧转换为 SDL 可播放格式
 - 将转换后的帧放入音频帧队列
 
 **关键接口**:
 ```cpp
 class AudioDecodeThread {
-    bool start(AVFormatContext* fmt_ctx, int stream_idx, FrameQueue<AudioFrame>* output_queue);
+    bool start(AVFormatContext* fmt_ctx, int stream_idx,
+               PacketQueue<PacketRef>* packet_queue,
+               FrameQueue<AudioFrame>* output_queue,
+               AudioPlayer* audio_player);
     void stop();
     void pause();
     void resume();
@@ -115,7 +146,7 @@ class AudioDecodeThread {
 };
 ```
 
-### 2.0.3 SyncManager (同步管理器)
+### 2.0.5 SyncManager (同步管理器)
 
 **职责**:
 - 管理音视频同步
@@ -350,11 +381,14 @@ graph LR
 主线程:
 └── 处理用户输入
 
+Packet 读取线程:
+└── av_read_frame() → 分发 packet 到视频/音频队列
+
 视频解码线程:
-└── 解码视频帧 → 视频帧队列
+└── 从 PacketQueue 获取 packet → 解码 → 视频帧队列
 
 音频解码线程:
-└── 解码音频帧 → 音频帧队列
+└── 从 PacketQueue 获取 packet → 解码 → 音频帧队列
 
 渲染线程 (主循环):
 ├── 从视频帧队列取帧
@@ -368,12 +402,21 @@ graph LR
 
 ```mermaid
 graph TB
+    subgraph PacketReader["Packet 读取线程"]
+        P1[PacketReaderThread]
+    end
+    
+    subgraph PacketQueues["Packet 队列"]
+        PQ1[VideoPacketQueue]
+        PQ2[AudioPacketQueue]
+    end
+    
     subgraph DecodeThreads["解码线程"]
         L1[VideoDecodeThread]
         L2[AudioDecodeThread]
     end
     
-    subgraph Queues["帧队列"]
+    subgraph FrameQueues["帧队列"]
         Q1[VideoFrameQueue]
         Q2[AudioFrameQueue]
     end
@@ -383,23 +426,32 @@ graph TB
         R2[SyncManager]
     end
     
+    P1 --> PQ1
+    P1 --> PQ2
+    PQ1 --> L1
+    PQ2 --> L2
     L1 --> Q1
     L2 --> Q2
     Q1 --> R1
     Q2 --> R1
     R1 --> R2
     
+    style PacketReader fill:#ffe1e1
+    style PacketQueues fill:#e1ffe1
     style DecodeThreads fill:#e1e1ff
-    style Queues fill:#ffffe1
+    style FrameQueues fill:#ffffe1
     style RenderThread fill:#f5e1ff
 ```
 
 **优点**:
+- 解决了并发读取 AVFormatContext 导致的数据竞争问题
 - 音视频同步更准确
 - 性能更好，解码不阻塞渲染
 - 支持预解码机制
 
 **实现细节**:
+- `PacketReaderThread` 是唯一调用 `av_read_frame()` 的地方
+- 使用 `PacketQueue` 和 `FrameQueue` 两级队列解耦读取和解码
 - FrameQueue 使用条件变量实现阻塞等待，避免 CPU 忙轮询
 - 解码线程和渲染线程通过帧队列解耦
 - SyncManager 统一管理音视频同步
