@@ -1,229 +1,188 @@
 #include "video_player.h"
-#include "video_decoder.h"
-#include "audio_decoder.h"
 #include "display.h"
 #include "audio_player.h"
 #include "logger.h"
+
 #include <iostream>
 #include <algorithm>
 
+extern "C" {
+#include <libswresample/swresample.h>
+}
+
 namespace vp {
 
-VideoPlayer::VideoPlayer()
-    : playing_(false)
-    , paused_(false)
-    , stopped_(true)
-    , seeking_(false)
-    , duration_(0.0)
-    , current_time_(0.0)
-    , volume_(1.0f)
-    , playback_speed_(1.0)
-    , format_ctx_(nullptr)
-    , video_stream_idx_(-1)
-    , audio_stream_idx_(-1) {
-    video_frame_queue_ = std::make_unique<FrameQueue<VideoFrame>>(10);
-    audio_frame_queue_ = std::make_unique<FrameQueue<AudioFrame>>(10);
-    video_packet_queue_ = std::make_unique<PacketQueue<PacketRef>>(100);
-    audio_packet_queue_ = std::make_unique<PacketQueue<PacketRef>>(100);
-}
+VideoPlayer::VideoPlayer() = default;
 
 VideoPlayer::~VideoPlayer() {
     close();
 }
 
 bool VideoPlayer::open(const std::string& filename) {
-    AVFormatContext* format_ctx = nullptr;
-
-    if (avformat_open_input(&format_ctx, filename.c_str(), nullptr, nullptr) != 0) {
-        LOG_ERROR("Could not open input file: " + filename);
+    demuxer_ = std::make_unique<Demuxer>();
+    if (!demuxer_->open(filename)) {
+        LOG_ERROR("Could not open file");
         return false;
     }
 
-    if (avformat_find_stream_info(format_ctx, nullptr) < 0) {
-        LOG_ERROR("Could not find stream information");
-        avformat_close_input(&format_ctx);
+    const MediaInfo& info = demuxer_->getMediaInfo();
+
+    if (!initComponents()) {
+        LOG_ERROR("Failed to initialize components");
         return false;
     }
 
-    video_stream_idx_ = -1;
-    audio_stream_idx_ = -1;
-
-    for (unsigned int i = 0; i < format_ctx->nb_streams; i++) {
-        if (format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
-            video_stream_idx_ < 0) {
-            video_stream_idx_ = i;
-        } else if (format_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
-                   audio_stream_idx_ < 0) {
-            audio_stream_idx_ = i;
-        }
-    }
-
-    if (video_stream_idx_ < 0 && audio_stream_idx_ < 0) {
-        LOG_ERROR("Could not find video or audio stream");
-        avformat_close_input(&format_ctx);
-        return false;
-    }
-
-    video_decoder_ = std::make_unique<VideoDecoder>();
-    audio_decoder_ = std::make_unique<AudioDecoder>();
-    display_ = std::make_unique<Display>();
-    audio_player_ = std::make_unique<AudioPlayer>();
-
-    if (video_stream_idx_ >= 0) {
-        if (!video_decoder_->open(format_ctx, video_stream_idx_)) {
-            LOG_ERROR("Failed to open video decoder");
-            avformat_close_input(&format_ctx);
-            return false;
-        }
-
-        if (!display_->init(video_decoder_->getWidth(),
-                           video_decoder_->getHeight(), "Video Player")) {
-            LOG_ERROR("Failed to initialize display");
-            avformat_close_input(&format_ctx);
-            return false;
-        }
-    }
-
-    if (audio_stream_idx_ >= 0) {
-        if (!audio_decoder_->open(format_ctx, audio_stream_idx_)) {
-            LOG_WARNING("Failed to open audio decoder");
-            audio_stream_idx_ = -1;
-        } else {
-            if (!audio_player_->init(audio_decoder_->getSampleRate(),
-                                     audio_decoder_->getChannels())) {
-                LOG_WARNING("Failed to initialize audio player");
-                audio_stream_idx_ = -1;
-            }
-        }
-    }
-
-    duration_ = format_ctx->duration / (double)AV_TIME_BASE;
-    format_ctx_ = format_ctx;
-
-    LOG_INFO("Opened file: " + filename);
-    LOG_INFO("Duration: " + std::to_string(duration_) + " seconds");
-
-    if (video_decoder_) {
-        LOG_INFO("Video: " + std::to_string(video_decoder_->getWidth()) + "x"
-                  + std::to_string(video_decoder_->getHeight()));
-    }
-
-    if (audio_decoder_) {
-        LOG_INFO("Audio: " + std::to_string(audio_decoder_->getSampleRate()) + "Hz, "
-                  + std::to_string(audio_decoder_->getChannels()) + " channels");
-    }
-
+    LOG_INFO("Opened file");
     return true;
-}
-
-bool VideoPlayer::initDecodeThreads(AVFormatContext* fmt_ctx, int video_stream_idx, int audio_stream_idx) {
-    packet_reader_ = std::make_unique<PacketReaderThread>();
-    if (!packet_reader_->start(fmt_ctx, video_stream_idx, audio_stream_idx,
-                               video_packet_queue_.get(), audio_packet_queue_.get())) {
-        LOG_ERROR("Failed to start packet reader thread");
-        return false;
-    }
-
-    if (video_stream_idx >= 0) {
-        video_decode_thread_ = std::make_unique<VideoDecodeThread>();
-        if (!video_decode_thread_->start(fmt_ctx, video_stream_idx,
-                                         video_packet_queue_.get(), video_frame_queue_.get())) {
-            LOG_ERROR("Failed to start video decode thread");
-            return false;
-        }
-    }
-
-    if (audio_stream_idx >= 0) {
-        audio_decode_thread_ = std::make_unique<AudioDecodeThread>();
-        if (!audio_decode_thread_->start(fmt_ctx, audio_stream_idx,
-                                         audio_packet_queue_.get(), audio_frame_queue_.get(),
-                                         audio_player_.get())) {
-            LOG_ERROR("Failed to start audio decode thread");
-            if (video_decode_thread_) {
-                video_decode_thread_->stop();
-            }
-            return false;
-        }
-    }
-
-    return true;
-}
-
-void VideoPlayer::stopDecodeThreads() {
-    if (packet_reader_) {
-        packet_reader_->stop();
-        packet_reader_.reset();
-    }
-
-    if (video_decode_thread_) {
-        video_decode_thread_->stop();
-        video_decode_thread_.reset();
-    }
-
-    if (audio_decode_thread_) {
-        audio_decode_thread_->stop();
-        audio_decode_thread_.reset();
-    }
-
-    if (video_packet_queue_) {
-        video_packet_queue_->clear();
-        video_packet_queue_->start();
-    }
-
-    if (audio_packet_queue_) {
-        audio_packet_queue_->clear();
-        audio_packet_queue_->start();
-    }
-
-    if (video_frame_queue_) {
-        video_frame_queue_->clear();
-    }
-
-    if (audio_frame_queue_) {
-        audio_frame_queue_->clear();
-    }
 }
 
 void VideoPlayer::close() {
     stop();
 
-    if (render_thread_.joinable()) {
-        render_thread_.join();
+    if (render_thread_ && render_thread_->joinable()) {
+        render_thread_->join();
     }
 
-    stopDecodeThreads();
+    stopThreads();
 
     video_decoder_.reset();
     audio_decoder_.reset();
     display_.reset();
     audio_player_.reset();
+    demuxer_.reset();
 
-    if (format_ctx_) {
-        avformat_close_input(&format_ctx_);
-        format_ctx_ = nullptr;
+    current_time_.store(0.0);
+}
+
+bool VideoPlayer::initComponents() {
+    if (!demuxer_) {
+        return false;
     }
 
-    duration_ = 0.0;
-    current_time_ = 0.0;
+    const MediaInfo& info = demuxer_->getMediaInfo();
+    AVFormatContext* fmt_ctx = demuxer_->getFormatContext();
+
+    if (info.video_stream_idx >= 0) {
+        display_ = std::make_unique<Display>();
+        if (!display_->init(info.width, info.height, "Video Player")) {
+            LOG_ERROR("Failed to initialize display");
+            return false;
+        }
+
+        video_packet_queue_ = std::make_unique<PacketQueue>(100);
+
+        video_decoder_ = std::make_unique<DecoderWorker>();
+        AVStream* video_stream = fmt_ctx->streams[info.video_stream_idx];
+        if (!video_decoder_->init(video_stream->codecpar, video_stream->time_base)) {
+            LOG_ERROR("Failed to initialize video decoder");
+            return false;
+        }
+
+        video_decoder_->setOutputCallback([this](AVFrame* frame) {
+            handleVideoFrame(frame);
+        });
+    }
+
+    if (info.audio_stream_idx >= 0) {
+        audio_player_ = std::make_unique<AudioPlayer>();
+        if (!audio_player_->init(info.sample_rate, info.channels)) {
+            LOG_WARNING("Failed to initialize audio player");
+        }
+
+        audio_packet_queue_ = std::make_unique<PacketQueue>(100);
+
+        audio_decoder_ = std::make_unique<DecoderWorker>();
+        AVStream* audio_stream = fmt_ctx->streams[info.audio_stream_idx];
+        if (!audio_decoder_->init(audio_stream->codecpar, audio_stream->time_base)) {
+            LOG_WARNING("Failed to initialize audio decoder");
+        } else {
+            audio_decoder_->setOutputCallback([this](AVFrame* frame) {
+                handleAudioFrame(frame);
+            });
+        }
+    }
+
+    return true;
+}
+
+void VideoPlayer::startThreads() {
+    if (video_decoder_ && video_packet_queue_) {
+        video_decoder_->start(video_packet_queue_.get());
+    }
+
+    if (audio_decoder_ && audio_packet_queue_) {
+        audio_decoder_->start(audio_packet_queue_.get());
+    }
+
+    demuxer_thread_ = std::make_unique<std::thread>([this]() {
+        while (!stopped_.load() && demuxer_ && !demuxer_->isEof()) {
+            if (paused_.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                continue;
+            }
+
+            bool video_full = video_packet_queue_ && video_packet_queue_->full();
+            bool audio_full = audio_packet_queue_ && audio_packet_queue_->full();
+
+            if (video_full && audio_full) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            AVPacket* packet = av_packet_alloc();
+            if (!packet) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
+            }
+
+            if (!demuxer_->readPacket(packet)) {
+                av_packet_free(&packet);
+                if (video_packet_queue_) video_packet_queue_->setEof(true);
+                if (audio_packet_queue_) audio_packet_queue_->setEof(true);
+                break;
+            }
+
+            const MediaInfo& info = demuxer_->getMediaInfo();
+            if (packet->stream_index == info.video_stream_idx && video_packet_queue_ && !video_full) {
+                video_packet_queue_->push(packet, 10);
+            } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_ && !audio_full) {
+                audio_packet_queue_->push(packet, 10);
+            } else {
+                av_packet_free(&packet);
+            }
+        }
+    });
+
+    render_thread_ = std::make_unique<std::thread>(&VideoPlayer::renderLoop, this);
+}
+
+void VideoPlayer::stopThreads() {
+    if (video_packet_queue_) {
+        video_packet_queue_->stop();
+    }
+    if (audio_packet_queue_) {
+        audio_packet_queue_->stop();
+    }
+
+    if (video_decoder_) {
+        video_decoder_->stop();
+    }
+    if (audio_decoder_) {
+        audio_decoder_->stop();
+    }
+
+    if (demuxer_thread_ && demuxer_thread_->joinable()) {
+        demuxer_thread_->join();
+    }
+    demuxer_thread_.reset();
 }
 
 void VideoPlayer::play() {
-    if (!video_decoder_ && !audio_decoder_) {
-        return;
-    }
-
     if (playing_.load()) {
         if (paused_.load()) {
             paused_.store(false);
-            if (packet_reader_) {
-                packet_reader_->resume();
-            }
-            if (video_decode_thread_) {
-                video_decode_thread_->resume();
-            }
-            if (audio_decode_thread_) {
-                audio_decode_thread_->resume();
-            }
+            if (video_decoder_) video_decoder_->resume();
+            if (audio_decoder_) audio_decoder_->resume();
         }
         return;
     }
@@ -232,46 +191,25 @@ void VideoPlayer::play() {
     paused_.store(false);
     stopped_.store(false);
 
-    video_decoder_.reset();
-    audio_decoder_.reset();
+    demuxer_->seek(0);
+    clock_.reset();
+    clock_.setMasterClock(0);
 
-    if (!initDecodeThreads(format_ctx_, video_stream_idx_, audio_stream_idx_)) {
-        LOG_ERROR("Failed to initialize decode threads");
-        playing_.store(false);
-        return;
-    }
+    startThreads();
 
-    if (render_thread_.joinable()) {
-        render_thread_.join();
-    }
-
-    render_thread_ = std::thread(&VideoPlayer::renderLoop, this);
+    LOG_INFO("Playback started");
 }
 
 void VideoPlayer::pause() {
     if (playing_.load()) {
         paused_.store(!paused_.load());
-
-        if (paused_.load()) {
-            if (packet_reader_) {
-                packet_reader_->pause();
-            }
-            if (video_decode_thread_) {
-                video_decode_thread_->pause();
-            }
-            if (audio_decode_thread_) {
-                audio_decode_thread_->pause();
-            }
-        } else {
-            if (packet_reader_) {
-                packet_reader_->resume();
-            }
-            if (video_decode_thread_) {
-                video_decode_thread_->resume();
-            }
-            if (audio_decode_thread_) {
-                audio_decode_thread_->resume();
-            }
+        if (video_decoder_) {
+            if (paused_.load()) video_decoder_->pause();
+            else video_decoder_->resume();
+        }
+        if (audio_decoder_) {
+            if (paused_.load()) audio_decoder_->pause();
+            else audio_decoder_->resume();
         }
     }
 }
@@ -282,49 +220,61 @@ void VideoPlayer::stop() {
     paused_.store(false);
     cv_.notify_all();
 
-    stopDecodeThreads();
+    stopThreads();
 
-    if (render_thread_.joinable()) {
-        render_thread_.join();
+    if (render_thread_ && render_thread_->joinable()) {
+        render_thread_->join();
     }
+    render_thread_.reset();
 
     if (display_) {
         display_->close();
-        if (video_decoder_) {
-            display_->init(video_decoder_->getWidth(),
-                         video_decoder_->getHeight(), "Video Player");
+        const MediaInfo& info = demuxer_->getMediaInfo();
+        if (info.video_stream_idx >= 0) {
+            display_->init(info.width, info.height, "Video Player");
         }
     }
 
-    current_time_ = 0.0;
-    sync_manager_.reset();
+    current_time_.store(0.0);
+    clock_.reset();
+
+    LOG_INFO("Playback stopped");
 }
 
 void VideoPlayer::seek(double timestamp) {
-    if (!video_decoder_ && !audio_decoder_) return;
+    if (!demuxer_) return;
 
     seeking_.store(true);
+    timestamp = std::max(0.0, std::min(timestamp, getDuration()));
 
-    timestamp = std::max(0.0, std::min(timestamp, duration_));
+    stopThreads();
 
-    LOG_INFO("Seeking to " + std::to_string(timestamp) + " seconds");
+    demuxer_->seek(timestamp);
 
-    stopDecodeThreads();
-
-    if (format_ctx_) {
-        int64_t seek_target = static_cast<int64_t>(timestamp * AV_TIME_BASE);
-        av_seek_frame(format_ctx_, -1, seek_target, AVSEEK_FLAG_BACKWARD);
+    if (video_packet_queue_) {
+        video_packet_queue_->clear();
+        video_packet_queue_->start();
     }
+    if (audio_packet_queue_) {
+        audio_packet_queue_->clear();
+        audio_packet_queue_->start();
+    }
+    if (video_decoder_) video_decoder_->flush();
+    if (audio_decoder_) audio_decoder_->flush();
 
-    current_time_ = timestamp;
-    sync_manager_.reset();
-    sync_manager_.setMasterClock(timestamp);
+    current_time_.store(timestamp);
+    clock_.setMasterClock(timestamp);
 
     if (playing_.load() && !stopped_.load()) {
-        initDecodeThreads(format_ctx_, video_stream_idx_, audio_stream_idx_);
+        startThreads();
     }
 
     seeking_.store(false);
+    LOG_INFO("Seek completed");
+}
+
+double VideoPlayer::getDuration() const {
+    return demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
 }
 
 void VideoPlayer::setVolume(float volume) {
@@ -336,31 +286,69 @@ void VideoPlayer::setVolume(float volume) {
 
 void VideoPlayer::setPlaybackSpeed(double speed) {
     playback_speed_ = std::max(0.5, std::min(2.0, speed));
+    clock_.setPlaybackSpeed(playback_speed_);
 }
 
 void VideoPlayer::setSyncMode(SyncMode mode) {
-    sync_manager_.setMode(mode);
+    clock_.setMode(mode);
+}
+
+void VideoPlayer::handleVideoFrame(AVFrame* frame) {
+    if (!frame) return;
+
+    if (pending_video_frame_) {
+        av_frame_free(&pending_video_frame_);
+    }
+
+    pending_video_frame_ = av_frame_clone(frame);
+
+    if (frame->pts != AV_NOPTS_VALUE) {
+        const MediaInfo& info = demuxer_->getMediaInfo();
+        AVRational tb = info.video_time_base;
+        pending_video_pts_ = frame->pts * av_q2d(tb);
+    }
+}
+
+void VideoPlayer::handleAudioFrame(AVFrame* frame) {
+    if (!frame || !audio_player_) return;
+
+    SwrContext* swr_ctx = nullptr;
+    AVChannelLayout dst_ch_layout;
+    av_channel_layout_default(&dst_ch_layout, frame->ch_layout.nb_channels);
+
+    swr_alloc_set_opts2(&swr_ctx,
+                        &dst_ch_layout, AV_SAMPLE_FMT_S16, frame->sample_rate,
+                        &frame->ch_layout, (AVSampleFormat)frame->format, frame->sample_rate,
+                        0, nullptr);
+
+    if (!swr_ctx || swr_init(swr_ctx) < 0) {
+        if (swr_ctx) swr_free(&swr_ctx);
+        return;
+    }
+
+    int dst_nb_samples = av_rescale_rnd(swr_get_delay(swr_ctx, frame->sample_rate) + frame->nb_samples,
+                                        frame->sample_rate, frame->sample_rate, AV_ROUND_UP);
+
+    uint8_t* dst_data = nullptr;
+    int dst_linesize = 0;
+    av_samples_alloc(&dst_data, &dst_linesize, frame->ch_layout.nb_channels, dst_nb_samples, AV_SAMPLE_FMT_S16, 0);
+
+    int converted = swr_convert(swr_ctx, &dst_data, dst_nb_samples,
+                                (const uint8_t**)frame->data, frame->nb_samples);
+
+    int size = converted * frame->ch_layout.nb_channels * av_get_bytes_per_sample(AV_SAMPLE_FMT_S16);
+
+    std::vector<uint8_t> audio_data(dst_data, dst_data + size);
+    audio_player_->play(audio_data);
+
+    av_free(dst_data);
+    swr_free(&swr_ctx);
 }
 
 void VideoPlayer::renderLoop() {
-    VideoFrame video_frame;
-    AudioFrame audio_frame;
-
-    auto start_time = Clock::now();
-    double video_pts = 0.0;
-
-    LOG_TRACE_LOOP("Render loop started");
-
-    int loop_count = 0;
-
     while (!stopped_.load() && display_ && !display_->shouldQuit()) {
-        LOG_TRACE_LOOP("========== Loop iteration {} ==========", loop_count++);
-
         if (paused_.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            start_time = Clock::now() -
-                         std::chrono::duration_cast<std::chrono::nanoseconds>(
-                             std::chrono::duration<double>(current_time_.load() / playback_speed_));
             continue;
         }
 
@@ -369,63 +357,34 @@ void VideoPlayer::renderLoop() {
             continue;
         }
 
-        auto current = Clock::now();
-        double elapsed = std::chrono::duration<double>(current - start_time).count();
-        current_time_ = elapsed * playback_speed_;
+        display_->handleEvents();
+        if (display_->shouldQuit()) {
+            break;
+        }
 
-        sync_manager_.setMasterClock(current_time_.load());
+        if (pending_video_frame_) {
+            double delay = clock_.calculateDelay(pending_video_pts_);
 
-        if (video_frame_queue_ && !video_frame_queue_->empty()) {
-            LOG_TRACE_VIDEO("Trying to get video frame from queue");
-
-            if (video_frame_queue_->pop(video_frame, 50)) {
-                if (video_frame.isValid()) {
-                    LOG_TRACE_VIDEO("Got video frame, pts={}", video_frame.pts());
-                    video_pts = video_frame.pts();
-                    sync_manager_.updateVideoPts(video_pts);
-
-                    display_->handleEvents();
-
-                    if (display_->shouldQuit()) {
-                        LOG_TRACE_LOOP("shouldQuit is true, will exit loop");
-                        break;
-                    }
-
-                    AVFrame* frame = video_frame.get();
-                    display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
-                    display_->present();
-
-                    double delay = sync_manager_.calculateDelay(video_pts);
-                    if (delay > 0.01) {
-                        std::this_thread::sleep_for(std::chrono::duration<double>(delay));
-                    }
-                }
+            if (delay > 0.01) {
+                std::this_thread::sleep_for(std::chrono::duration<double>(delay));
             }
+
+            clock_.updateVideoPts(pending_video_pts_);
+            current_time_.store(pending_video_pts_);
+
+            display_->renderFrame((const uint8_t*)pending_video_frame_,
+                                  pending_video_frame_->width, pending_video_frame_->height);
+            display_->present();
+
+            av_frame_free(&pending_video_frame_);
+            pending_video_frame_ = nullptr;
         } else {
-            LOG_TRACE_VIDEO("Video frame queue is empty or null");
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-
-        if (audio_frame_queue_ && !audio_frame_queue_->empty()) {
-            if (audio_frame_queue_->tryPop(audio_frame)) {
-                if (audio_frame.isValid()) {
-                    double audio_pts = audio_frame.pts();
-                    sync_manager_.updateAudioPts(audio_pts);
-                }
-            }
-        }
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    LOG_TRACE_LOOP("Render loop exited");
     playing_.store(false);
-}
-
-double VideoPlayer::getMasterClock() {
-    return current_time_.load();
-}
-
-void VideoPlayer::updateClock() {
+    LOG_INFO("Render loop exited");
 }
 
 }

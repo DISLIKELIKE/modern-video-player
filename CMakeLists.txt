@@ -155,6 +155,9 @@ add_executable(${PROJECT_NAME}
     src/audio_decode_thread.cpp
     src/sync_manager.cpp
     src/packet_reader.cpp
+    src/demuxer.cpp
+    src/decoder_worker.cpp
+    src/clock.cpp
 )
 
 # 链接库

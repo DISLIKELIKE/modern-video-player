@@ -126,7 +126,7 @@ void PacketReaderThread::readLoop() {
         int ret = av_read_frame(format_ctx_, packet);
 
         if (ret < 0) {
-            LOG_ERROR("PacketReaderThread: av_read_frame failed, ret={}, packet_count={}", ret, packet_count);
+            LOG_ERROR("PacketReaderThread: av_read_frame failed");
             av_packet_free(&packet);
             eof_reached_.store(true);
 
@@ -137,29 +137,26 @@ void PacketReaderThread::readLoop() {
                 audio_queue_->setEof(true);
             }
 
-            LOG_INFO("PacketReaderThread: EOF reached, total packets={}", packet_count);
+            LOG_INFO("PacketReaderThread: EOF reached");
             break;
         }
 
         packet_count++;
 
-        if (packet_count <= 5) {
-            LOG_INFO("PacketReaderThread: read packet {}, stream_index={}, size={}",
-                     packet_count, packet->stream_index, packet->size);
-        }
+        int stream_index = packet->stream_index;
 
-        PacketRef packet_ref = PacketRef::fromPacket(packet);
-
-        if (packet->stream_index == video_stream_idx_) {
+        if (stream_index == video_stream_idx_) {
             if (video_queue_ && !video_queue_full) {
+                PacketRef packet_ref = PacketRef::fromPacket(packet);
                 if (!video_queue_->pushWithWait(std::move(packet_ref), 10)) {
                     LOG_TRACE_VIDEO("PacketReaderThread: video queue push failed");
                 }
             } else {
                 av_packet_free(&packet);
             }
-        } else if (packet->stream_index == audio_stream_idx_) {
+        } else if (stream_index == audio_stream_idx_) {
             if (audio_queue_ && !audio_queue_full) {
+                PacketRef packet_ref = PacketRef::fromPacket(packet);
                 if (!audio_queue_->pushWithWait(std::move(packet_ref), 10)) {
                     LOG_TRACE_VIDEO("PacketReaderThread: audio queue push failed");
                 }

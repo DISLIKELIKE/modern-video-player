@@ -1,5 +1,37 @@
 # 开发日志
 
+## 问题 12: 企业级多线程架构重构
+
+**日期**: 2026-02-27
+**状态**: 已完成
+
+### 问题描述
+原有架构存在以下问题：
+1. 组件职责不清晰，VideoPlayer 承担过多职责
+2. 线程模型复杂，难以维护
+3. 内存管理容易出错，导致双重释放等 bug
+
+### 解决方案
+重构为企业级多线程架构，引入以下新组件：
+
+1. **Demuxer** - 解封装器，封装 AVFormatContext 的读取操作
+2. **DecoderWorker** - 解码工作线程，封装单个流的解码逻辑
+3. **ThreadSafeQueue** - 线程安全队列模板
+4. **Clock** - 时钟同步器，管理音视频同步
+
+### 架构图
+```
+VideoPlayer (主控制器)
+    ├── Demuxer (解封装器) → PacketQueue
+    ├── DecoderWorker (视频解码线程)
+    ├── DecoderWorker (音频解码线程)
+    ├── Display (渲染器)
+    ├── AudioPlayer (音频播放)
+    └── Clock (时钟同步)
+```
+
+---
+
 ## 问题 11: 并发读取 AVFormatContext 导致崩溃
 
 **日期**: 2026-02-27

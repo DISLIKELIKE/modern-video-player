@@ -17,47 +17,151 @@
 ```mermaid
 graph TB
     A[Main Program] --> B[VideoPlayer]
-    B --> C[VideoDecoder]
-    B --> D[AudioDecoder]
-    B --> E[Display]
-    B --> F[AudioPlayer]
+    B --> C[Demuxer]
+    B --> D[VideoDecoderWorker]
+    B --> E[AudioDecoderWorker]
+    B --> F[Display]
+    B --> G[AudioPlayer]
+    B --> H[Clock]
     
-    C --> G[FFmpeg Video Codec]
-    D --> H[FFmpeg Audio Codec]
-    E --> I[SDL2 Window/Renderer]
-    F --> J[SDL2 Audio Device]
+    C --> I[PacketQueue]
+    I --> D
+    I --> E
     
-    B --> K[RenderThread]
-    B --> L[VideoDecodeThread]
-    B --> M[AudioDecodeThread]
+    D --> F
+    E --> G
     
-    L --> N[VideoFrameQueue]
-    M --> O[AudioFrameQueue]
-    N --> K
-    O --> K
+    F --> J[SDL2 Window/Renderer]
+    G --> K[SDL2 Audio Device]
     
-    K --> P[SyncManager]
+    H --> B
     
     style A fill:#e1f5ff
     style B fill:#ffe1e1
     style C fill:#e1ffe1
-    style D fill:#e1ffe1
-    style E fill:#fff5e1
+    style D fill:#e1e1ff
+    style E fill:#e1e1ff
     style F fill:#fff5e1
-    style K fill:#f5e1ff
-    style L fill:#e1e1ff
-    style M fill:#e1e1ff
-    style N fill:#ffffe1
-    style O fill:#ffffe1
-    style P fill:#ffe1ff
+    style G fill:#fff5e1
+    style H fill:#ffe1ff
 ```
 
 ## 2. 模块设计
 
-### 2.0 FrameQueue (帧队列)
+### 2.1 Demuxer (解封装器)
 
 **职责**:
-- 线程安全的帧数据传输
+- 封装 AVFormatContext 的读取操作
+- 提供统一的 packet 读取接口
+- 支持 seek 操作
+- 检测流信息
+
+**关键接口**:
+```cpp
+class Demuxer {
+    bool open(const std::string& filename);
+    void close();
+    bool readPacket(AVPacket* packet);
+    bool seek(double timestamp);
+    const MediaInfo& getMediaInfo() const;
+};
+```
+
+**特性**:
+- 线程安全的读取操作
+- 自动检测视频/音频流索引
+- 支持获取媒体元信息
+
+### 2.2 DecoderWorker (解码工作线程)
+
+**职责**:
+- 封装单个流的解码逻辑
+- 从 PacketQueue 获取 packet
+- 通过回调输出解码后的帧
+- 支持暂停/恢复/flush
+
+**关键接口**:
+```cpp
+class DecoderWorker {
+    bool init(AVCodecParameters* codecpar, AVRational time_base);
+    void setOutputCallback(FrameCallback callback);
+    void start(PacketQueue* packet_queue);
+    void stop();
+    void pause();
+    void resume();
+    void flush();
+};
+```
+
+### 2.3 ThreadSafeQueue (线程安全队列)
+
+**职责**:
+- 通用的线程安全队列模板
+- 支持阻塞和非阻塞操作
+- 支持 EOF 信号传递
+
+**关键接口**:
+```cpp
+template<typename T>
+class ThreadSafeQueue {
+    bool push(T item, int timeout_ms);
+    bool pop(T& item, int timeout_ms);
+    bool tryPop(T& item);
+    void clear();
+    void stop();
+    void start();
+    void setEof(bool eof);
+};
+```
+
+### 2.4 Clock (时钟同步)
+
+**职责**:
+- 管理主时钟
+- 计算音视频同步延迟
+- 支持多种同步模式
+
+**同步模式**:
+```cpp
+enum class SyncMode {
+    AudioMaster,   // 音频为主时钟
+    VideoMaster,   // 视频为主时钟
+    Free           // 自由播放
+};
+```
+
+**关键接口**:
+```cpp
+class Clock {
+    void setMode(SyncMode mode);
+    void setMasterClock(double pts);
+    double getMasterClock() const;
+    double calculateDelay(double frame_pts) const;
+    bool shouldSkipFrame(double frame_pts) const;
+};
+```
+
+### 2.5 VideoPlayer (主播放器)
+
+**职责**:
+- 管理所有子模块
+- 控制播放流程
+- 实现音视频同步
+- 处理用户输入
+
+**关键接口**:
+```cpp
+class VideoPlayer {
+    bool open(const std::string& filename);
+    void play();
+    void pause();
+    void stop();
+    void seek(double timestamp);
+    void setVolume(float volume);
+    void setPlaybackSpeed(double speed);
+    void setSyncMode(SyncMode mode);
+};
+```
 - 解码线程与渲染线程之间的缓冲
 - 带超时等待的 push/pop 操作
 
