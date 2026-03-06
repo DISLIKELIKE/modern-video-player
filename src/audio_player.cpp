@@ -1,6 +1,7 @@
 #include "audio_player.h"
 #include <iostream>
 #include <cstring>
+#include <algorithm>
 
 namespace vp {
 
@@ -66,13 +67,29 @@ void AudioPlayer::close() {
     initialized_ = false;
 }
 
-void AudioPlayer::play(const std::vector<uint8_t>& data) {
+void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
     if (!initialized_ || data.empty()) {
         return;
     }
     
     std::lock_guard<std::mutex> lock(queue_mutex_);
-    audio_queue_.push(data);
+    AudioChunk chunk;
+    chunk.data = data;
+    chunk.offset = 0;
+    chunk.pts = pts;
+
+    if (chunk.pts < 0.0) {
+        const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
+                                        static_cast<double>(audio_spec_.channels) * 2.0;
+        if (bytes_per_second > 0.0) {
+            chunk.pts = playback_pts_.load() + static_cast<double>(queued_bytes_.load()) / bytes_per_second;
+        } else {
+            chunk.pts = playback_pts_.load();
+        }
+    }
+
+    audio_queue_.push(std::move(chunk));
+    queued_bytes_.fetch_add(data.size());
     
     SDL_PauseAudioDevice(audio_device_, 0);
 }
@@ -99,6 +116,8 @@ void AudioPlayer::stop() {
         while (!audio_queue_.empty()) {
             audio_queue_.pop();
         }
+        queued_bytes_.store(0);
+        playback_pts_.store(0.0);
     }
 }
 
@@ -110,6 +129,10 @@ void AudioPlayer::setMuted(bool muted) {
     muted_ = muted;
 }
 
+double AudioPlayer::getPlaybackPts() const {
+    return playback_pts_.load();
+}
+
 void AudioPlayer::audioCallback(void* userdata, uint8_t* stream, int len) {
     AudioPlayer* player = static_cast<AudioPlayer*>(userdata);
     std::lock_guard<std::mutex> lock(player->queue_mutex_);
@@ -117,26 +140,34 @@ void AudioPlayer::audioCallback(void* userdata, uint8_t* stream, int len) {
     SDL_memset(stream, 0, len);
     
     while (len > 0 && !player->audio_queue_.empty()) {
-        const auto& data = player->audio_queue_.front();
-        
-        int copy_len = std::min(len, static_cast<int>(data.size()));
+        AudioChunk& chunk = player->audio_queue_.front();
+        const size_t remaining = chunk.data.size() - chunk.offset;
+        int copy_len = std::min(len, static_cast<int>(remaining));
+        const uint8_t* src = chunk.data.data() + chunk.offset;
         
         if (player->muted_) {
             SDL_memset(stream, 0, copy_len);
         } else {
-            SDL_MixAudioFormat(stream, data.data(), AUDIO_S16SYS, copy_len, 
+            SDL_MixAudioFormat(stream, src, AUDIO_S16SYS, copy_len, 
                              static_cast<int>(player->volume_ * SDL_MIX_MAXVOLUME));
+        }
+
+        chunk.offset += static_cast<size_t>(copy_len);
+        size_t prev_queued = player->queued_bytes_.load();
+        size_t dec = static_cast<size_t>(copy_len);
+        player->queued_bytes_.store(prev_queued > dec ? prev_queued - dec : 0);
+
+        const double bytes_per_second = static_cast<double>(player->audio_spec_.freq) *
+                                        static_cast<double>(player->audio_spec_.channels) * 2.0;
+        if (chunk.pts >= 0.0 && bytes_per_second > 0.0) {
+            player->playback_pts_.store(chunk.pts + static_cast<double>(chunk.offset) / bytes_per_second);
         }
         
         stream += copy_len;
         len -= copy_len;
         
-        if (copy_len == static_cast<int>(data.size())) {
+        if (chunk.offset >= chunk.data.size()) {
             player->audio_queue_.pop();
-        } else {
-            std::vector<uint8_t> remaining(data.begin() + copy_len, data.end());
-            player->audio_queue_.pop();
-            player->audio_queue_.push(remaining);
         }
     }
 }

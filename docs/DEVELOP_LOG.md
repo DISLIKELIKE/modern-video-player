@@ -125,3 +125,70 @@ queue_.pop();
 1. 添加移动构造函数，将 `frame_` 指针转移
 2. 添加移动赋值运算符，将 `frame_` 指针转移
 3. 将原对象的 `frame_` 设为 nullptr，防止析构时释放内存
+
+---
+
+## 问题 13: Core API + Scheduler + Filter 多线程重构落地
+
+**日期**: 2026-03-06
+**状态**: 已解决
+
+### 问题描述
+- 现有播放器主流程仍以旧架构为中心，缺少规格要求的 `Core API / Scheduler / Filter` 模块化分层。
+- 音视频解码线程需要在新核心中独立调度，并通过队列实现无阻塞解耦。
+
+### 分析记录
+- 新增 `core` 层：`frame/frame_queue/clock/command/scheduler/player_core`。
+- 新增 `filters` 层：`video_filter/audio_filter/filter_registry/filter_pipeline/builtin filters`。
+- `VideoPlayer` 增加 `USE_NEW_PLAYER_CORE` 迁移开关路径，保持旧接口不变。
+
+### 修改文件
+- include/core/frame.h
+- include/core/frame_queue.h
+- include/core/clock.h
+- include/core/command.h
+- include/core/scheduler.h
+- include/core/player_core.h
+- src/core/frame.cpp
+- src/core/clock.cpp
+- src/core/scheduler.cpp
+- src/core/player_core.cpp
+- include/filters/video_filter.h
+- include/filters/audio_filter.h
+- include/filters/filter_registry.h
+- include/filters/filter_pipeline.h
+- include/filters/builtin_filters.h
+- src/filters/filter_registry.cpp
+- src/filters/filter_pipeline.cpp
+- src/filters/brightness_filter.cpp
+- src/filters/contrast_filter.cpp
+- src/filters/saturation_filter.cpp
+- src/filters/builtin_filters.cpp
+- include/video_player.h
+- src/video_player.cpp
+- CMakeLists.txt
+- tests/core_frame_queue_tests.cpp
+- tests/core_clock_tests.cpp
+
+---
+
+## 问题 14: 播放器架构收敛为 Core 单路径
+
+**日期**: 2026-03-06
+**状态**: 已解决
+
+### 问题描述
+- 项目同时保留旧播放链路和新核心链路，存在维护分叉与并发设计风险。
+
+### 解决方案
+- `VideoPlayer` 仅保留 `PlayerCore` 包装实现，删除旧链路分支。
+- CMake 删除旧模块编译入口，统一到 `core/*` + `filters/*`。
+- 清理旧头源文件，保留必要基础设施和输出模块。
+- 新增架构重构文档：`docs/ARCHITECTURE_REFACTOR_2026-03-06.md`。
+
+### 修改文件
+- CMakeLists.txt
+- include/video_player.h
+- src/video_player.cpp
+- docs/ARCHITECTURE_REFACTOR_2026-03-06.md
+- 删除旧模块文件（decoder/thread/sync/packet/legacy clock/frame_queue）

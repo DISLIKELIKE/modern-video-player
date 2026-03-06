@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL2/SDL.h>
+#include <atomic>
 #include <string>
 #include <vector>
 #include <queue>
@@ -17,7 +18,7 @@ public:
     bool init(int sample_rate, int channels);
     void close();
     
-    void play(const std::vector<uint8_t>& data);
+    void play(const std::vector<uint8_t>& data, double pts = -1.0);
     void pause();
     void resume();
     void stop();
@@ -27,8 +28,15 @@ public:
     
     void setMuted(bool muted);
     bool isMuted() const { return muted_; }
+    double getPlaybackPts() const;
 
 private:
+    struct AudioChunk {
+        std::vector<uint8_t> data;
+        size_t offset{0};
+        double pts{-1.0};
+    };
+
     static void audioCallback(void* userdata, uint8_t* stream, int len);
     
     SDL_AudioDeviceID audio_device_;
@@ -40,8 +48,10 @@ private:
     bool muted_;
     bool paused_;
     
-    std::queue<std::vector<uint8_t>> audio_queue_;
+    std::queue<AudioChunk> audio_queue_;
     std::mutex queue_mutex_;
+    std::atomic<double> playback_pts_{0.0};
+    std::atomic<size_t> queued_bytes_{0};
     
     bool initialized_;
 };

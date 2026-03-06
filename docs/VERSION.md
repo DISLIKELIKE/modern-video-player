@@ -297,3 +297,28 @@ make -j$(nproc)
 | 2026-02-25 | 记录多线程播放架构重构和音频播放架构修复 |
 | 2026-02-25 | 记录 Frame 移动语义修复 |
 | 2026-02-25 | 记录多解码器实例竞争读取修复 |
+
+---
+
+## 2026-03-06 更新
+
+### Core API / Scheduler / Filter 重构
+- 新增 `core` 子模块：`PlayerCore`、`Scheduler`、`FrameQueue`、`Clock`、`Command`、`Frame`。
+- 新增 `filters` 子模块：Filter 接口、`FilterRegistry`、`FilterPipeline`、内置亮度/对比度/饱和度滤镜。
+- 新增 `USE_NEW_PLAYER_CORE` 路径下的 `VideoPlayer` 适配，保持旧接口兼容。
+
+### 测试与构建
+- 新增 `tests/core_frame_queue_tests.cpp`、`tests/core_clock_tests.cpp`。
+- `CMakeLists.txt` 增加 `src/core/*` 与 `src/filters/*` 编译项，补充核心测试包含路径。
+
+---
+
+## 2026-03-06 架构收敛更新
+
+### 统一核心架构
+- 去除旧播放链路，实现统一为 `VideoPlayer + PlayerCore + Scheduler + Filters`。
+- 删除旧 decoder/thread/sync/packet/legacy clock 相关文件。
+- `CMakeLists.txt` 仅保留新架构编译项。
+
+### 文档
+- 新增 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md`，包含重构目标、删除模块、保留文件清单。

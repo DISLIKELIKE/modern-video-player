@@ -526,3 +526,74 @@ void VideoPlayer::play() {
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构设计
 - [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) - Windows 配置指南
 - [LOGGING.md](./LOGGING.md) - 日志系统说明
+
+---
+
+## 问题 13: Core API + Scheduler + Filter 多线程重构落地
+
+**日期**: 2026-03-06
+
+### 问题描述
+- 需要按规格引入 Core API、Scheduler 和 Filter 插件框架，并保持 `VideoPlayer` 外部接口稳定。
+
+### 原因分析
+- 旧架构以 `VideoPlayer` 聚合大部分职责，缺少可演进的核心层与调度层。
+- 缺少 `USE_NEW_PLAYER_CORE` 受控迁移路径下的新核心实现。
+
+### 解决方案
+- 新增 `core` 模块：`PlayerCore`、`Scheduler`、`FrameQueue`、`Clock`、`Command`、`Frame`。
+- 新增 `filters` 模块：过滤器接口、注册中心、处理管道、亮度/对比度/饱和度内置滤镜。
+- `VideoPlayer` 改造为双路径：`USE_NEW_PLAYER_CORE=ON` 走新核心，OFF 保持旧实现。
+- 新增 `tests/core_frame_queue_tests.cpp`、`tests/core_clock_tests.cpp`。
+
+### 修改文件
+- include/core/frame.h
+- include/core/frame_queue.h
+- include/core/clock.h
+- include/core/command.h
+- include/core/scheduler.h
+- include/core/player_core.h
+- src/core/frame.cpp
+- src/core/clock.cpp
+- src/core/scheduler.cpp
+- src/core/player_core.cpp
+- include/filters/video_filter.h
+- include/filters/audio_filter.h
+- include/filters/filter_registry.h
+- include/filters/filter_pipeline.h
+- include/filters/builtin_filters.h
+- src/filters/filter_registry.cpp
+- src/filters/filter_pipeline.cpp
+- src/filters/brightness_filter.cpp
+- src/filters/contrast_filter.cpp
+- src/filters/saturation_filter.cpp
+- src/filters/builtin_filters.cpp
+- include/video_player.h
+- src/video_player.cpp
+- CMakeLists.txt
+- tests/core_frame_queue_tests.cpp
+- tests/core_clock_tests.cpp
+
+---
+
+## 问题 14: 架构收敛为 Core 单路径
+
+**日期**: 2026-03-06
+
+### 问题描述
+- 历史上并存的新旧播放链路增加了维护成本和行为不一致风险。
+
+### 原因分析
+- 旧链路和新链路共存导致排障路径复杂，且旧链路存在结构性并发隐患。
+
+### 解决方案
+- 删除旧链路模块，统一到 `VideoPlayer -> PlayerCore -> Scheduler -> Queue -> Output`。
+- 构建系统改为仅编译新核心模块。
+- 新增重构文档说明保留文件与职责边界。
+
+### 修改文件
+- CMakeLists.txt
+- include/video_player.h
+- src/video_player.cpp
+- docs/ARCHITECTURE_REFACTOR_2026-03-06.md
+- 旧模块头源文件删除（见 DEVELOP_LOG 问题 14）
