@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <thread>
 #include <utility>
@@ -10,6 +11,14 @@
 #include "core/frame_queue.h"
 
 namespace vp::core {
+
+struct SchedulerStats {
+    uint64_t video_decoded_frames{0};
+    uint64_t audio_decoded_frames{0};
+    uint64_t rendered_frames{0};
+    uint64_t dropped_late_frames{0};
+    uint64_t wait_events{0};
+};
 
 class Scheduler {
 public:
@@ -31,6 +40,7 @@ public:
 
     size_t getVideoQueueSize() const;
     size_t getAudioQueueSize() const;
+    SchedulerStats getStats() const;
 
 private:
     void videoDecoderLoop();
@@ -57,6 +67,11 @@ private:
     Clock* clock_{nullptr};
     std::atomic<int> video_restart_count_{0};
     std::atomic<int> audio_restart_count_{0};
+    std::atomic<uint64_t> video_decoded_frames_{0};
+    std::atomic<uint64_t> audio_decoded_frames_{0};
+    std::atomic<uint64_t> rendered_frames_{0};
+    std::atomic<uint64_t> dropped_late_frames_{0};
+    std::atomic<uint64_t> wait_events_{0};
 };
 
 }  // namespace vp::core

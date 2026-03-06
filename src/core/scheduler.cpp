@@ -1,5 +1,6 @@
 #include "core/scheduler.h"
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 
@@ -46,6 +47,11 @@ void Scheduler::start() {
     paused_.store(false);
     video_restart_count_.store(0);
     audio_restart_count_.store(0);
+    video_decoded_frames_.store(0);
+    audio_decoded_frames_.store(0);
+    rendered_frames_.store(0);
+    dropped_late_frames_.store(0);
+    wait_events_.store(0);
 
     video_thread_ = std::thread([this] {
         runProtectedLoop([this] { videoDecoderLoop(); }, video_restart_count_);
@@ -96,6 +102,16 @@ size_t Scheduler::getAudioQueueSize() const {
     return audio_queue_ ? audio_queue_->size() : 0;
 }
 
+SchedulerStats Scheduler::getStats() const {
+    SchedulerStats stats;
+    stats.video_decoded_frames = video_decoded_frames_.load();
+    stats.audio_decoded_frames = audio_decoded_frames_.load();
+    stats.rendered_frames = rendered_frames_.load();
+    stats.dropped_late_frames = dropped_late_frames_.load();
+    stats.wait_events = wait_events_.load();
+    return stats;
+}
+
 void Scheduler::videoDecoderLoop() {
     while (running_.load()) {
         if (paused_.load()) {
@@ -119,7 +135,9 @@ void Scheduler::videoDecoderLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-        video_queue_->push(std::move(frame), std::chrono::milliseconds(20));
+        if (video_queue_->push(std::move(frame), std::chrono::milliseconds(20))) {
+            video_decoded_frames_.fetch_add(1);
+        }
     }
 }
 
@@ -146,7 +164,9 @@ void Scheduler::audioDecoderLoop() {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
-        audio_queue_->push(std::move(frame), std::chrono::milliseconds(20));
+        if (audio_queue_->push(std::move(frame), std::chrono::milliseconds(20))) {
+            audio_decoded_frames_.fetch_add(1);
+        }
     }
 }
 
@@ -173,14 +193,17 @@ void Scheduler::renderLoop() {
             const double master = clock_->getTime();
             const double diff = frame.pts - master;
             if (diff > 0.0) {
+                wait_events_.fetch_add(1);
                 const double wait_s = std::min(diff, 0.05);
                 std::this_thread::sleep_for(std::chrono::duration<double>(wait_s));
             } else if (diff < -0.25) {
+                dropped_late_frames_.fetch_add(1);
                 continue;
             }
         }
 
         render_callback_(std::move(frame));
+        rendered_frames_.fetch_add(1);
     }
 }
 

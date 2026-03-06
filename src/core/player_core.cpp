@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <limits>
 #include <vector>
 
@@ -18,6 +19,12 @@ namespace vp::core {
 
 namespace {
 constexpr int kPacketQueueSize = 256;
+
+int64_t nowSteadyMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
 }
 
 PlayerCore::PlayerCore() {
@@ -29,6 +36,7 @@ PlayerCore::PlayerCore() {
     scheduler_.setAudioDecoder([this](AudioFrame& frame) { return decodeAudioFrame(frame); });
     scheduler_.setRenderCallback([this](VideoFrame&& frame) { renderFrame(std::move(frame)); });
     last_position_emit_tp_ = std::chrono::steady_clock::now();
+    resetDiagnostics();
 }
 
 PlayerCore::~PlayerCore() {
@@ -68,6 +76,7 @@ bool PlayerCore::open(const std::string& filename) {
     position_.store(0.0);
     clock_.reset();
     clock_.setSource(info.audio_stream_idx >= 0 ? ClockSource::Audio : ClockSource::System);
+    resetDiagnostics();
     return true;
 }
 
@@ -112,6 +121,7 @@ void PlayerCore::play() {
     startDemuxThread();
     startAudioConsumer();
     scheduler_.start();
+    resetDiagnostics();
     state_.store(PlaybackState::Playing);
     emitStateChanged(PlaybackState::Playing);
 }
@@ -326,17 +336,27 @@ void PlayerCore::startDemuxThread() {
             bool queued = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
                 while (demux_running_.load() && !(queued = video_packet_queue_->push(packet, 20))) {
+                    demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                if (queued) {
+                    demux_video_packets_.fetch_add(1);
                 }
             } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_) {
                 while (demux_running_.load() && !(queued = audio_packet_queue_->push(packet, 20))) {
+                    demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+                if (queued) {
+                    demux_audio_packets_.fetch_add(1);
                 }
             }
 
             if (!queued) {
+                demux_dropped_packets_.fetch_add(1);
                 av_packet_free(&packet);
             }
+            maybeLogDiagnostics("demux");
         }
     });
 }
@@ -375,14 +395,18 @@ void PlayerCore::startAudioConsumer() {
             }
 
             if (!audio_queue_.pop(frame, std::chrono::milliseconds(5))) {
+                maybeLogDiagnostics("audio-idle");
                 continue;
             }
             if (!frame.valid || frame.samples.empty()) {
+                maybeLogDiagnostics("audio-invalid");
                 continue;
             }
 
             filter_pipeline_.processAudio(frame.samples.data(), frame.samples.size(), frame.channels);
             audio_player_->play(frame.samples, frame.pts);
+            audio_submitted_frames_.fetch_add(1);
+            maybeLogDiagnostics("audio-play");
         }
     });
 }
@@ -404,6 +428,51 @@ void PlayerCore::flushPipelines() {
     }
 }
 
+void PlayerCore::resetDiagnostics() {
+    demux_video_packets_.store(0);
+    demux_audio_packets_.store(0);
+    demux_push_retries_.store(0);
+    demux_dropped_packets_.store(0);
+    decode_video_ok_.store(0);
+    decode_audio_ok_.store(0);
+    audio_submitted_frames_.store(0);
+    render_frames_.store(0);
+    last_diag_log_ms_.store(nowSteadyMs());
+}
+
+void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
+    const int64_t now_ms = nowSteadyMs();
+    int64_t last_ms = last_diag_log_ms_.load();
+    while (now_ms - last_ms >= 1000) {
+        if (last_diag_log_ms_.compare_exchange_weak(last_ms, now_ms)) {
+            const SchedulerStats scheduler_stats = scheduler_.getStats();
+            const size_t video_pkt_q = video_packet_queue_ ? video_packet_queue_->size() : 0;
+            const size_t audio_pkt_q = audio_packet_queue_ ? audio_packet_queue_->size() : 0;
+            LOG_INFO("[diag:" << source_tag << "]"
+                     << " demux(v=" << demux_video_packets_.load()
+                     << ",a=" << demux_audio_packets_.load()
+                     << ",retry=" << demux_push_retries_.load()
+                     << ",drop=" << demux_dropped_packets_.load() << ")"
+                     << " pkt_q(v=" << video_pkt_q << ",a=" << audio_pkt_q << ")"
+                     << " dec(core v=" << decode_video_ok_.load()
+                     << ",a=" << decode_audio_ok_.load() << ")"
+                     << " dec(sched v=" << scheduler_stats.video_decoded_frames
+                     << ",a=" << scheduler_stats.audio_decoded_frames << ")"
+                     << " frame_q(v=" << video_queue_.size() << ",a=" << audio_queue_.size() << ")"
+                     << " render(out=" << scheduler_stats.rendered_frames
+                     << ",late_drop=" << scheduler_stats.dropped_late_frames
+                     << ",wait=" << scheduler_stats.wait_events
+                     << ",cb=" << render_frames_.load() << ")"
+                     << " audio(submit=" << audio_submitted_frames_.load()
+                     << ",play_pts=" << (audio_player_ ? audio_player_->getPlaybackPts() : 0.0) << ")"
+                     << " clock(a=" << clock_.getAudioClock()
+                     << ",v=" << clock_.getVideoClock()
+                     << ",m=" << clock_.getTime() << ")");
+            return;
+        }
+    }
+}
+
 bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     if (!video_codec_ctx_ || !video_packet_queue_) {
         return false;
@@ -417,6 +486,8 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
             out.pts = out.frame->pts * av_q2d(video_time_base_);
             out.duration = out.frame->duration * av_q2d(video_time_base_);
         }
+        decode_video_ok_.fetch_add(1);
+        maybeLogDiagnostics("vdec-recv");
         return true;
     }
 
@@ -440,6 +511,8 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
         out.pts = out.frame->pts * av_q2d(video_time_base_);
         out.duration = out.frame->duration * av_q2d(video_time_base_);
     }
+    decode_video_ok_.fetch_add(1);
+    maybeLogDiagnostics("vdec-send");
     return true;
 }
 
@@ -521,6 +594,10 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         out.pts = frame->pts * av_q2d(audio_time_base_);
         out.duration = frame->duration * av_q2d(audio_time_base_);
     }
+    if (out.valid) {
+        decode_audio_ok_.fetch_add(1);
+        maybeLogDiagnostics("adec");
+    }
 
     av_free(dst_data);
     swr_free(&swr_ctx);
@@ -546,10 +623,12 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     display_->present();
 
     clock_.setVideoClock(frame.pts);
+    render_frames_.fetch_add(1);
     if (clock_.getSource() != ClockSource::Audio) {
         position_.store(frame.pts);
         emitPositionChanged(frame.pts);
     }
+    maybeLogDiagnostics("render");
     emitFrameRendered();
 }
 

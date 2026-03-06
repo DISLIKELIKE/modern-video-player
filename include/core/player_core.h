@@ -6,6 +6,7 @@ extern "C" {
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -105,6 +106,8 @@ private:
     void emitPositionChanged(double position);
     void emitFrameRendered();
     void emitError(ErrorCode code, const std::string& message);
+    void resetDiagnostics();
+    void maybeLogDiagnostics(const char* source_tag);
 
     std::unique_ptr<Demuxer> demuxer_;
     std::unique_ptr<Display> display_;
@@ -140,6 +143,15 @@ private:
     std::vector<ErrorCallback> error_callbacks_;
     std::vector<FrameCallback> frame_callbacks_;
     std::chrono::steady_clock::time_point last_position_emit_tp_;
+    std::atomic<uint64_t> demux_video_packets_{0};
+    std::atomic<uint64_t> demux_audio_packets_{0};
+    std::atomic<uint64_t> demux_push_retries_{0};
+    std::atomic<uint64_t> demux_dropped_packets_{0};
+    std::atomic<uint64_t> decode_video_ok_{0};
+    std::atomic<uint64_t> decode_audio_ok_{0};
+    std::atomic<uint64_t> audio_submitted_frames_{0};
+    std::atomic<uint64_t> render_frames_{0};
+    std::atomic<int64_t> last_diag_log_ms_{0};
 };
 
 }  // namespace vp::core
