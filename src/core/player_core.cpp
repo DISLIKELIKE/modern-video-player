@@ -35,6 +35,7 @@ PlayerCore::PlayerCore() {
     scheduler_.setVideoDecoder([this](VideoFrame& frame) { return decodeVideoFrame(frame); });
     scheduler_.setAudioDecoder([this](AudioFrame& frame) { return decodeAudioFrame(frame); });
     scheduler_.setRenderCallback([this](VideoFrame&& frame) { renderFrame(std::move(frame)); });
+    scheduler_.setIdleCallback([this] { onRenderIdle(); });
     last_position_emit_tp_ = std::chrono::steady_clock::now();
     resetDiagnostics();
 }
@@ -186,6 +187,25 @@ void PlayerCore::seek(double timestamp) {
 
     if (was_playing) {
         scheduler_.resume();
+    }
+}
+
+void PlayerCore::pumpEvents() {
+    if (!display_) {
+        return;
+    }
+    display_->handleEvents();
+    if (display_->consumeTogglePauseRequest()) {
+        if (state_.load() == PlaybackState::Playing) {
+            pause();
+        } else if (state_.load() == PlaybackState::Paused) {
+            play();
+        }
+    }
+    if (display_->shouldQuit()) {
+        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+            emitStateChanged(PlaybackState::Stopped);
+        }
     }
 }
 
@@ -611,13 +631,6 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
         return;
     }
 
-    display_->handleEvents();
-    if (display_->shouldQuit()) {
-        state_.store(PlaybackState::Stopped);
-        emitStateChanged(PlaybackState::Stopped);
-        return;
-    }
-
     filter_pipeline_.processVideo(frame);
     display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
     display_->present();
@@ -630,6 +643,21 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     }
     maybeLogDiagnostics("render");
     emitFrameRendered();
+}
+
+void PlayerCore::onRenderIdle() {
+    if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
+        return;
+    }
+
+    const bool video_done = (!video_packet_queue_ || video_packet_queue_->empty()) && video_queue_.empty();
+    const bool audio_done = (!audio_packet_queue_ || audio_packet_queue_->empty()) && audio_queue_.empty();
+    if (video_done && audio_done) {
+        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+            LOG_INFO("Playback reached EOF, auto-stopping");
+            emitStateChanged(PlaybackState::Stopped);
+        }
+    }
 }
 
 void PlayerCore::emitStateChanged(PlaybackState state) {

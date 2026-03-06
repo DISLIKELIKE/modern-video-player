@@ -34,6 +34,10 @@ void Scheduler::setRenderCallback(std::function<void(VideoFrame&&)> callback) {
     render_callback_ = std::move(callback);
 }
 
+void Scheduler::setIdleCallback(std::function<void()> callback) {
+    idle_callback_ = std::move(callback);
+}
+
 void Scheduler::setClock(Clock* clock) {
     clock_ = clock;
 }
@@ -173,16 +177,25 @@ void Scheduler::audioDecoderLoop() {
 void Scheduler::renderLoop() {
     while (running_.load()) {
         if (paused_.load()) {
+            if (idle_callback_) {
+                idle_callback_();
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
         if (!video_queue_ || !render_callback_) {
+            if (idle_callback_) {
+                idle_callback_();
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
 
         VideoFrame frame;
         if (!video_queue_->pop(frame, std::chrono::milliseconds(20))) {
+            if (idle_callback_) {
+                idle_callback_();
+            }
             continue;
         }
         if (!frame.valid) {

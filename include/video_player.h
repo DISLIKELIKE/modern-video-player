@@ -20,6 +20,7 @@ public:
     void pause();
     void stop();
     void seek(double timestamp);
+    void pumpEvents();
 
     bool isPlaying() const;
     bool isPaused() const;

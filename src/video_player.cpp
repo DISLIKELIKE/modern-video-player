@@ -67,6 +67,12 @@ void VideoPlayer::seek(double timestamp) {
     }
 }
 
+void VideoPlayer::pumpEvents() {
+    if (core_player_) {
+        core_player_->pumpEvents();
+    }
+}
+
 bool VideoPlayer::isPlaying() const {
     return playing_.load();
 }

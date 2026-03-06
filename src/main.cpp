@@ -2,7 +2,9 @@
 #include "logger.h"
 #include <iostream>
 #include <csignal>
+#include <chrono>
 #include <memory>
+#include <thread>
 
 using namespace vp;
 
@@ -63,8 +65,9 @@ int main(int argc, char* argv[]) {
     
     g_player->play();
     
-    while (g_player->isPlaying()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    while (g_player->isPlaying() || g_player->isPaused()) {
+        g_player->pumpEvents();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     
     Logger::info("Playback finished");

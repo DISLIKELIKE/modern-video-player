@@ -15,6 +15,7 @@ Display::Display()
     , width_(0)
     , height_(0)
     , should_quit_(false)
+    , toggle_pause_requested_(false)
     , fullscreen_(false)
     , initialized_(false) {
 }
@@ -68,6 +69,7 @@ bool Display::init(int width, int height, const std::string& title) {
     
     initialized_ = true;
     should_quit_ = false;
+    toggle_pause_requested_ = false;
     
     std::cout << "Display initialized: " << width << "x" << height << std::endl;
     
@@ -209,6 +211,7 @@ void Display::handleEvents() {
                         should_quit_ = true;
                         break;
                     case SDLK_SPACE:
+                        toggle_pause_requested_ = true;
                         break;
                     case SDLK_f:
                         toggleFullscreen();
@@ -231,6 +234,14 @@ void Display::handleEvents() {
         }
     }
     LOG_TRACE_EVENT("handleEvents: end, should_quit_=" << should_quit_);
+}
+
+bool Display::consumeTogglePauseRequest() {
+    if (!toggle_pause_requested_) {
+        return false;
+    }
+    toggle_pause_requested_ = false;
+    return true;
 }
 
 void Display::toggleFullscreen() {

@@ -24,6 +24,7 @@ public:
     
     void handleEvents();
     bool shouldQuit() const { return should_quit_; }
+    bool consumeTogglePauseRequest();
     
     void toggleFullscreen();
     int getWidth() const { return width_; }
@@ -40,6 +41,7 @@ private:
     int width_;
     int height_;
     bool should_quit_;
+    bool toggle_pause_requested_;
     bool fullscreen_;
     bool initialized_;
 };

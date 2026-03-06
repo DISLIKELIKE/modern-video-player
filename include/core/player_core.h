@@ -67,6 +67,7 @@ public:
     void pause();
     void stop();
     void seek(double timestamp);
+    void pumpEvents();
 
     PlaybackState getState() const;
     PlaybackInfo getInfo() const;
@@ -101,6 +102,7 @@ private:
     bool decodeVideoFrame(VideoFrame& out);
     bool decodeAudioFrame(AudioFrame& out);
     void renderFrame(VideoFrame&& frame);
+    void onRenderIdle();
 
     void emitStateChanged(PlaybackState state);
     void emitPositionChanged(double position);

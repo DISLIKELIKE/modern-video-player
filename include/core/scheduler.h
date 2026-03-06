@@ -30,6 +30,7 @@ public:
     void setVideoQueue(FrameQueue<VideoFrame>* queue);
     void setAudioQueue(FrameQueue<AudioFrame>* queue);
     void setRenderCallback(std::function<void(VideoFrame&&)> callback);
+    void setIdleCallback(std::function<void()> callback);
     void setClock(Clock* clock);
 
     void start();
@@ -60,6 +61,7 @@ private:
     std::function<bool(VideoFrame&)> video_decoder_;
     std::function<bool(AudioFrame&)> audio_decoder_;
     std::function<void(VideoFrame&&)> render_callback_;
+    std::function<void()> idle_callback_;
 
     FrameQueue<VideoFrame>* video_queue_{nullptr};
     FrameQueue<AudioFrame>* audio_queue_{nullptr};
