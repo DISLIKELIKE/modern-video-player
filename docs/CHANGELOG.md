@@ -19,6 +19,7 @@
 | 10 | 2026-02-25 | 多解码器实例竞争读取导致解码错误 | ✅ 已修复 |
 | 11 | 2026-02-27 | 并发读取 AVFormatContext 导致崩溃 | ✅ 已修复 |
 | 12 | 2026-02-27 | 企业级多线程架构重构 | ✅ 已完成 |
+| 15 | 2026-03-06 | 小屏窗口过大且拖拽缩放不稳定 | ✅ 已修复 |
 
 ---
 
@@ -597,3 +598,29 @@ void VideoPlayer::play() {
 - src/video_player.cpp
 - docs/ARCHITECTURE_REFACTOR_2026-03-06.md
 - 旧模块头源文件删除（见 DEVELOP_LOG 问题 14）
+
+---
+
+## 问题 15: 小屏窗口过大且拖拽缩放不稳定
+
+**日期**: 2026-03-06
+
+### 问题描述
+- 小屏设备播放高分辨率视频时，窗口初始尺寸过大，影响操作。
+- 窗口拖拽后部分场景下渲染区域未及时更新，用户感知为“窗口不能调整”。
+
+### 原因分析
+- `Display::init()` 直接使用视频原始分辨率创建窗口，未按屏幕可用区域做首屏缩放。
+- 事件处理仅监听 `SDL_WINDOWEVENT_RESIZED`，未覆盖 `SDL_WINDOWEVENT_SIZE_CHANGED`。
+- 渲染目标区域直接使用窗口宽高，缺少按视频比例计算的目标矩形。
+
+### 解决方案
+- 启动时通过 `SDL_GetDisplayUsableBounds()` 计算可用屏幕区域，将初始窗口限制在可用区 90% 内并保持视频比例。
+- 同时处理 `SDL_WINDOWEVENT_RESIZED` 与 `SDL_WINDOWEVENT_SIZE_CHANGED`，确保窗口尺寸变化实时生效。
+- 按源视频比例计算 `SDL_RenderCopy` 的目标矩形，避免拖拽后画面拉伸。
+
+### 修改文件
+- src/display.cpp
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md

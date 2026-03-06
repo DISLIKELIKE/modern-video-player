@@ -192,3 +192,32 @@ queue_.pop();
 - src/video_player.cpp
 - docs/ARCHITECTURE_REFACTOR_2026-03-06.md
 - 删除旧模块文件（decoder/thread/sync/packet/legacy clock/frame_queue）
+
+---
+
+## 问题 15: 小屏窗口过大且拖拽缩放不稳定
+
+**日期**: 2026-03-06
+**状态**: 已解决
+
+### 问题描述
+- 播放器在小屏设备上按视频原始分辨率（如 1920x1080）直接开窗，窗口初始显示过大。
+- 用户拖拽窗口后，部分环境下渲染区域未稳定跟随，表现为“窗口不能正常调整”。
+
+### 日志输出
+```
+Display initialized: window 1306x734 (source 1920x1080)
+```
+
+### 分析记录
+- `PlayerCore::open()` 直接把视频分辨率传给 `Display::init()`，没有根据屏幕可用区做首帧窗口缩放。
+- 事件处理只监听 `SDL_WINDOWEVENT_RESIZED`，未覆盖常见的 `SDL_WINDOWEVENT_SIZE_CHANGED`。
+- 渲染目标矩形直接铺满窗口，缺少按源视频比例计算的目标区域。
+
+### 解决方案
+- 在 `Display::init()` 增加基于 `SDL_GetDisplayUsableBounds()` 的初始窗口尺寸计算，保持原始宽高比并限制到屏幕可用区 90%。
+- 同时处理 `SDL_WINDOWEVENT_RESIZED` 和 `SDL_WINDOWEVENT_SIZE_CHANGED`，确保拖拽时窗口尺寸状态实时更新。
+- 渲染时按视频宽高比计算 `dst_rect`，避免窗口变化时拉伸失真。
+
+### 修改文件
+- src/display.cpp

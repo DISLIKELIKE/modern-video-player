@@ -1,5 +1,7 @@
 #include "display.h"
 #include "logger.h"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
 
 extern "C" {
@@ -7,6 +9,63 @@ extern "C" {
 }
 
 namespace vp {
+
+namespace {
+
+struct WindowSize {
+    int width;
+    int height;
+};
+
+WindowSize computeInitialWindowSize(int video_width, int video_height) {
+    const int safe_video_width = std::max(1, video_width);
+    const int safe_video_height = std::max(1, video_height);
+
+    WindowSize result{safe_video_width, safe_video_height};
+
+    SDL_Rect usable_bounds{};
+    if (SDL_GetDisplayUsableBounds(0, &usable_bounds) != 0 || usable_bounds.w <= 0 || usable_bounds.h <= 0) {
+        return result;
+    }
+
+    constexpr double kMaxDisplayRatio = 0.9;
+    const double max_width = static_cast<double>(usable_bounds.w) * kMaxDisplayRatio;
+    const double max_height = static_cast<double>(usable_bounds.h) * kMaxDisplayRatio;
+
+    const double width_scale = max_width / static_cast<double>(safe_video_width);
+    const double height_scale = max_height / static_cast<double>(safe_video_height);
+    const double scale = std::min(1.0, std::min(width_scale, height_scale));
+
+    result.width = std::max(1, static_cast<int>(std::lround(static_cast<double>(safe_video_width) * scale)));
+    result.height = std::max(1, static_cast<int>(std::lround(static_cast<double>(safe_video_height) * scale)));
+    return result;
+}
+
+SDL_Rect computeRenderRect(int window_width, int window_height, int frame_width, int frame_height) {
+    SDL_Rect dst_rect{0, 0, std::max(1, window_width), std::max(1, window_height)};
+    if (window_width <= 0 || window_height <= 0 || frame_width <= 0 || frame_height <= 0) {
+        return dst_rect;
+    }
+
+    const double src_aspect = static_cast<double>(frame_width) / static_cast<double>(frame_height);
+    const double dst_aspect = static_cast<double>(window_width) / static_cast<double>(window_height);
+
+    if (dst_aspect > src_aspect) {
+        dst_rect.h = window_height;
+        dst_rect.w = std::max(1, static_cast<int>(std::lround(static_cast<double>(window_height) * src_aspect)));
+        dst_rect.x = (window_width - dst_rect.w) / 2;
+        dst_rect.y = 0;
+    } else {
+        dst_rect.w = window_width;
+        dst_rect.h = std::max(1, static_cast<int>(std::lround(static_cast<double>(window_width) / src_aspect)));
+        dst_rect.x = 0;
+        dst_rect.y = (window_height - dst_rect.h) / 2;
+    }
+
+    return dst_rect;
+}
+
+} // namespace
 
 Display::Display()
     : window_(nullptr)
@@ -34,15 +93,16 @@ bool Display::init(int width, int height, const std::string& title) {
         return false;
     }
     
-    width_ = width;
-    height_ = height;
+    const WindowSize window_size = computeInitialWindowSize(width, height);
+    width_ = window_size.width;
+    height_ = window_size.height;
     
     window_ = SDL_CreateWindow(
         title.c_str(),
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        width,
-        height,
+        width_,
+        height_,
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
     );
     
@@ -50,6 +110,8 @@ bool Display::init(int width, int height, const std::string& title) {
         std::cerr << "Error: Could not create SDL window: " << SDL_GetError() << std::endl;
         return false;
     }
+
+    SDL_SetWindowMinimumSize(window_, 320, 180);
     
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer_) {
@@ -71,7 +133,8 @@ bool Display::init(int width, int height, const std::string& title) {
     should_quit_ = false;
     toggle_pause_requested_ = false;
     
-    std::cout << "Display initialized: " << width << "x" << height << std::endl;
+    std::cout << "Display initialized: window " << width_ << "x" << height_
+              << " (source " << width << "x" << height << ")" << std::endl;
     
     return true;
 }
@@ -169,11 +232,7 @@ void Display::renderFrame(const uint8_t* data, int width, int height) {
         return;
     }
     
-    SDL_Rect dst_rect;
-    dst_rect.x = 0;
-    dst_rect.y = 0;
-    dst_rect.w = width_;
-    dst_rect.h = height_;
+    const SDL_Rect dst_rect = computeRenderRect(width_, height_, width, height);
     
     SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect);
 }
@@ -223,9 +282,10 @@ void Display::handleEvents() {
                 
             case SDL_WINDOWEVENT:
                 LOG_TRACE_EVENT("SDL_WINDOWEVENT, window event: " << event.window.event);
-                if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
-                    width_ = event.window.data1;
-                    height_ = event.window.data2;
+                if (event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                    event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    width_ = std::max(1, event.window.data1);
+                    height_ = std::max(1, event.window.data2);
                 }
                 break;
                 
