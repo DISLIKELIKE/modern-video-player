@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(DEBUG_MODE "Enable debug logging" ON)
-option(BUILD_CORE_TESTS "Build core API unit tests" OFF)
 
 if(WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
@@ -185,37 +184,6 @@ add_executable(${PROJECT_NAME}
     src/filters/builtin_filters.cpp
 )
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
-
-add_executable(core_frame_queue_tests EXCLUDE_FROM_ALL
-    tests/core_frame_queue_tests.cpp
-)
-target_include_directories(core_frame_queue_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
-    ${FFMPEG_INCLUDE_DIRS}
-)
-target_compile_features(core_frame_queue_tests PRIVATE cxx_std_17)
-if(NOT WIN32)
-    target_link_libraries(core_frame_queue_tests pthread)
-endif()
-
-add_executable(core_clock_tests EXCLUDE_FROM_ALL
-    tests/core_clock_tests.cpp
-    src/core/clock.cpp
-)
-target_include_directories(core_clock_tests PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
-    ${FFMPEG_INCLUDE_DIRS}
-)
-target_compile_features(core_clock_tests PRIVATE cxx_std_17)
-if(NOT WIN32)
-    target_link_libraries(core_clock_tests pthread)
-endif()
-
-if(BUILD_CORE_TESTS)
-    add_custom_target(core_tests ALL
-        DEPENDS core_frame_queue_tests core_clock_tests
-    )
-endif()
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME}

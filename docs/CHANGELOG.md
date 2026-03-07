@@ -25,6 +25,7 @@
 | 20 | 2026-03-07 | 探测入口与格式回归脚本落地 | ✅ 已修复 |
 | 21 | 2026-03-07 | GitHub Actions 自动格式回归接入 | ✅ 已修复 |
 | 22 | 2026-03-07 | 播放列表主链路、设置持久化与快捷键首版接入 | ✅ 已修复 |
+| 23 | 2026-03-07 | 移除 Core 单元测试目标与测试文件 | ✅ 已修复 |
 
 ---
 
@@ -889,3 +890,31 @@ void VideoPlayer::play() {
 - src/config/settings_manager.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 23: 移除 Core 单元测试目标与测试文件
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 当前仓库保留了两个 Core 相关测试目标与测试文件，但本次需求要求移除这两项测试内容并删除文件。
+- 若仅删除测试源码而不清理构建脚本，会导致构建配置存在悬挂路径风险。
+
+### 解决方案
+- 从 `CMakeLists.txt` 移除：
+  - `BUILD_CORE_TESTS` 选项；
+  - `core_frame_queue_tests`、`core_clock_tests` 两个测试目标；
+  - `core_tests` 聚合目标。
+- 删除测试文件：
+  - `tests/core_frame_queue_tests.cpp`
+  - `tests/core_clock_tests.cpp`
+- 同步更新变更文档，确保记录与当前仓库状态一致。
+
+### 修改文件
+- CMakeLists.txt
+- tests/core_frame_queue_tests.cpp（删除）
+- tests/core_clock_tests.cpp（删除）
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

@@ -481,3 +481,32 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/config/settings_manager.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 23: 移除 Core 单元测试目标与测试文件
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 需求要求移除两个 Core 测试及相关文件。
+- `CMakeLists.txt` 中仍存在测试目标与开关，直接删除文件会留下构建残留。
+
+### 分析记录
+1. 已确认待移除测试文件为 `tests/core_frame_queue_tests.cpp` 与 `tests/core_clock_tests.cpp`。
+2. 已确认构建脚本中存在 `BUILD_CORE_TESTS`、`core_frame_queue_tests`、`core_clock_tests` 与 `core_tests` 聚合目标引用。
+3. 需要同步清理 CMake 配置与文档记录，保证仓库状态一致。
+
+### 解决方案
+- 清理 `CMakeLists.txt` 中的两个测试目标、聚合目标与测试开关。
+- 删除两个测试文件。
+- 同步更新 `CHANGELOG.md`、`VERSION.md`、`DEVELOP_LOG.md`。
+
+### 修改文件
+- CMakeLists.txt
+- tests/core_frame_queue_tests.cpp（删除）
+- tests/core_clock_tests.cpp（删除）
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

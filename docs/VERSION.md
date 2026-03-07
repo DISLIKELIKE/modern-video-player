@@ -536,3 +536,21 @@ make -j$(nproc)
 - src/config/settings_manager.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+## 2026-03-07 更新（移除 Core 单元测试目标）
+
+### 构建配置调整
+- 移除 `BUILD_CORE_TESTS` 选项，避免保留无效测试开关。
+- 移除 `core_frame_queue_tests`、`core_clock_tests` 和 `core_tests` 聚合目标。
+
+### 文件清理
+- 删除 `tests/core_frame_queue_tests.cpp`。
+- 删除 `tests/core_clock_tests.cpp`。
+
+### 修改文件
+- CMakeLists.txt
+- tests/core_frame_queue_tests.cpp（删除）
+- tests/core_clock_tests.cpp（删除）
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
