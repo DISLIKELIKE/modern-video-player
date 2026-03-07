@@ -1,0 +1,2 @@
+sample_path,expected_container,expected_video_codec,expected_audio_codec,notes
+juren-30s.mp4,mp4,h264,aac,仓库内基础样本

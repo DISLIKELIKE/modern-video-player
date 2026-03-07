@@ -20,6 +20,9 @@
 | 11 | 2026-02-27 | 并发读取 AVFormatContext 导致崩溃 | ✅ 已修复 |
 | 12 | 2026-02-27 | 企业级多线程架构重构 | ✅ 已完成 |
 | 15 | 2026-03-06 | 小屏窗口过大且拖拽缩放不稳定 | ✅ 已修复 |
+| 18 | 2026-03-07 | DASH 解析编译失败与格式能力矩阵缺失 | ✅ 已修复 |
+| 19 | 2026-03-07 | D3D11VA 硬解最小闭环与软解回退 | ✅ 已修复 |
+| 20 | 2026-03-07 | 探测入口与格式回归脚本落地 | ✅ 已修复 |
 
 ---
 
@@ -651,3 +654,156 @@ void VideoPlayer::play() {
 - docs/DEVELOP_LOG.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
+
+## 问题 17: 企业级 MPC-HC 模块骨架落地（阶段二/三推进）
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 企业级模块规划已定义，但多数模块缺少代码入口，无法继续并行开发。
+
+### 原因分析
+- 旧实现以核心播放链路为主，模块边界不完整，难以分工推进。
+
+### 解决方案
+- 新增并接入企业级基础设施和模块骨架：任务队列、帧池、解码线程基类。
+- 引入渲染抽象层（`IVideoRenderer` + `RendererFactory`），并让 `PlayerCore` 切换到抽象接口。
+- 增加音频均衡器/混音器、解码器工厂、字幕 SRT 解析、播放列表、设置/快捷键、皮肤、插件、格式与流媒体解析模块。
+- 完善滤镜基类与音视频滤镜链，补齐音量平衡滤镜。
+- 同步更新 tasklist 对应已实现项。
+
+### 修改文件
+- CMakeLists.txt
+- include/core/task_queue.h
+- include/core/frame_pool.h
+- src/core/frame_pool.cpp
+- include/core/decoder_thread.h
+- src/core/decoder_thread.cpp
+- include/render/*
+- src/render/*
+- include/audio/*
+- src/audio/*
+- include/decoder/*
+- src/decoder/*
+- include/subtitle/*
+- src/subtitle/*
+- include/playlist/*
+- src/playlist/*
+- include/config/*
+- src/config/*
+- include/input/*
+- src/input/*
+- include/media/*
+- src/media/*
+- include/streaming/*
+- src/streaming/*
+- include/ui/*
+- src/ui/*
+- include/plugin/*
+- src/plugin/*
+- include/filters/filter_base.h
+- include/filters/video_filter_chain.h
+- src/filters/video_filter_chain.cpp
+- include/filters/audio_filter_chain.h
+- src/filters/audio_filter_chain.cpp
+- include/filters/audio_filter.h
+- include/filters/video_filter.h
+- include/filters/builtin_filters.h
+- src/filters/volume_balance_filter.cpp
+- src/filters/builtin_filters.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/audio_player.h
+- src/audio_player.cpp
+- .monkeycode/specs/enterprise-quill-logging/tasklist.md
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+
+---
+
+## 问题 18: DASH 解析编译失败与格式能力矩阵缺失
+
+**日期**: 2026-03-07
+
+### 问题描述
+- `src/streaming/dash_manifest_parser.cpp` 在 MSVC 下编译失败，阻塞全量构建。
+- 缺少一个可直接复用的“运行时格式能力矩阵”入口，不利于单人迭代中快速验证格式覆盖。
+
+### 原因分析
+- 原始字符串正则使用了默认分隔符，表达式中出现 `)"` 触发提前终止，导致语法错误。
+- 现有格式支持模块虽有基础接口，但缺少统一 CLI 检查入口与主力格式覆盖输出。
+
+### 解决方案
+- 修复 DASH 正则：改为自定义 raw-string 分隔符，恢复 MSVC 编译通过。
+- 扩展 `FormatSupport`：
+  - 增加运行时容器/编解码器枚举（`av_demuxer_iterate` / `av_codec_iterate`）
+  - 增加播放目标评估（高分辨率/高帧率/多音道）
+- 改造 `main`，新增命令：
+  - `--capabilities`
+  - `--evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>`
+- 增强 `Demuxer` 与 `PlayerCore` 音频链路稳健性（多音道输出参数对齐、重采样器复用等）。
+
+### 修改文件
+- src/streaming/dash_manifest_parser.cpp
+- include/media/format_support.h
+- src/media/format_support.cpp
+- include/demuxer.h
+- src/demuxer.cpp
+- include/audio_player.h
+- src/audio_player.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/README.md
+
+---
+
+## 问题 19: D3D11VA 硬解最小闭环与软解回退
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 需要在 Windows 下优先利用 D3D11VA 硬解高分辨率/高帧率视频，并确保失败时可自动回退软解。
+- 硬件解码输出通常是 GPU 帧或 `NV12`，现有 SDL 渲染链路要求 `YUV420P`，存在格式不匹配风险。
+
+### 解决方案
+- `PlayerCore` 增加 D3D11VA 尝试逻辑：
+  - 检测 codec 的 D3D11VA HW config；
+  - 创建 `AV_HWDEVICE_TYPE_D3D11VA` 设备上下文；
+  - 绑定 `get_format` 回调选择硬件像素格式。
+- 若 `avcodec_open2` 在硬解路径失败，自动重建解码上下文并回退到软解。
+- 新增视频帧输出规整链路：
+  - 硬件帧先 `av_hwframe_transfer_data` 转到系统内存；
+  - 非 `YUV420P` 帧统一经 `sws_scale` 转为 `YUV420P` 再进入渲染。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+
+---
+
+## 问题 20: 探测入口与格式回归脚本落地
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 需要把格式覆盖验证从“手工打开视频观察”升级为“可重复的命令行回归”。
+- 现有能力入口只有总体能力评估，缺少单文件探测和批量样本报告。
+
+### 解决方案
+- 在 `main` 中新增 `--probe-file <media_file>`：输出 `probe.*` 机器可读字段，包含容器/视频/音频状态、分辨率、帧率、声道与建议信息。
+- 新增 `tools/format_regression/run_format_regression.ps1`：
+  - 读取 `tools/format_regression/format_samples.csv`；
+  - 逐个调用 `--probe-file`；
+  - 生成 `docs/reports/FORMAT_REGRESSION_*.md` 报告；
+  - 返回码语义：`0=全部PASS`，`1=存在PARTIAL`，`2=存在FAIL`。
+- 补充 `docs/FORMAT_REGRESSION.md` 与文档索引，便于在 VS2022/PowerShell 下直接执行。
+
+### 修改文件
+- src/main.cpp
+- tools/format_regression/run_format_regression.ps1
+- tools/format_regression/format_samples.csv
+- docs/FORMAT_REGRESSION.md
+- docs/README.md

@@ -16,6 +16,9 @@
 |------|------|
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构设计 |
 | [VERSION.md](./VERSION.md) | 版本记录与依赖说明 |
+| [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) | 与 MPC-HC 的功能差距评估 |
+| [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 单人开发可执行迭代计划 |
+| [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 播放能力实现参考（格式/高分高帧/多音道） |
 
 ## 开发文档
 
@@ -23,6 +26,7 @@
 |------|------|
 | [CHANGELOG.md](./CHANGELOG.md) | 问题修复记录（重要） |
 | [LOGGING.md](./LOGGING.md) | 日志系统说明 |
+| [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md) | 格式样本回归脚本与报告说明 |
 
 ## 文档更新历史
 

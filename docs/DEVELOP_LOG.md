@@ -251,3 +251,156 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/display.cpp
 - src/core/player_core.cpp
 - src/main.cpp
+
+## 问题 17: 企业级 MPC-HC 架构剩余模块缺少可落地代码骨架
+
+**日期**: 2026-03-07
+**状态**: 已解决（阶段性）
+
+### 问题描述
+- `enterprise-quill-logging/tasklist.md` 中模块 02-14 仍有大量未完成项，缺少统一接口与代码落地点。
+- 现有播放器主链路未抽象渲染后端，难以扩展 D3D11/OpenGL 等企业级渲染模块。
+
+### 分析记录
+- 当前工程已具备 Core + Scheduler + Filter 基础，但缺少跨模块边界定义。
+- 需要先补高优先模块骨架并接入构建，再逐步填充完整能力。
+
+### 解决方案
+- 新增基础设施：`TaskQueue`、`FramePool`、`DecoderThread`。
+- 新增渲染模块：`IVideoRenderer`、SDL 适配器、D3D11/OpenGL 占位实现、`RendererFactory`，并接入 `PlayerCore`。
+- 新增音频增强：10 段均衡器、多流混音器，扩展 `AudioPlayer` 缓冲观测接口。
+- 新增解码器管理：`IDecoder`、`DecoderCapability`、`DecoderFactory` 自动选择逻辑。
+- 新增字幕/播放列表/设置/快捷键/皮肤/插件/格式支持/流媒体等企业级模块骨架。
+- 新增滤镜基类与音视频滤镜链，并补充音量平衡滤镜。
+- 同步更新 `tasklist.md` 勾选状态（仅勾选已落地代码项）。
+
+### 修改文件
+- CMakeLists.txt
+- include/core/task_queue.h
+- include/core/frame_pool.h
+- src/core/frame_pool.cpp
+- include/core/decoder_thread.h
+- src/core/decoder_thread.cpp
+- include/render/*
+- src/render/*
+- include/audio/*
+- src/audio/*
+- include/decoder/*
+- src/decoder/*
+- include/subtitle/*
+- src/subtitle/*
+- include/playlist/*
+- src/playlist/*
+- include/config/*
+- src/config/*
+- include/input/*
+- src/input/*
+- include/media/*
+- src/media/*
+- include/streaming/*
+- src/streaming/*
+- include/ui/*
+- src/ui/*
+- include/plugin/*
+- src/plugin/*
+- include/filters/filter_base.h
+- include/filters/video_filter_chain.h
+- src/filters/video_filter_chain.cpp
+- include/filters/audio_filter_chain.h
+- src/filters/audio_filter_chain.cpp
+- include/filters/audio_filter.h
+- include/filters/video_filter.h
+- include/filters/builtin_filters.h
+- src/filters/volume_balance_filter.cpp
+- src/filters/builtin_filters.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/audio_player.h
+- src/audio_player.cpp
+- .monkeycode/specs/enterprise-quill-logging/tasklist.md
+
+---
+
+## 问题 18: 编译基线恢复与格式能力矩阵入口
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- `dash_manifest_parser.cpp` 在 VS2022/MSVC 编译失败，阻塞本地持续开发。
+- 缺少可直接运行的能力检查入口，不利于快速验证“主力格式 + 高分高帧 + 多音道”目标。
+
+### 解决方案
+- 修复 DASH 正则 raw-string 分隔符，恢复工程可编译。
+- 新增命令行能力入口：
+  - `--capabilities`：输出运行时容器/编解码器能力与主力格式覆盖矩阵。
+  - `--evaluate-target`：评估指定分辨率/帧率/声道/码率目标是否建议硬解与 D3D11 渲染。
+- 增强播放链路基础能力：
+  - `Demuxer` 使用 `av_find_best_stream` + probe 参数增强；
+  - `AudioPlayer` 暴露实际输出参数；
+  - `PlayerCore` 复用 `SwrContext`，按设备输出参数进行重采样。
+
+### 修改文件
+- src/streaming/dash_manifest_parser.cpp
+- include/media/format_support.h
+- src/media/format_support.cpp
+- include/demuxer.h
+- src/demuxer.cpp
+- include/audio_player.h
+- src/audio_player.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/README.md
+
+---
+
+## 问题 19: D3D11VA 硬解最小闭环（失败回退软解）
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 需要在 Windows 下优先使用 D3D11VA 解码高负载视频，同时避免硬解失败导致无法播放。
+- 硬件输出帧格式与 SDL 渲染链路不一致（GPU/NV12 vs YUV420P），需要统一输出格式。
+
+### 解决方案
+- 在 `PlayerCore::initDecoders` 中加入 D3D11VA 配置与选择逻辑。
+- 当硬解 `avcodec_open2` 失败时，自动重建解码器并回退软解继续播放。
+- 在视频解码路径补充硬件帧转存与像素格式规整：
+  - `av_hwframe_transfer_data`（硬件帧 -> 系统内存帧）
+  - `sws_scale`（非 YUV420P -> YUV420P）
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+
+---
+
+## 问题 20: `--probe-file` 与格式回归脚本
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 缺少单文件可脚本化探测入口，不便于快速定位“某个样本为什么不达标”。
+- 缺少批量回归脚本，不利于单人开发迭代中持续追踪格式兼容性退化。
+
+### 解决方案
+- 新增命令：`modern-video-player.exe --probe-file <media_file>`，输出 `probe.*` 键值结果，便于脚本解析。
+- 新增 `tools/format_regression/run_format_regression.ps1`：按 CSV 样本清单批量探测并输出 Markdown 报告。
+- 报告默认路径：`docs/reports/FORMAT_REGRESSION_yyyyMMdd_HHmmss.md`。
+- 返回码约定：`0=PASS`，`1=PARTIAL`，`2=FAIL`。
+
+### 验证记录
+- `.\build\Debug\modern-video-player.exe --probe-file .\juren-30s.mp4` 返回 `probe.overall=PASS`。
+- `.\tools\format_regression\run_format_regression.ps1` 成功生成报告。
+- `-OutputFile` 自定义路径验证通过。
+
+### 修改文件
+- src/main.cpp
+- tools/format_regression/run_format_regression.ps1
+- tools/format_regression/format_samples.csv
+- docs/FORMAT_REGRESSION.md
+- docs/README.md

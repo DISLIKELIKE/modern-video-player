@@ -356,3 +356,106 @@ make -j$(nproc)
 - docs/DEVELOP_LOG.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
+
+## 2026-03-07 更新（企业级模块推进）
+
+### MPC-HC 架构模块扩展
+- 新增企业级基础设施模块：`TaskQueue`、`FramePool`、`DecoderThread`。
+- 新增渲染抽象层：`IVideoRenderer`、`SdlVideoRenderer`、`D3D11/OpenGL` 占位实现、`RendererFactory`。
+- `PlayerCore` 从直接依赖 `Display` 调整为依赖渲染抽象接口。
+- 新增音频增强模块：10 段均衡器、混音器；`AudioPlayer` 增加缓冲观测接口。
+- 新增解码器管理模块：能力探测与后端自动选择。
+- 新增字幕（SRT）、播放列表（M3U8）、设置、快捷键、皮肤、插件、格式支持、流媒体解析等模块骨架。
+- 新增滤镜基类与音视频滤镜链，补充音量/平衡音频滤镜。
+- 同步更新 `.monkeycode/specs/enterprise-quill-logging/tasklist.md` 已实现项。
+
+### 修改文件
+- CMakeLists.txt
+- include/core/*
+- src/core/*
+- include/render/*
+- src/render/*
+- include/audio/*
+- src/audio/*
+- include/decoder/*
+- src/decoder/*
+- include/subtitle/*
+- src/subtitle/*
+- include/playlist/*
+- src/playlist/*
+- include/config/*
+- src/config/*
+- include/input/*
+- src/input/*
+- include/media/*
+- src/media/*
+- include/streaming/*
+- src/streaming/*
+- include/ui/*
+- src/ui/*
+- include/plugin/*
+- src/plugin/*
+- include/filters/*
+- src/filters/*
+- .monkeycode/specs/enterprise-quill-logging/tasklist.md
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+
+## 2026-03-07 更新（格式能力矩阵与高分高帧评估）
+
+### 能力检查入口
+- 新增 `--capabilities` 命令：输出运行时容器/视频解码器/音频解码器能力，并给出主力格式覆盖矩阵（PASS/PARTIAL/FAIL）。
+- 新增 `--evaluate-target` 命令：按 `宽/高/FPS/声道/码率` 评估实时播放可行性与硬解/D3D11建议。
+
+### 稳健性增强
+- 修复 `src/streaming/dash_manifest_parser.cpp` 在 MSVC 下的 raw-string 正则编译问题，恢复构建基线。
+- `Demuxer` 使用 `av_find_best_stream`，并引入 `probesize`/`analyzeduration`/`+genpts` 选项增强复杂媒体探测。
+- `AudioPlayer` 暴露实际输出参数；`PlayerCore` 复用重采样器并按设备输出参数做多音道重采样。
+
+### 修改文件
+- src/streaming/dash_manifest_parser.cpp
+- include/media/format_support.h
+- src/media/format_support.cpp
+- include/demuxer.h
+- src/demuxer.cpp
+- include/audio_player.h
+- src/audio_player.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/README.md
+
+## 2026-03-07 更新（D3D11VA 硬解回退链路）
+
+### 解码后端
+- `PlayerCore` 增加 D3D11VA 硬解尝试逻辑（Windows）。
+- 硬解初始化失败时自动回退软解，保证可播放性优先。
+
+### 视频输出规整
+- 对硬件帧增加 `av_hwframe_transfer_data`；
+- 对非 `YUV420P` 帧增加 `sws_scale` 转换，统一为 `YUV420P` 给 SDL 渲染。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+
+## 2026-03-07 更新（单文件探测与格式回归自动化）
+
+### 新增可执行入口
+- 新增 `--probe-file <media_file>` 命令：输出 `probe.*` 机器可读字段，包含容器/视频/音频状态、分辨率、帧率、声道与建议信息。
+
+### 回归工具链
+- 新增 `tools/format_regression/run_format_regression.ps1`：按样本清单自动批量执行探测。
+- 新增 `tools/format_regression/format_samples.csv`：维护格式样本与预期编码信息。
+- 新增 `docs/FORMAT_REGRESSION.md`：记录脚本参数、输出路径和使用方式。
+- 报告输出：`docs/reports/FORMAT_REGRESSION_*.md`。
+- 返回码语义：`0=全部PASS`，`1=存在PARTIAL`，`2=存在FAIL`。
+
+### 修改文件
+- src/main.cpp
+- tools/format_regression/run_format_regression.ps1
+- tools/format_regression/format_samples.csv
+- docs/FORMAT_REGRESSION.md
+- docs/README.md
