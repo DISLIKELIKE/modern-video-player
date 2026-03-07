@@ -624,3 +624,30 @@ void VideoPlayer::play() {
 - docs/DEVELOP_LOG.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
+
+## 问题 16: 最大化/缩放时画面卡住，并补充基础交互控制
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 播放时最大化窗口或拖动缩放窗口，视频画面可能卡住，音频继续播放。
+- 缺少进度条、音量调节、拖动进度条等基础交互能力。
+
+### 原因分析
+- SDL 窗口事件处理与渲染调用分散在不同线程路径，窗口尺寸变化时更容易触发画面刷新停滞。
+- 显示层没有控制条与鼠标交互请求上报能力。
+
+### 解决方案
+- 调整事件处理路径：在渲染/空闲渲染路径中轮询 SDL 事件，主线程仅消费交互请求。
+- 为 Display 添加控制层绘制：进度条、音量条、暂停状态提示。
+- 新增鼠标交互：拖动进度条触发 seek，拖动音量条调节音量。
+- PlayerCore 增加对 seek/音量请求的消费执行。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md

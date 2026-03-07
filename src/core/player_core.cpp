@@ -194,7 +194,7 @@ void PlayerCore::pumpEvents() {
     if (!display_) {
         return;
     }
-    display_->handleEvents();
+
     if (display_->consumeTogglePauseRequest()) {
         if (state_.load() == PlaybackState::Playing) {
             pause();
@@ -202,6 +202,20 @@ void PlayerCore::pumpEvents() {
             play();
         }
     }
+
+    double seek_ratio = 0.0;
+    if (display_->consumeSeekRequest(seek_ratio)) {
+        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+        if (duration > 0.0) {
+            seek(duration * std::max(0.0, std::min(1.0, seek_ratio)));
+        }
+    }
+
+    float volume_request = 0.0f;
+    if (display_->consumeVolumeChangeRequest(volume_request)) {
+        setVolume(volume_request);
+    }
+
     if (display_->shouldQuit()) {
         if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
             emitStateChanged(PlaybackState::Stopped);
@@ -631,6 +645,9 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
         return;
     }
 
+    const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+    display_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
+
     filter_pipeline_.processVideo(frame);
     display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
     display_->present();
@@ -646,6 +663,12 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
 }
 
 void PlayerCore::onRenderIdle() {
+    if (display_) {
+        display_->handleEvents();
+        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+        display_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
+    }
+
     if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
         return;
     }

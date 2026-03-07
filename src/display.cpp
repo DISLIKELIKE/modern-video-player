@@ -1,5 +1,5 @@
 #include "display.h"
-#include "logger.h"
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -11,6 +11,17 @@ extern "C" {
 namespace vp {
 
 namespace {
+
+constexpr int kMinWindowWidth = 320;
+constexpr int kMinWindowHeight = 180;
+constexpr int kControlPanelInset = 8;
+constexpr int kControlPanelHeight = 44;
+constexpr int kControlPadding = 10;
+constexpr int kControlGap = 14;
+constexpr int kBarHeight = 8;
+constexpr int kVolumeBarWidth = 96;
+constexpr int kMinProgressBarWidth = 80;
+constexpr float kVolumeStep = 0.05f;
 
 struct WindowSize {
     int width;
@@ -65,6 +76,18 @@ SDL_Rect computeRenderRect(int window_width, int window_height, int frame_width,
     return dst_rect;
 }
 
+double clampRatio(double value) {
+    return std::max(0.0, std::min(1.0, value));
+}
+
+float clampVolume(float value) {
+    return std::max(0.0f, std::min(1.0f, value));
+}
+
+bool pointInRect(int x, int y, const SDL_Rect& rect) {
+    return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
+}
+
 } // namespace
 
 Display::Display()
@@ -76,7 +99,19 @@ Display::Display()
     , should_quit_(false)
     , toggle_pause_requested_(false)
     , fullscreen_(false)
-    , initialized_(false) {
+    , initialized_(false)
+    , seek_requested_(false)
+    , seek_ratio_(0.0)
+    , volume_change_requested_(false)
+    , requested_volume_(1.0f)
+    , dragging_seek_(false)
+    , dragging_volume_(false)
+    , seek_preview_active_(false)
+    , seek_preview_ratio_(0.0)
+    , overlay_position_(0.0)
+    , overlay_duration_(0.0)
+    , overlay_volume_(1.0f)
+    , overlay_paused_(false) {
 }
 
 Display::~Display() {
@@ -111,15 +146,19 @@ bool Display::init(int width, int height, const std::string& title) {
         return false;
     }
 
-    SDL_SetWindowMinimumSize(window_, 320, 180);
+    SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
     
-    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer_) {
+        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+    }
     if (!renderer_) {
         std::cerr << "Error: Could not create SDL renderer: " << SDL_GetError() << std::endl;
         SDL_DestroyWindow(window_);
         window_ = nullptr;
         return false;
     }
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     
     if (!createTexture(width, height)) {
         SDL_DestroyRenderer(renderer_);
@@ -130,8 +169,8 @@ bool Display::init(int width, int height, const std::string& title) {
     }
     
     initialized_ = true;
-    should_quit_ = false;
-    toggle_pause_requested_ = false;
+    should_quit_.store(false);
+    toggle_pause_requested_.store(false);
     
     std::cout << "Display initialized: window " << width_ << "x" << height_
               << " (source " << width << "x" << height << ")" << std::endl;
@@ -185,13 +224,15 @@ bool Display::createTexture(int width, int height) {
 }
 
 bool Display::updateTexture(const uint8_t* data, int width, int height) {
+    (void)width;
+    (void)height;
     if (!texture_ || !data) {
         return false;
     }
     
-    AVFrame* frame = (AVFrame*)data;
+    const AVFrame* frame = reinterpret_cast<const AVFrame*>(data);
     
-    int ret = SDL_UpdateYUVTexture(
+    const int ret = SDL_UpdateYUVTexture(
         texture_,
         nullptr,
         frame->data[0], frame->linesize[0],
@@ -209,32 +250,18 @@ bool Display::updateTexture(const uint8_t* data, int width, int height) {
 
 void Display::renderFrame(const uint8_t* data, int width, int height) {
     if (!renderer_ || !texture_ || !data) {
-        LOG_TRACE_EVENT("renderFrame: early return");
         return;
     }
     
+    handleEvents();
     SDL_RenderClear(renderer_);
-    
-    AVFrame* frame = (AVFrame*)data;
-    
-    LOG_TRACE_EVENT("renderFrame: update YUV texture");
-    
-    int ret = SDL_UpdateYUVTexture(
-        texture_,
-        nullptr,
-        frame->data[0], frame->linesize[0],
-        frame->data[1], frame->linesize[1],
-        frame->data[2], frame->linesize[2]
-    );
-    
-    if (ret < 0) {
-        std::cerr << "Error: Could not update YUV texture: " << SDL_GetError() << std::endl;
+    if (!updateTexture(data, width, height)) {
         return;
     }
     
     const SDL_Rect dst_rect = computeRenderRect(width_, height_, width, height);
-    
     SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect);
+    drawControls(width_, height_);
 }
 
 void Display::present() {
@@ -250,42 +277,101 @@ void Display::clear() {
 }
 
 void Display::handleEvents() {
-    LOG_TRACE_EVENT("handleEvents: start");
     SDL_Event event;
     
     while (SDL_PollEvent(&event)) {
-        LOG_TRACE_EVENT("Received event type: " << event.type);
         switch (event.type) {
             case SDL_QUIT:
-                LOG_TRACE_EVENT("SDL_QUIT event received, setting should_quit_=true");
-                should_quit_ = true;
+                should_quit_.store(true);
                 break;
                 
             case SDL_KEYDOWN:
-                LOG_TRACE_EVENT("SDL_KEYDOWN event, key: " << event.key.keysym.sym);
                 switch (event.key.keysym.sym) {
                     case SDLK_ESCAPE:
                     case SDLK_q:
-                        LOG_TRACE_EVENT("Exit key pressed, setting should_quit_=true");
-                        should_quit_ = true;
+                        should_quit_.store(true);
                         break;
                     case SDLK_SPACE:
-                        toggle_pause_requested_ = true;
+                        toggle_pause_requested_.store(true);
                         break;
                     case SDLK_f:
                         toggleFullscreen();
                         break;
+                    case SDLK_UP:
+                    case SDLK_EQUALS: {
+                        const float next = clampVolume(overlay_volume_.load() + kVolumeStep);
+                        {
+                            std::lock_guard<std::mutex> lock(request_mutex_);
+                            requested_volume_ = next;
+                            volume_change_requested_ = true;
+                        }
+                        overlay_volume_.store(next);
+                        break;
+                    }
+                    case SDLK_DOWN:
+                    case SDLK_MINUS: {
+                        const float next = clampVolume(overlay_volume_.load() - kVolumeStep);
+                        {
+                            std::lock_guard<std::mutex> lock(request_mutex_);
+                            requested_volume_ = next;
+                            volume_change_requested_ = true;
+                        }
+                        overlay_volume_.store(next);
+                        break;
+                    }
                     default:
                         break;
                 }
                 break;
                 
             case SDL_WINDOWEVENT:
-                LOG_TRACE_EVENT("SDL_WINDOWEVENT, window event: " << event.window.event);
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED ||
-                    event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
-                    width_ = std::max(1, event.window.data1);
-                    height_ = std::max(1, event.window.data2);
+                    event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                    event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
+                    event.window.event == SDL_WINDOWEVENT_RESTORED) {
+                    int new_width = event.window.data1;
+                    int new_height = event.window.data2;
+                    if (window_ && (new_width <= 0 || new_height <= 0)) {
+                        SDL_GetWindowSize(window_, &new_width, &new_height);
+                    }
+                    width_ = std::max(1, new_width);
+                    height_ = std::max(1, new_height);
+                }
+                break;
+
+            case SDL_MOUSEBUTTONDOWN:
+                if (event.button.button != SDL_BUTTON_LEFT) {
+                    break;
+                }
+                if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_, height_).progress_track)) {
+                    dragging_seek_ = true;
+                    updateSeekFromMouse(event.button.x, false);
+                } else if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_, height_).volume_track)) {
+                    dragging_volume_ = true;
+                    updateVolumeFromMouse(event.button.x);
+                }
+                break;
+
+            case SDL_MOUSEMOTION:
+                if (dragging_seek_) {
+                    updateSeekFromMouse(event.motion.x, false);
+                }
+                if (dragging_volume_) {
+                    updateVolumeFromMouse(event.motion.x);
+                }
+                break;
+
+            case SDL_MOUSEBUTTONUP:
+                if (event.button.button != SDL_BUTTON_LEFT) {
+                    break;
+                }
+                if (dragging_seek_) {
+                    updateSeekFromMouse(event.button.x, true);
+                    dragging_seek_ = false;
+                }
+                if (dragging_volume_) {
+                    updateVolumeFromMouse(event.button.x);
+                    dragging_volume_ = false;
                 }
                 break;
                 
@@ -293,15 +379,161 @@ void Display::handleEvents() {
                 break;
         }
     }
-    LOG_TRACE_EVENT("handleEvents: end, should_quit_=" << should_quit_);
 }
 
 bool Display::consumeTogglePauseRequest() {
-    if (!toggle_pause_requested_) {
+    return toggle_pause_requested_.exchange(false);
+}
+
+bool Display::consumeSeekRequest(double& normalized_position) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!seek_requested_) {
         return false;
     }
-    toggle_pause_requested_ = false;
+    normalized_position = seek_ratio_;
+    seek_requested_ = false;
     return true;
+}
+
+bool Display::consumeVolumeChangeRequest(float& volume) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!volume_change_requested_) {
+        return false;
+    }
+    volume = requested_volume_;
+    volume_change_requested_ = false;
+    return true;
+}
+
+void Display::setOverlayState(double position, double duration, float volume, bool paused) {
+    overlay_position_.store(std::max(0.0, position));
+    overlay_duration_.store(std::max(0.0, duration));
+    overlay_volume_.store(clampVolume(volume));
+    overlay_paused_.store(paused);
+}
+
+Display::ControlLayout Display::computeControlLayout(int window_width, int window_height) const {
+    const int safe_width = std::max(1, window_width);
+    const int safe_height = std::max(1, window_height);
+
+    ControlLayout layout{};
+    layout.panel = {
+        kControlPanelInset,
+        std::max(0, safe_height - kControlPanelHeight - kControlPanelInset),
+        std::max(1, safe_width - (kControlPanelInset * 2)),
+        kControlPanelHeight
+    };
+
+    const int track_y = layout.panel.y + (layout.panel.h - kBarHeight) / 2;
+    const int volume_width = std::min(kVolumeBarWidth, std::max(56, layout.panel.w / 5));
+    int progress_width = layout.panel.w - (kControlPadding * 2) - volume_width - kControlGap;
+    progress_width = std::max(kMinProgressBarWidth, progress_width);
+
+    layout.progress_track = {
+        layout.panel.x + kControlPadding,
+        track_y,
+        std::min(progress_width, std::max(1, layout.panel.w - (kControlPadding * 2))),
+        kBarHeight
+    };
+    layout.volume_track = {
+        layout.panel.x + layout.panel.w - kControlPadding - volume_width,
+        track_y,
+        std::max(1, volume_width),
+        kBarHeight
+    };
+    return layout;
+}
+
+void Display::drawControls(int window_width, int window_height) {
+    if (!renderer_) {
+        return;
+    }
+
+    const ControlLayout layout = computeControlLayout(window_width, window_height);
+    double progress = 0.0;
+    const double duration = overlay_duration_.load();
+    if (duration > 0.0) {
+        progress = overlay_position_.load() / duration;
+    }
+
+    float volume = overlay_volume_.load();
+    bool paused = overlay_paused_.load();
+
+    {
+        std::lock_guard<std::mutex> lock(request_mutex_);
+        if (seek_preview_active_) {
+            progress = seek_preview_ratio_;
+        }
+        if (dragging_volume_) {
+            volume = requested_volume_;
+        }
+    }
+
+    progress = clampRatio(progress);
+    volume = clampVolume(volume);
+
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 140);
+    SDL_RenderFillRect(renderer_, &layout.panel);
+
+    SDL_SetRenderDrawColor(renderer_, 85, 85, 85, 230);
+    SDL_RenderFillRect(renderer_, &layout.progress_track);
+
+    SDL_Rect progress_fill = layout.progress_track;
+    progress_fill.w = std::max(1, static_cast<int>(std::lround(progress * static_cast<double>(layout.progress_track.w))));
+    SDL_SetRenderDrawColor(renderer_, 245, 245, 245, 235);
+    SDL_RenderFillRect(renderer_, &progress_fill);
+
+    SDL_SetRenderDrawColor(renderer_, 85, 85, 85, 230);
+    SDL_RenderFillRect(renderer_, &layout.volume_track);
+
+    SDL_Rect volume_fill = layout.volume_track;
+    volume_fill.w = std::max(1, static_cast<int>(std::lround(volume * static_cast<double>(layout.volume_track.w))));
+    SDL_SetRenderDrawColor(renderer_, 130, 220, 160, 235);
+    SDL_RenderFillRect(renderer_, &volume_fill);
+
+    if (paused) {
+        SDL_Rect pause_flag{
+            layout.panel.x + layout.panel.w / 2 - 6,
+            layout.panel.y + 8,
+            12,
+            6
+        };
+        SDL_SetRenderDrawColor(renderer_, 255, 204, 102, 235);
+        SDL_RenderFillRect(renderer_, &pause_flag);
+    }
+}
+
+void Display::updateSeekFromMouse(int mouse_x, bool commit) {
+    const ControlLayout layout = computeControlLayout(width_, height_);
+    if (layout.progress_track.w <= 0) {
+        return;
+    }
+    const double ratio = clampRatio(
+        static_cast<double>(mouse_x - layout.progress_track.x) / static_cast<double>(layout.progress_track.w));
+
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    seek_preview_active_ = true;
+    seek_preview_ratio_ = ratio;
+    if (commit) {
+        seek_ratio_ = ratio;
+        seek_requested_ = true;
+        seek_preview_active_ = false;
+    }
+}
+
+void Display::updateVolumeFromMouse(int mouse_x) {
+    const ControlLayout layout = computeControlLayout(width_, height_);
+    if (layout.volume_track.w <= 0) {
+        return;
+    }
+    const float next_volume = static_cast<float>(clampRatio(
+        static_cast<double>(mouse_x - layout.volume_track.x) / static_cast<double>(layout.volume_track.w)));
+    {
+        std::lock_guard<std::mutex> lock(request_mutex_);
+        requested_volume_ = next_volume;
+        volume_change_requested_ = true;
+    }
+    overlay_volume_.store(next_volume);
 }
 
 void Display::toggleFullscreen() {
@@ -310,12 +542,18 @@ void Display::toggleFullscreen() {
     }
     
     fullscreen_ = !fullscreen_;
-    
+
     if (fullscreen_) {
         SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(window_, 0);
     }
+
+    int updated_width = width_;
+    int updated_height = height_;
+    SDL_GetWindowSize(window_, &updated_width, &updated_height);
+    width_ = std::max(1, updated_width);
+    height_ = std::max(1, updated_height);
 }
 
 } // namespace vp

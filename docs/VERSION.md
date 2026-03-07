@@ -338,3 +338,21 @@ make -j$(nproc)
 - `docs/DEVELOP_LOG.md`
 - `docs/CHANGELOG.md`
 - `docs/VERSION.md`
+
+## 2026-03-07 更新
+
+### 播放稳定性与基础交互增强
+- 修复窗口最大化/缩放时视频画面可能卡住的问题（音频不中断）。
+- 显示层新增基础控制条（进度条、音量条）。
+- 支持鼠标拖动进度条进行 seek。
+- 支持鼠标拖动音量条进行实时音量调节。
+- 补充音量快捷键：`+/-` 与 `↑/↓`。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md

@@ -23,6 +23,9 @@ void printUsage(const char* program_name) {
     std::cout << std::endl;
     std::cout << "Controls:" << std::endl;
     std::cout << "  SPACE - Play/Pause" << std::endl;
+    std::cout << "  Mouse drag progress bar - Seek" << std::endl;
+    std::cout << "  Mouse drag volume bar - Volume" << std::endl;
+    std::cout << "  +/- or Up/Down - Adjust volume" << std::endl;
     std::cout << "  Q/ESC - Quit" << std::endl;
     std::cout << "  F - Toggle Fullscreen" << std::endl;
     std::cout << std::endl;

@@ -221,3 +221,33 @@ Display initialized: window 1306x734 (source 1920x1080)
 
 ### 修改文件
 - src/display.cpp
+
+## 问题 16: 窗口最大化/缩放时视频画面卡住，缺少基础控制条
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 窗口最大化或拖动缩放时，视频画面容易卡住，音频仍继续播放。
+- 播放器缺少进度条、音量调节和拖动进度的基础能力。
+
+### 日志输出
+```text
+现象复现：窗口最大化/缩放时视频画面停止刷新，音频继续。
+```
+
+### 分析记录
+- 运行期 SDL 事件处理与渲染分布在不同线程，窗口变化事件与渲染调用并发时容易出现渲染停滞。
+- 播放器 UI 仅支持键盘暂停/退出/全屏，缺少基础交互控件。
+
+### 解决方案
+- 将窗口事件处理收敛到渲染路径（`Display::renderFrame`/`PlayerCore::onRenderIdle`）侧，降低缩放与最大化时的渲染阻塞风险。
+- `Display` 新增控制层绘制：进度条 + 音量条。
+- 新增鼠标交互：拖动进度条发起 seek、拖动音量条实时调节音量。
+- `PlayerCore::pumpEvents` 新增对 seek/volume 请求的消费与执行。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- src/core/player_core.cpp
+- src/main.cpp
