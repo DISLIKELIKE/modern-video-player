@@ -77,6 +77,10 @@ void SettingsManager::setInt(const std::string& key, int value) {
     values_[key] = std::to_string(value);
 }
 
+void SettingsManager::setDouble(const std::string& key, double value) {
+    values_[key] = std::to_string(value);
+}
+
 void SettingsManager::setBool(const std::string& key, bool value) {
     values_[key] = value ? "true" : "false";
 }
@@ -101,6 +105,18 @@ std::optional<int> SettingsManager::getInt(const std::string& key) const {
     }
 }
 
+std::optional<double> SettingsManager::getDouble(const std::string& key) const {
+    auto value = getString(key);
+    if (!value) {
+        return std::nullopt;
+    }
+    try {
+        return std::stod(*value);
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<bool> SettingsManager::getBool(const std::string& key) const {
     auto value = getString(key);
     if (!value) {
@@ -116,4 +132,3 @@ std::optional<bool> SettingsManager::getBool(const std::string& key) const {
 }
 
 }  // namespace vp::config
-

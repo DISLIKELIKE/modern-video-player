@@ -21,6 +21,9 @@ public:
     void stop();
     void seek(double timestamp);
     void pumpEvents();
+    bool consumeQuitRequest();
+    bool consumeNextItemRequest();
+    bool consumePreviousItemRequest();
 
     bool isPlaying() const;
     bool isPaused() const;

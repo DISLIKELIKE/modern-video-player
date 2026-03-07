@@ -24,6 +24,7 @@
 | 19 | 2026-03-07 | D3D11VA 硬解最小闭环与软解回退 | ✅ 已修复 |
 | 20 | 2026-03-07 | 探测入口与格式回归脚本落地 | ✅ 已修复 |
 | 21 | 2026-03-07 | GitHub Actions 自动格式回归接入 | ✅ 已修复 |
+| 22 | 2026-03-07 | 播放列表主链路、设置持久化与快捷键首版接入 | ✅ 已修复 |
 
 ---
 
@@ -838,4 +839,53 @@ void VideoPlayer::play() {
 - docs/FORMAT_REGRESSION.md
 - docs/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 22: 播放列表主链路、设置持久化与快捷键首版接入
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 播放器主流程仅支持单文件，不支持上一首/下一首与 EOF 自动切换。
+- 设置模块未接入运行链路，启动/退出时无法恢复音量和播放速度。
+- 默认快捷键缺失关键能力（相对 seek、变速、静音、播放列表切换）。
+
+### 解决方案
+- 主链路接入 `PlaylistManager`：
+  - 支持命令行传入多个媒体文件；
+  - 支持传入 `.m3u8` 作为播放列表；
+  - 支持 `PageUp/PageDown` 上一首/下一首；
+  - EOF 自动切换下一项。
+- 主链路接入 `SettingsManager`：
+  - 启动时加载 `config/player_settings.ini`；
+  - 缺失或解析失败时回退默认值（音量 100%、速度 1.0x、恢复上次索引）；
+  - 退出时保存当前音量、播放速度和播放列表索引。
+- 扩展 SDL 事件到播放器控制链路：
+  - `Left/Right` seek ±5 秒；
+  - `Ctrl+Left/Ctrl+Right` seek ±30 秒；
+  - `[`/`]` 调速，`R` 恢复 1.0x；
+  - `M` 静音/恢复；
+  - `Enter/Alt+Enter/F` 全屏切换；
+  - `Esc` 全屏态退全屏，窗口态退出。
+
+### 修改文件
+- src/main.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/config/settings_manager.h
+- src/config/settings_manager.cpp
+- config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

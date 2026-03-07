@@ -73,6 +73,18 @@ void VideoPlayer::pumpEvents() {
     }
 }
 
+bool VideoPlayer::consumeQuitRequest() {
+    return core_player_ ? core_player_->consumeQuitRequest() : false;
+}
+
+bool VideoPlayer::consumeNextItemRequest() {
+    return core_player_ ? core_player_->consumeNextItemRequest() : false;
+}
+
+bool VideoPlayer::consumePreviousItemRequest() {
+    return core_player_ ? core_player_->consumePreviousItemRequest() : false;
+}
+
 bool VideoPlayer::isPlaying() const {
     return playing_.load();
 }

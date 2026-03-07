@@ -299,6 +299,7 @@ make -j$(nproc)
 | 2026-02-25 | 记录多解码器实例竞争读取修复 |
 | 2026-03-06 | 修复小屏窗口过大与窗口缩放事件兼容问题 |
 | 2026-03-07 | 接入 GitHub Actions 自动格式回归与 CI 兼容改造 |
+| 2026-03-07 | 接入播放列表主链路、设置持久化与快捷键首版 |
 
 ---
 
@@ -492,3 +493,46 @@ make -j$(nproc)
 - docs/DEVELOP_LOG.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
+
+## 2026-03-07 更新（播放列表 + 设置 + 快捷键首版）
+
+### 主流程能力
+- `main` 接入 `PlaylistManager`：
+  - 支持多文件参数播放列表；
+  - 支持 `.m3u8` 导入；
+  - 支持 `PageUp/PageDown` 上一首/下一首；
+  - EOF 自动切换下一项。
+- `main` 接入 `SettingsManager`：
+  - 启动加载 `config/player_settings.ini`；
+  - 失败回退默认值；
+  - 退出保存音量、速度与列表索引。
+
+### 交互增强
+- 快捷键首版默认键位全部接入：
+  - `Space` 播放/暂停；
+  - `Enter/Alt+Enter/F` 全屏；
+  - `Esc/Q` 退出逻辑（全屏优先退全屏）；
+  - `Left/Right` 与 `Ctrl+Left/Ctrl+Right` 相对 seek；
+  - `Up/Down/+/-/M` 音量与静音；
+  - `[`/`]` 变速与 `R` 恢复 1.0x。
+- 渲染事件请求链路扩展到 `PlayerCore` 与 `VideoPlayer`，支持主流程消费“上一首/下一首/退出”控制请求。
+
+### 修改文件
+- src/main.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/config/settings_manager.h
+- src/config/settings_manager.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

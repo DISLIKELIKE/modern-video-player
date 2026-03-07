@@ -32,8 +32,30 @@ bool OpenGLVideoRenderer::consumeSeekRequest(double& normalized_position) {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeSeekDeltaRequest(double& delta_seconds) {
+    (void)delta_seconds;
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeVolumeChangeRequest(float& volume) {
     (void)volume;
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeSpeedChangeRequest(double& speed_delta) {
+    (void)speed_delta;
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeResetSpeedRequest() {
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeNextItemRequest() {
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumePreviousItemRequest() {
     return false;
 }
 
@@ -45,4 +67,3 @@ void OpenGLVideoRenderer::setOverlayState(double position, double duration, floa
 }
 
 }  // namespace vp::render
-

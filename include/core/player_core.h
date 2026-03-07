@@ -72,6 +72,9 @@ public:
     void stop();
     void seek(double timestamp);
     void pumpEvents();
+    bool consumeQuitRequest();
+    bool consumeNextItemRequest();
+    bool consumePreviousItemRequest();
 
     PlaybackState getState() const;
     PlaybackInfo getInfo() const;
@@ -163,6 +166,9 @@ private:
     std::atomic<float> volume_{1.0f};
     std::atomic<double> speed_{1.0};
     std::atomic<bool> opened_{false};
+    std::atomic<bool> quit_requested_{false};
+    std::atomic<bool> next_item_requested_{false};
+    std::atomic<bool> previous_item_requested_{false};
     filters::FilterPipeline filter_pipeline_;
 
     mutable std::mutex callback_mutex_;

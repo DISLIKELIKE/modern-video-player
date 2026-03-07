@@ -1,6 +1,8 @@
 #include "video_player.h"
+#include "config/settings_manager.h"
 #include "demuxer.h"
 #include "media/format_support.h"
+#include "playlist/playlist_manager.h"
 #include "logger.h"
 
 extern "C" {
@@ -11,6 +13,7 @@ extern "C" {
 #include <chrono>
 #include <csignal>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
@@ -412,6 +415,97 @@ void printFileProbeJsonReport(const ProbeReport& report) {
     std::cout << json.str();
 }
 
+struct AppSettings {
+    float volume{1.0f};
+    double playback_speed{1.0};
+    bool resume_last_playlist{true};
+    int last_playlist_index{0};
+};
+
+std::string normalizePathForTitle(const std::string& uri) {
+    std::filesystem::path path(uri);
+    const std::string title = path.filename().string();
+    return title.empty() ? uri : title;
+}
+
+bool isM3U8File(const std::string& value) {
+    return toLower(extensionFromPath(value)) == "m3u8";
+}
+
+playlist::PlaylistManager buildPlaylistFromArgs(int argc, char* argv[]) {
+    playlist::PlaylistManager manager;
+
+    if (argc == 2) {
+        const std::string single_arg = argv[1];
+        if (isM3U8File(single_arg) && manager.loadM3U8(single_arg)) {
+            return manager;
+        }
+    }
+
+    for (int i = 1; i < argc; ++i) {
+        playlist::PlaylistItem item{};
+        item.uri = argv[i];
+        item.title = normalizePathForTitle(item.uri);
+        manager.addItem(std::move(item));
+    }
+    return manager;
+}
+
+AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std::string& settings_path) {
+    AppSettings settings{};
+
+    const bool loaded = settings_manager.loadIni(settings_path);
+    if (!loaded) {
+        settings_manager.setInt("player.volume_percent", 100);
+        settings_manager.setDouble("player.playback_speed", 1.0);
+        settings_manager.setBool("player.resume_last_playlist", true);
+        settings_manager.setInt("player.last_playlist_index", 0);
+        return settings;
+    }
+
+    if (const auto volume_percent = settings_manager.getInt("player.volume_percent")) {
+        settings.volume = std::max(0.0f, std::min(1.0f, static_cast<float>(*volume_percent) / 100.0f));
+    }
+
+    if (const auto speed = settings_manager.getDouble("player.playback_speed")) {
+        settings.playback_speed = std::max(0.5, std::min(2.0, *speed));
+    }
+
+    if (const auto resume_last = settings_manager.getBool("player.resume_last_playlist")) {
+        settings.resume_last_playlist = *resume_last;
+    }
+
+    if (const auto index = settings_manager.getInt("player.last_playlist_index")) {
+        settings.last_playlist_index = std::max(0, *index);
+    }
+
+    settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(settings.volume * 100.0f)));
+    settings_manager.setDouble("player.playback_speed", settings.playback_speed);
+    settings_manager.setBool("player.resume_last_playlist", settings.resume_last_playlist);
+    settings_manager.setInt("player.last_playlist_index", settings.last_playlist_index);
+
+    return settings;
+}
+
+void saveAppSettings(config::SettingsManager& settings_manager,
+                     const std::string& settings_path,
+                     float volume,
+                     double playback_speed,
+                     bool resume_last_playlist,
+                     int last_playlist_index) {
+    const float clamped_volume = std::max(0.0f, std::min(1.0f, volume));
+    const double clamped_speed = std::max(0.5, std::min(2.0, playback_speed));
+
+    settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(clamped_volume * 100.0f)));
+    settings_manager.setDouble("player.playback_speed", clamped_speed);
+    settings_manager.setBool("player.resume_last_playlist", resume_last_playlist);
+    settings_manager.setInt("player.last_playlist_index", std::max(0, last_playlist_index));
+
+    if (!settings_manager.saveIni(settings_path)) {
+        LOG_WARNING("Failed to save settings file: " << settings_path);
+    }
+}
+
 }  // namespace
 
 void signalHandler(int signal) {
@@ -423,7 +517,8 @@ void signalHandler(int signal) {
 }
 
 void printUsage(const char* program_name) {
-    std::cout << "Usage: " << program_name << " <video_file>" << std::endl;
+    std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
+    std::cout << "       " << program_name << " <playlist.m3u8>" << std::endl;
     std::cout << "       " << program_name << " --capabilities" << std::endl;
     std::cout << "       " << program_name << " --probe-file <media_file> [--json]" << std::endl;
     std::cout << "       " << program_name
@@ -431,11 +526,17 @@ void printUsage(const char* program_name) {
     std::cout << std::endl;
     std::cout << "Controls:" << std::endl;
     std::cout << "  SPACE - Play/Pause" << std::endl;
+    std::cout << "  ENTER/F or ALT+ENTER - Toggle Fullscreen" << std::endl;
+    std::cout << "  ESC - Exit Fullscreen (or Quit when windowed)" << std::endl;
+    std::cout << "  Q - Quit" << std::endl;
+    std::cout << "  LEFT/RIGHT - Seek -/+5s" << std::endl;
+    std::cout << "  CTRL+LEFT/CTRL+RIGHT - Seek -/+30s" << std::endl;
+    std::cout << "  PAGEUP/PAGEDOWN - Previous/Next media in playlist" << std::endl;
+    std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
+    std::cout << "  M - Mute/Unmute" << std::endl;
     std::cout << "  Mouse drag progress bar - Seek" << std::endl;
     std::cout << "  Mouse drag volume bar - Volume" << std::endl;
     std::cout << "  +/- or Up/Down - Adjust volume" << std::endl;
-    std::cout << "  Q/ESC - Quit" << std::endl;
-    std::cout << "  F - Toggle Fullscreen" << std::endl;
     std::cout << std::endl;
 }
 
@@ -523,33 +624,117 @@ int main(int argc, char* argv[]) {
     
     signal(SIGINT, signalHandler);
     signal(SIGTERM, signalHandler);
-    
-    g_player = std::make_unique<VideoPlayer>();
-    
-    std::string filename(argv[1]);
-    Logger::info("Opening file: " + filename);
-    
-    if (!g_player->open(filename)) {
-        Logger::error("Could not open video file");
+
+    const std::string settings_path = "config/player_settings.ini";
+    config::SettingsManager settings_manager;
+    const AppSettings app_settings = loadAppSettings(settings_manager, settings_path);
+
+    playlist::PlaylistManager playlist_manager = buildPlaylistFromArgs(argc, argv);
+    if (playlist_manager.empty()) {
+        Logger::error("No playable media found from input arguments");
         Logger::shutdown();
         return 1;
     }
-    
-    Logger::info("Starting playback...");
-    std::cout << "Playing video..." << std::endl;
-    std::cout << std::endl;
-    
-    g_player->play();
-    
-    while (g_player->isPlaying() || g_player->isPaused()) {
-        g_player->pumpEvents();
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    size_t current_index = 0;
+    if (app_settings.resume_last_playlist && app_settings.last_playlist_index >= 0) {
+        const size_t saved_index = static_cast<size_t>(app_settings.last_playlist_index);
+        if (saved_index < playlist_manager.size()) {
+            current_index = saved_index;
+        }
     }
-    
+
+    g_player = std::make_unique<VideoPlayer>();
+    g_player->setVolume(app_settings.volume);
+    g_player->setPlaybackSpeed(app_settings.playback_speed);
+
+    bool quit_requested = false;
+    bool opened_any_media = false;
+
+    while (!quit_requested && current_index < playlist_manager.size()) {
+        const playlist::PlaylistItem& item = playlist_manager.items()[current_index];
+        Logger::info("Opening file: " + item.uri);
+
+        if (!g_player->open(item.uri)) {
+            Logger::error("Could not open media file: " + item.uri);
+            if (current_index + 1 < playlist_manager.size()) {
+                ++current_index;
+                continue;
+            }
+            break;
+        }
+
+        opened_any_media = true;
+        Logger::info("Starting playback...");
+        std::cout << "Playing: " << item.uri << std::endl;
+
+        g_player->play();
+
+        bool next_requested = false;
+        bool previous_requested = false;
+        while (g_player->isPlaying() || g_player->isPaused()) {
+            g_player->pumpEvents();
+            if (g_player->consumeQuitRequest()) {
+                quit_requested = true;
+                break;
+            }
+            if (g_player->consumeNextItemRequest()) {
+                next_requested = true;
+                break;
+            }
+            if (g_player->consumePreviousItemRequest()) {
+                previous_requested = true;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+
+        g_player->stop();
+        g_player->close();
+
+        if (quit_requested) {
+            break;
+        }
+
+        if (previous_requested) {
+            if (current_index > 0) {
+                --current_index;
+            }
+            continue;
+        }
+
+        if (next_requested) {
+            if (current_index + 1 < playlist_manager.size()) {
+                ++current_index;
+                continue;
+            }
+            break;
+        }
+
+        // Auto-next on EOF.
+        if (current_index + 1 < playlist_manager.size()) {
+            ++current_index;
+            continue;
+        }
+        break;
+    }
+
+    const float final_volume = g_player ? g_player->getVolume() : app_settings.volume;
+    const double final_speed = g_player ? g_player->getPlaybackSpeed() : app_settings.playback_speed;
+    saveAppSettings(settings_manager,
+                    settings_path,
+                    final_volume,
+                    final_speed,
+                    app_settings.resume_last_playlist,
+                    static_cast<int>(current_index));
+
+    if (!opened_any_media) {
+        Logger::error("No media could be opened");
+        Logger::shutdown();
+        return 1;
+    }
+
     Logger::info("Playback finished");
-    g_player->stop();
-    g_player->close();
-    
     Logger::shutdown();
     
     std::cout << std::endl;

@@ -58,8 +58,28 @@ bool SdlVideoRenderer::consumeSeekRequest(double& normalized_position) {
     return display_ ? display_->consumeSeekRequest(normalized_position) : false;
 }
 
+bool SdlVideoRenderer::consumeSeekDeltaRequest(double& delta_seconds) {
+    return display_ ? display_->consumeSeekDeltaRequest(delta_seconds) : false;
+}
+
 bool SdlVideoRenderer::consumeVolumeChangeRequest(float& volume) {
     return display_ ? display_->consumeVolumeChangeRequest(volume) : false;
+}
+
+bool SdlVideoRenderer::consumeSpeedChangeRequest(double& speed_delta) {
+    return display_ ? display_->consumeSpeedChangeRequest(speed_delta) : false;
+}
+
+bool SdlVideoRenderer::consumeResetSpeedRequest() {
+    return display_ ? display_->consumeResetSpeedRequest() : false;
+}
+
+bool SdlVideoRenderer::consumeNextItemRequest() {
+    return display_ ? display_->consumeNextItemRequest() : false;
+}
+
+bool SdlVideoRenderer::consumePreviousItemRequest() {
+    return display_ ? display_->consumePreviousItemRequest() : false;
 }
 
 void SdlVideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
@@ -69,4 +89,3 @@ void SdlVideoRenderer::setOverlayState(double position, double duration, float v
 }
 
 }  // namespace vp::render
-

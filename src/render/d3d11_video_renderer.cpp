@@ -32,8 +32,30 @@ bool D3D11VideoRenderer::consumeSeekRequest(double& normalized_position) {
     return false;
 }
 
+bool D3D11VideoRenderer::consumeSeekDeltaRequest(double& delta_seconds) {
+    (void)delta_seconds;
+    return false;
+}
+
 bool D3D11VideoRenderer::consumeVolumeChangeRequest(float& volume) {
     (void)volume;
+    return false;
+}
+
+bool D3D11VideoRenderer::consumeSpeedChangeRequest(double& speed_delta) {
+    (void)speed_delta;
+    return false;
+}
+
+bool D3D11VideoRenderer::consumeResetSpeedRequest() {
+    return false;
+}
+
+bool D3D11VideoRenderer::consumeNextItemRequest() {
+    return false;
+}
+
+bool D3D11VideoRenderer::consumePreviousItemRequest() {
     return false;
 }
 
@@ -45,4 +67,3 @@ void D3D11VideoRenderer::setOverlayState(double position, double duration, float
 }
 
 }  // namespace vp::render
-

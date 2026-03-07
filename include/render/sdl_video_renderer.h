@@ -24,7 +24,12 @@ public:
 
     bool consumeTogglePauseRequest() override;
     bool consumeSeekRequest(double& normalized_position) override;
+    bool consumeSeekDeltaRequest(double& delta_seconds) override;
     bool consumeVolumeChangeRequest(float& volume) override;
+    bool consumeSpeedChangeRequest(double& speed_delta) override;
+    bool consumeResetSpeedRequest() override;
+    bool consumeNextItemRequest() override;
+    bool consumePreviousItemRequest() override;
     void setOverlayState(double position, double duration, float volume, bool paused) override;
 
 private:
@@ -32,4 +37,3 @@ private:
 };
 
 }  // namespace vp::render
-

@@ -22,6 +22,9 @@ constexpr int kBarHeight = 8;
 constexpr int kVolumeBarWidth = 96;
 constexpr int kMinProgressBarWidth = 80;
 constexpr float kVolumeStep = 0.05f;
+constexpr double kSeekStepSeconds = 5.0;
+constexpr double kSeekStepSecondsCtrl = 30.0;
+constexpr double kSpeedStep = 0.1;
 
 struct WindowSize {
     int width;
@@ -102,8 +105,16 @@ Display::Display()
     , initialized_(false)
     , seek_requested_(false)
     , seek_ratio_(0.0)
+    , seek_delta_requested_(false)
+    , seek_delta_seconds_(0.0)
     , volume_change_requested_(false)
     , requested_volume_(1.0f)
+    , speed_change_requested_(false)
+    , speed_delta_(0.0)
+    , speed_reset_requested_(false)
+    , next_item_requested_(false)
+    , previous_item_requested_(false)
+    , last_nonzero_volume_(1.0f)
     , dragging_seek_(false)
     , dragging_volume_(false)
     , seek_preview_active_(false)
@@ -171,6 +182,25 @@ bool Display::init(int width, int height, const std::string& title) {
     initialized_ = true;
     should_quit_.store(false);
     toggle_pause_requested_.store(false);
+    {
+        std::lock_guard<std::mutex> lock(request_mutex_);
+        seek_requested_ = false;
+        seek_ratio_ = 0.0;
+        seek_delta_requested_ = false;
+        seek_delta_seconds_ = 0.0;
+        volume_change_requested_ = false;
+        requested_volume_ = 1.0f;
+        speed_change_requested_ = false;
+        speed_delta_ = 0.0;
+        speed_reset_requested_ = false;
+        next_item_requested_ = false;
+        previous_item_requested_ = false;
+        last_nonzero_volume_ = 1.0f;
+        dragging_seek_ = false;
+        dragging_volume_ = false;
+        seek_preview_active_ = false;
+        seek_preview_ratio_ = 0.0;
+    }
     
     std::cout << "Display initialized: window " << width_ << "x" << height_
               << " (source " << width << "x" << height << ")" << std::endl;
@@ -288,15 +318,32 @@ void Display::handleEvents() {
             case SDL_KEYDOWN:
                 switch (event.key.keysym.sym) {
                     case SDLK_ESCAPE:
+                        if (fullscreen_) {
+                            toggleFullscreen();
+                        } else {
+                            should_quit_.store(true);
+                        }
+                        break;
                     case SDLK_q:
                         should_quit_.store(true);
                         break;
                     case SDLK_SPACE:
                         toggle_pause_requested_.store(true);
                         break;
+                    case SDLK_RETURN:
+                    case SDLK_KP_ENTER:
                     case SDLK_f:
                         toggleFullscreen();
                         break;
+                    case SDLK_LEFT:
+                    case SDLK_RIGHT: {
+                        const bool ctrl_pressed = (event.key.keysym.mod & KMOD_CTRL) != 0;
+                        const double delta = ctrl_pressed ? kSeekStepSecondsCtrl : kSeekStepSeconds;
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        seek_delta_seconds_ += (event.key.keysym.sym == SDLK_RIGHT) ? delta : -delta;
+                        seek_delta_requested_ = true;
+                        break;
+                    }
                     case SDLK_UP:
                     case SDLK_EQUALS: {
                         const float next = clampVolume(overlay_volume_.load() + kVolumeStep);
@@ -317,6 +364,48 @@ void Display::handleEvents() {
                             volume_change_requested_ = true;
                         }
                         overlay_volume_.store(next);
+                        break;
+                    }
+                    case SDLK_m: {
+                        const float current = clampVolume(overlay_volume_.load());
+                        float next = current;
+                        if (current > 0.0001f) {
+                            last_nonzero_volume_ = current;
+                            next = 0.0f;
+                        } else {
+                            next = clampVolume(last_nonzero_volume_);
+                            if (next < 0.0001f) {
+                                next = 0.5f;
+                            }
+                        }
+                        {
+                            std::lock_guard<std::mutex> lock(request_mutex_);
+                            requested_volume_ = next;
+                            volume_change_requested_ = true;
+                        }
+                        overlay_volume_.store(next);
+                        break;
+                    }
+                    case SDLK_LEFTBRACKET:
+                    case SDLK_RIGHTBRACKET: {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        speed_delta_ += (event.key.keysym.sym == SDLK_RIGHTBRACKET) ? kSpeedStep : -kSpeedStep;
+                        speed_change_requested_ = true;
+                        break;
+                    }
+                    case SDLK_r: {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        speed_reset_requested_ = true;
+                        break;
+                    }
+                    case SDLK_PAGEUP: {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        previous_item_requested_ = true;
+                        break;
+                    }
+                    case SDLK_PAGEDOWN: {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        next_item_requested_ = true;
                         break;
                     }
                     default:
@@ -395,6 +484,17 @@ bool Display::consumeSeekRequest(double& normalized_position) {
     return true;
 }
 
+bool Display::consumeSeekDeltaRequest(double& delta_seconds) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!seek_delta_requested_) {
+        return false;
+    }
+    delta_seconds = seek_delta_seconds_;
+    seek_delta_seconds_ = 0.0;
+    seek_delta_requested_ = false;
+    return true;
+}
+
 bool Display::consumeVolumeChangeRequest(float& volume) {
     std::lock_guard<std::mutex> lock(request_mutex_);
     if (!volume_change_requested_) {
@@ -405,10 +505,52 @@ bool Display::consumeVolumeChangeRequest(float& volume) {
     return true;
 }
 
+bool Display::consumeSpeedChangeRequest(double& speed_delta) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!speed_change_requested_) {
+        return false;
+    }
+    speed_delta = speed_delta_;
+    speed_delta_ = 0.0;
+    speed_change_requested_ = false;
+    return true;
+}
+
+bool Display::consumeResetSpeedRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!speed_reset_requested_) {
+        return false;
+    }
+    speed_reset_requested_ = false;
+    return true;
+}
+
+bool Display::consumeNextItemRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!next_item_requested_) {
+        return false;
+    }
+    next_item_requested_ = false;
+    return true;
+}
+
+bool Display::consumePreviousItemRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!previous_item_requested_) {
+        return false;
+    }
+    previous_item_requested_ = false;
+    return true;
+}
+
 void Display::setOverlayState(double position, double duration, float volume, bool paused) {
     overlay_position_.store(std::max(0.0, position));
     overlay_duration_.store(std::max(0.0, duration));
-    overlay_volume_.store(clampVolume(volume));
+    const float clamped_volume = clampVolume(volume);
+    overlay_volume_.store(clamped_volume);
+    if (clamped_volume > 0.0001f) {
+        last_nonzero_volume_ = clamped_volume;
+    }
     overlay_paused_.store(paused);
 }
 

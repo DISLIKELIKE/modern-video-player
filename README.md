@@ -128,8 +128,15 @@ build\Release\modern-video-player.exe your_video.mp4
 | Key | Function |
 |-----|----------|
 | Space | Play/Pause |
-| Q / ESC | Quit |
-| F | Toggle Fullscreen |
+| Enter / Alt+Enter / F | Toggle Fullscreen |
+| Esc | Exit Fullscreen (or quit if windowed) |
+| Q | Quit |
+| Left / Right | Seek -/+5s |
+| Ctrl+Left / Ctrl+Right | Seek -/+30s |
+| Up / Down / +/- | Volume +5/-5 |
+| M | Mute / Unmute |
+| \[ / \] / R | Speed down/up/reset |
+| PageUp / PageDown | Previous / Next item |
 
 ## Technical Highlights
 

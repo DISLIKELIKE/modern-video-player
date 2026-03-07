@@ -437,3 +437,47 @@ Display initialized: window 1306x734 (source 1920x1080)
 - docs/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 22: M1 主链路推进（播放列表 + 设置 + 快捷键首版）
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 当前主流程只有单文件播放，`PlaylistManager`/`SettingsManager` 虽有模块但未接入。
+- 关键快捷键未覆盖任务清单目标，用户交互效率不足。
+
+### 解决方案
+- 在 `main` 主流程接入播放列表：
+  - 支持多文件参数构建播放列表；
+  - 支持 `.m3u8` 加载；
+  - 支持上一首/下一首与 EOF 自动下一首。
+- 在 `main` 接入设置持久化：
+  - 启动加载 `config/player_settings.ini`；
+  - 设置失败回退默认；
+  - 退出保存音量、速度、索引。
+- 扩展渲染事件请求链路（Display -> Renderer -> PlayerCore -> VideoPlayer -> main）：
+  - seek 增量请求、速度调整请求、列表切换请求、退出请求；
+  - 实现任务清单首版默认键位集（`Space/Enter/Esc/Q/Left/Right/Ctrl+Left/Ctrl+Right/Up/Down/M/PageUp/PageDown/[ ]/R`）。
+
+### 修改文件
+- src/main.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/config/settings_manager.h
+- src/config/settings_manager.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -135,6 +135,9 @@ bool PlayerCore::open(const std::string& filename) {
     opened_.store(true);
     state_.store(PlaybackState::Stopped);
     position_.store(0.0);
+    quit_requested_.store(false);
+    next_item_requested_.store(false);
+    previous_item_requested_.store(false);
     clock_.reset();
     const bool has_audio_clock = audio_codec_ctx_ && audio_player_ && audio_player_->isInitialized();
     clock_.setSource(has_audio_clock ? ClockSource::Audio : ClockSource::System);
@@ -273,16 +276,61 @@ void PlayerCore::pumpEvents() {
         }
     }
 
+    double seek_delta_seconds = 0.0;
+    if (video_renderer_->consumeSeekDeltaRequest(seek_delta_seconds) && seek_delta_seconds != 0.0) {
+        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+        const double current = position_.load();
+        if (duration > 0.0) {
+            const double target = std::max(0.0, std::min(duration, current + seek_delta_seconds));
+            seek(target);
+        }
+    }
+
     float volume_request = 0.0f;
     if (video_renderer_->consumeVolumeChangeRequest(volume_request)) {
         setVolume(volume_request);
     }
 
-    if (video_renderer_->shouldQuit()) {
+    double speed_delta = 0.0;
+    if (video_renderer_->consumeSpeedChangeRequest(speed_delta) && speed_delta != 0.0) {
+        setPlaybackSpeed(getPlaybackSpeed() + speed_delta);
+    }
+    if (video_renderer_->consumeResetSpeedRequest()) {
+        setPlaybackSpeed(1.0);
+    }
+
+    if (video_renderer_->consumeNextItemRequest()) {
+        next_item_requested_.store(true);
         if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
             emitStateChanged(PlaybackState::Stopped);
         }
     }
+
+    if (video_renderer_->consumePreviousItemRequest()) {
+        previous_item_requested_.store(true);
+        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+            emitStateChanged(PlaybackState::Stopped);
+        }
+    }
+
+    if (video_renderer_->shouldQuit()) {
+        quit_requested_.store(true);
+        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+            emitStateChanged(PlaybackState::Stopped);
+        }
+    }
+}
+
+bool PlayerCore::consumeQuitRequest() {
+    return quit_requested_.exchange(false);
+}
+
+bool PlayerCore::consumeNextItemRequest() {
+    return next_item_requested_.exchange(false);
+}
+
+bool PlayerCore::consumePreviousItemRequest() {
+    return previous_item_requested_.exchange(false);
 }
 
 PlaybackState PlayerCore::getState() const {

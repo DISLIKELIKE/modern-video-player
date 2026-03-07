@@ -27,7 +27,12 @@ public:
     bool shouldQuit() const { return should_quit_.load(); }
     bool consumeTogglePauseRequest();
     bool consumeSeekRequest(double& normalized_position);
+    bool consumeSeekDeltaRequest(double& delta_seconds);
     bool consumeVolumeChangeRequest(float& volume);
+    bool consumeSpeedChangeRequest(double& speed_delta);
+    bool consumeResetSpeedRequest();
+    bool consumeNextItemRequest();
+    bool consumePreviousItemRequest();
     void setOverlayState(double position, double duration, float volume, bool paused);
     
     void toggleFullscreen();
@@ -62,8 +67,16 @@ private:
     std::mutex request_mutex_;
     bool seek_requested_;
     double seek_ratio_;
+    bool seek_delta_requested_;
+    double seek_delta_seconds_;
     bool volume_change_requested_;
     float requested_volume_;
+    bool speed_change_requested_;
+    double speed_delta_;
+    bool speed_reset_requested_;
+    bool next_item_requested_;
+    bool previous_item_requested_;
+    float last_nonzero_volume_;
     bool dragging_seek_;
     bool dragging_volume_;
     bool seek_preview_active_;
