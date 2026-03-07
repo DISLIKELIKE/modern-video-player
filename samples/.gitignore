@@ -1,0 +1,15 @@
+# Keep only sample structure and docs in git.
+# Real media files are local-only by default.
+*
+!.gitignore
+!README.md
+!mp4/
+!mkv/
+!webm/
+!flv/
+!ts/
+!mp4/.gitkeep
+!mkv/.gitkeep
+!webm/.gitkeep
+!flv/.gitkeep
+!ts/.gitkeep

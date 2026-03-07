@@ -64,6 +64,39 @@ function Probe-LinesToMap {
     return $probe
 }
 
+function Convert-ProbeJsonToMap {
+    param([object]$ProbeObject)
+
+    $probe = @{}
+    if ($null -eq $ProbeObject) {
+        return $probe
+    }
+
+    if ($null -ne $ProbeObject.open) { $probe["open"] = [string]$ProbeObject.open }
+    if ($null -ne $ProbeObject.overall) { $probe["overall"] = [string]$ProbeObject.overall }
+
+    if ($null -ne $ProbeObject.container) {
+        if ($null -ne $ProbeObject.container.ext) { $probe["container_ext"] = [string]$ProbeObject.container.ext }
+        if ($null -ne $ProbeObject.container.status) { $probe["container_status"] = [string]$ProbeObject.container.status }
+    }
+
+    if ($null -ne $ProbeObject.video) {
+        if ($null -ne $ProbeObject.video.codec) { $probe["video_codec"] = [string]$ProbeObject.video.codec }
+        if ($null -ne $ProbeObject.video.status) { $probe["video_status"] = [string]$ProbeObject.video.status }
+    }
+
+    if ($null -ne $ProbeObject.audio) {
+        if ($null -ne $ProbeObject.audio.codec) { $probe["audio_codec"] = [string]$ProbeObject.audio.codec }
+        if ($null -ne $ProbeObject.audio.status) { $probe["audio_status"] = [string]$ProbeObject.audio.status }
+    }
+
+    if ($null -ne $ProbeObject.recommendation -and $null -ne $ProbeObject.recommendation.reason) {
+        $probe["reason"] = [string]$ProbeObject.recommendation.reason
+    }
+
+    return $probe
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 Set-Location $repoRoot
 
@@ -135,12 +168,13 @@ foreach ($sample in $samples) {
 
     $stdoutFile = [System.IO.Path]::GetTempFileName()
     $stderrFile = [System.IO.Path]::GetTempFileName()
-    $outputLines = @()
+    $stdoutLines = @()
+    $stderrLines = @()
     $processExitCode = 0
 
     try {
         $process = Start-Process -FilePath $exePath `
-            -ArgumentList @("--probe-file", $resolvedSamplePath) `
+            -ArgumentList @("--probe-file", $resolvedSamplePath, "--json") `
             -NoNewWindow `
             -Wait `
             -PassThru `
@@ -149,17 +183,30 @@ foreach ($sample in $samples) {
 
         $processExitCode = $process.ExitCode
         if (Test-Path $stdoutFile) {
-            $outputLines += @((Get-Content -Path $stdoutFile -ErrorAction SilentlyContinue) | ForEach-Object { [string]$_ })
+            $stdoutLines = @((Get-Content -Path $stdoutFile -ErrorAction SilentlyContinue) | ForEach-Object { [string]$_ })
         }
         if (Test-Path $stderrFile) {
-            $outputLines += @((Get-Content -Path $stderrFile -ErrorAction SilentlyContinue) | ForEach-Object { [string]$_ })
+            $stderrLines = @((Get-Content -Path $stderrFile -ErrorAction SilentlyContinue) | ForEach-Object { [string]$_ })
         }
     } finally {
         Remove-Item -Path $stdoutFile -ErrorAction SilentlyContinue
         Remove-Item -Path $stderrFile -ErrorAction SilentlyContinue
     }
 
-    $probe = Probe-LinesToMap -OutputLines $outputLines
+    $probe = @{}
+    $jsonParsed = $false
+    $stdoutText = ($stdoutLines -join "`n").Trim()
+    if (-not [string]::IsNullOrWhiteSpace($stdoutText)) {
+        try {
+            $probeObject = $stdoutText | ConvertFrom-Json -ErrorAction Stop
+            $probe = Convert-ProbeJsonToMap -ProbeObject $probeObject
+            $jsonParsed = $true
+        } catch {
+            $probe = Probe-LinesToMap -OutputLines @($stdoutLines + $stderrLines)
+        }
+    } else {
+        $probe = Probe-LinesToMap -OutputLines @($stderrLines)
+    }
 
     $openStatus = if ($probe.ContainsKey("open")) { Normalize-Status $probe["open"] } else { "FAIL" }
     $probeOverall = if ($probe.ContainsKey("overall")) { Normalize-Status $probe["overall"] } else { "FAIL" }
@@ -194,11 +241,17 @@ foreach ($sample in $samples) {
     if (-not [string]::IsNullOrWhiteSpace($notes)) {
         $finalNotes += $notes
     }
+    if (-not $jsonParsed) {
+        $finalNotes += "probe json parse fallback"
+    }
     if ($probe.ContainsKey("reason")) {
         $finalNotes += ("probe reason: " + $probe["reason"])
     }
     if ($processExitCode -ne 0) {
         $finalNotes += "probe process exit code=$processExitCode"
+    }
+    if ($stderrLines.Count -gt 0) {
+        $finalNotes += ("probe stderr lines=" + $stderrLines.Count)
     }
     if ($compatibilityNotes.Count -gt 0) {
         $finalNotes += ($compatibilityNotes -join "; ")
