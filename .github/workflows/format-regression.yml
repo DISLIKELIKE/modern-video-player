@@ -21,8 +21,8 @@ jobs:
         shell: pwsh
         run: |
           $externalRoot = Join-Path $PWD "external"
-          if (Test-Path $externalRoot -PathType Leaf) {
-            Remove-Item -Path $externalRoot -Force
+          if (Test-Path $externalRoot) {
+            Remove-Item -Path $externalRoot -Recurse -Force
           }
           New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
 
@@ -34,12 +34,11 @@ jobs:
           }
           Expand-Archive -Path $sdlZip -DestinationPath $sdlExtract -Force
           $sdlRoot = Get-ChildItem -Path $sdlExtract -Directory | Select-Object -First 1
-          $sdlDest = Join-Path $externalRoot "SDL2"
-          if (Test-Path $sdlDest) {
-            Remove-Item -Path $sdlDest -Recurse -Force
+          if (-not $sdlRoot) {
+            throw "SDL archive extraction did not produce a top-level directory."
           }
-          New-Item -ItemType Directory -Path $sdlDest -Force | Out-Null
-          Copy-Item -Path (Join-Path $sdlRoot.FullName "*") -Destination $sdlDest -Recurse -Force
+          $sdlDest = Join-Path $externalRoot "SDL2"
+          Move-Item -Path $sdlRoot.FullName -Destination $sdlDest -Force
 
           $ffmpegZip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
           $ffmpegExtract = Join-Path $env:RUNNER_TEMP "ffmpeg_extract"
@@ -49,12 +48,11 @@ jobs:
           }
           Expand-Archive -Path $ffmpegZip -DestinationPath $ffmpegExtract -Force
           $ffmpegRoot = Get-ChildItem -Path $ffmpegExtract -Directory | Select-Object -First 1
-          $ffmpegDest = Join-Path $externalRoot "ffmpeg"
-          if (Test-Path $ffmpegDest) {
-            Remove-Item -Path $ffmpegDest -Recurse -Force
+          if (-not $ffmpegRoot) {
+            throw "FFmpeg archive extraction did not produce a top-level directory."
           }
-          New-Item -ItemType Directory -Path $ffmpegDest -Force | Out-Null
-          Copy-Item -Path (Join-Path $ffmpegRoot.FullName "*") -Destination $ffmpegDest -Recurse -Force
+          $ffmpegDest = Join-Path $externalRoot "ffmpeg"
+          Move-Item -Path $ffmpegRoot.FullName -Destination $ffmpegDest -Force
 
       - name: Configure CMake
         shell: pwsh
