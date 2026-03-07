@@ -162,3 +162,21 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 `
 2. 执行 `download_test_samples.ps1`
 3. 执行 `run_all_checks.ps1`
 4. 查看 `docs/reports/` 报告
+
+## 10. GitHub Actions 自动回归
+
+工作流文件：
+
+- `.github/workflows/format-regression.yml`
+
+触发时机：
+
+- 提交 PR
+- 推送到 `main/master`
+- 手动触发
+
+操作作用：
+
+- 在 `windows-latest` 自动安装依赖并构建播放器；
+- 自动生成样本并执行 `run_all_checks.ps1`；
+- 上传 `docs/reports/FORMAT_REGRESSION_CI.md` 作为回归产物。

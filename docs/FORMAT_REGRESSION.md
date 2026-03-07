@@ -106,3 +106,22 @@
   -ProbeFile "juren-30s.mp4" `
   -SamplesFile "tools/format_regression/format_samples.csv"
 ```
+
+## 9. GitHub Actions 自动回归
+
+已接入工作流：
+
+- `.github/workflows/format-regression.yml`
+
+触发方式：
+
+- `pull_request`
+- 推送到 `main/master`
+- 手动触发 `workflow_dispatch`
+
+执行内容：
+
+- 自动下载 `SDL2` 与 `FFmpeg` 预编译包到 `external/`，并构建 `Debug` 版本。
+- 调用 `tools/download_test_samples.ps1` 生成回归样本（`-FfmpegPath` 支持直接传 `ffmpeg` 命令名）。
+- 调用 `tools/run_all_checks.ps1` 执行单文件探测 + 批量回归。
+- 上传回归产物：`docs/reports/FORMAT_REGRESSION_CI.md`。

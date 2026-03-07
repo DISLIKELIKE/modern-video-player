@@ -10,21 +10,62 @@ option(BUILD_CORE_TESTS "Build core API unit tests" OFF)
 
 if(WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+    set(SDL2_EXTERNAL_DIR "")
+    set(FFMPEG_EXTERNAL_DIR "")
 
+    set(SDL2_LIBRARIES "")
     find_package(SDL2 CONFIG QUIET)
-    if(NOT SDL2_FOUND)
+    if(SDL2_FOUND)
+        if(TARGET SDL2::SDL2)
+            list(APPEND SDL2_LIBRARIES SDL2::SDL2)
+            if(TARGET SDL2::SDL2main)
+                list(PREPEND SDL2_LIBRARIES SDL2::SDL2main)
+            endif()
+        endif()
+    endif()
+
+    if(NOT SDL2_FOUND OR NOT SDL2_LIBRARIES)
         set(SDL2_PATH "${CMAKE_SOURCE_DIR}/external/SDL2")
         if(EXISTS ${SDL2_PATH})
             include_directories(${SDL2_PATH}/include)
             link_directories(${SDL2_PATH}/lib/x64)
-            set(SDL2_DIR ${SDL2_PATH} CACHE PATH "SDL2 directory" FORCE)
+            set(SDL2_LIBRARIES SDL2main SDL2 SDL2)
+            set(SDL2_EXTERNAL_DIR ${SDL2_PATH})
+            set(SDL2_FOUND TRUE)
         else()
             message(FATAL_ERROR "SDL2 not found at ${SDL2_PATH}. Please install SDL2 and set SDL2_DIR")
         endif()
     endif()
 
+    set(FFMPEG_LIBRARIES "")
     find_package(FFMPEG CONFIG QUIET)
-    if(NOT FFMPEG_FOUND)
+    if(FFMPEG_FOUND)
+        if(TARGET FFMPEG::avformat)
+            set(FFMPEG_LIBRARIES
+                FFMPEG::avformat
+                FFMPEG::avcodec
+                FFMPEG::avutil
+                FFMPEG::swscale
+                FFMPEG::swresample
+            )
+        endif()
+    endif()
+
+    if(NOT FFMPEG_FOUND OR NOT FFMPEG_LIBRARIES)
+        find_package(unofficial-ffmpeg CONFIG QUIET)
+        if(TARGET unofficial::ffmpeg::avformat)
+            set(FFMPEG_LIBRARIES
+                unofficial::ffmpeg::avformat
+                unofficial::ffmpeg::avcodec
+                unofficial::ffmpeg::avutil
+                unofficial::ffmpeg::swscale
+                unofficial::ffmpeg::swresample
+            )
+            set(FFMPEG_FOUND TRUE)
+        endif()
+    endif()
+
+    if(NOT FFMPEG_FOUND OR NOT FFMPEG_LIBRARIES)
         set(FFMPEG_PATH "${CMAKE_SOURCE_DIR}/external/ffmpeg")
         if(EXISTS ${FFMPEG_PATH})
             set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PATH}/include)
@@ -45,7 +86,7 @@ if(WIN32)
                     ${SWRESAMPLE_LIBRARY}
                 )
                 set(FFMPEG_FOUND TRUE)
-                set(FFMPEG_DIR ${FFMPEG_PATH} CACHE PATH "FFmpeg directory" FORCE)
+                set(FFMPEG_EXTERNAL_DIR ${FFMPEG_PATH})
             else()
                 message(FATAL_ERROR "FFmpeg libraries not found in ${FFMPEG_PATH}/lib")
             endif()
@@ -73,7 +114,6 @@ if(WIN32)
         endif()
     endif()
 
-    set(SDL2_LIBRARIES SDL2main SDL2 SDL2)
     if(MSVC)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /SUBSYSTEM:CONSOLE")
     endif()
@@ -184,16 +224,16 @@ if(WIN32)
         ${QUILL_LIBRARIES}
     )
 
-    if(SDL2_DIR)
+    if(SDL2_EXTERNAL_DIR)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${SDL2_DIR}/lib/x64/SDL2.dll
+            ${SDL2_EXTERNAL_DIR}/lib/x64/SDL2.dll
             $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
 
-    if(FFMPEG_DIR)
-        file(GLOB_RECURSE FFMPEG_DLLS "${FFMPEG_DIR}/bin/*.dll")
+    if(FFMPEG_EXTERNAL_DIR)
+        file(GLOB_RECURSE FFMPEG_DLLS "${FFMPEG_EXTERNAL_DIR}/bin/*.dll")
         foreach(dll ${FFMPEG_DLLS})
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

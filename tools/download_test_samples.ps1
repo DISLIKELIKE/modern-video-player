@@ -20,6 +20,31 @@ function Resolve-ProjectPath {
     return (Join-Path $Root $PathValue)
 }
 
+function Resolve-ExecutablePath {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Root,
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue
+    )
+
+    if ([System.IO.Path]::IsPathRooted($PathValue)) {
+        return $PathValue
+    }
+
+    $repoCandidate = Join-Path $Root $PathValue
+    if (Test-Path $repoCandidate) {
+        return $repoCandidate
+    }
+
+    $commandInfo = Get-Command -Name $PathValue -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $commandInfo -and -not [string]::IsNullOrWhiteSpace($commandInfo.Source)) {
+        return $commandInfo.Source
+    }
+
+    return $repoCandidate
+}
+
 function Invoke-CheckedProcess {
     param(
         [Parameter(Mandatory = $true)]
@@ -38,7 +63,7 @@ function Invoke-CheckedProcess {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $repoRoot
 
-$ffmpeg = Resolve-ProjectPath -Root $repoRoot -PathValue $FfmpegPath
+$ffmpeg = Resolve-ExecutablePath -Root $repoRoot -PathValue $FfmpegPath
 if (-not (Test-Path $ffmpeg)) {
     throw "ffmpeg not found: $ffmpeg"
 }

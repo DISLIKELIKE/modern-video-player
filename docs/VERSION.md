@@ -298,6 +298,7 @@ make -j$(nproc)
 | 2026-02-25 | 记录 Frame 移动语义修复 |
 | 2026-02-25 | 记录多解码器实例竞争读取修复 |
 | 2026-03-06 | 修复小屏窗口过大与窗口缩放事件兼容问题 |
+| 2026-03-07 | 接入 GitHub Actions 自动格式回归与 CI 兼容改造 |
 
 ---
 
@@ -459,3 +460,35 @@ make -j$(nproc)
 - tools/format_regression/format_samples.csv
 - docs/FORMAT_REGRESSION.md
 - docs/README.md
+
+## 2026-03-07 更新（GitHub Actions 自动回归）
+
+### CI 工作流
+- 新增 `.github/workflows/format-regression.yml`：
+  - PR / `main` / `master` 自动触发；
+  - 自动下载 `SDL2/FFmpeg` 预编译依赖后执行 Windows 构建；
+  - 样本生成 + `run_all_checks.ps1` 自动回归；
+  - 上传 `docs/reports/FORMAT_REGRESSION_CI.md` 产物。
+
+### 构建与脚本兼容性
+- `CMakeLists.txt`（Windows）优先支持 `SDL2::`、`FFMPEG::`、`unofficial::ffmpeg::` 导入目标，保留 `external/` 回退路径。
+- `tools/download_test_samples.ps1` 支持通过 PATH 解析 `ffmpeg` 命令名，便于 CI 直接调用。
+
+### 任务清单同步
+- 更新 `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `0.3`（P0/P1/P2 范围冻结）标记完成；
+  - `2.1.1`（格式矩阵定义冻结）标记完成；
+  - `2.1.5`（PASS/PARTIAL/FAIL 结果表）标记完成；
+  - `2.3.1`（格式矩阵结果可追溯）标记完成。
+
+### 修改文件
+- .github/workflows/format-regression.yml
+- CMakeLists.txt
+- tools/download_test_samples.ps1
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/DEVELOP_LOG.md
+- docs/CHANGELOG.md
+- docs/VERSION.md

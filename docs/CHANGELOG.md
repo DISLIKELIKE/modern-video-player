@@ -23,6 +23,7 @@
 | 18 | 2026-03-07 | DASH 解析编译失败与格式能力矩阵缺失 | ✅ 已修复 |
 | 19 | 2026-03-07 | D3D11VA 硬解最小闭环与软解回退 | ✅ 已修复 |
 | 20 | 2026-03-07 | 探测入口与格式回归脚本落地 | ✅ 已修复 |
+| 21 | 2026-03-07 | GitHub Actions 自动格式回归接入 | ✅ 已修复 |
 
 ---
 
@@ -807,3 +808,34 @@ void VideoPlayer::play() {
 - tools/format_regression/format_samples.csv
 - docs/FORMAT_REGRESSION.md
 - docs/README.md
+
+---
+
+## 问题 21: GitHub Actions 自动格式回归接入
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 回归链路虽可在本地运行，但缺少 PR/主分支自动执行，无法在提交阶段及时拦截格式退化。
+- Windows CI 环境与本地依赖发现方式不一致，需补齐构建与脚本兼容性。
+
+### 解决方案
+- 新增工作流 `.github/workflows/format-regression.yml`：
+  - 在 `windows-latest` 下载 `SDL2/FFmpeg` 预编译包并构建 `Debug`；
+  - 执行 `download_test_samples.ps1` 与 `run_all_checks.ps1`；
+  - 上传 `docs/reports/FORMAT_REGRESSION_CI.md` 报告产物。
+- 调整 `CMakeLists.txt`：
+  - Windows 下优先识别 `SDL2::`、`FFMPEG::` 与 `unofficial::ffmpeg::` 导入目标；
+  - 保留 `external/` 目录回退逻辑，兼容本地既有构建。
+- 调整 `download_test_samples.ps1`：
+  - `-FfmpegPath` 支持 PATH 命令名（如 `ffmpeg`），便于 CI 直接调用。
+- 更新回归文档与任务清单状态，补齐自动回归入口说明。
+
+### 修改文件
+- .github/workflows/format-regression.yml
+- CMakeLists.txt
+- tools/download_test_samples.ps1
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

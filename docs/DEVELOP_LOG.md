@@ -404,3 +404,36 @@ Display initialized: window 1306x734 (source 1920x1080)
 - tools/format_regression/format_samples.csv
 - docs/FORMAT_REGRESSION.md
 - docs/README.md
+
+---
+
+## 问题 21: GitHub Actions 自动回归接入
+
+**日期**: 2026-03-07
+**状态**: 已解决
+
+### 问题描述
+- 当前格式回归仅在本地手动执行，PR 缺少自动化门禁。
+- Windows CI 中依赖发现方式与本地 `external/` 目录方案不同，存在构建不一致风险。
+
+### 解决方案
+- 新增 `.github/workflows/format-regression.yml`：
+  - 自动下载 `SDL2/FFmpeg` 预编译依赖并构建 `build/Debug/modern-video-player.exe`；
+  - 调用 `tools/download_test_samples.ps1` 生成样本；
+  - 调用 `tools/run_all_checks.ps1` 执行单文件探测 + 批量回归；
+  - 上传 `docs/reports/FORMAT_REGRESSION_CI.md` 产物。
+- 调整 `CMakeLists.txt`（Windows）：
+  - 优先支持 `SDL2::`、`FFMPEG::`、`unofficial::ffmpeg::` 导入目标链接；
+  - 继续保留 `external/SDL2` 与 `external/ffmpeg` 回退路径。
+- 调整 `tools/download_test_samples.ps1`：
+  - 新增 PATH 可执行解析逻辑，支持 `-FfmpegPath ffmpeg`。
+- 同步更新回归文档与任务清单已完成项。
+
+### 修改文件
+- .github/workflows/format-regression.yml
+- CMakeLists.txt
+- tools/download_test_samples.ps1
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
