@@ -4,7 +4,13 @@ extern "C" {
 #include <libavutil/frame.h>
 }
 
+#if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
+#elif __has_include(<SDL.h>)
+#include <SDL.h>
+#else
+#error "SDL2 headers not found"
+#endif
 #include <atomic>
 #include <mutex>
 #include <string>
