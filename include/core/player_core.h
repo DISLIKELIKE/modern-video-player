@@ -23,6 +23,7 @@ extern "C" {
 #include "demuxer.h"
 #include "filters/filter_pipeline.h"
 #include "render/video_renderer.h"
+#include "subtitle/subtitle_parser.h"
 #include "thread_safe_queue.h"
 
 namespace vp {
@@ -84,6 +85,12 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
+    void clearExternalSubtitles();
+    bool hasExternalSubtitles() const;
+    void setSubtitleEnabled(bool enabled);
+    bool isSubtitleEnabled() const;
+    bool toggleSubtitleEnabled();
 
     using StateCallback = std::function<void(PlaybackState)>;
     using PositionCallback = std::function<void(double)>;
@@ -118,6 +125,7 @@ private:
     bool decodeAudioFrame(AudioFrame& out);
     void renderFrame(VideoFrame&& frame);
     void onRenderIdle();
+    void updateSubtitleOverlay(double position_seconds);
 
     void emitStateChanged(PlaybackState state);
     void emitPositionChanged(double position);
@@ -186,6 +194,13 @@ private:
     std::atomic<uint64_t> audio_submitted_frames_{0};
     std::atomic<uint64_t> render_frames_{0};
     std::atomic<int64_t> last_diag_log_ms_{0};
+
+    mutable std::mutex subtitle_mutex_;
+    std::vector<subtitle::SubtitleItem> subtitle_items_;
+    std::string subtitle_source_path_;
+    std::string subtitle_active_text_;
+    int subtitle_active_index_{-1};
+    bool subtitle_enabled_{true};
 };
 
 }  // namespace vp::core

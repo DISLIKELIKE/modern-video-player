@@ -1,8 +1,12 @@
 #include "video_player.h"
 
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <system_error>
 
 #include "logger.h"
+#include "subtitle/srt_parser.h"
 
 namespace vp {
 
@@ -24,6 +28,7 @@ bool VideoPlayer::open(const std::string& filename) {
     if (!core_player_) {
         core_player_ = std::make_unique<core::PlayerCore>();
     }
+    core_player_->clearExternalSubtitles();
     const bool ok = core_player_->open(filename);
     if (!ok) {
         LOG_ERROR("Failed to open file with PlayerCore");
@@ -31,6 +36,10 @@ bool VideoPlayer::open(const std::string& filename) {
     }
     core_player_->setVolume(volume_);
     core_player_->setPlaybackSpeed(playback_speed_);
+    core_player_->setSubtitleEnabled(subtitle_enabled_);
+    if (!subtitle_items_.empty()) {
+        core_player_->setExternalSubtitles(subtitle_items_, subtitle_path_);
+    }
     return true;
 }
 
@@ -38,6 +47,7 @@ void VideoPlayer::close() {
     if (core_player_) {
         core_player_->close();
     }
+    clearExternalSubtitle();
     playing_.store(false);
     paused_.store(false);
     current_time_.store(0.0);
@@ -121,6 +131,89 @@ void VideoPlayer::setPlaybackSpeed(double speed) {
 
 double VideoPlayer::getPlaybackSpeed() const {
     return playback_speed_;
+}
+
+bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
+    clearExternalSubtitle();
+    if (subtitle_file.empty()) {
+        return false;
+    }
+
+    std::error_code ec;
+    std::filesystem::path path(subtitle_file);
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    if (extension != ".srt") {
+        LOG_WARNING("Unsupported subtitle extension: " << subtitle_file);
+        return false;
+    }
+    if (!std::filesystem::exists(path, ec) || ec || !std::filesystem::is_regular_file(path, ec) || ec) {
+        LOG_WARNING("Subtitle file not found: " << subtitle_file);
+        return false;
+    }
+
+    subtitle::SrtParser parser;
+    bool parsed = false;
+    try {
+        parsed = parser.parseFile(path.string());
+    } catch (const std::exception& ex) {
+        LOG_WARNING("Subtitle parser raised exception: " << ex.what());
+        return false;
+    } catch (...) {
+        LOG_WARNING("Subtitle parser raised unknown exception");
+        return false;
+    }
+    if (!parsed) {
+        LOG_WARNING("Failed to parse subtitle file: " << subtitle_file);
+        return false;
+    }
+
+    subtitle_path_ = path.string();
+    subtitle_items_ = parser.items();
+    if (core_player_) {
+        core_player_->setExternalSubtitles(subtitle_items_, subtitle_path_);
+    }
+    LOG_INFO("Loaded external subtitle: " << subtitle_path_ << " entries=" << subtitle_items_.size());
+    return true;
+}
+
+void VideoPlayer::clearExternalSubtitle() {
+    if (core_player_) {
+        core_player_->clearExternalSubtitles();
+    }
+    subtitle_path_.clear();
+    subtitle_items_.clear();
+}
+
+bool VideoPlayer::hasExternalSubtitle() const {
+    return !subtitle_items_.empty();
+}
+
+const std::string& VideoPlayer::externalSubtitlePath() const {
+    return subtitle_path_;
+}
+
+size_t VideoPlayer::externalSubtitleCount() const {
+    return subtitle_items_.size();
+}
+
+void VideoPlayer::setSubtitleEnabled(bool enabled) {
+    subtitle_enabled_ = enabled;
+    if (core_player_) {
+        core_player_->setSubtitleEnabled(enabled);
+    }
+}
+
+bool VideoPlayer::isSubtitleEnabled() const {
+    return subtitle_enabled_;
+}
+
+bool VideoPlayer::toggleSubtitleEnabled() {
+    setSubtitleEnabled(!subtitle_enabled_);
+    return subtitle_enabled_;
 }
 
 }  // namespace vp

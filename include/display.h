@@ -14,6 +14,7 @@ extern "C" {
 #include <atomic>
 #include <mutex>
 #include <string>
+#include <vector>
 
 namespace vp {
 
@@ -37,9 +38,11 @@ public:
     bool consumeVolumeChangeRequest(float& volume);
     bool consumeSpeedChangeRequest(double& speed_delta);
     bool consumeResetSpeedRequest();
+    bool consumeToggleSubtitleRequest();
     bool consumeNextItemRequest();
     bool consumePreviousItemRequest();
     void setOverlayState(double position, double duration, float volume, bool paused);
+    void setSubtitleText(const std::string& text);
     
     void toggleFullscreen();
     int getWidth() const { return width_; }
@@ -55,6 +58,7 @@ private:
     bool createTexture(int width, int height);
     bool updateTexture(const uint8_t* data, int width, int height);
     void drawControls(int window_width, int window_height);
+    void drawSubtitleOverlay(int window_width, int window_height);
     ControlLayout computeControlLayout(int window_width, int window_height) const;
     void updateSeekFromMouse(int mouse_x, bool commit);
     void updateVolumeFromMouse(int mouse_x);
@@ -80,6 +84,7 @@ private:
     bool speed_change_requested_;
     double speed_delta_;
     bool speed_reset_requested_;
+    bool subtitle_toggle_requested_;
     bool next_item_requested_;
     bool previous_item_requested_;
     float last_nonzero_volume_;
@@ -92,6 +97,8 @@ private:
     std::atomic<double> overlay_duration_;
     std::atomic<float> overlay_volume_;
     std::atomic<bool> overlay_paused_;
+    std::mutex subtitle_mutex_;
+    std::string subtitle_text_;
 };
 
 } // namespace vp

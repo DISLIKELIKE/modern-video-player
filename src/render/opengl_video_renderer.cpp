@@ -51,6 +51,10 @@ bool OpenGLVideoRenderer::consumeResetSpeedRequest() {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeToggleSubtitleRequest() {
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeNextItemRequest() {
     return false;
 }
@@ -64,6 +68,10 @@ void OpenGLVideoRenderer::setOverlayState(double position, double duration, floa
     (void)duration;
     (void)volume;
     (void)paused;
+}
+
+void OpenGLVideoRenderer::setSubtitleText(const std::string& text) {
+    (void)text;
 }
 
 }  // namespace vp::render

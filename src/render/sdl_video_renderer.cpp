@@ -74,6 +74,10 @@ bool SdlVideoRenderer::consumeResetSpeedRequest() {
     return display_ ? display_->consumeResetSpeedRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeToggleSubtitleRequest() {
+    return display_ ? display_->consumeToggleSubtitleRequest() : false;
+}
+
 bool SdlVideoRenderer::consumeNextItemRequest() {
     return display_ ? display_->consumeNextItemRequest() : false;
 }
@@ -85,6 +89,12 @@ bool SdlVideoRenderer::consumePreviousItemRequest() {
 void SdlVideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
     if (display_) {
         display_->setOverlayState(position, duration, volume, paused);
+    }
+}
+
+void SdlVideoRenderer::setSubtitleText(const std::string& text) {
+    if (display_) {
+        display_->setSubtitleText(text);
     }
 }
 

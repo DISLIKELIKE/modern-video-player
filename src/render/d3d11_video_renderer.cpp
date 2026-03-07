@@ -51,6 +51,10 @@ bool D3D11VideoRenderer::consumeResetSpeedRequest() {
     return false;
 }
 
+bool D3D11VideoRenderer::consumeToggleSubtitleRequest() {
+    return false;
+}
+
 bool D3D11VideoRenderer::consumeNextItemRequest() {
     return false;
 }
@@ -64,6 +68,10 @@ void D3D11VideoRenderer::setOverlayState(double position, double duration, float
     (void)duration;
     (void)volume;
     (void)paused;
+}
+
+void D3D11VideoRenderer::setSubtitleText(const std::string& text) {
+    (void)text;
 }
 
 }  // namespace vp::render

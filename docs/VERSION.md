@@ -554,3 +554,92 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-07 更新（外挂字幕加载入口）
+
+### 字幕入口能力
+- 主流程新增外挂字幕参数：`--subtitle <file.srt>`。
+- 未传 `--subtitle` 时，自动尝试加载与当前媒体同名 `.srt` 文件。
+- `VideoPlayer` 新增外挂字幕加载与清理接口，支持 SRT 解析并记录条目数。
+
+### 修改文件
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-07 更新（字幕渲染叠加与时序同步）
+
+### 字幕渲染能力
+- 渲染接口新增字幕文本通道：`IVideoRenderer::setSubtitleText()`。
+- SDL 渲染链路新增字幕叠加层，支持多行显示、超长截断、底板与阴影。
+- D3D11/OpenGL 渲染器补齐字幕接口桩实现，保证多后端编译一致性。
+- 当前字幕字模为轻量实现，非 ASCII 字符会降级显示。
+
+### 字幕时间轴同步
+- `PlayerCore` 新增外挂字幕轨道管理与活跃索引缓存。
+- 渲染帧路径与空闲路径均按当前播放时间更新字幕，覆盖播放/暂停/seek。
+- 修复字幕更新中的锁粒度问题，避免锁内调用渲染接口。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `1.1.2 字幕渲染叠加` 标记完成；
+  - `1.1.3 播放/暂停/seek 同步` 标记完成。
+
+### 修改文件
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（字幕开关与异常处理）
+
+### 字幕开关能力
+- 新增运行时字幕开关链路，支持在播放中按 `V` 切换字幕显示开/关。
+- 字幕关闭时立即清空叠加层；重新开启后按当前播放时间恢复字幕同步。
+- 字幕开关状态在播放会话内保持一致，跨媒体切换可继承当前显示偏好。
+
+### 异常处理增强
+- 外挂字幕加载路径检查改为 `std::error_code`，避免文件系统异常传播。
+- 增加字幕解析异常捕获与日志降级处理，确保播放主链不中断。
+- 加载失败时保持状态一致：清空旧字幕并继续播放媒体。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `1.1.4 字幕开关与异常处理` 标记完成。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

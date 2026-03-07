@@ -26,6 +26,9 @@
 | 21 | 2026-03-07 | GitHub Actions 自动格式回归接入 | ✅ 已修复 |
 | 22 | 2026-03-07 | 播放列表主链路、设置持久化与快捷键首版接入 | ✅ 已修复 |
 | 23 | 2026-03-07 | 移除 Core 单元测试目标与测试文件 | ✅ 已修复 |
+| 24 | 2026-03-07 | 外挂字幕加载入口（SRT）接入主流程 | ✅ 已修复 |
+| 25 | 2026-03-07 | 字幕渲染叠加与播放时序同步接入 | ✅ 已修复 |
+| 26 | 2026-03-08 | 字幕开关控制与字幕加载异常处理完善 | ✅ 已修复 |
 
 ---
 
@@ -915,6 +918,126 @@ void VideoPlayer::play() {
 - CMakeLists.txt
 - tests/core_frame_queue_tests.cpp（删除）
 - tests/core_clock_tests.cpp（删除）
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 24: 外挂字幕加载入口（SRT）接入主流程
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 任务清单 `1.1.1` 要求支持外挂字幕加载入口，但当前主流程只有视频/音频播放链路，未提供外部字幕文件入口。
+- 项目已存在 `subtitle::SrtParser`，但未接入 `VideoPlayer` 与命令行参数。
+
+### 解决方案
+- 在 `VideoPlayer` 增加外挂字幕加载接口：
+  - `loadExternalSubtitle()` / `clearExternalSubtitle()`；
+  - 支持 `.srt` 文件解析与容错日志；
+  - 暴露已加载字幕路径与条目数量，便于后续渲染接入。
+- 在 `main` 增加命令行入口：
+  - 新增 `--subtitle <file.srt>`；
+  - 保持现有播放列表参数逻辑；
+  - 未显式传参时，自动尝试加载与媒体同名的 `.srt`。
+- 更新任务清单，标记 `1.1.1 外挂字幕加载入口` 已完成。
+
+### 修改文件
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 25: 字幕渲染叠加与播放时序同步接入
+
+**日期**: 2026-03-07
+
+### 问题描述
+- 任务清单 `1.1.2` 要求字幕可渲染叠加到画面，但现有渲染接口没有字幕文本通道。
+- 任务清单 `1.1.3` 要求字幕与播放/暂停/seek 同步，但主播放时钟链路没有字幕时间轴更新逻辑。
+
+### 解决方案
+- 扩展渲染抽象：
+  - 在 `IVideoRenderer` 增加 `setSubtitleText()`；
+  - SDL 渲染器转发字幕文本到 `Display`；
+  - D3D11/OpenGL 先提供兼容桩实现，保持接口一致。
+- 在 `Display` 增加字幕叠加层：
+  - 新增字幕状态存储与线程安全更新；
+  - 在视频帧渲染后、控制条渲染前绘制字幕面板；
+  - 支持多行字幕、超长截断与基础可读性样式（阴影+半透明底板）。
+  - 当前使用轻量字模渲染，非 ASCII 字符会降级显示。
+- 在 `PlayerCore` 增加字幕时间轴驱动：
+  - 新增外挂字幕轨道状态与索引缓存；
+  - 渲染帧路径与空闲事件路径均调用 `updateSubtitleOverlay()`；
+  - 基于当前播放时间选择活跃字幕，覆盖播放、暂停与 seek 场景；
+  - 修复锁内调用渲染接口的问题，避免在字幕互斥锁内触发渲染回调。
+- 调整 `VideoPlayer::open()` 字幕状态处理，消除“先清空再判断加载”的矛盾逻辑。
+- 更新任务清单，标记 `1.1.2`、`1.1.3` 已完成。
+
+### 修改文件
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 26: 字幕开关控制与字幕加载异常处理完善
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.1.4` 要求字幕开关与异常处理，但当前字幕仅支持“加载后显示”，缺少运行时开关。
+- 外挂字幕加载路径在文件系统异常场景下容错不足，影响稳定性预期。
+
+### 解决方案
+- 增加字幕开关控制链路（按键 `V`）：
+  - `Display` 新增字幕开关请求；
+  - `Renderer` 抽象新增 `consumeToggleSubtitleRequest()`；
+  - `PlayerCore` 新增字幕显示状态管理与切换接口；
+  - 关闭字幕时立即清空叠加层，开启时按当前播放时间恢复同步。
+- 增强外挂字幕异常处理：
+  - `VideoPlayer::loadExternalSubtitle()` 改为使用 `std::error_code` 路径检查；
+  - 捕获解析器异常并降级为告警日志，不中断播放主流程；
+  - 保持“加载失败自动清空旧字幕”的状态一致性。
+- 更新帮助信息，补充 `V - Toggle subtitles on/off`。
+- 更新任务清单，标记 `1.1.4` 已完成。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md

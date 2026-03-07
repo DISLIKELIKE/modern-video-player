@@ -28,9 +28,11 @@ public:
     bool consumeVolumeChangeRequest(float& volume) override;
     bool consumeSpeedChangeRequest(double& speed_delta) override;
     bool consumeResetSpeedRequest() override;
+    bool consumeToggleSubtitleRequest() override;
     bool consumeNextItemRequest() override;
     bool consumePreviousItemRequest() override;
     void setOverlayState(double position, double duration, float volume, bool paused) override;
+    void setSubtitleText(const std::string& text) override;
 
 private:
     std::unique_ptr<Display> display_;

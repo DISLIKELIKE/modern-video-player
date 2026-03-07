@@ -21,6 +21,7 @@ extern "C" {
 #include <iostream>
 #include <memory>
 #include <sstream>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -422,6 +423,11 @@ struct AppSettings {
     int last_playlist_index{0};
 };
 
+struct PlaybackCliArgs {
+    std::vector<std::string> media_inputs;
+    std::string subtitle_file;
+};
+
 std::string normalizePathForTitle(const std::string& uri) {
     std::filesystem::path path(uri);
     const std::string title = path.filename().string();
@@ -432,23 +438,70 @@ bool isM3U8File(const std::string& value) {
     return toLower(extensionFromPath(value)) == "m3u8";
 }
 
-playlist::PlaylistManager buildPlaylistFromArgs(int argc, char* argv[]) {
+bool parsePlaybackCliArgs(int argc, char* argv[], PlaybackCliArgs& out, std::string& error) {
+    out = PlaybackCliArgs{};
+    error.clear();
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--subtitle") {
+            if (!out.subtitle_file.empty()) {
+                error = "duplicate --subtitle option";
+                return false;
+            }
+            if (i + 1 >= argc) {
+                error = "missing subtitle file path after --subtitle";
+                return false;
+            }
+            out.subtitle_file = argv[++i];
+            continue;
+        }
+
+        if (!arg.empty() && arg[0] == '-') {
+            error = "unknown option in playback mode: " + arg;
+            return false;
+        }
+
+        out.media_inputs.push_back(arg);
+    }
+
+    if (out.media_inputs.empty()) {
+        error = "no media input provided";
+        return false;
+    }
+    return true;
+}
+
+playlist::PlaylistManager buildPlaylistFromInputs(const std::vector<std::string>& media_inputs) {
     playlist::PlaylistManager manager;
 
-    if (argc == 2) {
-        const std::string single_arg = argv[1];
+    if (media_inputs.size() == 1) {
+        const std::string& single_arg = media_inputs.front();
         if (isM3U8File(single_arg) && manager.loadM3U8(single_arg)) {
             return manager;
         }
     }
 
-    for (int i = 1; i < argc; ++i) {
+    for (const std::string& media_input : media_inputs) {
         playlist::PlaylistItem item{};
-        item.uri = argv[i];
+        item.uri = media_input;
         item.title = normalizePathForTitle(item.uri);
         manager.addItem(std::move(item));
     }
     return manager;
+}
+
+std::string detectAutoSubtitlePath(const std::string& media_uri) {
+    if (media_uri.find("://") != std::string::npos) {
+        return {};
+    }
+
+    std::error_code ec;
+    std::filesystem::path candidate(media_uri);
+    candidate.replace_extension(".srt");
+    if (std::filesystem::exists(candidate, ec) && !ec && std::filesystem::is_regular_file(candidate, ec) && !ec) {
+        return candidate.string();
+    }
+    return {};
 }
 
 AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std::string& settings_path) {
@@ -518,6 +571,7 @@ void signalHandler(int signal) {
 
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
+    std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.srt>" << std::endl;
     std::cout << "       " << program_name << " <playlist.m3u8>" << std::endl;
     std::cout << "       " << program_name << " --capabilities" << std::endl;
     std::cout << "       " << program_name << " --probe-file <media_file> [--json]" << std::endl;
@@ -533,6 +587,7 @@ void printUsage(const char* program_name) {
     std::cout << "  CTRL+LEFT/CTRL+RIGHT - Seek -/+30s" << std::endl;
     std::cout << "  PAGEUP/PAGEDOWN - Previous/Next media in playlist" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
+    std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
     std::cout << "  Mouse drag progress bar - Seek" << std::endl;
     std::cout << "  Mouse drag volume bar - Volume" << std::endl;
@@ -613,6 +668,14 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    PlaybackCliArgs cli_args;
+    std::string cli_error;
+    if (!parsePlaybackCliArgs(argc, argv, cli_args, cli_error)) {
+        std::cerr << "Argument error: " << cli_error << std::endl;
+        printUsage(argv[0]);
+        return 1;
+    }
+
     Logger::init();
     
     std::cout << "========================================" << std::endl;
@@ -629,7 +692,7 @@ int main(int argc, char* argv[]) {
     config::SettingsManager settings_manager;
     const AppSettings app_settings = loadAppSettings(settings_manager, settings_path);
 
-    playlist::PlaylistManager playlist_manager = buildPlaylistFromArgs(argc, argv);
+    playlist::PlaylistManager playlist_manager = buildPlaylistFromInputs(cli_args.media_inputs);
     if (playlist_manager.empty()) {
         Logger::error("No playable media found from input arguments");
         Logger::shutdown();
@@ -667,6 +730,17 @@ int main(int argc, char* argv[]) {
         opened_any_media = true;
         Logger::info("Starting playback...");
         std::cout << "Playing: " << item.uri << std::endl;
+
+        const std::string subtitle_path =
+            !cli_args.subtitle_file.empty() ? cli_args.subtitle_file : detectAutoSubtitlePath(item.uri);
+        if (!subtitle_path.empty()) {
+            if (g_player->loadExternalSubtitle(subtitle_path)) {
+                Logger::info("Loaded external subtitle: " + subtitle_path +
+                             " entries=" + std::to_string(g_player->externalSubtitleCount()));
+            } else {
+                Logger::warning("Failed to load external subtitle: " + subtitle_path);
+            }
+        }
 
         g_player->play();
 

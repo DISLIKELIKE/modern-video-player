@@ -40,9 +40,11 @@ public:
     virtual bool consumeVolumeChangeRequest(float& volume) = 0;
     virtual bool consumeSpeedChangeRequest(double& speed_delta) = 0;
     virtual bool consumeResetSpeedRequest() = 0;
+    virtual bool consumeToggleSubtitleRequest() = 0;
     virtual bool consumeNextItemRequest() = 0;
     virtual bool consumePreviousItemRequest() = 0;
     virtual void setOverlayState(double position, double duration, float volume, bool paused) = 0;
+    virtual void setSubtitleText(const std::string& text) = 0;
 };
 
 using VideoRendererPtr = std::unique_ptr<IVideoRenderer>;

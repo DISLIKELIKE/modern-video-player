@@ -162,6 +162,7 @@ void PlayerCore::close() {
     demuxer_.reset();
     video_packet_queue_.reset();
     audio_packet_queue_.reset();
+    clearExternalSubtitles();
     opened_.store(false);
 }
 
@@ -248,6 +249,7 @@ void PlayerCore::seek(double timestamp) {
     clock_.setTime(timestamp);
     clock_.setAudioClock(timestamp);
     clock_.setVideoClock(timestamp);
+    updateSubtitleOverlay(timestamp);
     emitPositionChanged(timestamp);
 
     if (was_playing) {
@@ -297,6 +299,10 @@ void PlayerCore::pumpEvents() {
     }
     if (video_renderer_->consumeResetSpeedRequest()) {
         setPlaybackSpeed(1.0);
+    }
+
+    if (video_renderer_->consumeToggleSubtitleRequest()) {
+        toggleSubtitleEnabled();
     }
 
     if (video_renderer_->consumeNextItemRequest()) {
@@ -376,6 +382,95 @@ void PlayerCore::setPlaybackSpeed(double speed) {
 
 double PlayerCore::getPlaybackSpeed() const {
     return speed_.load();
+}
+
+void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
+    std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
+        if (lhs.start_seconds == rhs.start_seconds) {
+            return lhs.end_seconds < rhs.end_seconds;
+        }
+        return lhs.start_seconds < rhs.start_seconds;
+    });
+
+    size_t subtitle_count = 0;
+    std::string subtitle_path;
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        subtitle_items_ = std::move(subtitles);
+        subtitle_source_path_ = source_path;
+        subtitle_active_text_.clear();
+        subtitle_active_index_ = -1;
+        subtitle_count = subtitle_items_.size();
+        subtitle_path = subtitle_source_path_;
+    }
+
+    if (video_renderer_) {
+        video_renderer_->setSubtitleText("");
+    }
+    LOG_INFO("Subtitle track attached: path=" << subtitle_path << ", entries=" << subtitle_count);
+}
+
+void PlayerCore::clearExternalSubtitles() {
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        subtitle_items_.clear();
+        subtitle_source_path_.clear();
+        subtitle_active_text_.clear();
+        subtitle_active_index_ = -1;
+    }
+
+    if (video_renderer_) {
+        video_renderer_->setSubtitleText("");
+    }
+}
+
+bool PlayerCore::hasExternalSubtitles() const {
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+    return !subtitle_items_.empty();
+}
+
+void PlayerCore::setSubtitleEnabled(bool enabled) {
+    bool changed = false;
+    bool has_subtitle_track = false;
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        has_subtitle_track = !subtitle_items_.empty();
+        if (subtitle_enabled_ == enabled) {
+            return;
+        }
+        subtitle_enabled_ = enabled;
+        subtitle_active_index_ = -1;
+        subtitle_active_text_.clear();
+        changed = true;
+    }
+
+    if (!changed) {
+        return;
+    }
+
+    if (video_renderer_) {
+        if (!enabled) {
+            video_renderer_->setSubtitleText("");
+        } else {
+            updateSubtitleOverlay(position_.load());
+        }
+    }
+
+    LOG_INFO("Subtitle display " << (enabled ? "enabled" : "disabled"));
+    if (enabled && !has_subtitle_track) {
+        LOG_WARNING("Subtitle display enabled, but no subtitle track is loaded");
+    }
+}
+
+bool PlayerCore::isSubtitleEnabled() const {
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+    return subtitle_enabled_;
+}
+
+bool PlayerCore::toggleSubtitleEnabled() {
+    const bool next_enabled = !isSubtitleEnabled();
+    setSubtitleEnabled(next_enabled);
+    return next_enabled;
 }
 
 void PlayerCore::onStateChanged(StateCallback callback) {
@@ -1144,6 +1239,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     }
 
     const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+    updateSubtitleOverlay(frame.pts);
     video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
 
     filter_pipeline_.processVideo(frame);
@@ -1164,6 +1260,7 @@ void PlayerCore::onRenderIdle() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
         const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+        updateSubtitleOverlay(position_.load());
         video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
     }
 
@@ -1178,6 +1275,64 @@ void PlayerCore::onRenderIdle() {
             LOG_INFO("Playback reached EOF, auto-stopping");
             emitStateChanged(PlaybackState::Stopped);
         }
+    }
+}
+
+void PlayerCore::updateSubtitleOverlay(double position_seconds) {
+    if (!video_renderer_) {
+        return;
+    }
+
+    std::string subtitle_text;
+    bool subtitle_changed = false;
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        if (!subtitle_enabled_ || subtitle_items_.empty()) {
+            subtitle_active_index_ = -1;
+            if (!subtitle_active_text_.empty()) {
+                subtitle_active_text_.clear();
+                subtitle_changed = true;
+            }
+        } else {
+            const auto within_item = [&](int index) -> bool {
+                if (index < 0 || index >= static_cast<int>(subtitle_items_.size())) {
+                    return false;
+                }
+                const subtitle::SubtitleItem& item = subtitle_items_[index];
+                return position_seconds >= item.start_seconds && position_seconds <= item.end_seconds;
+            };
+
+            int resolved_index = -1;
+            if (within_item(subtitle_active_index_)) {
+                resolved_index = subtitle_active_index_;
+            } else {
+                auto it = std::upper_bound(
+                    subtitle_items_.begin(),
+                    subtitle_items_.end(),
+                    position_seconds,
+                    [](double value, const subtitle::SubtitleItem& item) {
+                        return value < item.start_seconds;
+                    });
+
+                if (it != subtitle_items_.begin()) {
+                    --it;
+                    if (position_seconds >= it->start_seconds && position_seconds <= it->end_seconds) {
+                        resolved_index = static_cast<int>(std::distance(subtitle_items_.begin(), it));
+                    }
+                }
+            }
+
+            subtitle_active_index_ = resolved_index;
+            subtitle_text = (resolved_index >= 0) ? subtitle_items_[resolved_index].text : "";
+            if (subtitle_text != subtitle_active_text_) {
+                subtitle_active_text_ = subtitle_text;
+                subtitle_changed = true;
+            }
+        }
+    }
+
+    if (subtitle_changed) {
+        video_renderer_->setSubtitleText(subtitle_text);
     }
 }
 

@@ -3,8 +3,10 @@
 #include <atomic>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "core/player_core.h"
+#include "subtitle/subtitle_parser.h"
 
 namespace vp {
 
@@ -36,6 +38,15 @@ public:
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
 
+    bool loadExternalSubtitle(const std::string& subtitle_file);
+    void clearExternalSubtitle();
+    bool hasExternalSubtitle() const;
+    const std::string& externalSubtitlePath() const;
+    size_t externalSubtitleCount() const;
+    void setSubtitleEnabled(bool enabled);
+    bool isSubtitleEnabled() const;
+    bool toggleSubtitleEnabled();
+
 private:
     std::unique_ptr<core::PlayerCore> core_player_;
     std::atomic<bool> playing_{false};
@@ -43,6 +54,9 @@ private:
     std::atomic<double> current_time_{0.0};
     float volume_{1.0f};
     double playback_speed_{1.0};
+    std::string subtitle_path_;
+    std::vector<subtitle::SubtitleItem> subtitle_items_;
+    bool subtitle_enabled_{true};
 };
 
 }  // namespace vp

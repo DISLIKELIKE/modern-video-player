@@ -1,8 +1,12 @@
 #include "display.h"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <iostream>
+#include <sstream>
+#include <vector>
 
 extern "C" {
 #include <libavutil/frame.h>
@@ -91,6 +95,276 @@ bool pointInRect(int x, int y, const SDL_Rect& rect) {
     return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
 }
 
+using Glyph5x7 = std::array<uint8_t, 7>;
+
+const Glyph5x7& glyphFor(char ch) {
+    static const Glyph5x7 kSpace{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+    static const Glyph5x7 kUnknown{0x1F, 0x11, 0x15, 0x15, 0x15, 0x11, 0x1F};
+    static const Glyph5x7 kDot{0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C};
+    static const Glyph5x7 kComma{0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x08};
+    static const Glyph5x7 kColon{0x00, 0x04, 0x00, 0x00, 0x04, 0x00, 0x00};
+    static const Glyph5x7 kSemicolon{0x00, 0x04, 0x00, 0x00, 0x04, 0x04, 0x08};
+    static const Glyph5x7 kExclamation{0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04};
+    static const Glyph5x7 kQuestion{0x0E, 0x11, 0x01, 0x02, 0x04, 0x00, 0x04};
+    static const Glyph5x7 kMinus{0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00};
+    static const Glyph5x7 kUnderscore{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1F};
+    static const Glyph5x7 kSlash{0x01, 0x02, 0x04, 0x08, 0x10, 0x00, 0x00};
+    static const Glyph5x7 kPercent{0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13};
+    static const Glyph5x7 kPlus{0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00};
+    static const Glyph5x7 kEqual{0x00, 0x1F, 0x00, 0x1F, 0x00, 0x00, 0x00};
+    static const Glyph5x7 kApostrophe{0x04, 0x04, 0x02, 0x00, 0x00, 0x00, 0x00};
+    static const Glyph5x7 kQuote{0x0A, 0x0A, 0x05, 0x00, 0x00, 0x00, 0x00};
+    static const Glyph5x7 kLeftParen{0x02, 0x04, 0x08, 0x08, 0x08, 0x04, 0x02};
+    static const Glyph5x7 kRightParen{0x08, 0x04, 0x02, 0x02, 0x02, 0x04, 0x08};
+
+    switch (std::toupper(static_cast<unsigned char>(ch))) {
+    case ' ':
+        return kSpace;
+    case '.':
+        return kDot;
+    case ',':
+        return kComma;
+    case ':':
+        return kColon;
+    case ';':
+        return kSemicolon;
+    case '!':
+        return kExclamation;
+    case '?':
+        return kQuestion;
+    case '-':
+        return kMinus;
+    case '_':
+        return kUnderscore;
+    case '/':
+        return kSlash;
+    case '%':
+        return kPercent;
+    case '+':
+        return kPlus;
+    case '=':
+        return kEqual;
+    case '\'':
+        return kApostrophe;
+    case '"':
+        return kQuote;
+    case '(':
+        return kLeftParen;
+    case ')':
+        return kRightParen;
+    case '0': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E};
+        return v;
+    }
+    case '1': {
+        static const Glyph5x7 v{0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E};
+        return v;
+    }
+    case '2': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F};
+        return v;
+    }
+    case '3': {
+        static const Glyph5x7 v{0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E};
+        return v;
+    }
+    case '4': {
+        static const Glyph5x7 v{0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02};
+        return v;
+    }
+    case '5': {
+        static const Glyph5x7 v{0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E};
+        return v;
+    }
+    case '6': {
+        static const Glyph5x7 v{0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E};
+        return v;
+    }
+    case '7': {
+        static const Glyph5x7 v{0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08};
+        return v;
+    }
+    case '8': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E};
+        return v;
+    }
+    case '9': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E};
+        return v;
+    }
+    case 'A': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
+        return v;
+    }
+    case 'B': {
+        static const Glyph5x7 v{0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E};
+        return v;
+    }
+    case 'C': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E};
+        return v;
+    }
+    case 'D': {
+        static const Glyph5x7 v{0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E};
+        return v;
+    }
+    case 'E': {
+        static const Glyph5x7 v{0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F};
+        return v;
+    }
+    case 'F': {
+        static const Glyph5x7 v{0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10};
+        return v;
+    }
+    case 'G': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x10, 0x10, 0x13, 0x11, 0x0E};
+        return v;
+    }
+    case 'H': {
+        static const Glyph5x7 v{0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11};
+        return v;
+    }
+    case 'I': {
+        static const Glyph5x7 v{0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E};
+        return v;
+    }
+    case 'J': {
+        static const Glyph5x7 v{0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0E};
+        return v;
+    }
+    case 'K': {
+        static const Glyph5x7 v{0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11};
+        return v;
+    }
+    case 'L': {
+        static const Glyph5x7 v{0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F};
+        return v;
+    }
+    case 'M': {
+        static const Glyph5x7 v{0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11};
+        return v;
+    }
+    case 'N': {
+        static const Glyph5x7 v{0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11};
+        return v;
+    }
+    case 'O': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
+        return v;
+    }
+    case 'P': {
+        static const Glyph5x7 v{0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10};
+        return v;
+    }
+    case 'Q': {
+        static const Glyph5x7 v{0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D};
+        return v;
+    }
+    case 'R': {
+        static const Glyph5x7 v{0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11};
+        return v;
+    }
+    case 'S': {
+        static const Glyph5x7 v{0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E};
+        return v;
+    }
+    case 'T': {
+        static const Glyph5x7 v{0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04};
+        return v;
+    }
+    case 'U': {
+        static const Glyph5x7 v{0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E};
+        return v;
+    }
+    case 'V': {
+        static const Glyph5x7 v{0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04};
+        return v;
+    }
+    case 'W': {
+        static const Glyph5x7 v{0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A};
+        return v;
+    }
+    case 'X': {
+        static const Glyph5x7 v{0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11};
+        return v;
+    }
+    case 'Y': {
+        static const Glyph5x7 v{0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04};
+        return v;
+    }
+    case 'Z': {
+        static const Glyph5x7 v{0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F};
+        return v;
+    }
+    default:
+        return kUnknown;
+    }
+}
+
+void drawGlyph5x7(SDL_Renderer* renderer, char ch, int x, int y, int scale, SDL_Color color) {
+    if (!renderer || scale <= 0) {
+        return;
+    }
+
+    const Glyph5x7& glyph = glyphFor(ch);
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    for (int row = 0; row < 7; ++row) {
+        for (int col = 0; col < 5; ++col) {
+            if ((glyph[row] & (1 << (4 - col))) == 0) {
+                continue;
+            }
+            SDL_Rect pixel_rect{
+                x + col * scale,
+                y + row * scale,
+                scale,
+                scale
+            };
+            SDL_RenderFillRect(renderer, &pixel_rect);
+        }
+    }
+}
+
+std::vector<std::string> splitSubtitleLines(const std::string& text, size_t max_lines) {
+    std::vector<std::string> lines;
+    std::stringstream stream(text);
+    std::string line;
+
+    while (std::getline(stream, line)) {
+        if (!line.empty() && line.back() == '\r') {
+            line.pop_back();
+        }
+
+        std::string normalized;
+        normalized.reserve(line.size());
+        for (size_t i = 0; i < line.size();) {
+            const unsigned char ch = static_cast<unsigned char>(line[i]);
+            if (ch < 0x80) {
+                normalized.push_back(static_cast<char>(ch));
+                ++i;
+                continue;
+            }
+
+            normalized.push_back('?');
+            if ((ch & 0xE0) == 0xC0) {
+                i += 2;
+            } else if ((ch & 0xF0) == 0xE0) {
+                i += 3;
+            } else if ((ch & 0xF8) == 0xF0) {
+                i += 4;
+            } else {
+                ++i;
+            }
+        }
+
+        lines.push_back(std::move(normalized));
+        if (lines.size() >= max_lines) {
+            break;
+        }
+    }
+
+    return lines;
+}
+
 } // namespace
 
 Display::Display()
@@ -112,6 +386,7 @@ Display::Display()
     , speed_change_requested_(false)
     , speed_delta_(0.0)
     , speed_reset_requested_(false)
+    , subtitle_toggle_requested_(false)
     , next_item_requested_(false)
     , previous_item_requested_(false)
     , last_nonzero_volume_(1.0f)
@@ -193,6 +468,7 @@ bool Display::init(int width, int height, const std::string& title) {
         speed_change_requested_ = false;
         speed_delta_ = 0.0;
         speed_reset_requested_ = false;
+        subtitle_toggle_requested_ = false;
         next_item_requested_ = false;
         previous_item_requested_ = false;
         last_nonzero_volume_ = 1.0f;
@@ -291,6 +567,7 @@ void Display::renderFrame(const uint8_t* data, int width, int height) {
     
     const SDL_Rect dst_rect = computeRenderRect(width_, height_, width, height);
     SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect);
+    drawSubtitleOverlay(width_, height_);
     drawControls(width_, height_);
 }
 
@@ -396,6 +673,11 @@ void Display::handleEvents() {
                     case SDLK_r: {
                         std::lock_guard<std::mutex> lock(request_mutex_);
                         speed_reset_requested_ = true;
+                        break;
+                    }
+                    case SDLK_v: {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        subtitle_toggle_requested_ = true;
                         break;
                     }
                     case SDLK_PAGEUP: {
@@ -525,6 +807,15 @@ bool Display::consumeResetSpeedRequest() {
     return true;
 }
 
+bool Display::consumeToggleSubtitleRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!subtitle_toggle_requested_) {
+        return false;
+    }
+    subtitle_toggle_requested_ = false;
+    return true;
+}
+
 bool Display::consumeNextItemRequest() {
     std::lock_guard<std::mutex> lock(request_mutex_);
     if (!next_item_requested_) {
@@ -552,6 +843,89 @@ void Display::setOverlayState(double position, double duration, float volume, bo
         last_nonzero_volume_ = clamped_volume;
     }
     overlay_paused_.store(paused);
+}
+
+void Display::setSubtitleText(const std::string& text) {
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+    subtitle_text_ = text;
+}
+
+void Display::drawSubtitleOverlay(int window_width, int window_height) {
+    if (!renderer_) {
+        return;
+    }
+
+    std::string subtitle_text;
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        subtitle_text = subtitle_text_;
+    }
+
+    if (subtitle_text.empty()) {
+        return;
+    }
+
+    constexpr size_t kMaxSubtitleLines = 3;
+    auto lines = splitSubtitleLines(subtitle_text, kMaxSubtitleLines);
+    if (lines.empty()) {
+        return;
+    }
+
+    const int scale = std::max(1, std::min(3, window_width / 520));
+    const int glyph_width = 5 * scale;
+    const int glyph_height = 7 * scale;
+    const int glyph_spacing = scale;
+    const int line_spacing = scale * 2;
+    const int horizontal_margin = std::max(16, scale * 8);
+    const int char_step = glyph_width + glyph_spacing;
+    const size_t max_chars = std::max<size_t>(8, static_cast<size_t>(std::max(1, window_width - horizontal_margin * 2) / std::max(1, char_step)));
+
+    int content_width = 0;
+    for (std::string& line : lines) {
+        if (line.size() > max_chars) {
+            if (max_chars > 3) {
+                line = line.substr(0, max_chars - 3) + "...";
+            } else {
+                line = line.substr(0, max_chars);
+            }
+        }
+        const int line_width = static_cast<int>(line.empty() ? 0 : line.size() * char_step - glyph_spacing);
+        content_width = std::max(content_width, line_width);
+    }
+
+    const int content_height =
+        static_cast<int>(lines.size()) * glyph_height + static_cast<int>(std::max<size_t>(0, lines.size() - 1)) * line_spacing;
+
+    if (content_width <= 0 || content_height <= 0) {
+        return;
+    }
+
+    const ControlLayout controls = computeControlLayout(window_width, window_height);
+    const int panel_padding = scale * 4;
+    const int panel_width = content_width + panel_padding * 2;
+    const int panel_height = content_height + panel_padding * 2;
+    const int panel_x = std::max(0, (window_width - panel_width) / 2);
+    const int panel_bottom = std::max(0, controls.panel.y - scale * 3);
+    const int panel_y = std::max(0, panel_bottom - panel_height);
+
+    SDL_Rect subtitle_panel{panel_x, panel_y, panel_width, panel_height};
+    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 150);
+    SDL_RenderFillRect(renderer_, &subtitle_panel);
+
+    SDL_Color shadow{0, 0, 0, 230};
+    SDL_Color front{242, 242, 242, 245};
+
+    for (size_t line_index = 0; line_index < lines.size(); ++line_index) {
+        const std::string& line = lines[line_index];
+        const int line_width = static_cast<int>(line.empty() ? 0 : line.size() * char_step - glyph_spacing);
+        int x = panel_x + (panel_width - line_width) / 2;
+        const int y = panel_y + panel_padding + static_cast<int>(line_index) * (glyph_height + line_spacing);
+        for (char ch : line) {
+            drawGlyph5x7(renderer_, ch, x + 1, y + 1, scale, shadow);
+            drawGlyph5x7(renderer_, ch, x, y, scale, front);
+            x += char_step;
+        }
+    }
 }
 
 Display::ControlLayout Display::computeControlLayout(int window_width, int window_height) const {
