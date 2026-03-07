@@ -9,10 +9,8 @@ AudioPlayer::AudioPlayer()
     : audio_device_(0)
     , sample_rate_(0)
     , channels_(0)
-    , volume_(1.0f)
-    , muted_(false)
-    , paused_(false)
     , initialized_(false) {
+    SDL_zero(audio_spec_);
 }
 
 AudioPlayer::~AudioPlayer() {
@@ -25,28 +23,39 @@ bool AudioPlayer::init(int sample_rate, int channels) {
     }
     
     sample_rate_ = sample_rate;
-    channels_ = channels;
+    channels_ = std::max(1, channels);
     
     SDL_AudioSpec desired_spec;
     SDL_zero(desired_spec);
     desired_spec.freq = sample_rate;
     desired_spec.format = AUDIO_S16SYS;
-    desired_spec.channels = channels;
+    desired_spec.channels = static_cast<Uint8>(std::clamp(channels_, 1, 8));
     desired_spec.silence = 0;
     desired_spec.samples = 1024;
     desired_spec.callback = audioCallback;
     desired_spec.userdata = this;
     
-    audio_device_ = SDL_OpenAudioDevice(nullptr, 0, &desired_spec, &audio_spec_, 0);
+    const int allow_changes = SDL_AUDIO_ALLOW_FREQUENCY_CHANGE | SDL_AUDIO_ALLOW_CHANNELS_CHANGE;
+    audio_device_ = SDL_OpenAudioDevice(nullptr, 0, &desired_spec, &audio_spec_, allow_changes);
     if (audio_device_ == 0) {
         std::cerr << "Error: Could not open audio device: " << SDL_GetError() << std::endl;
         return false;
     }
+
+    if (audio_spec_.format != AUDIO_S16SYS) {
+        std::cerr << "Error: Unsupported SDL output format, expected AUDIO_S16SYS, got "
+                  << audio_spec_.format << std::endl;
+        SDL_CloseAudioDevice(audio_device_);
+        audio_device_ = 0;
+        return false;
+    }
     
+    sample_rate_ = audio_spec_.freq;
+    channels_ = audio_spec_.channels;
     initialized_ = true;
     
-    std::cout << "Audio player initialized: " << sample_rate << "Hz, " 
-              << channels << " channels" << std::endl;
+    std::cout << "Audio player initialized: request " << sample_rate << "Hz/" << channels
+              << "ch, actual " << sample_rate_ << "Hz/" << channels_ << "ch" << std::endl;
     
     return true;
 }
@@ -65,6 +74,9 @@ void AudioPlayer::close() {
     }
     
     initialized_ = false;
+    SDL_zero(audio_spec_);
+    sample_rate_ = 0;
+    channels_ = 0;
 }
 
 void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
@@ -80,7 +92,8 @@ void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
 
     if (chunk.pts < 0.0) {
         const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
-                                        static_cast<double>(audio_spec_.channels) * 2.0;
+                                        static_cast<double>(audio_spec_.channels) *
+                                        static_cast<double>(std::max(1, outputBytesPerSample()));
         if (bytes_per_second > 0.0) {
             chunk.pts = playback_pts_.load() + static_cast<double>(queued_bytes_.load()) / bytes_per_second;
         } else {
@@ -96,14 +109,14 @@ void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
 
 void AudioPlayer::pause() {
     if (initialized_) {
-        paused_ = true;
+        paused_.store(true);
         SDL_PauseAudioDevice(audio_device_, 1);
     }
 }
 
 void AudioPlayer::resume() {
     if (initialized_) {
-        paused_ = false;
+        paused_.store(false);
         SDL_PauseAudioDevice(audio_device_, 0);
     }
 }
@@ -133,6 +146,27 @@ double AudioPlayer::getPlaybackPts() const {
     return playback_pts_.load();
 }
 
+size_t AudioPlayer::getQueuedBytes() const {
+    return queued_bytes_.load();
+}
+
+double AudioPlayer::getBufferedSeconds() const {
+    const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
+                                    static_cast<double>(audio_spec_.channels) *
+                                    static_cast<double>(std::max(1, outputBytesPerSample()));
+    if (bytes_per_second <= 0.0) {
+        return 0.0;
+    }
+    return static_cast<double>(queued_bytes_.load()) / bytes_per_second;
+}
+
+int AudioPlayer::outputBytesPerSample() const {
+    if (audio_spec_.format == 0) {
+        return 0;
+    }
+    return static_cast<int>(SDL_AUDIO_BITSIZE(audio_spec_.format) / 8);
+}
+
 void AudioPlayer::audioCallback(void* userdata, uint8_t* stream, int len) {
     AudioPlayer* player = static_cast<AudioPlayer*>(userdata);
     std::lock_guard<std::mutex> lock(player->queue_mutex_);
@@ -145,20 +179,23 @@ void AudioPlayer::audioCallback(void* userdata, uint8_t* stream, int len) {
         int copy_len = std::min(len, static_cast<int>(remaining));
         const uint8_t* src = chunk.data.data() + chunk.offset;
         
-        if (player->muted_) {
+        if (player->muted_.load()) {
             SDL_memset(stream, 0, copy_len);
         } else {
-            SDL_MixAudioFormat(stream, src, AUDIO_S16SYS, copy_len, 
-                             static_cast<int>(player->volume_ * SDL_MIX_MAXVOLUME));
+            SDL_MixAudioFormat(stream, src, player->audio_spec_.format, copy_len,
+                               static_cast<int>(player->volume_.load() * SDL_MIX_MAXVOLUME));
         }
 
         chunk.offset += static_cast<size_t>(copy_len);
-        size_t prev_queued = player->queued_bytes_.load();
-        size_t dec = static_cast<size_t>(copy_len);
-        player->queued_bytes_.store(prev_queued > dec ? prev_queued - dec : 0);
+        const size_t dec = static_cast<size_t>(copy_len);
+        const size_t prev_queued = player->queued_bytes_.fetch_sub(dec);
+        if (prev_queued < dec) {
+            player->queued_bytes_.store(0);
+        }
 
         const double bytes_per_second = static_cast<double>(player->audio_spec_.freq) *
-                                        static_cast<double>(player->audio_spec_.channels) * 2.0;
+                                        static_cast<double>(player->audio_spec_.channels) *
+                                        static_cast<double>(std::max(1, player->outputBytesPerSample()));
         if (chunk.pts >= 0.0 && bytes_per_second > 0.0) {
             player->playback_pts_.store(chunk.pts + static_cast<double>(chunk.offset) / bytes_per_second);
         }

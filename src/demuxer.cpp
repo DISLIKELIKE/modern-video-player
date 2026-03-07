@@ -1,6 +1,7 @@
 #include "demuxer.h"
 #include "logger.h"
-#include <iostream>
+
+#include <algorithm>
 
 namespace vp {
 
@@ -17,10 +18,17 @@ bool Demuxer::open(const std::string& filename) {
         close();
     }
 
-    if (avformat_open_input(&format_ctx_, filename.c_str(), nullptr, nullptr) != 0) {
-        LOG_ERROR("Could not open input file");
+    AVDictionary* options = nullptr;
+    av_dict_set(&options, "probesize", "104857600", 0);      // 100 MB
+    av_dict_set(&options, "analyzeduration", "10000000", 0); // 10 s
+    av_dict_set(&options, "fflags", "+genpts", 0);
+
+    if (avformat_open_input(&format_ctx_, filename.c_str(), nullptr, &options) != 0) {
+        av_dict_free(&options);
+        LOG_ERROR("Could not open input file: " << filename);
         return false;
     }
+    av_dict_free(&options);
 
     if (avformat_find_stream_info(format_ctx_, nullptr) < 0) {
         LOG_ERROR("Could not find stream information");
@@ -31,10 +39,18 @@ bool Demuxer::open(const std::string& filename) {
     detectStreams();
     eof_reached_.store(false);
 
-    LOG_INFO("Demuxer opened file");
-    LOG_INFO("Duration:");
-    LOG_INFO("Video stream index:");
-    LOG_INFO("Audio stream index:");
+    LOG_INFO("Demuxer opened file: " << filename
+             << ", duration=" << media_info_.duration << "s"
+             << ", video_stream=" << media_info_.video_stream_idx
+             << ", audio_stream=" << media_info_.audio_stream_idx);
+    if (media_info_.video_stream_idx >= 0) {
+        LOG_INFO("Video info: " << media_info_.width << "x" << media_info_.height
+                 << " @" << media_info_.fps << "fps");
+    }
+    if (media_info_.audio_stream_idx >= 0) {
+        LOG_INFO("Audio info: " << media_info_.sample_rate << "Hz, "
+                 << media_info_.channels << "ch");
+    }
 
     return true;
 }
@@ -91,21 +107,45 @@ void Demuxer::detectStreams() {
         return;
     }
 
-    for (unsigned int i = 0; i < format_ctx_->nb_streams; i++) {
-        AVStream* stream = format_ctx_->streams[i];
-        AVMediaType type = stream->codecpar->codec_type;
+    media_info_ = MediaInfo();
 
-        if (type == AVMEDIA_TYPE_VIDEO && media_info_.video_stream_idx < 0) {
-            media_info_.video_stream_idx = static_cast<int>(i);
-            media_info_.width = stream->codecpar->width;
-            media_info_.height = stream->codecpar->height;
-            media_info_.video_time_base = stream->time_base;
-        } else if (type == AVMEDIA_TYPE_AUDIO && media_info_.audio_stream_idx < 0) {
-            media_info_.audio_stream_idx = static_cast<int>(i);
-            media_info_.sample_rate = stream->codecpar->sample_rate;
-            media_info_.channels = stream->codecpar->ch_layout.nb_channels;
-            media_info_.audio_time_base = stream->time_base;
+    media_info_.video_stream_idx = av_find_best_stream(
+        format_ctx_, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+    media_info_.audio_stream_idx = av_find_best_stream(
+        format_ctx_, AVMEDIA_TYPE_AUDIO, -1, media_info_.video_stream_idx, nullptr, 0);
+
+    for (unsigned int i = 0; i < format_ctx_->nb_streams; ++i) {
+        AVStream* stream = format_ctx_->streams[i];
+        if (!stream || !stream->codecpar) {
+            continue;
         }
+
+        if (media_info_.video_stream_idx < 0 && stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            media_info_.video_stream_idx = static_cast<int>(i);
+        }
+        if (media_info_.audio_stream_idx < 0 && stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            media_info_.audio_stream_idx = static_cast<int>(i);
+        }
+    }
+
+    if (media_info_.video_stream_idx >= 0 &&
+        media_info_.video_stream_idx < static_cast<int>(format_ctx_->nb_streams)) {
+        AVStream* stream = format_ctx_->streams[media_info_.video_stream_idx];
+        media_info_.width = stream->codecpar->width;
+        media_info_.height = stream->codecpar->height;
+        media_info_.video_time_base = stream->time_base;
+        const AVRational fps_r = stream->avg_frame_rate.num > 0 ? stream->avg_frame_rate : stream->r_frame_rate;
+        if (fps_r.num > 0 && fps_r.den > 0) {
+            media_info_.fps = av_q2d(fps_r);
+        }
+    }
+
+    if (media_info_.audio_stream_idx >= 0 &&
+        media_info_.audio_stream_idx < static_cast<int>(format_ctx_->nb_streams)) {
+        AVStream* stream = format_ctx_->streams[media_info_.audio_stream_idx];
+        media_info_.sample_rate = stream->codecpar->sample_rate;
+        media_info_.channels = std::max(1, stream->codecpar->ch_layout.nb_channels);
+        media_info_.audio_time_base = stream->time_base;
     }
 
     media_info_.duration = format_ctx_->duration / (double)AV_TIME_BASE;

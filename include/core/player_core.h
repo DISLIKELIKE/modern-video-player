@@ -2,6 +2,7 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavutil/channel_layout.h>
 }
 
 #include <atomic>
@@ -18,14 +19,17 @@ extern "C" {
 #include "core/frame.h"
 #include "core/frame_queue.h"
 #include "core/scheduler.h"
+#include "decoder/decoder_capability.h"
 #include "demuxer.h"
 #include "filters/filter_pipeline.h"
+#include "render/video_renderer.h"
 #include "thread_safe_queue.h"
 
 namespace vp {
 class AudioPlayer;
-class Display;
 }  // namespace vp
+struct SwrContext;
+struct SwsContext;
 
 namespace vp::core {
 
@@ -93,6 +97,14 @@ private:
 
     bool initDecoders();
     void releaseDecoders();
+    bool tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx);
+    static AVPixelFormat selectVideoPixelFormat(AVCodecContext* ctx, const AVPixelFormat* pix_fmts);
+    bool prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out);
+    bool ensureVideoScaler(const AVFrame* src_frame);
+    bool convertVideoFrameToYuv420(const AVFrame* src_frame, AVFrame* dst_frame);
+    void releaseVideoScaler();
+    bool ensureAudioResampler(const AVFrame* frame);
+    void releaseAudioResampler();
     void startDemuxThread();
     void stopDemuxThread();
     void startAudioConsumer();
@@ -112,7 +124,7 @@ private:
     void maybeLogDiagnostics(const char* source_tag);
 
     std::unique_ptr<Demuxer> demuxer_;
-    std::unique_ptr<Display> display_;
+    render::VideoRendererPtr video_renderer_;
     std::unique_ptr<AudioPlayer> audio_player_;
 
     Scheduler scheduler_;
@@ -129,6 +141,20 @@ private:
 
     AVCodecContext* video_codec_ctx_{nullptr};
     AVCodecContext* audio_codec_ctx_{nullptr};
+    AVBufferRef* video_hw_device_ctx_{nullptr};
+    AVPixelFormat video_hw_pixel_fmt_{AV_PIX_FMT_NONE};
+    decoder::DecoderBackend video_decoder_backend_{decoder::DecoderBackend::Software};
+    SwsContext* video_sws_ctx_{nullptr};
+    int video_sws_src_width_{0};
+    int video_sws_src_height_{0};
+    AVPixelFormat video_sws_src_fmt_{AV_PIX_FMT_NONE};
+    SwrContext* audio_swr_ctx_{nullptr};
+    AVChannelLayout swr_in_layout_{};
+    AVChannelLayout swr_out_layout_{};
+    AVSampleFormat swr_in_sample_fmt_{AV_SAMPLE_FMT_NONE};
+    AVSampleFormat swr_out_sample_fmt_{AV_SAMPLE_FMT_NONE};
+    int swr_in_sample_rate_{0};
+    int swr_out_sample_rate_{0};
     AVRational video_time_base_{0, 1};
     AVRational audio_time_base_{0, 1};
 

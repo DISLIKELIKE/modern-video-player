@@ -113,13 +113,35 @@ add_executable(${PROJECT_NAME}
     src/logger.cpp
     src/core/frame.cpp
     src/core/clock.cpp
+    src/core/frame_pool.cpp
+    src/core/decoder_thread.cpp
     src/core/scheduler.cpp
     src/core/player_core.cpp
+    src/render/sdl_video_renderer.cpp
+    src/render/d3d11_video_renderer.cpp
+    src/render/opengl_video_renderer.cpp
+    src/render/renderer_factory.cpp
+    src/audio/audio_equalizer.cpp
+    src/audio/audio_mixer.cpp
+    src/decoder/decoder_factory.cpp
+    src/subtitle/srt_parser.cpp
+    src/playlist/playlist_manager.cpp
+    src/config/settings_manager.cpp
+    src/input/hotkey_manager.cpp
+    src/media/format_support.cpp
+    src/streaming/http_stream_downloader.cpp
+    src/streaming/hls_manifest_parser.cpp
+    src/streaming/dash_manifest_parser.cpp
+    src/ui/skin_engine.cpp
+    src/plugin/plugin_manager.cpp
     src/filters/filter_registry.cpp
     src/filters/filter_pipeline.cpp
+    src/filters/video_filter_chain.cpp
+    src/filters/audio_filter_chain.cpp
     src/filters/brightness_filter.cpp
     src/filters/contrast_filter.cpp
     src/filters/saturation_filter.cpp
+    src/filters/volume_balance_filter.cpp
     src/filters/builtin_filters.cpp
 )
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)

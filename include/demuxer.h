@@ -17,6 +17,7 @@ struct MediaInfo {
     int audio_stream_idx = -1;
     int width = 0;
     int height = 0;
+    double fps = 0.0;
     int sample_rate = 0;
     int channels = 0;
     double duration = 0.0;

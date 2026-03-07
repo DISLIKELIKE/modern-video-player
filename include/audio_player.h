@@ -24,11 +24,18 @@ public:
     void stop();
     
     void setVolume(float volume);
-    float getVolume() const { return volume_; }
+    float getVolume() const { return volume_.load(); }
     
     void setMuted(bool muted);
-    bool isMuted() const { return muted_; }
+    bool isMuted() const { return muted_.load(); }
     double getPlaybackPts() const;
+    size_t getQueuedBytes() const;
+    double getBufferedSeconds() const;
+    int outputSampleRate() const { return audio_spec_.freq; }
+    int outputChannels() const { return audio_spec_.channels; }
+    SDL_AudioFormat outputFormat() const { return audio_spec_.format; }
+    int outputBytesPerSample() const;
+    bool isInitialized() const { return initialized_; }
 
 private:
     struct AudioChunk {
@@ -44,9 +51,9 @@ private:
     
     int sample_rate_;
     int channels_;
-    float volume_;
-    bool muted_;
-    bool paused_;
+    std::atomic<float> volume_{1.0f};
+    std::atomic<bool> muted_{false};
+    std::atomic<bool> paused_{false};
     
     std::queue<AudioChunk> audio_queue_;
     std::mutex queue_mutex_;
