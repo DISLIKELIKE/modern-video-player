@@ -2290,3 +2290,26 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+---
+
+## 问题 61: 建立里程碑标签（v0.2.0-rc1 / v0.2.0）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `0.4` 要求为当前阶段建立 `v0.2.0-rc1` 与 `v0.2.0` 里程碑标签，但仓库中此前没有任何 Git 标签。
+
+### 原因分析
+- 发布门禁和阶段性能力已经收口，但版本里程碑缺少可追溯的 Git 标记。
+- 差距评估与任务清单仍保留“只差标签操作”的旧口径，需要与实际仓库状态同步。
+
+### 解决方案
+- 在主线稳定快照上建立 `v0.2.0-rc1` 与 `v0.2.0` 两个里程碑标签。
+- 同步更新 `VERSION / DEVELOP_LOG / MPC_HC_GAP_ANALYSIS / tasklist`，记录标签已建立。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

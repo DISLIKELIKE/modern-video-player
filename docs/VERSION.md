@@ -1646,3 +1646,28 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+## 2026-03-08 更新（建立里程碑标签）
+
+- 完成任务清单 `0.4`，建立里程碑标签 `v0.2.0-rc1` 与 `v0.2.0`。
+- `v0.2.0-rc1` 用于冻结发布门禁已收口的候选快照；`v0.2.0` 用于标记当前主线里程碑完成点。
+- 同步刷新差距评估与任务清单状态，避免文档仍保留“仅差标签操作”的旧口径。
+
+### 标签说明
+- `v0.2.0-rc1`：基于发布门禁闭环后的稳定快照建立。
+- `v0.2.0`：基于当前 `main` 的里程碑收口快照建立。
+
+### 本地验证
+- `git tag --list`：确认标签已存在。
+- `git show v0.2.0-rc1 --no-patch --stat`
+- `git show v0.2.0 --no-patch --stat`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `0.4 建立里程碑标签（v0.2.0-rc1 / v0.2.0）` 标记完成。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

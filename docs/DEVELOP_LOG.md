@@ -2110,3 +2110,30 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+## 问题 61: 建立里程碑标签（v0.2.0-rc1 / v0.2.0）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `0.4` 尚未完成，仓库缺少 `v0.2.0-rc1` 与 `v0.2.0` 的里程碑标签。
+
+### 分析记录
+1. 当前仓库 `git tag --list` 为空，说明还没有任何正式里程碑标记。
+2. `docs/MPC_HC_GAP_ANALYSIS.md` 仍写着“当前仅剩版本标签操作未执行”，需要在标签建立后立即回写。
+3. 里程碑标签属于仓库状态的一部分，除了创建标签本身，还需要同步任务状态与版本记录。
+
+### 解决方案
+- 建立 `v0.2.0-rc1` 与 `v0.2.0` 两个里程碑标签。
+- 同步更新版本记录、变更记录、开发日志、差距评估和任务清单。
+
+### 本地验收结果
+- `git tag --list`：创建前为空，创建后包含 `v0.2.0-rc1` 与 `v0.2.0`。
+- 标签建立后可通过 `git show <tag> --no-patch --stat` 验证指向提交。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
