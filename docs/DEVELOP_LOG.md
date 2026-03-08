@@ -1408,3 +1408,35 @@ windows-backend-check.result=FAIL
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 44: `docs/VERSION.md` 历史路径描述过期
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `docs/VERSION.md` 的早期阶段描述仍保留旧版 decoder/thread/test 文件级表述，看起来像当前仓库仍在使用这些路径。
+- 这会影响按文档遍历仓库时的进度判断，也容易把历史实现和当前主链结构混为一谈。
+
+### 分析记录
+1. `2026-03-06` 架构收敛后，播放器主链已经切到 `PlayerCore + Scheduler + core/*`，但版本文档的历史章节没有同步去歧义。
+2. “阶段一：基础播放器 (当前阶段)” 与“下一步计划”等措辞已经不再符合 `2026-03-08` 的实际状态。
+3. 历史章节应该保留能力演进和问题修复记录，但不应再把已删除文件当作当前仓库结构说明。
+
+### 解决方案
+- 将阶段一改写为“历史起点”，并补充旧版 `decoder / playLoop` 架构已并入当前主链的说明。
+- 将 `video_decoder` / `audio_decoder`、`VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 等旧路径改写为能力级历史表述。
+- 将“下一步计划”、`USE_NEW_PLAYER_CORE`、临时 `tests/core_*` 的相关描述调整为历史记录口径。
+- 在 `docs/VERSION.md` 的文档更新日志中补记本次清理。
+
+### 本地校对结果
+- `docs/VERSION.md` 不再出现“当前阶段”“下一步计划”等易误导当前状态的旧口径。
+- 早期章节对旧版 decoder/thread 的表述已改为历史说明，并指向当前 `core/*` 主链。
+- 本次变更限定在文档层，未扩散到代码或构建配置。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

@@ -24,7 +24,7 @@
 
 ---
 
-## 阶段一：基础播放器 (当前阶段)
+## 阶段一：基础播放器（历史起点）
 
 ### 开始日期
 2026-02-17
@@ -48,19 +48,19 @@
 - [x] 版本兼容性修复
 - [x] 视频流索引不匹配问题修复
 
+**说明**:
+- 本节记录的是 2026-02-17 ~ 2026-02-25 的早期实现基线。
+- 当时使用的是旧版 decoder / playLoop 架构；相关文件已在 2026-03-06 架构收敛后移除或并入 `PlayerCore + Scheduler + core/*` 主链。
+- 为避免误导，下述历史说明保留“能力与问题”本身，不再把已删除文件当作当前仓库结构说明。
+
 ### 版本兼容性修改
 
 #### FFmpeg 8.0.1 兼容性
 - 修复 `codec_ctx_->avctx->priv_data` 在 FFmpeg 8.0 中不可用的问题
-- 修改 `video_decoder.cpp` 和 `audio_decoder.cpp`：
-  - 在解码器类中添加 `format_ctx_` 成员变量
-  - 直接使用传入的 format context 而非从 codec context 获取
-- 修改文件：
-  - `include/video_decoder.h`
-  - `include/audio_decoder.h`
-  - `src/video_decoder.cpp`
-  - `src/audio_decoder.cpp`
-
+- 该修复发生在旧版独立视频/音频解码器实现中：
+  - 在解码器对象内显式保存 `format context`；
+  - 不再依赖从 `codec context` 反向读取内部字段。
+- 相关实现后来已并入现行解封装/解码主链，旧文件名已不再保留。
 #### 日志系统更新（企业级 Quill 管道）
 - 重新启用 Quill，构建 ConsoleSink + RotatingFileSink 异步日志通道，并保持 stdout/stderr 备援。
 - `config/logging.conf` 与 `MVP_LOG_*` 环境变量支持运行时调整 `log_dir`、轮转大小/数量及日志等级。
@@ -74,46 +74,31 @@
 - 实现线程安全帧队列（FrameQueue），支持条件变量等待
 - 实现音视频同步管理器（SyncManager），支持 AudioMaster/VideoMaster/Free 三种模式
 - 重构 VideoPlayer，从单线程 playLoop 改为多线程 renderLoop
-- 新增文件：
-  - `include/frame_queue.h`
-  - `include/video_decode_thread.h`
-  - `include/audio_decode_thread.h`
-  - `include/sync_manager.h`
-  - `src/video_decode_thread.cpp`
-  - `src/audio_decode_thread.cpp`
-  - `src/sync_manager.cpp`
-- 修改文件：
-  - `include/video_player.h`
-  - `include/audio_decoder.h` (添加 setConvertedData 方法)
-  - `src/video_player.cpp`
-  - `CMakeLists.txt`
-
+- 这些能力后来沉淀为当前仓库中的 `core` 模块：
+  - `include/core/frame_queue.h`
+  - `include/core/decoder_thread.h`
+  - `include/core/clock.h`
+  - `include/core/scheduler.h`
+  - `include/core/player_core.h`
+- 旧版线程/同步文件名仅代表早期实现阶段，现已不再作为当前文件结构存在。
 #### 音频播放架构修复 (2026-02-25)
 - 修复音频播放断断续续的问题
 - AudioDecodeThread 解码后直接调用 AudioPlayer::play() 将数据放入 SDL 队列
 - 确保 SDL 音频回调能持续获取数据
-- 修改文件：
-  - `include/audio_decode_thread.h`
-  - `src/audio_decode_thread.cpp`
-  - `src/video_player.cpp`
-
+- 相关逻辑后来已并入当前音频消费线程、`AudioPlayer` 与 `PlayerCore` 主链，不再对应独立旧文件名。
 #### Frame 移动语义修复 (2026-02-25)
 - 修复 VideoFrame 和 AudioFrame 类缺少移动语义导致的崩溃问题
 - 为 VideoFrame 添加移动构造函数和移动赋值运算符
 - 为 AudioFrame 添加移动构造函数和移动赋值运算符
 - 显式删除拷贝构造函数和拷贝赋值运算符，防止浅拷贝
-- 修改文件：
-  - `include/video_decoder.h`
-  - `src/video_decoder.cpp`
-  - `include/audio_decoder.h`
-  - `src/audio_decoder.cpp`
-
+- 当前等价能力位于：
+  - `include/core/frame.h`
+  - `src/core/frame.cpp`
 #### 多解码器实例竞争读取修复 (2026-02-25)
 - 修复播放时多个解码器竞争读取同一 AVFormatContext 导致的解码错误
-- 在 play() 前重置 video_decoder_ 和 audio_decoder_，避免竞争
+- 在早期实现中通过重置旧版解码器状态避免竞争；后续已改为统一 `Demuxer + PlayerCore + Scheduler` 主链
 - 修改文件：
   - `src/video_player.cpp`
-
 ### 已知问题
 - 音视频同步使用简单的时间计算，高速或低速播放时可能有同步问题
 - 仅支持 YUV420P 格式的视频
@@ -134,12 +119,12 @@
 - 原代码遇到不匹配的流时直接返回 false，导致视频帧无法解码
 
 **解决方案**:
-- 修改 `src/video_decoder.cpp` 的 `decodeFrame()` 方法
+- 修改旧版视频解码循环的读包逻辑
 - 将遇到不匹配流时返回 false，改为 continue 跳过该包
 - 循环读取直到找到正确流索引的包
 
 **修改文件**:
-- `src/video_decoder.cpp`
+- 旧版视频解码器实现（该文件后续已在架构收敛中移除）
 
 **日志示例**:
 ```
@@ -159,11 +144,11 @@
 - 同样的问题：音频包可能不是第一个被读取的流
 
 **解决方案**:
-- 修改 `src/audio_decoder.cpp` 的 `decodeFrame()` 方法
+- 修改旧版音频解码循环的读包逻辑
 - 应用与视频解码器相同的修复
 
 **修改文件**:
-- `src/audio_decoder.cpp`
+- 旧版音频解码器实现（该文件后续已在架构收敛中移除）
 
 #### YUV 数据渲染错误 (2026-02-24)
 
@@ -198,12 +183,12 @@ SDL_UpdateYUVTexture(
 );
 ```
 
-### 下一步计划
-- [ ] 完善音视频同步机制
-- [ ] 添加更多的播放控制（快进、快退）
-- [ ] 支持更多的视频格式
-- [ ] 添加字幕支持
-- [ ] 优化性能
+### 阶段后续目标（历史记录）
+- 后续目标已在 2026-03-06 之后的章节中逐步落地，包括：
+  - 统一 `PlayerCore + Scheduler + Filters` 架构；
+  - 外挂字幕、播放列表、设置与快捷键接入；
+  - D3D11VA / D3D11 最小可用链路；
+  - 章节导航、A-B Repeat、截图。
 
 ---
 
@@ -300,6 +285,7 @@ make -j$(nproc)
 | 2026-03-06 | 修复小屏窗口过大与窗口缩放事件兼容问题 |
 | 2026-03-07 | 接入 GitHub Actions 自动格式回归与 CI 兼容改造 |
 | 2026-03-07 | 接入播放列表主链路、设置持久化与快捷键首版 |
+| 2026-03-08 | 清理历史章节中的旧路径描述，避免将已移除文件误写为当前仓库结构 |
 
 ---
 
@@ -308,11 +294,11 @@ make -j$(nproc)
 ### Core API / Scheduler / Filter 重构
 - 新增 `core` 子模块：`PlayerCore`、`Scheduler`、`FrameQueue`、`Clock`、`Command`、`Frame`。
 - 新增 `filters` 子模块：Filter 接口、`FilterRegistry`、`FilterPipeline`、内置亮度/对比度/饱和度滤镜。
-- 新增 `USE_NEW_PLAYER_CORE` 路径下的 `VideoPlayer` 适配，保持旧接口兼容。
+- 初期引入 `VideoPlayer -> PlayerCore` 适配层，随后在同日完成架构收敛并移除旧路径分叉。
 
 ### 测试与构建
-- 新增 `tests/core_frame_queue_tests.cpp`、`tests/core_clock_tests.cpp`。
-- `CMakeLists.txt` 增加 `src/core/*` 与 `src/filters/*` 编译项，补充核心测试包含路径。
+- 当时曾引入临时核心测试文件；这些测试文件已在 2026-03-07 清理。
+- `CMakeLists.txt` 在该阶段开始纳入 `src/core/*` 与 `src/filters/*` 主编译项。
 
 ---
 
@@ -1232,4 +1218,20 @@ make -j$(nproc)
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（版本文档历史段落清理）
+
+### 历史章节去歧义
+- 将“阶段一：基础播放器（当前阶段）”调整为“阶段一：基础播放器（历史起点）”，明确该段记录的是 `2026-02-17 ~ 2026-02-25` 的早期实现基线。
+- 为阶段一补充说明：旧版 `decoder / playLoop` 路径已在 `2026-03-06` 架构收敛后并入 `PlayerCore + Scheduler + core/*` 主链。
+
+### 旧路径表述清洗
+- 将早期 `video_decoder` / `audio_decoder` 以及 `VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 的文件级表述改写为能力级历史记录。
+- 将“下一步计划”改写为“阶段后续目标（历史记录）”，避免与当前迭代进度章节混淆。
+- 将 `USE_NEW_PLAYER_CORE` 和临时 `tests/core_*` 的历史描述改写为“架构收敛 / 后续清理”口径。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md

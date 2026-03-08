@@ -1682,3 +1682,28 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 44: `docs/VERSION.md` 历史路径描述过期
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `docs/VERSION.md` 的“阶段一”历史章节仍把早期 decoder/thread/test 文件名写成当前仓库结构说明。
+- 在基于文档遍历仓库时，容易把已移除的旧实现与当前 `PlayerCore + Scheduler + core/*` 主链混淆。
+
+### 原因分析
+- `2026-03-06` 之后架构已经收敛，但版本文档保留了早期文件级描述。
+- 后续功能持续追加新记录，未回头清理“当前阶段”“下一步计划”这类已过时口径。
+
+### 解决方案
+- 将阶段一标题改为“历史起点”，并补充这是早期实现基线的说明。
+- 将 `video_decoder` / `audio_decoder`、`VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 等旧路径改写为能力级历史记录，并映射到当前 `core/*` 主链。
+- 将“下一步计划”、`USE_NEW_PLAYER_CORE`、临时 `tests/core_*` 等表述改写为历史说明，避免误导当前进度判断。
+- 同步补写版本文档的更新日志条目。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
