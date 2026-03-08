@@ -6,6 +6,7 @@
 #include <system_error>
 
 #include "logger.h"
+#include "decoder/decoder_factory.h"
 #include "subtitle/srt_parser.h"
 
 namespace vp {
@@ -143,6 +144,17 @@ void VideoPlayer::setPreferHardwareDecode(bool prefer_hardware_decode) {
 
 bool VideoPlayer::preferHardwareDecode() const {
     return prefer_hardware_decode_;
+}
+
+std::string VideoPlayer::videoRendererBackendName() const {
+    return core_player_ ? core_player_->videoRendererBackendName() : "None";
+}
+
+const char* VideoPlayer::videoDecoderBackendName() const {
+    if (!core_player_) {
+        return "Unknown";
+    }
+    return decoder::DecoderFactory::backendName(core_player_->videoDecoderBackend());
 }
 
 void VideoPlayer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {

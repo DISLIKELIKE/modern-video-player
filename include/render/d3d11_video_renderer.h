@@ -1,11 +1,17 @@
 #pragma once
 
+#include <memory>
+
+#include "display.h"
 #include "render/video_renderer.h"
 
 namespace vp::render {
 
 class D3D11VideoRenderer final : public IVideoRenderer {
 public:
+    D3D11VideoRenderer();
+    ~D3D11VideoRenderer() override;
+
     bool init(const VideoRendererConfig& config) override;
     void close() override;
     void renderFrame(const core::VideoFrame& frame) override;
@@ -25,6 +31,10 @@ public:
     void setOverlayState(double position, double duration, float volume, bool paused) override;
     void setSubtitleText(const std::string& text) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
+    const char* rendererBackendName() const override;
+
+private:
+    std::unique_ptr<Display> display_;
 };
 
 }  // namespace vp::render

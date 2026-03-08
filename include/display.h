@@ -48,6 +48,9 @@ public:
     void setOverlayState(double position, double duration, float volume, bool paused);
     void setSubtitleText(const std::string& text);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
+    void setPreferredRendererDriver(const std::string& driver_name);
+    std::string currentRendererDriver() const;
+    bool isUsingRendererDriver(const std::string& driver_name) const;
     
     void toggleFullscreen();
     int getWidth() const { return width_.load(); }
@@ -137,6 +140,9 @@ private:
     std::mutex subtitle_mutex_;
     std::string subtitle_text_;
     input::HotkeyManager hotkey_manager_;
+    std::string preferred_renderer_driver_;
+    mutable std::mutex renderer_info_mutex_;
+    std::string active_renderer_driver_;
 };
 
 } // namespace vp

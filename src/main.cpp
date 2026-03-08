@@ -18,6 +18,7 @@ extern "C" {
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <iomanip>
 #include <iostream>
@@ -26,6 +27,13 @@ extern "C" {
 #include <system_error>
 #include <thread>
 #include <vector>
+
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 using namespace vp;
 
@@ -919,6 +927,435 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
     return result;
 }
 
+class ScopedEnvOverride {
+public:
+    ScopedEnvOverride(const char* key, const std::string& value) : key_(key ? key : "") {
+        if (key_.empty()) {
+            return;
+        }
+        const std::string previous = get(key_.c_str());
+        if (!previous.empty()) {
+            had_previous_ = true;
+            previous_value_ = previous;
+        }
+        set(value);
+    }
+
+    ~ScopedEnvOverride() {
+        if (key_.empty()) {
+            return;
+        }
+        if (had_previous_) {
+            set(previous_value_);
+        } else {
+            clear();
+        }
+    }
+
+private:
+    std::string get(const char* key) const {
+        if (!key || key[0] == '\0') {
+            return {};
+        }
+#if defined(_WIN32)
+        char* value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, key) != 0 || !value) {
+            return {};
+        }
+        std::string result(value);
+        std::free(value);
+        return result;
+#else
+        const char* value = std::getenv(key);
+        return value ? std::string(value) : std::string{};
+#endif
+    }
+
+    void set(const std::string& value) {
+#if defined(_WIN32)
+        _putenv_s(key_.c_str(), value.c_str());
+#else
+        setenv(key_.c_str(), value.c_str(), 1);
+#endif
+    }
+
+    void clear() {
+#if defined(_WIN32)
+        _putenv_s(key_.c_str(), "");
+#else
+        unsetenv(key_.c_str());
+#endif
+    }
+
+    std::string key_;
+    std::string previous_value_;
+    bool had_previous_{false};
+};
+
+bool runRendererFallbackCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "renderer-fallback-check.path=" << media_file << std::endl;
+        std::cout << "renderer-fallback-check.open_ok=false" << std::endl;
+        std::cout << "renderer-fallback-check.renderer_backend=None" << std::endl;
+        std::cout << "renderer-fallback-check.decoder_backend=Unknown" << std::endl;
+        std::cout << "renderer-fallback-check.entered_playback_loop=false" << std::endl;
+        std::cout << "renderer-fallback-check.fallback_to_sdl=false" << std::endl;
+        std::cout << "renderer-fallback-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    ScopedEnvOverride force_non_d3d11_driver("MVP_D3D11_DRIVER_HINT", "software");
+
+    auto run_session = [&](bool prefer_hardware_decode) {
+        struct SessionResult {
+            bool open_ok{false};
+            bool entered_playback_loop{false};
+            std::string renderer_backend{"None"};
+            std::string decoder_backend{"Unknown"};
+        } result;
+
+        VideoPlayer player;
+        player.setPreferHardwareDecode(prefer_hardware_decode);
+        result.open_ok = player.open(media_file);
+        result.renderer_backend = player.videoRendererBackendName();
+        result.decoder_backend = player.videoDecoderBackendName();
+
+        if (result.open_ok) {
+            player.play();
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+            while (std::chrono::steady_clock::now() < deadline &&
+                   (player.isPlaying() || player.isPaused())) {
+                result.entered_playback_loop = true;
+                player.pumpEvents();
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            player.stop();
+            player.close();
+        }
+        return result;
+    };
+
+    const auto session = run_session(true);
+    const bool fallback_to_sdl = session.renderer_backend == "SoftwareSDL";
+    const bool result = session.open_ok && fallback_to_sdl;
+
+    std::cout << "renderer-fallback-check.path=" << media_file << std::endl;
+    std::cout << "renderer-fallback-check.open_ok=" << (session.open_ok ? "true" : "false") << std::endl;
+    std::cout << "renderer-fallback-check.renderer_backend=" << session.renderer_backend << std::endl;
+    std::cout << "renderer-fallback-check.decoder_backend=" << session.decoder_backend << std::endl;
+    std::cout << "renderer-fallback-check.entered_playback_loop="
+              << (session.entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "renderer-fallback-check.fallback_to_sdl=" << (fallback_to_sdl ? "true" : "false") << std::endl;
+    std::cout << "renderer-fallback-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+
+    return result;
+}
+
+struct BackendSessionResult {
+    bool open_ok{false};
+    bool entered_playback_loop{false};
+    std::string renderer_backend{"None"};
+    std::string decoder_backend{"Unknown"};
+    bool mode_ok{false};
+    int exit_code{3};
+    bool parsed{false};
+};
+
+std::string trimWhitespace(std::string value) {
+    auto is_space = [](unsigned char ch) {
+        return std::isspace(ch) != 0;
+    };
+
+    while (!value.empty() && is_space(static_cast<unsigned char>(value.front()))) {
+        value.erase(value.begin());
+    }
+    while (!value.empty() && is_space(static_cast<unsigned char>(value.back()))) {
+        value.pop_back();
+    }
+    return value;
+}
+
+std::string stripWrappingQuotes(std::string value) {
+    value = trimWhitespace(std::move(value));
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+        value = value.substr(1, value.size() - 2);
+    }
+    return value;
+}
+
+bool parseBoolText(const std::string& text) {
+    const std::string lowered = toLower(trimWhitespace(text));
+    return lowered == "1" || lowered == "true" || lowered == "yes" || lowered == "on";
+}
+
+std::string quoteCommandArg(const std::string& arg) {
+    std::string quoted;
+    quoted.reserve(arg.size() + 2);
+    quoted.push_back('"');
+    for (char ch : arg) {
+        if (ch == '"') {
+            quoted += "\"\"";
+        } else {
+            quoted.push_back(ch);
+        }
+    }
+    quoted.push_back('"');
+    return quoted;
+}
+
+BackendSessionResult parseBackendSessionOutput(const std::filesystem::path& output_path,
+                                               const std::string& mode) {
+    BackendSessionResult result;
+
+    std::ifstream input(output_path);
+    if (!input.is_open()) {
+        return result;
+    }
+
+    const std::string prefix = "windows-backend-session-check." + mode + ".";
+    std::string line;
+    while (std::getline(input, line)) {
+        line = trimWhitespace(line);
+        if (line.rfind(prefix, 0) != 0) {
+            continue;
+        }
+
+        const size_t split_pos = line.find('=');
+        if (split_pos == std::string::npos || split_pos <= prefix.size()) {
+            continue;
+        }
+        result.parsed = true;
+        const std::string key = line.substr(prefix.size(), split_pos - prefix.size());
+        const std::string value = line.substr(split_pos + 1);
+
+        if (key == "open_ok") {
+            result.open_ok = parseBoolText(value);
+            continue;
+        }
+        if (key == "entered_playback_loop") {
+            result.entered_playback_loop = parseBoolText(value);
+            continue;
+        }
+        if (key == "renderer_backend") {
+            result.renderer_backend = trimWhitespace(value);
+            continue;
+        }
+        if (key == "decoder_backend") {
+            result.decoder_backend = trimWhitespace(value);
+            continue;
+        }
+        if (key == "mode_ok") {
+            result.mode_ok = parseBoolText(value);
+            continue;
+        }
+    }
+
+    return result;
+}
+
+BackendSessionResult runBackendSessionSubprocess(const std::string& program_path,
+                                                 const std::string& media_file,
+                                                 const std::string& mode) {
+    BackendSessionResult result;
+    const std::string clean_program_path = stripWrappingQuotes(program_path);
+    const std::string clean_media_file = stripWrappingQuotes(media_file);
+    if (clean_program_path.empty() || clean_media_file.empty()) {
+        return result;
+    }
+    const auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count();
+
+    std::error_code ec;
+    const std::filesystem::path output_path = std::filesystem::temp_directory_path(ec) /
+        ("mvp_windows_backend_" + mode + "_" + std::to_string(now_ms) + ".log");
+    if (ec) {
+        return result;
+    }
+
+    const std::string command =
+        quoteCommandArg(clean_program_path) + " --windows-backend-session-check " +
+        quoteCommandArg(clean_media_file) + " " + mode +
+        " > " + quoteCommandArg(output_path.string()) + " 2>&1";
+#if defined(_WIN32)
+    (void)command;
+    SECURITY_ATTRIBUTES sa{};
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = nullptr;
+    sa.bInheritHandle = TRUE;
+
+    HANDLE output_handle = CreateFileA(output_path.string().c_str(),
+                                       GENERIC_WRITE,
+                                       FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                       &sa,
+                                       CREATE_ALWAYS,
+                                       FILE_ATTRIBUTE_NORMAL,
+                                       nullptr);
+    if (output_handle == INVALID_HANDLE_VALUE) {
+        return result;
+    }
+
+    STARTUPINFOA si{};
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+    si.hStdOutput = output_handle;
+    si.hStdError = output_handle;
+
+    PROCESS_INFORMATION pi{};
+    std::string child_command = quoteCommandArg(clean_program_path) +
+                                " --windows-backend-session-check " +
+                                quoteCommandArg(clean_media_file) +
+                                " " + mode;
+    std::vector<char> mutable_command(child_command.begin(), child_command.end());
+    mutable_command.push_back('\0');
+
+    const BOOL created = CreateProcessA(nullptr,
+                                        mutable_command.data(),
+                                        nullptr,
+                                        nullptr,
+                                        TRUE,
+                                        CREATE_NO_WINDOW,
+                                        nullptr,
+                                        nullptr,
+                                        &si,
+                                        &pi);
+    CloseHandle(output_handle);
+    if (!created) {
+        return result;
+    }
+
+    const DWORD wait_result = WaitForSingleObject(pi.hProcess, 120000);
+    if (wait_result == WAIT_TIMEOUT) {
+        TerminateProcess(pi.hProcess, 124);
+        result.exit_code = 124;
+    } else {
+        DWORD child_exit_code = 3;
+        if (GetExitCodeProcess(pi.hProcess, &child_exit_code)) {
+            result.exit_code = static_cast<int>(child_exit_code);
+        }
+    }
+
+    CloseHandle(pi.hThread);
+    CloseHandle(pi.hProcess);
+#else
+    result.exit_code = std::system(command.c_str());
+#endif
+    BackendSessionResult parsed = parseBackendSessionOutput(output_path, mode);
+    if (parsed.parsed) {
+        parsed.exit_code = result.exit_code;
+        result = parsed;
+    } else {
+        result.mode_ok = (result.exit_code == 0);
+    }
+
+    std::filesystem::remove(output_path, ec);
+    return result;
+}
+
+bool runWindowsBackendSessionCheck(const std::string& media_file, const std::string& mode) {
+    const bool hard_mode = mode == "hard";
+    const bool soft_mode = mode == "soft";
+    if (!hard_mode && !soft_mode) {
+        std::cout << "windows-backend-session-check.mode=" << mode << std::endl;
+        std::cout << "windows-backend-session-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "windows-backend-session-check.path=" << media_file << std::endl;
+        std::cout << "windows-backend-session-check.mode=" << mode << std::endl;
+        std::cout << "windows-backend-session-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    const bool prefer_hardware_decode = hard_mode;
+    const std::string expected_decoder = prefer_hardware_decode ? "D3D11VA" : "Software";
+    ScopedEnvOverride force_d3d11_driver_hint("MVP_D3D11_DRIVER_HINT", "direct3d11");
+
+    // Keep this session self-contained and avoid stop/close teardown deadlocks by
+    // leaving cleanup to process exit in the parent command path.
+    auto* player = new VideoPlayer();
+    BackendSessionResult session{};
+    player->setPreferHardwareDecode(prefer_hardware_decode);
+    session.open_ok = player->open(media_file);
+    session.renderer_backend = player->videoRendererBackendName();
+    session.decoder_backend = player->videoDecoderBackendName();
+
+    if (session.open_ok) {
+        player->play();
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player->isPlaying() || player->isPaused())) {
+            session.entered_playback_loop = true;
+            player->pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
+
+    session.mode_ok = session.open_ok && session.entered_playback_loop &&
+                      session.decoder_backend == expected_decoder;
+
+    std::cout << "windows-backend-session-check.path=" << media_file << std::endl;
+    std::cout << "windows-backend-session-check.mode=" << mode << std::endl;
+    std::cout << "windows-backend-session-check." << mode
+              << ".open_ok=" << (session.open_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-session-check." << mode
+              << ".entered_playback_loop=" << (session.entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-session-check." << mode
+              << ".renderer_backend=" << session.renderer_backend << std::endl;
+    std::cout << "windows-backend-session-check." << mode
+              << ".decoder_backend=" << session.decoder_backend << std::endl;
+    std::cout << "windows-backend-session-check." << mode
+              << ".mode_ok=" << (session.mode_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-session-check.result=" << (session.mode_ok ? "PASS" : "FAIL") << std::endl;
+
+    return session.mode_ok;
+}
+
+bool runWindowsBackendPlaybackCheck(const std::string& program_path, const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "windows-backend-check.path=" << media_file << std::endl;
+        std::cout << "windows-backend-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    const BackendSessionResult hard_session = runBackendSessionSubprocess(program_path, media_file, "hard");
+    const BackendSessionResult soft_session = runBackendSessionSubprocess(program_path, media_file, "soft");
+    const bool result = hard_session.mode_ok && soft_session.mode_ok &&
+                        hard_session.exit_code == 0 && soft_session.exit_code == 0;
+
+    std::cout << "windows-backend-check.path=" << media_file << std::endl;
+    std::cout << "windows-backend-check.hard.open_ok=" << (hard_session.open_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.hard.entered_playback_loop="
+              << (hard_session.entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.hard.renderer_backend=" << hard_session.renderer_backend << std::endl;
+    std::cout << "windows-backend-check.hard.decoder_backend=" << hard_session.decoder_backend << std::endl;
+    std::cout << "windows-backend-check.hard.mode_ok=" << (hard_session.mode_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.hard.exit_code=" << hard_session.exit_code << std::endl;
+
+    std::cout << "windows-backend-check.soft.open_ok=" << (soft_session.open_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.soft.entered_playback_loop="
+              << (soft_session.entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.soft.renderer_backend=" << soft_session.renderer_backend << std::endl;
+    std::cout << "windows-backend-check.soft.decoder_backend=" << soft_session.decoder_backend << std::endl;
+    std::cout << "windows-backend-check.soft.mode_ok=" << (soft_session.mode_ok ? "true" : "false") << std::endl;
+    std::cout << "windows-backend-check.soft.exit_code=" << soft_session.exit_code << std::endl;
+
+    std::cout << "windows-backend-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 }  // namespace
 
 void signalHandler(int signal) {
@@ -938,6 +1375,8 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --subtitle-sync-check <subtitle.srt>" << std::endl;
     std::cout << "       " << program_name << " --playlist-flow-check <media1> <media2> <media3> <media4> <media5> [more...]" << std::endl;
     std::cout << "       " << program_name << " --settings-persistence-check [settings_file]" << std::endl;
+    std::cout << "       " << program_name << " --renderer-fallback-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --windows-backend-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
     std::cout << std::endl;
@@ -1056,6 +1495,30 @@ int main(int argc, char* argv[]) {
         }
         const std::string override_path = (argc == 3) ? argv[2] : std::string{};
         return runSettingsPersistenceCheck(override_path) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--renderer-fallback-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runRendererFallbackCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--windows-backend-session-check") {
+        if (argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runWindowsBackendSessionCheck(argv[2], argv[3]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--windows-backend-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runWindowsBackendPlaybackCheck(argv[0], argv[2]) ? 0 : 2;
     }
     
     if (argc < 2) {

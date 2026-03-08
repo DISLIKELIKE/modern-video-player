@@ -39,6 +39,8 @@ public:
     double getPlaybackSpeed() const;
     void setPreferHardwareDecode(bool prefer_hardware_decode);
     bool preferHardwareDecode() const;
+    std::string videoRendererBackendName() const;
+    const char* videoDecoderBackendName() const;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
     const input::HotkeyManager& hotkeyManager() const;
 

@@ -104,4 +104,8 @@ void SdlVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manag
     }
 }
 
+const char* SdlVideoRenderer::rendererBackendName() const {
+    return "SoftwareSDL";
+}
+
 }  // namespace vp::render

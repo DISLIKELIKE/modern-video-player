@@ -1400,3 +1400,109 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 37: M3 3.2.1（D3D11 渲染最小可用链路）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `3.2.1` 要求 D3D11 渲染具备最小可用能力（`init/upload/present`）。
+- 现有 `D3D11VideoRenderer` 为桩实现，无法初始化、无法消费帧，也无法呈现。
+
+### 原因分析
+- 渲染后端接口已定义，但 D3D11 后端未接入实际渲染链路；
+- 缺少“当前 SDL renderer 实际后端”的可观测能力，无法判定是否真的跑在 D3D11。
+
+### 解决方案
+- 在 `Display` 中新增：
+  - 渲染驱动偏好设置（`setPreferredRendererDriver`）；
+  - 当前渲染后端观测（`currentRendererDriver` / `isUsingRendererDriver`）。
+- 完整实现 `D3D11VideoRenderer` 最小功能：
+  - `init` 时请求 `direct3d11` 驱动并创建渲染链路；
+  - 接通 `renderFrame`（上传）、`present`（呈现）、`clear`、事件与控制请求透传。
+- 初始化后校验实际后端：
+  - 若非 `direct3d11/d3d11`，`init` 失败并记录日志，交由上层回退 `SoftwareSDL`。
+- 更新任务清单，标记 `3.2.1` 完成。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 38: M3 3.3.2（渲染失败降级不中断播放）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `3.3.2` 要求渲染失败时自动降级且不中断播放。
+- 现有实现缺少可重复执行的自动化验收入口，难以稳定验证回退链路。
+
+### 原因分析
+- D3D11 初始化失败场景此前主要依赖人工触发，无法作为稳定回归项。
+- 缺少渲染后端/解码后端的运行时可观测字段，不便于命令化验证。
+
+### 解决方案
+- 扩展渲染接口，增加后端名称查询（`rendererBackendName`）。
+- 扩展播放器对外接口，暴露当前渲染后端和解码后端名称。
+- 新增命令 `--renderer-fallback-check <media_file>`：
+  - 通过环境变量 `MVP_D3D11_DRIVER_HINT=software` 强制 D3D11 渲染初始化失败；
+  - 验证主链路是否自动回退到 `SoftwareSDL` 并能进入播放循环；
+  - 输出 `renderer-fallback-check.*` 字段和 `PASS/FAIL`。
+- 新增本地回归报告 `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`。
+- 任务清单 `3.3.2` 标记完成。
+
+### 修改文件
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 39: M3 3.3.1（Windows 软解+硬解主力样本可播）
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `3.3.1` 要求 Windows 下硬解与软解主力样本均可稳定进入播放链路。
+- 现有检查路径缺少统一聚合命令，且同进程连续会话在部分场景存在停止阶段卡死风险。
+
+### 原因分析
+- 之前的 `--windows-backend-check` 在同进程顺序执行硬解+软解，会触发二次会话资源回收不稳定。
+- 缺少可复用的会话级诊断输出，不利于回归报告自动化采集。
+
+### 解决方案
+- 新增会话级命令 `--windows-backend-session-check <media_file> <hard|soft>`，输出结构化字段并返回模式结果。
+- 将聚合命令 `--windows-backend-check <media_file>` 改为父进程拉起两个子进程（hard/soft）并汇总结果，隔离会话状态。
+- 在 Windows 下使用 `CreateProcess` 重定向输出，避免 shell 重定向解析不稳定。
+- 新增本地回归报告 `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`。
+- 完成任务清单同步：`3.3.1`、`3.3.3` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

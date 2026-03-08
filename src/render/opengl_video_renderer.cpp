@@ -78,4 +78,8 @@ void OpenGLVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_ma
     (void)hotkey_manager;
 }
 
+const char* OpenGLVideoRenderer::rendererBackendName() const {
+    return "OpenGL";
+}
+
 }  // namespace vp::render

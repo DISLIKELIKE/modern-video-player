@@ -47,6 +47,7 @@ public:
     virtual void setOverlayState(double position, double duration, float volume, bool paused) = 0;
     virtual void setSubtitleText(const std::string& text) = 0;
     virtual void setHotkeyManager(const input::HotkeyManager& hotkey_manager) = 0;
+    virtual const char* rendererBackendName() const = 0;
 };
 
 using VideoRendererPtr = std::unique_ptr<IVideoRenderer>;

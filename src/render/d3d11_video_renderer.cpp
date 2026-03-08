@@ -1,81 +1,164 @@
 #include "render/d3d11_video_renderer.h"
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
+
+#include "logger.h"
+
 namespace vp::render {
 
-bool D3D11VideoRenderer::init(const VideoRendererConfig& config) {
-    (void)config;
-    return false;
+namespace {
+std::string readEnvVar(const char* key) {
+    if (!key || key[0] == '\0') {
+        return {};
+    }
+#if defined(_WIN32)
+    char* value = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&value, &len, key) != 0 || !value) {
+        return {};
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    const char* value = std::getenv(key);
+    return value ? std::string(value) : std::string{};
+#endif
+}
 }
 
-void D3D11VideoRenderer::close() {}
+D3D11VideoRenderer::D3D11VideoRenderer() = default;
+
+D3D11VideoRenderer::~D3D11VideoRenderer() {
+    close();
+}
+
+bool D3D11VideoRenderer::init(const VideoRendererConfig& config) {
+    close();
+    display_ = std::make_unique<Display>();
+
+    std::string preferred_driver = "direct3d11";
+    const std::string forced_driver = readEnvVar("MVP_D3D11_DRIVER_HINT");
+    if (!forced_driver.empty()) {
+        preferred_driver = forced_driver;
+    }
+    display_->setPreferredRendererDriver(preferred_driver);
+    if (!display_->init(config.width, config.height, config.title)) {
+        return false;
+    }
+
+    std::string driver_name = display_->currentRendererDriver();
+    std::transform(driver_name.begin(), driver_name.end(), driver_name.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    const bool is_d3d11 = driver_name.find("direct3d11") != std::string::npos ||
+                          driver_name.find("d3d11") != std::string::npos;
+    if (!is_d3d11) {
+        LOG_WARNING("D3D11 renderer init requested, but SDL backend is '" << driver_name
+                    << "', fallback to SoftwareSDL renderer");
+        close();
+        return false;
+    }
+
+    LOG_INFO("D3D11 renderer initialized with SDL backend: " << driver_name);
+    return true;
+}
+
+void D3D11VideoRenderer::close() {
+    if (display_) {
+        display_->close();
+        display_.reset();
+    }
+}
 
 void D3D11VideoRenderer::renderFrame(const core::VideoFrame& frame) {
-    (void)frame;
+    if (!display_ || !frame.valid || !frame.frame) {
+        return;
+    }
+    display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
 }
 
-void D3D11VideoRenderer::present() {}
+void D3D11VideoRenderer::present() {
+    if (display_) {
+        display_->present();
+    }
+}
 
-void D3D11VideoRenderer::clear() {}
+void D3D11VideoRenderer::clear() {
+    if (display_) {
+        display_->clear();
+    }
+}
 
-void D3D11VideoRenderer::handleEvents() {}
+void D3D11VideoRenderer::handleEvents() {
+    if (display_) {
+        display_->handleEvents();
+    }
+}
 
 bool D3D11VideoRenderer::shouldQuit() const {
-    return false;
+    return display_ ? display_->shouldQuit() : false;
 }
 
 bool D3D11VideoRenderer::consumeTogglePauseRequest() {
-    return false;
+    return display_ ? display_->consumeTogglePauseRequest() : false;
 }
 
 bool D3D11VideoRenderer::consumeSeekRequest(double& normalized_position) {
-    (void)normalized_position;
-    return false;
+    return display_ ? display_->consumeSeekRequest(normalized_position) : false;
 }
 
 bool D3D11VideoRenderer::consumeSeekDeltaRequest(double& delta_seconds) {
-    (void)delta_seconds;
-    return false;
+    return display_ ? display_->consumeSeekDeltaRequest(delta_seconds) : false;
 }
 
 bool D3D11VideoRenderer::consumeVolumeChangeRequest(float& volume) {
-    (void)volume;
-    return false;
+    return display_ ? display_->consumeVolumeChangeRequest(volume) : false;
 }
 
 bool D3D11VideoRenderer::consumeSpeedChangeRequest(double& speed_delta) {
-    (void)speed_delta;
-    return false;
+    return display_ ? display_->consumeSpeedChangeRequest(speed_delta) : false;
 }
 
 bool D3D11VideoRenderer::consumeResetSpeedRequest() {
-    return false;
+    return display_ ? display_->consumeResetSpeedRequest() : false;
 }
 
 bool D3D11VideoRenderer::consumeToggleSubtitleRequest() {
-    return false;
+    return display_ ? display_->consumeToggleSubtitleRequest() : false;
 }
 
 bool D3D11VideoRenderer::consumeNextItemRequest() {
-    return false;
+    return display_ ? display_->consumeNextItemRequest() : false;
 }
 
 bool D3D11VideoRenderer::consumePreviousItemRequest() {
-    return false;
+    return display_ ? display_->consumePreviousItemRequest() : false;
 }
 
 void D3D11VideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
-    (void)position;
-    (void)duration;
-    (void)volume;
-    (void)paused;
+    if (display_) {
+        display_->setOverlayState(position, duration, volume, paused);
+    }
 }
 
 void D3D11VideoRenderer::setSubtitleText(const std::string& text) {
-    (void)text;
+    if (display_) {
+        display_->setSubtitleText(text);
+    }
 }
 
 void D3D11VideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
-    (void)hotkey_manager;
+    if (display_) {
+        display_->setHotkeyManager(hotkey_manager);
+    }
+}
+
+const char* D3D11VideoRenderer::rendererBackendName() const {
+    return "D3D11";
 }
 
 }  // namespace vp::render

@@ -473,6 +473,21 @@ bool PlayerCore::preferHardwareDecode() const {
     return prefer_hardware_decode_.load();
 }
 
+decoder::DecoderBackend PlayerCore::videoDecoderBackend() const {
+    return video_decoder_backend_;
+}
+
+std::string PlayerCore::videoRendererBackendName() const {
+    if (!video_renderer_) {
+        return "None";
+    }
+    const char* name = video_renderer_->rendererBackendName();
+    if (!name || name[0] == '\0') {
+        return "Unknown";
+    }
+    return name;
+}
+
 void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
     std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
         if (lhs.start_seconds == rhs.start_seconds) {

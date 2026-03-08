@@ -1048,3 +1048,146 @@ Display initialized: window 1306x734 (source 1920x1080)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 37: M3 3.2.1（D3D11 渲染最小可用链路）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `3.2.1` 要求 D3D11 渲染最小可用（`init/upload/present`）。
+- 现有 `D3D11VideoRenderer` 为桩实现，`init` 固定失败，无法形成可用渲染后端。
+
+### 分析记录
+1. 现有 `Display` 已具备稳定的 owner-thread 渲染与帧上传链路，可复用于 D3D11 最小闭环。
+2. 需要可观测当前 SDL renderer 后端，以判断是否真正启用了 `direct3d11`。
+3. 若实际后端不是 D3D11，应在 `D3D11VideoRenderer::init` 失败并交给上层触发 `3.2.2` 自动回退。
+
+### 解决方案
+- `Display` 新增渲染驱动控制与观测接口：
+  - `setPreferredRendererDriver()`：允许在创建 renderer 前设置偏好驱动；
+  - `currentRendererDriver()` / `isUsingRendererDriver()`：返回当前实际 renderer 后端。
+- `D3D11VideoRenderer` 改为最小可用实现：
+  - `init`：创建 `Display`，指定 `direct3d11` 偏好，完成窗口/渲染初始化；
+  - `renderFrame/present/clear`：接通帧上传与呈现；
+  - 事件与控制请求接口统一透传 `Display`。
+- `init` 阶段增加后端校验：
+  - 若实际 renderer 后端非 `direct3d11/d3d11`，主动返回失败并记录日志，触发上层 SDL 回退。
+- 任务清单 `3.2.1` 标记完成。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 38: M3 3.3.2（渲染失败降级不中断播放）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `3.3.2` 要求渲染失败时可自动降级且不中断播放。
+- 需要一个可重复执行的本地验收入口来稳定验证 D3D11 失败后的 SDL 回退链路。
+
+### 分析记录
+1. `3.2.1/3.2.2` 已具备 D3D11 初始化与 SDL 回退机制，但缺少自动化验收命令。
+2. 需要在不依赖人工操作的前提下，强制制造 D3D11 renderer 初始化失败场景。
+
+### 解决方案
+- 新增渲染/解码后端可观测接口（renderer backend / decoder backend）。
+- 新增命令 `--renderer-fallback-check <media_file>`：
+  - 临时注入 `MVP_D3D11_DRIVER_HINT=software`，强制 D3D11 渲染初始化失败；
+  - 通过播放器主链路验证是否自动回退到 `SoftwareSDL`；
+  - 输出结构化字段与 `PASS/FAIL`。
+- 新增本地报告：`docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`。
+- 更新任务清单，标记 `3.3.2` 完成。
+
+### 本地验收结果
+- `build/Debug/modern-video-player.exe --renderer-fallback-check juren-30s.mp4`
+  - `open_ok=true`
+  - `renderer_backend=SoftwareSDL`
+  - `entered_playback_loop=true`
+  - `fallback_to_sdl=true`
+  - `result=PASS`
+
+### 修改文件
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 39: M3 3.3.1（Windows 软解+硬解主力样本可播）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `3.3.1` 要求在 Windows 下验证硬解（D3D11VA）和软解（Software）主力样本均可播。
+- 原聚合命令在同进程顺序执行双会话时，出现停止阶段卡住，导致命令超时。
+
+### 日志输出
+```text
+windows-backend-check.command=... 
+... The filename, directory name, or volume label syntax is incorrect.
+windows-backend-check.result=FAIL
+```
+
+### 分析记录
+1. 同进程连续跑 hard/soft 会话时，第二轮存在回收链路不稳定。
+2. `std::system` + 重定向在当前路径组合下存在 shell 解析不稳定。
+3. 需要将会话隔离并改为更稳定的子进程创建方式。
+
+### 解决方案
+- 新增 `--windows-backend-session-check <media_file> <hard|soft>`，每次只验证一个会话并输出结构化字段。
+- 将 `--windows-backend-check` 改为父进程拉起两个子进程（hard、soft）并汇总结果。
+- Windows 下用 `CreateProcess` + 文件句柄重定向采集子进程输出，避免 shell 语法问题。
+- 增加本地报告 `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --windows-backend-session-check juren-30s.mp4 hard` 通过（PASS）。
+- `build/Debug/modern-video-player.exe --windows-backend-session-check juren-30s.mp4 soft` 通过（PASS）。
+- `build/Debug/modern-video-player.exe --windows-backend-check juren-30s.mp4` 通过（PASS）。
+- `build/Debug/modern-video-player.exe --renderer-fallback-check juren-30s.mp4` 通过（PASS）。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（PASS）。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `3.3.1` 标记完成。
+  - `3.3.3` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

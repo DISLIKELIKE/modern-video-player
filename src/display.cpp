@@ -110,6 +110,13 @@ bool pointInRect(int x, int y, const SDL_Rect& rect) {
     return x >= rect.x && y >= rect.y && x < rect.x + rect.w && y < rect.y + rect.h;
 }
 
+std::string toLowerAscii(std::string text) {
+    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return text;
+}
+
 using Glyph5x7 = std::array<uint8_t, 7>;
 
 const Glyph5x7& glyphFor(char ch) {
@@ -544,6 +551,10 @@ void Display::close() {
     render_initialized_.store(false);
     render_init_success_.store(false);
     initialized_ = false;
+    {
+        std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+        active_renderer_driver_.clear();
+    }
 }
 
 bool Display::createRenderer() {
@@ -560,13 +571,44 @@ bool Display::createRenderer() {
         renderer_ = nullptr;
     }
 
+    const char* previous_render_driver_hint = SDL_GetHint(SDL_HINT_RENDER_DRIVER);
+    const bool had_previous_render_driver_hint =
+        previous_render_driver_hint != nullptr && previous_render_driver_hint[0] != '\0';
+    const std::string previous_render_driver =
+        had_previous_render_driver_hint ? std::string(previous_render_driver_hint) : std::string{};
+
+    std::string preferred_driver;
+    {
+        std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+        preferred_driver = preferred_renderer_driver_;
+    }
+    if (!preferred_driver.empty()) {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, preferred_driver.c_str());
+    }
+
     renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer_) {
         renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
     }
+
+    if (had_previous_render_driver_hint) {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, previous_render_driver.c_str());
+    } else {
+        SDL_SetHint(SDL_HINT_RENDER_DRIVER, "");
+    }
+
     if (!renderer_) {
         std::cerr << "Error: Could not create SDL renderer: " << SDL_GetError() << std::endl;
         return false;
+    }
+
+    SDL_RendererInfo renderer_info{};
+    if (SDL_GetRendererInfo(renderer_, &renderer_info) == 0 && renderer_info.name) {
+        std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+        active_renderer_driver_ = renderer_info.name;
+    } else {
+        std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+        active_renderer_driver_.clear();
     }
 
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -1151,6 +1193,23 @@ void Display::setSubtitleText(const std::string& text) {
 void Display::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
     std::lock_guard<std::mutex> lock(request_mutex_);
     hotkey_manager_ = hotkey_manager;
+}
+
+void Display::setPreferredRendererDriver(const std::string& driver_name) {
+    std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+    preferred_renderer_driver_ = driver_name;
+}
+
+std::string Display::currentRendererDriver() const {
+    std::lock_guard<std::mutex> lock(renderer_info_mutex_);
+    return active_renderer_driver_;
+}
+
+bool Display::isUsingRendererDriver(const std::string& driver_name) const {
+    if (driver_name.empty()) {
+        return false;
+    }
+    return toLowerAscii(currentRendererDriver()) == toLowerAscii(driver_name);
 }
 
 void Display::drawSubtitleOverlay(int window_width, int window_height) {

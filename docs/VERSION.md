@@ -950,3 +950,94 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（D3D11 渲染最小可用链路）
+
+### 渲染后端能力补齐
+- `D3D11VideoRenderer` 完成最小可用实现：
+  - `init`：创建渲染链路；
+  - `renderFrame`：接入帧上传；
+  - `present`：接入呈现；
+  - 事件与交互请求透传。
+- `Display` 新增渲染后端可观测能力：
+  - 可设置 renderer 驱动偏好；
+  - 可查询当前实际 renderer 后端名称。
+
+### D3D11 后端校验与回退协同
+- `D3D11VideoRenderer::init` 在请求 `direct3d11` 后，会校验实际 SDL renderer 后端：
+  - 命中 `direct3d11/d3d11`：初始化成功；
+  - 未命中：初始化失败并由上层触发 `SoftwareSDL` 回退链路（与 `3.2.2` 协同）。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `3.2.1 D3D11 渲染最小可用（init/upload/present）` 标记完成。
+
+### 修改文件
+- include/display.h
+- src/display.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（渲染失败自动降级回归入口）
+
+### 新增回归命令
+- 新增 `--renderer-fallback-check <media_file>`：
+  - 强制构造 D3D11 渲染初始化失败场景；
+  - 验证是否自动回退 `SoftwareSDL`；
+  - 输出 `renderer-fallback-check.*` 字段和 `PASS/FAIL`。
+
+### 可观测能力补齐
+- 渲染接口新增后端名称查询，播放器对外新增当前渲染后端/解码后端查询接口，用于命令化验收输出。
+
+### 本地报告
+- 新增 `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`，记录本地回归命令与结果。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `3.3.2 渲染失败降级不中断播放` 标记完成。
+
+### 修改文件
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（Windows 软解/硬解主力样本回归）
+
+### 回归能力补齐
+- 新增 `--windows-backend-session-check <media_file> <hard|soft>`：单模式会话检查与结构化输出。
+- 新增并稳定 `--windows-backend-check <media_file>`：自动聚合硬解/软解结果并输出 `PASS/FAIL`。
+
+### 稳定性修复
+- `--windows-backend-check` 从同进程双会话改为父进程拉起两个子进程（hard/soft）并汇总，规避会话回收卡死。
+- Windows 子进程执行改为 `CreateProcess`，避免 shell 重定向语法差异导致失败。
+
+### 本地验证
+- `build/Debug/modern-video-player.exe --windows-backend-check juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --renderer-fallback-check juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `3.3.1 Windows 下软解+硬解主力样本可播` 标记完成。
+  - `3.3.3 回归报告完整` 标记完成。
+
+### 新增报告
+- `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`

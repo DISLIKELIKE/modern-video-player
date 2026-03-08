@@ -25,6 +25,7 @@ public:
     void setOverlayState(double position, double duration, float volume, bool paused) override;
     void setSubtitleText(const std::string& text) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
+    const char* rendererBackendName() const override;
 };
 
 }  // namespace vp::render

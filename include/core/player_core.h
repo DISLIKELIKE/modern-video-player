@@ -88,6 +88,8 @@ public:
     double getPlaybackSpeed() const;
     void setPreferHardwareDecode(bool prefer_hardware_decode);
     bool preferHardwareDecode() const;
+    decoder::DecoderBackend videoDecoderBackend() const;
+    std::string videoRendererBackendName() const;
     void setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
     void clearExternalSubtitles();
     bool hasExternalSubtitles() const;
