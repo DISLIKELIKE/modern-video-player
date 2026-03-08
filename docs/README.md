@@ -74,7 +74,7 @@
 - 新增 [reports/PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) - 记录 7.1 插件系统本地验收结果
 - 新增 [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) - 记录 7.2 流媒体 HTTP 分片与缓冲本地验收结果
 - 新增 [reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) - 记录 7.3 HLS/DASH 自适应码率本地验收结果
-- 更新 [VERSION.md](./VERSION.md) / [CHANGELOG.md](./CHANGELOG.md) / [DEVELOP_LOG.md](./DEVELOP_LOG.md) / [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) / [tasklist.md](../.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md) - 同步记录 `v0.2.0-rc1` 与 `v0.2.0` 里程碑标签已建立，并完成 `5.3` 勾选
+- 更新 [VERSION.md](./VERSION.md) / [CHANGELOG.md](./CHANGELOG.md) / [DEVELOP_LOG.md](./DEVELOP_LOG.md) / [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) / [tasklist.md](../.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md) - 同步记录 `v0.2.0-rc1` 与 `v0.2.0` 里程碑标签已建立，并完成 `5.1 / 5.3` 勾选
 
 ---
 

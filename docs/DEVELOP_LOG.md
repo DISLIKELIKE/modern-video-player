@@ -2139,3 +2139,30 @@ windows-backend-check.result=FAIL
 - docs/DEVELOP_LOG.md
 - docs/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+## 问题 62: 执行守则口径同步（5.1 / 5.2）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 守则项 `5.1 / 5.2` 需要根据当前仓库与交付节奏做一次口径同步，避免任务清单与实际执行状态脱节。
+
+### 分析记录
+1. 本轮主要任务按“发布门禁 → 插件系统 → 流媒体缓冲 → ABR → 里程碑标签 → 守则口径”的顺序串行推进，没有出现超过 2 个主任务并行推进的证据。
+2. `5.2` 的判断条件是“每周五只做收敛”，这要求持续性的周节奏记录，而不仅是一轮收口结果。
+3. 因此 `5.1` 可以勾选，`5.2` 仍应保持待完成。
+
+### 解决方案
+- 勾选 `5.1 WIP 限制：同时进行任务不超过 2 个`。
+- 保留 `5.2 每周五只做收敛（修复、回归、文档）` 为待完成，并在版本/变更记录中写明原因。
+
+### 本地验收结果
+- 任务清单已更新为：`5.1` 完成、`5.2` 待完成、`5.3` 完成。
+- 当前仓库没有新增代码改动，本次只同步过程约束口径。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

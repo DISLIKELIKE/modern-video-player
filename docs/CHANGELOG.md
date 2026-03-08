@@ -2314,3 +2314,26 @@ void VideoPlayer::play() {
 - docs/DEVELOP_LOG.md
 - docs/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+---
+
+## 问题 62: 执行守则口径同步（5.1 / 5.2）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单中的执行守则 `5.1 / 5.2` 仍未更新，但当前仓库状态已经足以判断其中一部分约束是否满足。
+
+### 原因分析
+- `5.1` 关注的是本轮并行工作量控制，能从实际任务推进顺序中得到证据。
+- `5.2` 关注的是按周节奏执行“只做收敛”，需要跨周、重复性的过程证据，不能仅凭一次交付收口直接勾选。
+
+### 解决方案
+- 勾选 `5.1 WIP 限制：同时进行任务不超过 2 个`。
+- 保留 `5.2 每周五只做收敛（修复、回归、文档）` 为待完成，并在文档中明确原因。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -1673,3 +1673,23 @@ make -j$(nproc)
 - docs/DEVELOP_LOG.md
 - docs/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+## 2026-03-08 更新（执行守则口径同步）
+
+- 结合本轮提交与任务推进顺序，`5.1 WIP 限制：同时进行任务不超过 2 个` 可判定为满足，并同步勾选。
+- `5.2 每周五只做收敛（修复、回归、文档）` 属于按周执行节奏约束，当前仓库中尚缺持续性的周维度证据，暂保持未勾选。
+
+### 口径说明
+- `5.1` 的判断依据是本轮任务按单主线串行推进：发布门禁、插件系统、流媒体缓冲、ABR、里程碑标签与守则口径依次收口。
+- `5.2` 需要跨周、重复执行的过程证据，不适合仅凭当前一次收口结果直接判定完成。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `5.1 WIP 限制：同时进行任务不超过 2 个` 标记完成。
+  - `5.2 每周五只做收敛（修复、回归、文档）` 保持待完成。
+
+### 修改文件
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+- docs/README.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
