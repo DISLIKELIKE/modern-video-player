@@ -1163,3 +1163,39 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（截图）
+
+### 交互能力增强
+- 新增稳定可用的截图能力：
+  - `S` 触发截图；
+  - 输出文件写入 `screenshots/` 目录；
+  - 命名格式为 `screenshot_YYYYMMDD_HHMMSS_mmm.ppm`。
+
+### 截图链路收敛
+- `PlayerCore` 新增最近渲染帧缓存，用于在暂停态直接保存当前画面。
+- `requestScreenshot()` 区分两种路径：
+  - 播放中：异步等待当前/下一帧落盘；
+  - 暂停态：直接从缓存帧落盘。
+- `main` 中的 `--screenshot-check` 改为覆盖暂停态截图场景。
+
+### 本地验证
+- `build/Debug/modern-video-player.exe --screenshot-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`：`PASS`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `4.3 截图` 标记完成。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SCREENSHOT_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

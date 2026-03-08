@@ -31,6 +31,8 @@ public:
     bool isABRepeatEnabled() const;
     double abRepeatStart() const;
     double abRepeatEnd() const;
+    bool requestScreenshot();
+    bool consumeLastScreenshotPath(std::string& path);
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();

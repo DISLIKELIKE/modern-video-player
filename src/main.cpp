@@ -1533,6 +1533,86 @@ bool runABRepeatCheck(const std::string& media_file) {
     return result;
 }
 
+bool runScreenshotCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "screenshot-check.path=" << media_file << std::endl;
+        std::cout << "screenshot-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+
+    bool entered_playback_loop = false;
+    bool paused_before_request = false;
+    bool request_ok = false;
+    bool captured = false;
+    bool file_exists = false;
+    std::string screenshot_path;
+
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(800));
+        if (entered_playback_loop) {
+            player.pause();
+            paused_before_request = player.isPaused();
+        }
+        request_ok = player.requestScreenshot();
+        if (request_ok) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+            while (std::chrono::steady_clock::now() < deadline &&
+                   (player.isPlaying() || player.isPaused())) {
+                player.pumpEvents();
+                if (player.consumeLastScreenshotPath(screenshot_path)) {
+                    captured = true;
+                    break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+        player.stop();
+        player.close();
+    }
+
+    if (!screenshot_path.empty()) {
+        const std::filesystem::path path(screenshot_path);
+        file_exists = std::filesystem::exists(path, ec) && !ec && std::filesystem::is_regular_file(path, ec) && !ec;
+    }
+
+    const bool result = open_ok &&
+                         entered_playback_loop &&
+                         paused_before_request &&
+                         request_ok &&
+                         captured &&
+                         file_exists;
+
+    std::cout << "screenshot-check.path=" << media_file << std::endl;
+    std::cout << "screenshot-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.paused_before_request=" << (paused_before_request ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.request_ok=" << (request_ok ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.captured=" << (captured ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.file_exists=" << (file_exists ? "true" : "false") << std::endl;
+    std::cout << "screenshot-check.output=" << screenshot_path << std::endl;
+    std::cout << "screenshot-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 }  // namespace
 
 void signalHandler(int signal) {
@@ -1556,6 +1636,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --windows-backend-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
     std::cout << std::endl;
@@ -1569,6 +1650,7 @@ void printUsage(const char* program_name) {
     std::cout << "  PAGEUP/PAGEDOWN - Previous/Next media in playlist" << std::endl;
     std::cout << "  HOME/END - Previous/Next chapter" << std::endl;
     std::cout << "  A/B/C - Set A point / Set B point / Clear A-B repeat" << std::endl;
+    std::cout << "  S - Save screenshot" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -1716,6 +1798,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runABRepeatCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runScreenshotCheck(argv[2]) ? 0 : 2;
     }
     
     if (argc < 2) {

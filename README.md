@@ -137,6 +137,10 @@ build\Release\modern-video-player.exe your_video.mp4
 | M | Mute / Unmute |
 | \[ / \] / R | Speed down/up/reset |
 | PageUp / PageDown | Previous / Next item |
+| Home / End | Previous / Next chapter |
+| A / B / C | Set A / Set B / Clear A-B repeat |
+| S | Save screenshot |
+| V | Toggle subtitles |
 
 ## Technical Highlights
 

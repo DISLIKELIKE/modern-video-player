@@ -143,6 +143,10 @@ bool D3D11VideoRenderer::consumeClearABRepeatRequest() {
     return display_ ? display_->consumeClearABRepeatRequest() : false;
 }
 
+bool D3D11VideoRenderer::consumeScreenshotRequest() {
+    return display_ ? display_->consumeScreenshotRequest() : false;
+}
+
 bool D3D11VideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }

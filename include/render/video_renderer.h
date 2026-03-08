@@ -45,6 +45,7 @@ public:
     virtual bool consumeSetABRepeatStartRequest() = 0;
     virtual bool consumeSetABRepeatEndRequest() = 0;
     virtual bool consumeClearABRepeatRequest() = 0;
+    virtual bool consumeScreenshotRequest() = 0;
     virtual bool consumeNextChapterRequest() = 0;
     virtual bool consumePreviousChapterRequest() = 0;
     virtual bool consumeNextItemRequest() = 0;

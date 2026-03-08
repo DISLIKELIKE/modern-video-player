@@ -67,6 +67,10 @@ bool OpenGLVideoRenderer::consumeClearABRepeatRequest() {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeScreenshotRequest() {
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeNextChapterRequest() {
     return false;
 }

@@ -418,6 +418,7 @@ Display::Display()
     , ab_repeat_start_requested_(false)
     , ab_repeat_end_requested_(false)
     , ab_repeat_clear_requested_(false)
+    , screenshot_requested_(false)
     , next_chapter_requested_(false)
     , previous_chapter_requested_(false)
     , next_item_requested_(false)
@@ -492,6 +493,7 @@ bool Display::init(int width, int height, const std::string& title) {
         ab_repeat_start_requested_ = false;
         ab_repeat_end_requested_ = false;
         ab_repeat_clear_requested_ = false;
+        screenshot_requested_ = false;
         next_chapter_requested_ = false;
         previous_chapter_requested_ = false;
         next_item_requested_ = false;
@@ -1028,6 +1030,11 @@ void Display::handleEvents() {
                     ab_repeat_clear_requested_ = true;
                     break;
                 }
+                case input::PlayerAction::TakeScreenshot: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    screenshot_requested_ = true;
+                    break;
+                }
                 case input::PlayerAction::PreviousChapter: {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     previous_chapter_requested_ = true;
@@ -1215,6 +1222,15 @@ bool Display::consumeClearABRepeatRequest() {
         return false;
     }
     ab_repeat_clear_requested_ = false;
+    return true;
+}
+
+bool Display::consumeScreenshotRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!screenshot_requested_) {
+        return false;
+    }
+    screenshot_requested_ = false;
     return true;
 }
 

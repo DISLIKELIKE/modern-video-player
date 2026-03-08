@@ -5,8 +5,13 @@
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <ctime>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
 #include <iterator>
 #include <limits>
+#include <sstream>
 #include <vector>
 
 extern "C" {
@@ -195,6 +200,13 @@ bool PlayerCore::open(const std::string& filename) {
     next_item_requested_.store(false);
     previous_item_requested_.store(false);
     clearABRepeat();
+    screenshot_requested_.store(false);
+    {
+        std::lock_guard<std::mutex> lock(screenshot_mutex_);
+        last_screenshot_path_.clear();
+        screenshot_path_pending_ = false;
+    }
+    clearLastRenderedFrame();
     clock_.reset();
     const bool has_audio_clock = audio_codec_ctx_ && audio_player_ && audio_player_->isInitialized();
     clock_.setSource(has_audio_clock ? ClockSource::Audio : ClockSource::System);
@@ -222,6 +234,13 @@ void PlayerCore::close() {
     clearExternalSubtitles();
     chapter_points_.clear();
     clearABRepeat();
+    screenshot_requested_.store(false);
+    {
+        std::lock_guard<std::mutex> lock(screenshot_mutex_);
+        last_screenshot_path_.clear();
+        screenshot_path_pending_ = false;
+    }
+    clearLastRenderedFrame();
     opened_.store(false);
 }
 
@@ -467,6 +486,33 @@ double PlayerCore::abRepeatEnd() const {
     return ab_repeat_end_.load();
 }
 
+bool PlayerCore::requestScreenshot() {
+    if (!opened_.load() || !video_renderer_) {
+        return false;
+    }
+
+    if (state_.load() != PlaybackState::Playing) {
+        if (!captureScreenshotFromCachedFrame()) {
+            LOG_WARNING("Screenshot request failed: no cached frame available");
+            return false;
+        }
+        return true;
+    }
+
+    screenshot_requested_.store(true);
+    return true;
+}
+
+bool PlayerCore::consumeLastScreenshotPath(std::string& path) {
+    std::lock_guard<std::mutex> lock(screenshot_mutex_);
+    if (!screenshot_path_pending_ || last_screenshot_path_.empty()) {
+        return false;
+    }
+    path = last_screenshot_path_;
+    screenshot_path_pending_ = false;
+    return true;
+}
+
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -532,6 +578,10 @@ void PlayerCore::pumpEvents() {
 
         if (video_renderer_->consumeClearABRepeatRequest()) {
             clearABRepeat();
+        }
+
+        if (video_renderer_->consumeScreenshotRequest() && !requestScreenshot()) {
+            LOG_WARNING("Screenshot request failed");
         }
 
         if (video_renderer_->consumeNextItemRequest()) {
@@ -611,6 +661,162 @@ void PlayerCore::handleABRepeatLoop() {
 
     LOG_INFO("A-B repeat loop: " << current << "s -> " << start << "s");
     seek(start);
+}
+
+bool PlayerCore::captureScreenshot(const VideoFrame& frame) {
+    if (!frame.valid || !frame.frame) {
+        return false;
+    }
+
+    return captureScreenshotFrame(frame.frame);
+}
+
+void PlayerCore::updateLastRenderedFrame(const VideoFrame& frame) {
+    if (!frame.valid || !frame.frame) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(rendered_frame_mutex_);
+    if (!last_rendered_frame_) {
+        last_rendered_frame_ = av_frame_alloc();
+        if (!last_rendered_frame_) {
+            LOG_WARNING("Failed to allocate cached frame for screenshot support");
+            return;
+        }
+    }
+
+    av_frame_unref(last_rendered_frame_);
+    if (av_frame_ref(last_rendered_frame_, frame.frame) < 0) {
+        LOG_WARNING("Failed to cache last rendered frame for screenshot support");
+        av_frame_unref(last_rendered_frame_);
+    }
+}
+
+void PlayerCore::clearLastRenderedFrame() {
+    std::lock_guard<std::mutex> lock(rendered_frame_mutex_);
+    if (last_rendered_frame_) {
+        av_frame_free(&last_rendered_frame_);
+    }
+}
+
+bool PlayerCore::captureScreenshotFromCachedFrame() {
+    AVFrame* cached_frame = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(rendered_frame_mutex_);
+        if (!last_rendered_frame_) {
+            return false;
+        }
+
+        cached_frame = av_frame_alloc();
+        if (!cached_frame) {
+            LOG_WARNING("Failed to allocate cached screenshot frame clone");
+            return false;
+        }
+        if (av_frame_ref(cached_frame, last_rendered_frame_) < 0) {
+            av_frame_free(&cached_frame);
+            LOG_WARNING("Failed to clone cached frame for screenshot");
+            return false;
+        }
+    }
+
+    const bool ok = captureScreenshotFrame(cached_frame);
+    av_frame_free(&cached_frame);
+    return ok;
+}
+
+bool PlayerCore::captureScreenshotFrame(const AVFrame* src) {
+    if (!src) {
+        return false;
+    }
+
+    if (src->width <= 0 || src->height <= 0) {
+        return false;
+    }
+
+    SwsContext* screenshot_sws = sws_getContext(
+        src->width,
+        src->height,
+        static_cast<AVPixelFormat>(src->format),
+        src->width,
+        src->height,
+        AV_PIX_FMT_RGB24,
+        SWS_BILINEAR,
+        nullptr,
+        nullptr,
+        nullptr);
+    if (!screenshot_sws) {
+        LOG_WARNING("Failed to initialize screenshot scaler");
+        return false;
+    }
+
+    std::vector<uint8_t> rgb(static_cast<size_t>(src->width) * static_cast<size_t>(src->height) * 3U);
+    uint8_t* dst_data[4]{rgb.data(), nullptr, nullptr, nullptr};
+    int dst_linesize[4]{src->width * 3, 0, 0, 0};
+    const int converted_rows = sws_scale(
+        screenshot_sws,
+        src->data,
+        src->linesize,
+        0,
+        src->height,
+        dst_data,
+        dst_linesize);
+    sws_freeContext(screenshot_sws);
+    if (converted_rows <= 0) {
+        LOG_WARNING("Failed to convert frame for screenshot");
+        return false;
+    }
+
+    const std::filesystem::path screenshot_dir("screenshots");
+    std::error_code ec;
+    std::filesystem::create_directories(screenshot_dir, ec);
+    if (ec) {
+        LOG_WARNING("Failed to create screenshot directory: " << screenshot_dir.string());
+        return false;
+    }
+
+    const auto now = std::chrono::system_clock::now();
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+    const std::time_t now_tt = std::chrono::system_clock::to_time_t(now);
+    std::tm local_tm{};
+#if defined(_WIN32)
+    localtime_s(&local_tm, &now_tt);
+#else
+    localtime_r(&now_tt, &local_tm);
+#endif
+
+    std::ostringstream name_builder;
+    name_builder << "screenshot_"
+                 << std::put_time(&local_tm, "%Y%m%d_%H%M%S")
+                 << "_"
+                 << std::setfill('0') << std::setw(3) << ms.count()
+                 << ".ppm";
+    const std::filesystem::path screenshot_path = screenshot_dir / name_builder.str();
+
+    std::ofstream output(screenshot_path, std::ios::binary);
+    if (!output.is_open()) {
+        LOG_WARNING("Failed to open screenshot file: " << screenshot_path.string());
+        return false;
+    }
+    output << "P6\n" << src->width << " " << src->height << "\n255\n";
+    output.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
+    output.flush();
+    if (!output.good()) {
+        LOG_WARNING("Failed to write screenshot file: " << screenshot_path.string());
+        return false;
+    }
+
+    std::string saved_path = screenshot_path.string();
+    const auto abs_path = std::filesystem::absolute(screenshot_path, ec);
+    if (!ec) {
+        saved_path = abs_path.string();
+    }
+    {
+        std::lock_guard<std::mutex> lock(screenshot_mutex_);
+        last_screenshot_path_ = saved_path;
+        screenshot_path_pending_ = true;
+    }
+    LOG_INFO("Screenshot saved: " << saved_path);
+    return true;
 }
 
 bool PlayerCore::consumeQuitRequest() {
@@ -1623,6 +1829,12 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     filter_pipeline_.processVideo(frame);
     video_renderer_->renderFrame(frame);
     video_renderer_->present();
+    updateLastRenderedFrame(frame);
+    if (screenshot_requested_.exchange(false)) {
+        if (!captureScreenshotFromCachedFrame()) {
+            LOG_WARNING("Screenshot request failed");
+        }
+    }
 
     clock_.setVideoClock(frame.pts);
     render_frames_.fetch_add(1);

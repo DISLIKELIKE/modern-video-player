@@ -1623,3 +1623,35 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 42: M4 4.3（截图）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `4.3` 需要支持截图。
+- 当前实现虽然已经接入截图热键和 `--screenshot-check`，但暂停态没有缓存最近一帧，截图请求无法稳定保存当前画面。
+
+### 原因分析
+- 截图落盘逻辑只绑定在渲染线程的新帧处理路径上。
+- 播放暂停后，调度器不再继续送帧，导致暂停态截图没有可消费的图像数据源。
+
+### 解决方案
+- `PlayerCore` 新增最近渲染帧缓存，并支持从缓存帧直接落盘截图。
+- `requestScreenshot()` 调整为：播放中异步排队，暂停态直接使用缓存帧保存。
+- `--screenshot-check` 升级为暂停态截图验收，覆盖这次修复的核心场景。
+- 更新快捷键文档，补充 `S` 截图、章节导航、A-B Repeat、字幕开关等现有能力说明。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SCREENSHOT_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

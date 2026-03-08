@@ -19,7 +19,7 @@ namespace {
 
 using ActionPair = std::pair<PlayerAction, const char*>;
 
-constexpr std::array<ActionPair, 19> kActionKeyPairs{{
+constexpr std::array<ActionPair, 20> kActionKeyPairs{{
     {PlayerAction::PlayPause, "play_pause"},
     {PlayerAction::SeekBackward, "seek_backward"},
     {PlayerAction::SeekForward, "seek_forward"},
@@ -32,6 +32,7 @@ constexpr std::array<ActionPair, 19> kActionKeyPairs{{
     {PlayerAction::SetABRepeatStart, "ab_repeat_start"},
     {PlayerAction::SetABRepeatEnd, "ab_repeat_end"},
     {PlayerAction::ClearABRepeat, "ab_repeat_clear"},
+    {PlayerAction::TakeScreenshot, "take_screenshot"},
     {PlayerAction::PreviousChapter, "previous_chapter"},
     {PlayerAction::NextChapter, "next_chapter"},
     {PlayerAction::PreviousItem, "previous_item"},
@@ -111,6 +112,7 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::SetABRepeatStart, 'a');
     bind(PlayerAction::SetABRepeatEnd, 'b');
     bind(PlayerAction::ClearABRepeat, 'c');
+    bind(PlayerAction::TakeScreenshot, 's');
     bind(PlayerAction::PreviousChapter, SDLK_HOME);
     bind(PlayerAction::NextChapter, SDLK_END);
     bind(PlayerAction::PreviousItem, SDLK_PAGEUP);

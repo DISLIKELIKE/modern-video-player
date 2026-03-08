@@ -82,6 +82,8 @@ public:
     bool isABRepeatEnabled() const;
     double abRepeatStart() const;
     double abRepeatEnd() const;
+    bool requestScreenshot();
+    bool consumeLastScreenshotPath(std::string& path);
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -143,6 +145,11 @@ private:
     void onRenderIdle();
     void rebuildChapterPoints();
     void handleABRepeatLoop();
+    bool captureScreenshot(const VideoFrame& frame);
+    bool captureScreenshotFrame(const AVFrame* frame);
+    bool captureScreenshotFromCachedFrame();
+    void updateLastRenderedFrame(const VideoFrame& frame);
+    void clearLastRenderedFrame();
     void updateSubtitleOverlay(double position_seconds);
 
     void emitStateChanged(PlaybackState state);
@@ -201,6 +208,7 @@ private:
     std::atomic<double> ab_repeat_start_{-1.0};
     std::atomic<double> ab_repeat_end_{-1.0};
     std::atomic<int64_t> ab_repeat_last_loop_ms_{0};
+    std::atomic<bool> screenshot_requested_{false};
     filters::FilterPipeline filter_pipeline_;
 
     mutable std::mutex callback_mutex_;
@@ -228,6 +236,11 @@ private:
     int subtitle_active_index_{-1};
     bool subtitle_enabled_{true};
     input::HotkeyManager hotkey_manager_{};
+    mutable std::mutex screenshot_mutex_;
+    mutable std::mutex rendered_frame_mutex_;
+    std::string last_screenshot_path_;
+    bool screenshot_path_pending_{false};
+    AVFrame* last_rendered_frame_{nullptr};
 };
 
 }  // namespace vp::core

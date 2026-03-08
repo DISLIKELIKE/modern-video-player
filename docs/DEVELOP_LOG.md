@@ -1325,3 +1325,51 @@ windows-backend-check.result=FAIL
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 42: M4 4.3（截图）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `4.3` 需要支持截图。
+- 当前截图链路仍处于 WIP：热键、主流程与 `--screenshot-check` 已接入，但暂停态请求缺少“最后显示帧”缓存，导致暂停时无法稳定保存当前画面。
+
+### 分析记录
+1. `Display -> Renderer -> PlayerCore -> VideoPlayer -> main` 的请求链路已经具备，只差播放器核心对“最近一帧”的保留能力。
+2. 现有实现只在渲染线程处理截图请求；一旦进入暂停态，调度器停止继续送帧，截图请求就拿不到新的图像数据。
+3. 要让截图成为可用功能，除了补齐缓存外，还需要把自检改成覆盖“暂停态截图”，否则无法证明根因已修复。
+
+### 解决方案
+- `PlayerCore` 新增最近一次渲染帧缓存：
+  - `updateLastRenderedFrame()` 在每次呈现后缓存当前帧；
+  - `captureScreenshotFromCachedFrame()` 支持在暂停态直接截图；
+  - `clearLastRenderedFrame()` 在重新打开/关闭媒体时清理缓存。
+- `requestScreenshot()` 调整为：
+  - 播放中：维持异步请求；
+  - 非播放态（重点是暂停态）：直接从缓存帧落盘。
+- `--screenshot-check` 调整为“先播放 -> 暂停 -> 请求截图 -> 校验输出文件”，确保本次修复有针对性验证。
+- 文档与任务清单同步：
+  - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md` 标记 `4.3` 完成；
+  - 新增本地报告 `docs/reports/SCREENSHOT_LOCAL_CHECK.md`；
+  - 更新 `README.md` / `README_ZH.md` 的快捷键说明。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --screenshot-check .\\juren-30s.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4` 通过（`PASS`）。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SCREENSHOT_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

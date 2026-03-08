@@ -21,6 +21,7 @@ enum class PlayerAction {
     SetABRepeatStart,
     SetABRepeatEnd,
     ClearABRepeat,
+    TakeScreenshot,
     PreviousChapter,
     NextChapter,
     PreviousItem,

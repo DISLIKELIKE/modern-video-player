@@ -23,6 +23,7 @@ public:
     bool consumeSetABRepeatStartRequest() override;
     bool consumeSetABRepeatEndRequest() override;
     bool consumeClearABRepeatRequest() override;
+    bool consumeScreenshotRequest() override;
     bool consumeNextChapterRequest() override;
     bool consumePreviousChapterRequest() override;
     bool consumeNextItemRequest() override;

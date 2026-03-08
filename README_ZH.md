@@ -148,8 +148,19 @@ build\Release\modern-video-player.exe your_video.mp4
 | 按键 | 功能 |
 |------|------|
 | 空格 | 播放/暂停 |
-| Q / ESC | 退出 |
-| F | 全屏切换 |
+| Enter / Alt+Enter / F | 全屏切换 |
+| ESC | 退出全屏（窗口态时退出播放器） |
+| Q | 退出播放器 |
+| 左 / 右 | 快退 / 快进 5 秒 |
+| Ctrl+左 / Ctrl+右 | 快退 / 快进 30 秒 |
+| 上 / 下 / +/- | 音量 +5 / -5 |
+| M | 静音 / 取消静音 |
+| [ / ] / R | 降速 / 升速 / 恢复 1.0x |
+| PageUp / PageDown | 上一项 / 下一项 |
+| Home / End | 上一章 / 下一章 |
+| A / B / C | 设置 A 点 / 设置 B 点 / 清除 A-B Repeat |
+| S | 保存截图 |
+| V | 字幕开关 |
 
 ## 技术亮点
 

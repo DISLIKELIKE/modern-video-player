@@ -117,6 +117,14 @@ double VideoPlayer::abRepeatEnd() const {
     return core_player_ ? core_player_->abRepeatEnd() : -1.0;
 }
 
+bool VideoPlayer::requestScreenshot() {
+    return core_player_ ? core_player_->requestScreenshot() : false;
+}
+
+bool VideoPlayer::consumeLastScreenshotPath(std::string& path) {
+    return core_player_ ? core_player_->consumeLastScreenshotPath(path) : false;
+}
+
 void VideoPlayer::pumpEvents() {
     if (core_player_) {
         core_player_->pumpEvents();

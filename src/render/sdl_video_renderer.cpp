@@ -90,6 +90,10 @@ bool SdlVideoRenderer::consumeClearABRepeatRequest() {
     return display_ ? display_->consumeClearABRepeatRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeScreenshotRequest() {
+    return display_ ? display_->consumeScreenshotRequest() : false;
+}
+
 bool SdlVideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }
