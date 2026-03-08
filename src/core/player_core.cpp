@@ -230,22 +230,43 @@ void PlayerCore::seek(double timestamp) {
     if (!opened_.load() || !demuxer_) {
         return;
     }
+    const double duration = demuxer_->getMediaInfo().duration;
+    if (duration > 0.0) {
+        timestamp = std::max(0.0, std::min(duration, timestamp));
+    } else {
+        timestamp = std::max(0.0, timestamp);
+    }
+    LOG_INFO("Seek request: target=" << timestamp << "s");
     const bool was_playing = state_.load() == PlaybackState::Playing;
+    const bool demux_was_running = demux_running_.load();
     if (was_playing) {
         scheduler_.pause();
     }
 
+    if (demux_was_running) {
+        stopDemuxThread();
+    }
+
     flushPipelines();
-    if (!demuxer_->seek(timestamp)) {
+    const bool seek_ok = demuxer_->seek(timestamp);
+    {
+        std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
+        if (video_codec_ctx_) {
+            avcodec_flush_buffers(video_codec_ctx_);
+        }
+        if (audio_codec_ctx_) {
+            avcodec_flush_buffers(audio_codec_ctx_);
+        }
+        releaseAudioResampler();
+    }
+    if (!seek_ok) {
         emitError(ErrorCode::SeekFailed, "seek failed");
     }
-    if (video_codec_ctx_) {
-        avcodec_flush_buffers(video_codec_ctx_);
+    if (audio_player_) {
+        // Drop stale buffered audio so seek takes effect immediately.
+        audio_player_->stop();
     }
-    if (audio_codec_ctx_) {
-        avcodec_flush_buffers(audio_codec_ctx_);
-    }
-    releaseAudioResampler();
+    flushPipelines();
     position_.store(timestamp);
     clock_.setTime(timestamp);
     clock_.setAudioClock(timestamp);
@@ -253,7 +274,13 @@ void PlayerCore::seek(double timestamp) {
     updateSubtitleOverlay(timestamp);
     emitPositionChanged(timestamp);
 
+    if (demux_was_running) {
+        startDemuxThread();
+    }
     if (was_playing) {
+        if (audio_player_) {
+            audio_player_->resume();
+        }
         scheduler_.resume();
     }
 }
@@ -602,6 +629,7 @@ bool PlayerCore::initDecoders() {
 }
 
 void PlayerCore::releaseDecoders() {
+    std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
     releaseVideoScaler();
     releaseAudioResampler();
     if (video_hw_device_ctx_) {
@@ -1085,6 +1113,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
         return false;
     }
 
+    std::lock_guard<std::mutex> codec_lock(video_codec_mutex_);
     av_frame_unref(out.frame);
     int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
     if (ret >= 0) {
@@ -1145,6 +1174,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         return false;
     }
 
+    std::lock_guard<std::mutex> codec_lock(audio_codec_mutex_);
     AVFrame* frame = av_frame_alloc();
     if (!frame) {
         return false;

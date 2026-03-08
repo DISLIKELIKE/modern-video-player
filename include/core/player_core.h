@@ -197,6 +197,8 @@ private:
     std::atomic<uint64_t> audio_submitted_frames_{0};
     std::atomic<uint64_t> render_frames_{0};
     std::atomic<int64_t> last_diag_log_ms_{0};
+    std::mutex video_codec_mutex_;
+    std::mutex audio_codec_mutex_;
 
     mutable std::mutex subtitle_mutex_;
     std::vector<subtitle::SubtitleItem> subtitle_items_;
