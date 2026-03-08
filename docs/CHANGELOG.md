@@ -2391,3 +2391,29 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 
+
+---
+
+## 问题 65: 汇总当前功能、使用方式与验证入口
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 需要把程序当前已经实现的功能、可用的使用方式，以及现有验证路径集中写成一份可查文档，避免信息散落。
+
+### 原因分析
+- 当前能力已经横跨“正常播放、诊断命令、专项验收、插件/流媒体基础设施”，但入口分散在多个文档与源码帮助输出中。
+- 如果没有统一总览，后续继续维护文档时容易遗漏“功能”和“验证”之间的对应关系。
+
+### 解决方案
+- 新增 `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`，统一记录当前功能、使用方式、配置入口、专项验收命令与报告映射。
+- 更新 `docs/README.md` 和根 `README.md`，增加该总览文档的入口。
+
+### 修改文件
+- docs/PLAYER_FEATURES_USAGE_VALIDATION.md
+- docs/README.md
+- README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+

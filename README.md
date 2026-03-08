@@ -138,6 +138,8 @@ build\Release\modern-video-player.exe your_video.mp4
 ./build/modern-video-player your_video.mp4
 ```
 
+For the current feature / usage / validation matrix, see `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`.
+
 ## Keyboard Shortcuts
 
 | Key | Function |
@@ -227,6 +229,7 @@ build\Release\modern-video-player.exe your_video.mp4
 - [Architecture Design](docs/ARCHITECTURE.md) - Historical architecture baseline and design context
 - [Refactor Note (2026-03-06)](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - Current main-chain architecture
 - [Version History](docs/VERSION.md) - Project version and dependency information
+- [Current Features / Usage / Validation](docs/PLAYER_FEATURES_USAGE_VALIDATION.md) - Up-to-date capability summary, usage patterns, and verification entry points
 
 ## Learning Roadmap
 

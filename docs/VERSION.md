@@ -1758,3 +1758,35 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
 
+
+## 问题 65: 汇总当前功能、使用方式与验证入口
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 当前仓库已经具备较多播放器能力与验收命令，但功能清单、使用方式和验证入口分散在 `README`、`reports`、`tasklist` 与 `main.cpp` 帮助输出中，缺少一份统一总览。
+
+### 分析记录
+1. 用户可直接使用的功能，与开发/验收向命令混杂在多个文档和源码帮助输出中，不利于快速理解“程序现在到底能做什么”。
+2. 根 `README.md` 只保留了较早期的功能与使用示例，无法完整覆盖当前主线能力。
+3. 因此需要新增一份总览文档，把“功能、用法、验证”集中整理，并同步入口索引。
+
+### 解决方案
+- 新增 `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`，系统整理当前功能、使用方式、配置方式、验证命令与报告映射。
+- 更新 `docs/README.md`，为该总览文档增加入口，并在更新历史中记账。
+- 更新根 `README.md`，补充到当前总览文档的入口，避免使用说明继续停留在旧口径。
+
+### 本地验收结果
+- 新文档已覆盖“用户可直接使用功能 / 开发验收能力 / 使用方式 / 验证流程 / 当前边界”。
+- 文档中已给出 `--capabilities`、`--probe-file`、`--evaluate-target` 以及专项验收命令的统一入口。
+- 当前仓库没有新增代码改动，本次只补齐功能与使用说明文档。
+
+### 修改文件
+- docs/PLAYER_FEATURES_USAGE_VALIDATION.md
+- docs/README.md
+- README.md
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+

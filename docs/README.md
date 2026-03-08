@@ -8,6 +8,7 @@
 |------|------|
 | [README.md](../README.md) | 项目简介 |
 | [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) | Windows 环境配置 |
+| [PLAYER_FEATURES_USAGE_VALIDATION.md](./PLAYER_FEATURES_USAGE_VALIDATION.md) | 当前功能、使用方式与验证入口总览 |
 | [IMPLEMENTATION.md](./IMPLEMENTATION.md) | 早期原型的从零实现教程（历史实现基线） |
 
 ## 设计文档
@@ -65,6 +66,7 @@
 - 清理 README / VERSION / ARCHITECTURE 中的历史路径描述，避免将旧模块误写为现行结构
 - 更新 [IMPLEMENTATION.md](./IMPLEMENTATION.md) / [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) 的状态说明，区分历史教程、计划快照与当前实际进度
 - 更新 [FILTERS.md](./FILTERS.md) / [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) / [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) 的状态说明与当前入口描述
+- 新增 [PLAYER_FEATURES_USAGE_VALIDATION.md](./PLAYER_FEATURES_USAGE_VALIDATION.md) - 汇总当前功能、使用方式与验证命令/报告入口
 - 更新根 README 的故障排除口径，并为 [video-stream-index-fix.md](./video-stream-index-fix.md) 增加历史归档说明
 - 新增 [DOC_AUDIT_2026-03-08.md](./DOC_AUDIT_2026-03-08.md) - 汇总本轮文档巡检范围、结论与保留策略
 - 新增 [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) - 记录 4.5 音轨/字幕延迟调节本地验收结果
