@@ -4,6 +4,8 @@
 #include "media/format_support.h"
 #include "playlist/playlist_manager.h"
 #include "logger.h"
+#include "subtitle/srt_parser.h"
+#include "subtitle/subtitle_timeline.h"
 
 extern "C" {
 #include <libavutil/log.h>
@@ -416,11 +418,225 @@ void printFileProbeJsonReport(const ProbeReport& report) {
     std::cout << json.str();
 }
 
+playlist::PlaylistManager buildPlaylistFromInputs(const std::vector<std::string>& media_inputs);
+
+std::vector<subtitle::SubtitleItem> sortSubtitleItems(std::vector<subtitle::SubtitleItem> items) {
+    std::sort(items.begin(), items.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
+        if (lhs.start_seconds == rhs.start_seconds) {
+            return lhs.end_seconds < rhs.end_seconds;
+        }
+        return lhs.start_seconds < rhs.start_seconds;
+    });
+    return items;
+}
+
+int resolveSubtitleIndexByScan(const std::vector<subtitle::SubtitleItem>& items, double position_seconds) {
+    int resolved_index = -1;
+    for (size_t i = 0; i < items.size(); ++i) {
+        const subtitle::SubtitleItem& item = items[i];
+        if (position_seconds >= item.start_seconds && position_seconds <= item.end_seconds) {
+            resolved_index = static_cast<int>(i);
+        }
+    }
+    return resolved_index;
+}
+
+std::vector<double> buildSubtitleValidationTimeline(const std::vector<subtitle::SubtitleItem>& items) {
+    std::vector<double> timeline;
+    timeline.reserve(items.size() * 7 + 64);
+    timeline.push_back(0.0);
+
+    constexpr double kEdgeEpsilon = 0.001;
+    for (const auto& item : items) {
+        timeline.push_back(std::max(0.0, item.start_seconds - kEdgeEpsilon));
+        timeline.push_back(item.start_seconds);
+        timeline.push_back(item.start_seconds + kEdgeEpsilon);
+        timeline.push_back((item.start_seconds + item.end_seconds) * 0.5);
+        if (item.end_seconds > kEdgeEpsilon) {
+            timeline.push_back(item.end_seconds - kEdgeEpsilon);
+        }
+        timeline.push_back(item.end_seconds);
+        timeline.push_back(item.end_seconds + kEdgeEpsilon);
+    }
+
+    const double max_end_seconds = items.empty() ? 0.0 : std::max(0.0, items.back().end_seconds);
+    constexpr double kStepSeconds = 0.25;
+    for (double t = 0.0; t <= max_end_seconds + 1.0; t += kStepSeconds) {
+        timeline.push_back(t);
+    }
+
+    std::sort(timeline.begin(), timeline.end());
+    timeline.erase(std::unique(timeline.begin(), timeline.end(), [](double lhs, double rhs) {
+        return std::abs(lhs - rhs) < 1e-7;
+    }), timeline.end());
+    return timeline;
+}
+
+std::vector<double> buildSeekValidationTimeline(const std::vector<double>& ordered_timeline) {
+    std::vector<double> seek_timeline;
+    if (ordered_timeline.empty()) {
+        return seek_timeline;
+    }
+
+    const size_t total = ordered_timeline.size();
+    const size_t max_checks = std::min<size_t>(total, 120);
+    seek_timeline.reserve(max_checks + 4);
+
+    size_t index = total / 2;
+    const size_t base_step = (total > 1) ? (total / 3 + 1) : 1;
+    for (size_t i = 0; i < max_checks; ++i) {
+        index = (index + base_step + (i % 7)) % total;
+        seek_timeline.push_back(ordered_timeline[index]);
+    }
+
+    seek_timeline.push_back(ordered_timeline.front());
+    seek_timeline.push_back(ordered_timeline.back());
+    seek_timeline.push_back(ordered_timeline[total / 3]);
+    seek_timeline.push_back(ordered_timeline[(total * 2) / 3]);
+    return seek_timeline;
+}
+
+bool runSubtitleSyncCheck(const std::string& subtitle_path) {
+    subtitle::SrtParser parser;
+    if (!parser.parseFile(subtitle_path)) {
+        std::cerr << "subtitle-sync-check: failed to parse subtitle file: " << subtitle_path << std::endl;
+        return false;
+    }
+
+    std::vector<subtitle::SubtitleItem> items = sortSubtitleItems(parser.items());
+    if (items.empty()) {
+        std::cerr << "subtitle-sync-check: no subtitle entries found: " << subtitle_path << std::endl;
+        return false;
+    }
+
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (items[i].end_seconds < items[i].start_seconds) {
+            std::cerr << "subtitle-sync-check: invalid subtitle range at index " << i
+                      << " start=" << items[i].start_seconds
+                      << " end=" << items[i].end_seconds << std::endl;
+            return false;
+        }
+    }
+
+    const auto ordered_timeline = buildSubtitleValidationTimeline(items);
+    const auto seek_timeline = buildSeekValidationTimeline(ordered_timeline);
+
+    size_t ordered_checks = 0;
+    size_t seek_checks = 0;
+    size_t mismatch_count = 0;
+    int active_index_hint = -1;
+
+    auto validate_at = [&](const char* phase, double position_seconds) {
+        const int expected = resolveSubtitleIndexByScan(items, position_seconds);
+        const int actual = subtitle::resolveActiveSubtitleIndex(items, position_seconds, active_index_hint);
+        if (actual != expected) {
+            ++mismatch_count;
+            if (mismatch_count <= 8) {
+                std::cout << std::fixed << std::setprecision(3)
+                          << "subtitle-sync-check mismatch [" << phase << "]"
+                          << " t=" << position_seconds
+                          << " expected=" << expected
+                          << " actual=" << actual
+                          << " previous_hint=" << active_index_hint
+                          << std::endl;
+            }
+        }
+        active_index_hint = actual;
+    };
+
+    for (double position_seconds : ordered_timeline) {
+        ++ordered_checks;
+        validate_at("ordered", position_seconds);
+    }
+
+    for (double position_seconds : seek_timeline) {
+        ++seek_checks;
+        validate_at("seek", position_seconds);
+    }
+
+    std::cout << "subtitle-sync-check.path=" << subtitle_path << std::endl;
+    std::cout << "subtitle-sync-check.entries=" << items.size() << std::endl;
+    std::cout << "subtitle-sync-check.ordered_checks=" << ordered_checks << std::endl;
+    std::cout << "subtitle-sync-check.seek_checks=" << seek_checks << std::endl;
+    std::cout << "subtitle-sync-check.mismatches=" << mismatch_count << std::endl;
+    std::cout << "subtitle-sync-check.result=" << (mismatch_count == 0 ? "PASS" : "FAIL") << std::endl;
+    return mismatch_count == 0;
+}
+
+std::string joinIndexList(const std::vector<size_t>& indices) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < indices.size(); ++i) {
+        if (i > 0) {
+            oss << ",";
+        }
+        oss << indices[i];
+    }
+    return oss.str();
+}
+
+bool runPlaylistFlowCheck(const std::vector<std::string>& media_inputs, size_t required_items = 5) {
+    const playlist::PlaylistManager playlist_manager = buildPlaylistFromInputs(media_inputs);
+    const size_t total_entries = playlist_manager.size();
+    if (total_entries < required_items) {
+        std::cerr << "playlist-flow-check: requires at least " << required_items
+                  << " playlist entries, got " << total_entries << std::endl;
+        return false;
+    }
+
+    const size_t checked_entries = required_items;
+    size_t open_passes = 0;
+    std::vector<size_t> failed_open_indices;
+    failed_open_indices.reserve(checked_entries);
+    for (size_t i = 0; i < checked_entries; ++i) {
+        const ProbeReport report = collectFileProbeReport(playlist_manager.items()[i].uri);
+        const bool open_ok = report.open == "PASS";
+        if (open_ok) {
+            ++open_passes;
+        } else {
+            failed_open_indices.push_back(i);
+        }
+    }
+
+    std::vector<size_t> visited_indices;
+    visited_indices.reserve(checked_entries);
+    size_t current_index = 0;
+    while (current_index < checked_entries) {
+        visited_indices.push_back(current_index);
+        if (current_index + 1 < checked_entries) {
+            ++current_index;
+            continue;
+        }
+        break;
+    }
+
+    bool ordered_sequence_ok = visited_indices.size() == checked_entries;
+    for (size_t i = 0; ordered_sequence_ok && i < visited_indices.size(); ++i) {
+        if (visited_indices[i] != i) {
+            ordered_sequence_ok = false;
+        }
+    }
+
+    const bool open_phase_ok = open_passes == checked_entries;
+    const bool result = open_phase_ok && ordered_sequence_ok;
+
+    std::cout << "playlist-flow-check.required_entries=" << required_items << std::endl;
+    std::cout << "playlist-flow-check.total_entries=" << total_entries << std::endl;
+    std::cout << "playlist-flow-check.checked_entries=" << checked_entries << std::endl;
+    std::cout << "playlist-flow-check.open_passes=" << open_passes << std::endl;
+    std::cout << "playlist-flow-check.open_failed_indices="
+              << (failed_open_indices.empty() ? "-" : joinIndexList(failed_open_indices)) << std::endl;
+    std::cout << "playlist-flow-check.sequence=" << joinIndexList(visited_indices) << std::endl;
+    std::cout << "playlist-flow-check.sequence_ok=" << (ordered_sequence_ok ? "true" : "false") << std::endl;
+    std::cout << "playlist-flow-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 struct AppSettings {
     float volume{1.0f};
     double playback_speed{1.0};
     bool resume_last_playlist{true};
     int last_playlist_index{0};
+    input::HotkeyManager hotkey_manager{};
 };
 
 struct PlaybackCliArgs {
@@ -504,6 +720,68 @@ std::string detectAutoSubtitlePath(const std::string& media_uri) {
     return {};
 }
 
+std::string hotkeySettingKey(input::PlayerAction action) {
+    return "hotkey." + input::HotkeyManager::actionConfigKey(action);
+}
+
+void loadHotkeySettings(config::SettingsManager& settings_manager, input::HotkeyManager& hotkey_manager) {
+    const bool restore_defaults_requested = settings_manager.getBool("hotkey.restore_defaults").value_or(false);
+    if (restore_defaults_requested) {
+        hotkey_manager.resetToDefaults();
+        settings_manager.setBool("hotkey.restore_defaults", false);
+        LOG_INFO("Hotkey restore requested, applied default bindings");
+        return;
+    }
+
+    input::HotkeyManager candidate = hotkey_manager;
+    bool invalid_hotkey_found = false;
+    for (const input::PlayerAction action : input::HotkeyManager::allActions()) {
+        const std::string key = hotkeySettingKey(action);
+        const auto token = settings_manager.getString(key);
+        if (!token) {
+            continue;
+        }
+
+        const auto key_code = input::HotkeyManager::keyCodeFromToken(*token);
+        if (!key_code) {
+            LOG_WARNING("Invalid hotkey token for " << key << ": " << *token << ", keeping default binding");
+            invalid_hotkey_found = true;
+            continue;
+        }
+        candidate.bind(action, *key_code);
+    }
+
+    const auto conflicts = candidate.findConflicts();
+    if (!conflicts.empty()) {
+        for (const auto& [first_action, second_action] : conflicts) {
+            const auto key_code = candidate.keyForAction(first_action);
+            const std::string key_token = key_code ? input::HotkeyManager::keyCodeToToken(*key_code) : "UNKNOWN";
+            LOG_WARNING("Hotkey conflict detected on key " << key_token
+                        << ": " << input::HotkeyManager::actionConfigKey(first_action)
+                        << " <-> " << input::HotkeyManager::actionConfigKey(second_action));
+        }
+        hotkey_manager.resetToDefaults();
+        LOG_WARNING("Hotkey conflicts detected, restored default bindings");
+        settings_manager.setBool("hotkey.restore_defaults", false);
+        return;
+    }
+
+    hotkey_manager = candidate;
+    if (invalid_hotkey_found) {
+        LOG_WARNING("Some hotkey settings are invalid and were ignored");
+    }
+}
+
+void syncHotkeySettings(config::SettingsManager& settings_manager, const input::HotkeyManager& hotkey_manager) {
+    for (const input::PlayerAction action : input::HotkeyManager::allActions()) {
+        const auto key_code = hotkey_manager.keyForAction(action);
+        if (!key_code) {
+            continue;
+        }
+        settings_manager.setString(hotkeySettingKey(action), input::HotkeyManager::keyCodeToToken(*key_code));
+    }
+}
+
 AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std::string& settings_path) {
     AppSettings settings{};
 
@@ -513,6 +791,8 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
         settings_manager.setDouble("player.playback_speed", 1.0);
         settings_manager.setBool("player.resume_last_playlist", true);
         settings_manager.setInt("player.last_playlist_index", 0);
+        settings_manager.setBool("hotkey.restore_defaults", false);
+        syncHotkeySettings(settings_manager, settings.hotkey_manager);
         return settings;
     }
 
@@ -531,11 +811,14 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
     if (const auto index = settings_manager.getInt("player.last_playlist_index")) {
         settings.last_playlist_index = std::max(0, *index);
     }
+    loadHotkeySettings(settings_manager, settings.hotkey_manager);
 
     settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(settings.volume * 100.0f)));
     settings_manager.setDouble("player.playback_speed", settings.playback_speed);
     settings_manager.setBool("player.resume_last_playlist", settings.resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", settings.last_playlist_index);
+    settings_manager.setBool("hotkey.restore_defaults", false);
+    syncHotkeySettings(settings_manager, settings.hotkey_manager);
 
     return settings;
 }
@@ -545,7 +828,8 @@ void saveAppSettings(config::SettingsManager& settings_manager,
                      float volume,
                      double playback_speed,
                      bool resume_last_playlist,
-                     int last_playlist_index) {
+                     int last_playlist_index,
+                     const input::HotkeyManager& hotkey_manager) {
     const float clamped_volume = std::max(0.0f, std::min(1.0f, volume));
     const double clamped_speed = std::max(0.5, std::min(2.0, playback_speed));
 
@@ -553,10 +837,73 @@ void saveAppSettings(config::SettingsManager& settings_manager,
     settings_manager.setDouble("player.playback_speed", clamped_speed);
     settings_manager.setBool("player.resume_last_playlist", resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", std::max(0, last_playlist_index));
+    syncHotkeySettings(settings_manager, hotkey_manager);
 
     if (!settings_manager.saveIni(settings_path)) {
         LOG_WARNING("Failed to save settings file: " << settings_path);
     }
+}
+
+bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
+    std::error_code ec;
+    std::filesystem::path check_path;
+    if (!settings_path_override.empty()) {
+        check_path = std::filesystem::path(settings_path_override);
+    } else {
+        check_path = std::filesystem::temp_directory_path(ec) / "modern_video_player_settings_check.ini";
+        if (ec || check_path.empty()) {
+            check_path = std::filesystem::path("build") / "modern_video_player_settings_check.ini";
+        }
+    }
+
+    const std::string check_path_text = check_path.string();
+    if (check_path.has_parent_path()) {
+        std::filesystem::create_directories(check_path.parent_path(), ec);
+    }
+    std::filesystem::remove(check_path, ec);
+    ec.clear();
+
+    constexpr float expected_volume = 0.37f;
+    constexpr double expected_speed = 1.25;
+    constexpr bool expected_resume_last_playlist = false;
+    constexpr int expected_playlist_index = 3;
+    constexpr int expected_subtitle_key = 'b';
+
+    config::SettingsManager writer_manager;
+    AppSettings initial = loadAppSettings(writer_manager, check_path_text);
+    input::HotkeyManager expected_hotkeys = initial.hotkey_manager;
+    expected_hotkeys.bind(input::PlayerAction::ToggleSubtitle, expected_subtitle_key);
+    saveAppSettings(writer_manager,
+                    check_path_text,
+                    expected_volume,
+                    expected_speed,
+                    expected_resume_last_playlist,
+                    expected_playlist_index,
+                    expected_hotkeys);
+
+    config::SettingsManager reader_manager;
+    AppSettings restored = loadAppSettings(reader_manager, check_path_text);
+
+    const bool volume_ok = std::abs(restored.volume - expected_volume) < 1e-6f;
+    const bool speed_ok = std::abs(restored.playback_speed - expected_speed) < 1e-9;
+    const bool resume_ok = restored.resume_last_playlist == expected_resume_last_playlist;
+    const bool index_ok = restored.last_playlist_index == expected_playlist_index;
+
+    const auto subtitle_key = restored.hotkey_manager.keyForAction(input::PlayerAction::ToggleSubtitle);
+    const bool hotkey_ok = subtitle_key.has_value() && *subtitle_key == expected_subtitle_key;
+
+    const bool result = volume_ok && speed_ok && resume_ok && index_ok && hotkey_ok;
+
+    std::cout << "settings-persistence-check.path=" << check_path_text << std::endl;
+    std::cout << "settings-persistence-check.volume_ok=" << (volume_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.speed_ok=" << (speed_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.resume_ok=" << (resume_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.index_ok=" << (index_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.hotkey_ok=" << (hotkey_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+
+    std::filesystem::remove(check_path, ec);
+    return result;
 }
 
 }  // namespace
@@ -575,6 +922,9 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " <playlist.m3u8>" << std::endl;
     std::cout << "       " << program_name << " --capabilities" << std::endl;
     std::cout << "       " << program_name << " --probe-file <media_file> [--json]" << std::endl;
+    std::cout << "       " << program_name << " --subtitle-sync-check <subtitle.srt>" << std::endl;
+    std::cout << "       " << program_name << " --playlist-flow-check <media1> <media2> <media3> <media4> <media5> [more...]" << std::endl;
+    std::cout << "       " << program_name << " --settings-persistence-check [settings_file]" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
     std::cout << std::endl;
@@ -592,6 +942,8 @@ void printUsage(const char* program_name) {
     std::cout << "  Mouse drag progress bar - Seek" << std::endl;
     std::cout << "  Mouse drag volume bar - Volume" << std::endl;
     std::cout << "  +/- or Up/Down - Adjust volume" << std::endl;
+    std::cout << "  Custom hotkeys: config/player_settings.ini (hotkey.*)" << std::endl;
+    std::cout << "  Restore defaults: set hotkey.restore_defaults=true then restart" << std::endl;
     std::cout << std::endl;
 }
 
@@ -662,6 +1014,36 @@ int main(int argc, char* argv[]) {
         }
         return report.exit_code;
     }
+
+    if (argc >= 2 && std::string(argv[1]) == "--subtitle-sync-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runSubtitleSyncCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--playlist-flow-check") {
+        if (argc < 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        std::vector<std::string> media_inputs;
+        media_inputs.reserve(static_cast<size_t>(argc - 2));
+        for (int i = 2; i < argc; ++i) {
+            media_inputs.push_back(argv[i]);
+        }
+        return runPlaylistFlowCheck(media_inputs) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--settings-persistence-check") {
+        if (argc > 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        const std::string override_path = (argc == 3) ? argv[2] : std::string{};
+        return runSettingsPersistenceCheck(override_path) ? 0 : 2;
+    }
     
     if (argc < 2) {
         printUsage(argv[0]);
@@ -710,6 +1092,7 @@ int main(int argc, char* argv[]) {
     g_player = std::make_unique<VideoPlayer>();
     g_player->setVolume(app_settings.volume);
     g_player->setPlaybackSpeed(app_settings.playback_speed);
+    g_player->setHotkeyManager(app_settings.hotkey_manager);
 
     bool quit_requested = false;
     bool opened_any_media = false;
@@ -795,12 +1178,14 @@ int main(int argc, char* argv[]) {
 
     const float final_volume = g_player ? g_player->getVolume() : app_settings.volume;
     const double final_speed = g_player ? g_player->getPlaybackSpeed() : app_settings.playback_speed;
+    const input::HotkeyManager& final_hotkeys = g_player ? g_player->hotkeyManager() : app_settings.hotkey_manager;
     saveAppSettings(settings_manager,
                     settings_path,
                     final_volume,
                     final_speed,
                     app_settings.resume_last_playlist,
-                    static_cast<int>(current_index));
+                    static_cast<int>(current_index),
+                    final_hotkeys);
 
     if (!opened_any_media) {
         Logger::error("No media could be opened");

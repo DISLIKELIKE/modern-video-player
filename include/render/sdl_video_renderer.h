@@ -33,6 +33,7 @@ public:
     bool consumePreviousItemRequest() override;
     void setOverlayState(double position, double duration, float volume, bool paused) override;
     void setSubtitleText(const std::string& text) override;
+    void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
 
 private:
     std::unique_ptr<Display> display_;

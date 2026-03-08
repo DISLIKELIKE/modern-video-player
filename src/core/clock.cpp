@@ -43,7 +43,7 @@ void Clock::setTime(double time) {
 }
 
 void Clock::setAudioClock(double time) {
-    audio_clock_.store(std::max(time, audio_clock_.load()));
+    audio_clock_.store(std::max(0.0, time));
 }
 
 double Clock::getAudioClock() const {
@@ -51,7 +51,7 @@ double Clock::getAudioClock() const {
 }
 
 void Clock::setVideoClock(double time) {
-    video_clock_.store(std::max(time, video_clock_.load()));
+    video_clock_.store(std::max(0.0, time));
 }
 
 double Clock::getVideoClock() const {

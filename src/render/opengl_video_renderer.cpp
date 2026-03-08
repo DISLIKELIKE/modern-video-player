@@ -74,4 +74,8 @@ void OpenGLVideoRenderer::setSubtitleText(const std::string& text) {
     (void)text;
 }
 
+void OpenGLVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    (void)hotkey_manager;
+}
+
 }  // namespace vp::render

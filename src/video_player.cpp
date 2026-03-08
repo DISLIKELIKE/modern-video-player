@@ -133,6 +133,17 @@ double VideoPlayer::getPlaybackSpeed() const {
     return playback_speed_;
 }
 
+void VideoPlayer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    if (core_player_) {
+        core_player_->setHotkeyManager(hotkey_manager);
+    }
+}
+
+const input::HotkeyManager& VideoPlayer::hotkeyManager() const {
+    static const input::HotkeyManager kFallbackHotkeys{};
+    return core_player_ ? core_player_->hotkeyManager() : kFallbackHotkeys;
+}
+
 bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
     clearExternalSubtitle();
     if (subtitle_file.empty()) {

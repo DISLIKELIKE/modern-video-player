@@ -98,4 +98,10 @@ void SdlVideoRenderer::setSubtitleText(const std::string& text) {
     }
 }
 
+void SdlVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    if (display_) {
+        display_->setHotkeyManager(hotkey_manager);
+    }
+}
+
 }  // namespace vp::render

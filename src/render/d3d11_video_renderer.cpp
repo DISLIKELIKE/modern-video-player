@@ -74,4 +74,8 @@ void D3D11VideoRenderer::setSubtitleText(const std::string& text) {
     (void)text;
 }
 
+void D3D11VideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    (void)hotkey_manager;
+}
+
 }  // namespace vp::render

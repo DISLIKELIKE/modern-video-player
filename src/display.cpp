@@ -415,15 +415,15 @@ bool Display::init(int width, int height, const std::string& title) {
     }
     
     const WindowSize window_size = computeInitialWindowSize(width, height);
-    width_ = window_size.width;
-    height_ = window_size.height;
+    width_.store(window_size.width);
+    height_.store(window_size.height);
     
     window_ = SDL_CreateWindow(
         title.c_str(),
         SDL_WINDOWPOS_CENTERED,
         SDL_WINDOWPOS_CENTERED,
-        width_,
-        height_,
+        width_.load(),
+        height_.load(),
         SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
     );
     
@@ -478,7 +478,7 @@ bool Display::init(int width, int height, const std::string& title) {
         seek_preview_ratio_ = 0.0;
     }
     
-    std::cout << "Display initialized: window " << width_ << "x" << height_
+    std::cout << "Display initialized: window " << width_.load() << "x" << height_.load()
               << " (source " << width << "x" << height << ")" << std::endl;
     
     return true;
@@ -502,8 +502,8 @@ void Display::close() {
     
     SDL_Quit();
     
-    width_ = 0;
-    height_ = 0;
+    width_.store(0);
+    height_.store(0);
     initialized_ = false;
 }
 
@@ -558,27 +558,29 @@ void Display::renderFrame(const uint8_t* data, int width, int height) {
     if (!renderer_ || !texture_ || !data) {
         return;
     }
-    
-    handleEvents();
+
+    std::lock_guard<std::mutex> lock(sdl_mutex_);
     SDL_RenderClear(renderer_);
     if (!updateTexture(data, width, height)) {
         return;
     }
     
-    const SDL_Rect dst_rect = computeRenderRect(width_, height_, width, height);
+    const SDL_Rect dst_rect = computeRenderRect(width_.load(), height_.load(), width, height);
     SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect);
-    drawSubtitleOverlay(width_, height_);
-    drawControls(width_, height_);
+    drawSubtitleOverlay(width_.load(), height_.load());
+    drawControls(width_.load(), height_.load());
 }
 
 void Display::present() {
     if (renderer_) {
+        std::lock_guard<std::mutex> lock(sdl_mutex_);
         SDL_RenderPresent(renderer_);
     }
 }
 
 void Display::clear() {
     if (renderer_) {
+        std::lock_guard<std::mutex> lock(sdl_mutex_);
         SDL_RenderClear(renderer_);
     }
 }
@@ -593,120 +595,125 @@ void Display::handleEvents() {
                 break;
                 
             case SDL_KEYDOWN:
-                switch (event.key.keysym.sym) {
-                    case SDLK_ESCAPE:
-                        if (fullscreen_) {
-                            toggleFullscreen();
-                        } else {
-                            should_quit_.store(true);
-                        }
-                        break;
-                    case SDLK_q:
-                        should_quit_.store(true);
-                        break;
-                    case SDLK_SPACE:
-                        toggle_pause_requested_.store(true);
-                        break;
-                    case SDLK_RETURN:
-                    case SDLK_KP_ENTER:
-                    case SDLK_f:
+            {
+                const SDL_Keycode key_code = event.key.keysym.sym;
+
+                if (key_code == SDLK_ESCAPE) {
+                    if (fullscreen_.load()) {
                         toggleFullscreen();
-                        break;
-                    case SDLK_LEFT:
-                    case SDLK_RIGHT: {
-                        const bool ctrl_pressed = (event.key.keysym.mod & KMOD_CTRL) != 0;
-                        const double delta = ctrl_pressed ? kSeekStepSecondsCtrl : kSeekStepSeconds;
-                        std::lock_guard<std::mutex> lock(request_mutex_);
-                        seek_delta_seconds_ += (event.key.keysym.sym == SDLK_RIGHT) ? delta : -delta;
-                        seek_delta_requested_ = true;
-                        break;
+                    } else {
+                        should_quit_.store(true);
                     }
-                    case SDLK_UP:
-                    case SDLK_EQUALS: {
-                        const float next = clampVolume(overlay_volume_.load() + kVolumeStep);
-                        {
-                            std::lock_guard<std::mutex> lock(request_mutex_);
-                            requested_volume_ = next;
-                            volume_change_requested_ = true;
+                    break;
+                }
+
+                if (key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) {
+                    toggleFullscreen();
+                    break;
+                }
+
+                std::optional<input::PlayerAction> action = hotkey_manager_.actionForKey(key_code);
+                if (!action && key_code == SDLK_EQUALS) {
+                    action = input::PlayerAction::VolumeUp;
+                } else if (!action && key_code == SDLK_MINUS) {
+                    action = input::PlayerAction::VolumeDown;
+                }
+                if (!action) {
+                    break;
+                }
+
+                switch (*action) {
+                case input::PlayerAction::PlayPause:
+                    toggle_pause_requested_.store(true);
+                    break;
+                case input::PlayerAction::SeekBackward:
+                case input::PlayerAction::SeekForward: {
+                    const bool ctrl_pressed = (event.key.keysym.mod & KMOD_CTRL) != 0;
+                    const double delta = ctrl_pressed ? kSeekStepSecondsCtrl : kSeekStepSeconds;
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    seek_delta_seconds_ += (*action == input::PlayerAction::SeekForward) ? delta : -delta;
+                    seek_delta_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::VolumeUp:
+                case input::PlayerAction::VolumeDown: {
+                    const float direction = (*action == input::PlayerAction::VolumeUp) ? 1.0f : -1.0f;
+                    const float next = clampVolume(overlay_volume_.load() + direction * kVolumeStep);
+                    {
+                        std::lock_guard<std::mutex> lock(request_mutex_);
+                        requested_volume_ = next;
+                        volume_change_requested_ = true;
+                    }
+                    overlay_volume_.store(next);
+                    break;
+                }
+                case input::PlayerAction::ToggleMute: {
+                    const float current = clampVolume(overlay_volume_.load());
+                    float next = current;
+                    if (current > 0.0001f) {
+                        last_nonzero_volume_ = current;
+                        next = 0.0f;
+                    } else {
+                        next = clampVolume(last_nonzero_volume_);
+                        if (next < 0.0001f) {
+                            next = 0.5f;
                         }
-                        overlay_volume_.store(next);
-                        break;
                     }
-                    case SDLK_DOWN:
-                    case SDLK_MINUS: {
-                        const float next = clampVolume(overlay_volume_.load() - kVolumeStep);
-                        {
-                            std::lock_guard<std::mutex> lock(request_mutex_);
-                            requested_volume_ = next;
-                            volume_change_requested_ = true;
-                        }
-                        overlay_volume_.store(next);
-                        break;
-                    }
-                    case SDLK_m: {
-                        const float current = clampVolume(overlay_volume_.load());
-                        float next = current;
-                        if (current > 0.0001f) {
-                            last_nonzero_volume_ = current;
-                            next = 0.0f;
-                        } else {
-                            next = clampVolume(last_nonzero_volume_);
-                            if (next < 0.0001f) {
-                                next = 0.5f;
-                            }
-                        }
-                        {
-                            std::lock_guard<std::mutex> lock(request_mutex_);
-                            requested_volume_ = next;
-                            volume_change_requested_ = true;
-                        }
-                        overlay_volume_.store(next);
-                        break;
-                    }
-                    case SDLK_LEFTBRACKET:
-                    case SDLK_RIGHTBRACKET: {
+                    {
                         std::lock_guard<std::mutex> lock(request_mutex_);
-                        speed_delta_ += (event.key.keysym.sym == SDLK_RIGHTBRACKET) ? kSpeedStep : -kSpeedStep;
-                        speed_change_requested_ = true;
-                        break;
+                        requested_volume_ = next;
+                        volume_change_requested_ = true;
                     }
-                    case SDLK_r: {
-                        std::lock_guard<std::mutex> lock(request_mutex_);
-                        speed_reset_requested_ = true;
-                        break;
-                    }
-                    case SDLK_v: {
-                        std::lock_guard<std::mutex> lock(request_mutex_);
-                        subtitle_toggle_requested_ = true;
-                        break;
-                    }
-                    case SDLK_PAGEUP: {
-                        std::lock_guard<std::mutex> lock(request_mutex_);
-                        previous_item_requested_ = true;
-                        break;
-                    }
-                    case SDLK_PAGEDOWN: {
-                        std::lock_guard<std::mutex> lock(request_mutex_);
-                        next_item_requested_ = true;
-                        break;
-                    }
-                    default:
-                        break;
+                    overlay_volume_.store(next);
+                    break;
+                }
+                case input::PlayerAction::SpeedDown:
+                case input::PlayerAction::SpeedUp: {
+                    const double delta = (*action == input::PlayerAction::SpeedUp) ? kSpeedStep : -kSpeedStep;
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    speed_delta_ += delta;
+                    speed_change_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::SpeedReset: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    speed_reset_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::PreviousItem: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    previous_item_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::NextItem: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    next_item_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::ToggleSubtitle: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    subtitle_toggle_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::ToggleFullscreen:
+                    toggleFullscreen();
+                    break;
+                case input::PlayerAction::Quit:
+                    should_quit_.store(true);
+                    break;
                 }
                 break;
+            }
                 
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED ||
                     event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                     event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
                     event.window.event == SDL_WINDOWEVENT_RESTORED) {
-                    int new_width = event.window.data1;
-                    int new_height = event.window.data2;
-                    if (window_ && (new_width <= 0 || new_height <= 0)) {
-                        SDL_GetWindowSize(window_, &new_width, &new_height);
-                    }
-                    width_ = std::max(1, new_width);
-                    height_ = std::max(1, new_height);
+                    const int new_width = event.window.data1;
+                    const int new_height = event.window.data2;
+                    width_.store(std::max(1, new_width));
+                    height_.store(std::max(1, new_height));
                 }
                 break;
 
@@ -714,10 +721,10 @@ void Display::handleEvents() {
                 if (event.button.button != SDL_BUTTON_LEFT) {
                     break;
                 }
-                if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_, height_).progress_track)) {
+                if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_.load(), height_.load()).progress_track)) {
                     dragging_seek_ = true;
                     updateSeekFromMouse(event.button.x, false);
-                } else if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_, height_).volume_track)) {
+                } else if (pointInRect(event.button.x, event.button.y, computeControlLayout(width_.load(), height_.load()).volume_track)) {
                     dragging_volume_ = true;
                     updateVolumeFromMouse(event.button.x);
                 }
@@ -848,6 +855,11 @@ void Display::setOverlayState(double position, double duration, float volume, bo
 void Display::setSubtitleText(const std::string& text) {
     std::lock_guard<std::mutex> lock(subtitle_mutex_);
     subtitle_text_ = text;
+}
+
+void Display::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    hotkey_manager_ = hotkey_manager;
 }
 
 void Display::drawSubtitleOverlay(int window_width, int window_height) {
@@ -1020,7 +1032,7 @@ void Display::drawControls(int window_width, int window_height) {
 }
 
 void Display::updateSeekFromMouse(int mouse_x, bool commit) {
-    const ControlLayout layout = computeControlLayout(width_, height_);
+    const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
     if (layout.progress_track.w <= 0) {
         return;
     }
@@ -1038,7 +1050,7 @@ void Display::updateSeekFromMouse(int mouse_x, bool commit) {
 }
 
 void Display::updateVolumeFromMouse(int mouse_x) {
-    const ControlLayout layout = computeControlLayout(width_, height_);
+    const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
     if (layout.volume_track.w <= 0) {
         return;
     }
@@ -1053,23 +1065,25 @@ void Display::updateVolumeFromMouse(int mouse_x) {
 }
 
 void Display::toggleFullscreen() {
+    std::lock_guard<std::mutex> lock(sdl_mutex_);
     if (!window_) {
         return;
     }
-    
-    fullscreen_ = !fullscreen_;
 
-    if (fullscreen_) {
+    const bool next_fullscreen = !fullscreen_.load();
+    fullscreen_.store(next_fullscreen);
+
+    if (next_fullscreen) {
         SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
     } else {
         SDL_SetWindowFullscreen(window_, 0);
     }
 
-    int updated_width = width_;
-    int updated_height = height_;
+    int updated_width = width_.load();
+    int updated_height = height_.load();
     SDL_GetWindowSize(window_, &updated_width, &updated_height);
-    width_ = std::max(1, updated_width);
-    height_ = std::max(1, updated_height);
+    width_.store(std::max(1, updated_width));
+    height_.store(std::max(1, updated_height));
 }
 
 } // namespace vp

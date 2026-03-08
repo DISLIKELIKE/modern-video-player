@@ -83,27 +83,30 @@ void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
     if (!initialized_ || data.empty()) {
         return;
     }
-    
-    std::lock_guard<std::mutex> lock(queue_mutex_);
-    AudioChunk chunk;
-    chunk.data = data;
-    chunk.offset = 0;
-    chunk.pts = pts;
 
-    if (chunk.pts < 0.0) {
-        const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
-                                        static_cast<double>(audio_spec_.channels) *
-                                        static_cast<double>(std::max(1, outputBytesPerSample()));
-        if (bytes_per_second > 0.0) {
-            chunk.pts = playback_pts_.load() + static_cast<double>(queued_bytes_.load()) / bytes_per_second;
-        } else {
-            chunk.pts = playback_pts_.load();
+    {
+        std::lock_guard<std::mutex> lock(queue_mutex_);
+        AudioChunk chunk;
+        chunk.data = data;
+        chunk.offset = 0;
+        chunk.pts = pts;
+
+        if (chunk.pts < 0.0) {
+            const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
+                                            static_cast<double>(audio_spec_.channels) *
+                                            static_cast<double>(std::max(1, outputBytesPerSample()));
+            if (bytes_per_second > 0.0) {
+                chunk.pts = playback_pts_.load() + static_cast<double>(queued_bytes_.load()) / bytes_per_second;
+            } else {
+                chunk.pts = playback_pts_.load();
+            }
         }
+
+        audio_queue_.push(std::move(chunk));
+        queued_bytes_.fetch_add(data.size());
     }
 
-    audio_queue_.push(std::move(chunk));
-    queued_bytes_.fetch_add(data.size());
-    
+    // Avoid lock inversion with SDL audio callback thread (device lock vs queue lock).
     SDL_PauseAudioDevice(audio_device_, 0);
 }
 

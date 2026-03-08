@@ -37,6 +37,8 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
+    const input::HotkeyManager& hotkeyManager() const;
 
     bool loadExternalSubtitle(const std::string& subtitle_file);
     void clearExternalSubtitle();

@@ -211,6 +211,10 @@ void Scheduler::renderLoop() {
                 std::this_thread::sleep_for(std::chrono::duration<double>(wait_s));
             } else if (diff < -0.25) {
                 dropped_late_frames_.fetch_add(1);
+                if (idle_callback_) {
+                    // Keep UI/event pumping alive even when rendering drops late frames continuously.
+                    idle_callback_();
+                }
                 continue;
             }
         }

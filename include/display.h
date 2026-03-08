@@ -16,6 +16,8 @@ extern "C" {
 #include <string>
 #include <vector>
 
+#include "input/hotkey_manager.h"
+
 namespace vp {
 
 class Display {
@@ -43,10 +45,11 @@ public:
     bool consumePreviousItemRequest();
     void setOverlayState(double position, double duration, float volume, bool paused);
     void setSubtitleText(const std::string& text);
+    void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
     
     void toggleFullscreen();
-    int getWidth() const { return width_; }
-    int getHeight() const { return height_; }
+    int getWidth() const { return width_.load(); }
+    int getHeight() const { return height_.load(); }
 
 private:
     struct ControlLayout {
@@ -67,12 +70,13 @@ private:
     SDL_Renderer* renderer_;
     SDL_Texture* texture_;
     
-    int width_;
-    int height_;
+    std::atomic<int> width_;
+    std::atomic<int> height_;
     std::atomic<bool> should_quit_;
     std::atomic<bool> toggle_pause_requested_;
-    bool fullscreen_;
+    std::atomic<bool> fullscreen_;
     bool initialized_;
+    std::mutex sdl_mutex_;
 
     std::mutex request_mutex_;
     bool seek_requested_;
@@ -99,6 +103,7 @@ private:
     std::atomic<bool> overlay_paused_;
     std::mutex subtitle_mutex_;
     std::string subtitle_text_;
+    input::HotkeyManager hotkey_manager_;
 };
 
 } // namespace vp
