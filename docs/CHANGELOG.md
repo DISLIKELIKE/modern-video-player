@@ -1372,3 +1372,31 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 36: M3 3.1.2（D3D11VA 初始化失败回退软解兜底）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `3.1.2` 要求 D3D11VA 初始化失败时可靠回退软解。
+- 现有逻辑在像素格式协商失败场景下仅日志提示，未显式更新后端状态，存在状态不一致风险。
+
+### 原因分析
+- `selectVideoPixelFormat` 在协商不到 D3D11VA 格式时会返回软件格式；
+- 但此前没有同步切换 `video_decoder_backend_` 与硬件像素格式状态。
+
+### 解决方案
+- 在 `PlayerCore::selectVideoPixelFormat` 中补充显式软解降级：
+  - `video_hw_pixel_fmt_ = AV_PIX_FMT_NONE`；
+  - `video_decoder_backend_ = Software`。
+- 在 `initDecoders` 后端尝试链路中补充“D3D11VA 协商阶段降级软解”日志。
+- 更新任务清单，标记 `3.1.2` 完成。
+
+### 修改文件
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

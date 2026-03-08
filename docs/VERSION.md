@@ -931,3 +931,22 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（D3D11VA 协商失败软解兜底）
+
+### 回退链路增强
+- 在 `PlayerCore::selectVideoPixelFormat` 中，当 D3D11VA 目标像素格式未被解码器提供时，显式降级到软件后端：
+  - `video_hw_pixel_fmt_` 重置为 `AV_PIX_FMT_NONE`；
+  - `video_decoder_backend_` 置为 `Software`。
+- 在解码初始化流程中补充协商降级日志，便于定位“硬解初始化成功但协商阶段回退”的场景。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `3.1.2 D3D11VA 初始化与失败回退软解` 标记完成。
+
+### 修改文件
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

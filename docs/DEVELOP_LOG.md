@@ -1013,3 +1013,38 @@ Display initialized: window 1306x734 (source 1920x1080)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 36: M3 3.1.2（D3D11VA 初始化失败回退软解兜底）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `3.1.2` 要求 D3D11VA 初始化失败时必须可靠回退到软解。
+- 现有链路在像素格式协商回退场景下仅打印日志，后端状态未显式切换为软解，存在状态不一致风险。
+
+### 分析记录
+1. `PlayerCore::selectVideoPixelFormat` 在未命中 D3D11VA 像素格式时会返回软件像素格式。
+2. 该路径此前未同步更新 `video_decoder_backend_`，可能导致后续硬件绑定清理条件判断不准确。
+
+### 解决方案
+- 在 `selectVideoPixelFormat` 中补充显式降级：
+  - 将 `video_hw_pixel_fmt_` 重置为 `AV_PIX_FMT_NONE`；
+  - 将 `video_decoder_backend_` 设置为 `Software`。
+- 在 `initDecoders` 的后端尝试链路中新增降级日志：
+  - 当 D3D11VA 初始化过程中被协商为软件路径时，记录“降级为软解”提示。
+- 同步更新任务清单 `3.1.2` 为完成。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --capabilities` 通过（主力矩阵 `PASS`）。
+
+### 修改文件
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

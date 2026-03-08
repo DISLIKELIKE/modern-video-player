@@ -681,6 +681,11 @@ bool PlayerCore::initDecoders() {
                 return false;
             }
 
+            if (backend == decoder::DecoderBackend::D3D11VA &&
+                video_decoder_backend_ != decoder::DecoderBackend::D3D11VA) {
+                LOG_WARNING("D3D11VA decoder initialization downgraded to software backend during format negotiation");
+            }
+
             LOG_INFO("Video decoder backend: " << decoder::DecoderFactory::backendName(video_decoder_backend_));
             return true;
         };
@@ -832,7 +837,9 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
                     return *p;
                 }
             }
-            LOG_WARNING("Requested D3D11VA pixel format not offered by decoder, fallback to software format");
+            LOG_WARNING("Requested D3D11VA pixel format not offered by decoder, fallback to software decode backend");
+            self->video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+            self->video_decoder_backend_ = decoder::DecoderBackend::Software;
         }
     }
 
