@@ -1781,6 +1781,103 @@ bool runDelayAdjustCheck(const std::string& media_file, const std::string& subti
     return result;
 }
 
+bool runNumericSeekCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "numeric-seek-check.path=" << media_file << std::endl;
+        std::cout << "numeric-seek-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    input::HotkeyManager hotkeys;
+    auto binding_is = [&hotkeys](input::PlayerAction action, int expected_key) {
+        const auto key = hotkeys.keyForAction(action);
+        return key.has_value() && *key == expected_key;
+    };
+
+    const bool bindings_ok =
+        binding_is(input::PlayerAction::SeekTo10Percent, '1') &&
+        binding_is(input::PlayerAction::SeekTo20Percent, '2') &&
+        binding_is(input::PlayerAction::SeekTo30Percent, '3') &&
+        binding_is(input::PlayerAction::SeekTo40Percent, '4') &&
+        binding_is(input::PlayerAction::SeekTo50Percent, '5') &&
+        binding_is(input::PlayerAction::SeekTo60Percent, '6') &&
+        binding_is(input::PlayerAction::SeekTo70Percent, '7') &&
+        binding_is(input::PlayerAction::SeekTo80Percent, '8') &&
+        binding_is(input::PlayerAction::SeekTo90Percent, '9');
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+
+    bool entered_playback_loop = false;
+    bool paused_before_seek = false;
+    double duration = 0.0;
+    double target_10 = 0.0;
+    double target_90 = 0.0;
+    double after_10 = 0.0;
+    double after_90 = 0.0;
+    bool seek_10_ok = false;
+    bool seek_90_ok = false;
+
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(800));
+        duration = player.getDuration();
+        if (entered_playback_loop && duration > 1.0) {
+            player.pause();
+            paused_before_seek = player.isPaused();
+            pump_for(player, std::chrono::milliseconds(120));
+
+            target_10 = duration * 0.1;
+            target_90 = duration * 0.9;
+            const double tolerance = 0.75;
+
+            player.seek(target_10);
+            pump_for(player, std::chrono::milliseconds(180));
+            after_10 = player.getCurrentTime();
+            seek_10_ok = std::abs(after_10 - target_10) <= tolerance;
+
+            player.seek(target_90);
+            pump_for(player, std::chrono::milliseconds(180));
+            after_90 = player.getCurrentTime();
+            seek_90_ok = std::abs(after_90 - target_90) <= tolerance;
+        }
+        player.stop();
+        player.close();
+    }
+
+    const bool result = open_ok && bindings_ok && entered_playback_loop && paused_before_seek && seek_10_ok && seek_90_ok;
+
+    std::cout << "numeric-seek-check.path=" << media_file << std::endl;
+    std::cout << "numeric-seek-check.bindings_ok=" << (bindings_ok ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.paused_before_seek=" << (paused_before_seek ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.duration=" << duration << std::endl;
+    std::cout << "numeric-seek-check.target_10=" << target_10 << std::endl;
+    std::cout << "numeric-seek-check.after_10=" << after_10 << std::endl;
+    std::cout << "numeric-seek-check.target_90=" << target_90 << std::endl;
+    std::cout << "numeric-seek-check.after_90=" << after_90 << std::endl;
+    std::cout << "numeric-seek-check.seek_10_ok=" << (seek_10_ok ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.seek_90_ok=" << (seek_90_ok ? "true" : "false") << std::endl;
+    std::cout << "numeric-seek-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1886,6 +1983,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --frame-step-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.srt>" << std::endl;
+    std::cout << "       " << program_name << " --numeric-seek-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -1904,6 +2002,7 @@ void printUsage(const char* program_name) {
     std::cout << "  , / . - Step backward / forward one frame when paused" << std::endl;
     std::cout << "  J / K - Subtitle delay -/+100ms" << std::endl;
     std::cout << "  CTRL+J / CTRL+K - Audio delay -/+100ms" << std::endl;
+    std::cout << "  1..9 - Jump to 10%..90% of media" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -2067,6 +2166,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runDelayAdjustCheck(argv[2], argv[3]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--numeric-seek-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runNumericSeekCheck(argv[2]) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

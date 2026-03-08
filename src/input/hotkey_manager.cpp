@@ -19,7 +19,7 @@ namespace {
 
 using ActionPair = std::pair<PlayerAction, const char*>;
 
-constexpr std::array<ActionPair, 24> kActionKeyPairs{{
+constexpr std::array<ActionPair, 33> kActionKeyPairs{{
     {PlayerAction::PlayPause, "play_pause"},
     {PlayerAction::SeekBackward, "seek_backward"},
     {PlayerAction::SeekForward, "seek_forward"},
@@ -37,6 +37,15 @@ constexpr std::array<ActionPair, 24> kActionKeyPairs{{
     {PlayerAction::StepFrameForward, "step_frame_forward"},
     {PlayerAction::SubtitleDelayDown, "subtitle_delay_down"},
     {PlayerAction::SubtitleDelayUp, "subtitle_delay_up"},
+    {PlayerAction::SeekTo10Percent, "seek_to_10_percent"},
+    {PlayerAction::SeekTo20Percent, "seek_to_20_percent"},
+    {PlayerAction::SeekTo30Percent, "seek_to_30_percent"},
+    {PlayerAction::SeekTo40Percent, "seek_to_40_percent"},
+    {PlayerAction::SeekTo50Percent, "seek_to_50_percent"},
+    {PlayerAction::SeekTo60Percent, "seek_to_60_percent"},
+    {PlayerAction::SeekTo70Percent, "seek_to_70_percent"},
+    {PlayerAction::SeekTo80Percent, "seek_to_80_percent"},
+    {PlayerAction::SeekTo90Percent, "seek_to_90_percent"},
     {PlayerAction::PreviousChapter, "previous_chapter"},
     {PlayerAction::NextChapter, "next_chapter"},
     {PlayerAction::PreviousItem, "previous_item"},
@@ -127,6 +136,15 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::StepFrameForward, SDLK_PERIOD);
     bind(PlayerAction::SubtitleDelayDown, 'j');
     bind(PlayerAction::SubtitleDelayUp, 'k');
+    bind(PlayerAction::SeekTo10Percent, '1');
+    bind(PlayerAction::SeekTo20Percent, '2');
+    bind(PlayerAction::SeekTo30Percent, '3');
+    bind(PlayerAction::SeekTo40Percent, '4');
+    bind(PlayerAction::SeekTo50Percent, '5');
+    bind(PlayerAction::SeekTo60Percent, '6');
+    bind(PlayerAction::SeekTo70Percent, '7');
+    bind(PlayerAction::SeekTo80Percent, '8');
+    bind(PlayerAction::SeekTo90Percent, '9');
     bind(PlayerAction::PreviousChapter, SDLK_HOME);
     bind(PlayerAction::NextChapter, SDLK_END);
     bind(PlayerAction::PreviousItem, SDLK_PAGEUP);

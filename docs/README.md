@@ -33,7 +33,9 @@
 | [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md) | 格式样本回归脚本与报告说明 |
 | [REGRESSION_OPERATION_PLAYBOOK.md](./REGRESSION_OPERATION_PLAYBOOK.md) | 样本准备与回归操作清单（含每步作用） |
 | [format-regression.yml](../.github/workflows/format-regression.yml) | GitHub Actions 自动格式回归工作流 |
-| [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/恢复索引/快捷键） |
+| [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/音轨字幕时延/恢复索引/快捷键） |
+| [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨/字幕延迟调节本地验收记录 |
+| [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 数字热键 `1..9` 跳转本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -54,6 +56,8 @@
 - 更新 [FILTERS.md](./FILTERS.md) / [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) / [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) 的状态说明与当前入口描述
 - 更新根 README 的故障排除口径，并为 [video-stream-index-fix.md](./video-stream-index-fix.md) 增加历史归档说明
 - 新增 [DOC_AUDIT_2026-03-08.md](./DOC_AUDIT_2026-03-08.md) - 汇总本轮文档巡检范围、结论与保留策略
+- 新增 [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) - 记录 4.5 音轨/字幕延迟调节本地验收结果
+- 新增 [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) - 记录 4.6 数字热键跳转本地验收结果
 
 ---
 

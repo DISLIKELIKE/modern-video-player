@@ -158,6 +158,7 @@ build\Release\modern-video-player.exe your_video.mp4
 | , / . | Step backward / forward one frame when paused |
 | J / K | Subtitle delay -/+100ms |
 | Ctrl+J / Ctrl+K | Audio delay -/+100ms |
+| 1..9 | Jump to 10%..90% of media |
 | V | Toggle subtitles |
 
 ## Technical Highlights

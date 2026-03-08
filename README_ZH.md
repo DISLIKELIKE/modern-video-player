@@ -172,6 +172,9 @@ build\Release\modern-video-player.exe your_video.mp4
 | A / B / C | 设置 A 点 / 设置 B 点 / 清除 A-B Repeat |
 | S | 保存截图 |
 | , / . | 暂停态单帧后退 / 前进 |
+| J / K | 字幕延迟 -/+100ms |
+| Ctrl+J / Ctrl+K | 音轨延迟 -/+100ms |
+| 1..9 | 跳转到 10%..90% 位置 |
 | V | 字幕开关 |
 
 ## 技术亮点

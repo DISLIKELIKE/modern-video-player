@@ -1071,6 +1071,53 @@ void Display::handleEvents() {
                     }
                     break;
                 }
+                case input::PlayerAction::SeekTo10Percent:
+                case input::PlayerAction::SeekTo20Percent:
+                case input::PlayerAction::SeekTo30Percent:
+                case input::PlayerAction::SeekTo40Percent:
+                case input::PlayerAction::SeekTo50Percent:
+                case input::PlayerAction::SeekTo60Percent:
+                case input::PlayerAction::SeekTo70Percent:
+                case input::PlayerAction::SeekTo80Percent:
+                case input::PlayerAction::SeekTo90Percent: {
+                    double ratio = 0.0;
+                    switch (*action) {
+                    case input::PlayerAction::SeekTo10Percent:
+                        ratio = 0.1;
+                        break;
+                    case input::PlayerAction::SeekTo20Percent:
+                        ratio = 0.2;
+                        break;
+                    case input::PlayerAction::SeekTo30Percent:
+                        ratio = 0.3;
+                        break;
+                    case input::PlayerAction::SeekTo40Percent:
+                        ratio = 0.4;
+                        break;
+                    case input::PlayerAction::SeekTo50Percent:
+                        ratio = 0.5;
+                        break;
+                    case input::PlayerAction::SeekTo60Percent:
+                        ratio = 0.6;
+                        break;
+                    case input::PlayerAction::SeekTo70Percent:
+                        ratio = 0.7;
+                        break;
+                    case input::PlayerAction::SeekTo80Percent:
+                        ratio = 0.8;
+                        break;
+                    case input::PlayerAction::SeekTo90Percent:
+                        ratio = 0.9;
+                        break;
+                    default:
+                        break;
+                    }
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    seek_ratio_ = ratio;
+                    seek_requested_ = true;
+                    seek_preview_active_ = false;
+                    break;
+                }
                 case input::PlayerAction::PreviousChapter: {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     previous_chapter_requested_ = true;
