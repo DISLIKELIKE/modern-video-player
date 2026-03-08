@@ -78,6 +78,18 @@ bool SdlVideoRenderer::consumeToggleSubtitleRequest() {
     return display_ ? display_->consumeToggleSubtitleRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeSetABRepeatStartRequest() {
+    return display_ ? display_->consumeSetABRepeatStartRequest() : false;
+}
+
+bool SdlVideoRenderer::consumeSetABRepeatEndRequest() {
+    return display_ ? display_->consumeSetABRepeatEndRequest() : false;
+}
+
+bool SdlVideoRenderer::consumeClearABRepeatRequest() {
+    return display_ ? display_->consumeClearABRepeatRequest() : false;
+}
+
 bool SdlVideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }

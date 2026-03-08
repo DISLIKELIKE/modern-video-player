@@ -91,6 +91,32 @@ size_t VideoPlayer::chapterCount() const {
     return core_player_ ? core_player_->chapterCount() : 0U;
 }
 
+bool VideoPlayer::setABRepeatStart() {
+    return core_player_ ? core_player_->setABRepeatStart() : false;
+}
+
+bool VideoPlayer::setABRepeatEnd() {
+    return core_player_ ? core_player_->setABRepeatEnd() : false;
+}
+
+void VideoPlayer::clearABRepeat() {
+    if (core_player_) {
+        core_player_->clearABRepeat();
+    }
+}
+
+bool VideoPlayer::isABRepeatEnabled() const {
+    return core_player_ ? core_player_->isABRepeatEnabled() : false;
+}
+
+double VideoPlayer::abRepeatStart() const {
+    return core_player_ ? core_player_->abRepeatStart() : -1.0;
+}
+
+double VideoPlayer::abRepeatEnd() const {
+    return core_player_ ? core_player_->abRepeatEnd() : -1.0;
+}
+
 void VideoPlayer::pumpEvents() {
     if (core_player_) {
         core_player_->pumpEvents();

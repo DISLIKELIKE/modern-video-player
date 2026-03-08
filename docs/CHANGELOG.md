@@ -43,6 +43,7 @@
 | 38 | 2026-03-08 | M3 3.3.2：渲染失败降级回归入口补齐 | ✅ 已修复 |
 | 39 | 2026-03-08 | M3 3.3.1：Windows 软解/硬解主力样本回归通过 | ✅ 已修复 |
 | 40 | 2026-03-08 | M4 4.1：章节导航（上一章/下一章）接入与验收 | ✅ 已修复 |
+| 41 | 2026-03-08 | M4 4.2：A-B Repeat（A/B/C）接入与验收 | ✅ 已修复 |
 
 ---
 
@@ -1562,6 +1563,63 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 41: M4 4.2（A-B Repeat）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `4.2` 需要支持 A-B Repeat。
+- 当前播放器缺少 A/B/C 快捷键动作与循环区间控制逻辑，无法在播放中进行区间重复。
+
+### 原因分析
+- 输入链路未定义 A-B Repeat 请求动作。
+- `PlayerCore` 缺少 A 点/B 点状态管理与循环触发逻辑。
+- 缺少可重复执行的 A-B Repeat 验收命令。
+
+### 解决方案
+- 扩展热键动作：
+  - 新增 `SetABRepeatStart` / `SetABRepeatEnd` / `ClearABRepeat`；
+  - 默认键位绑定 `A/B/C`。
+- 扩展请求链路：
+  - `Display` 增加 A-B Repeat 请求标记与消费接口；
+  - `IVideoRenderer` 与各渲染器实现增加透传接口。
+- `PlayerCore` 新增 A-B Repeat 状态与控制：
+  - `setABRepeatStart()` 设置 A 点并清空旧 B 点；
+  - `setABRepeatEnd()` 设置 B 点并启用循环；
+  - `clearABRepeat()` 清除循环；
+  - `handleABRepeatLoop()` 在播放中检测到达 B 点后自动 seek 回 A 点。
+- `VideoPlayer` 暴露 A-B Repeat API 供主流程与验收命令调用。
+- 新增 `--ab-repeat-check <media_file>` 命令，输出 `ab-repeat-check.*` 字段和 `PASS/FAIL`。
+- 修复回归检查冲突：
+  - `--settings-persistence-check` 的测试键位由 `b` 调整为 `x`，避免与新默认热键冲突。
+- 新增本地报告 `docs/reports/AB_REPEAT_LOCAL_CHECK.md`。
+- 更新任务清单，标记 `4.2` 已完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/AB_REPEAT_LOCAL_CHECK.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md

@@ -25,6 +25,12 @@ public:
     bool seekToNextChapter();
     bool seekToPreviousChapter();
     size_t chapterCount() const;
+    bool setABRepeatStart();
+    bool setABRepeatEnd();
+    void clearABRepeat();
+    bool isABRepeatEnabled() const;
+    double abRepeatStart() const;
+    double abRepeatEnd() const;
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();

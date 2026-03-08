@@ -76,6 +76,12 @@ public:
     bool seekToNextChapter();
     bool seekToPreviousChapter();
     size_t chapterCount() const;
+    bool setABRepeatStart();
+    bool setABRepeatEnd();
+    void clearABRepeat();
+    bool isABRepeatEnabled() const;
+    double abRepeatStart() const;
+    double abRepeatEnd() const;
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -136,6 +142,7 @@ private:
     void renderFrame(VideoFrame&& frame);
     void onRenderIdle();
     void rebuildChapterPoints();
+    void handleABRepeatLoop();
     void updateSubtitleOverlay(double position_seconds);
 
     void emitStateChanged(PlaybackState state);
@@ -190,6 +197,10 @@ private:
     std::atomic<bool> next_item_requested_{false};
     std::atomic<bool> previous_item_requested_{false};
     std::vector<double> chapter_points_;
+    std::atomic<bool> ab_repeat_enabled_{false};
+    std::atomic<double> ab_repeat_start_{-1.0};
+    std::atomic<double> ab_repeat_end_{-1.0};
+    std::atomic<int64_t> ab_repeat_last_loop_ms_{0};
     filters::FilterPipeline filter_pipeline_;
 
     mutable std::mutex callback_mutex_;

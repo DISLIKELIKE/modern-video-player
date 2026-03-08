@@ -43,6 +43,9 @@ public:
     bool consumeSpeedChangeRequest(double& speed_delta);
     bool consumeResetSpeedRequest();
     bool consumeToggleSubtitleRequest();
+    bool consumeSetABRepeatStartRequest();
+    bool consumeSetABRepeatEndRequest();
+    bool consumeClearABRepeatRequest();
     bool consumeNextChapterRequest();
     bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
@@ -127,6 +130,9 @@ private:
     double speed_delta_;
     bool speed_reset_requested_;
     bool subtitle_toggle_requested_;
+    bool ab_repeat_start_requested_;
+    bool ab_repeat_end_requested_;
+    bool ab_repeat_clear_requested_;
     bool next_chapter_requested_;
     bool previous_chapter_requested_;
     bool next_item_requested_;

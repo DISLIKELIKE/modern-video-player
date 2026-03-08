@@ -194,6 +194,7 @@ bool PlayerCore::open(const std::string& filename) {
     quit_requested_.store(false);
     next_item_requested_.store(false);
     previous_item_requested_.store(false);
+    clearABRepeat();
     clock_.reset();
     const bool has_audio_clock = audio_codec_ctx_ && audio_player_ && audio_player_->isInitialized();
     clock_.setSource(has_audio_clock ? ClockSource::Audio : ClockSource::System);
@@ -220,6 +221,7 @@ void PlayerCore::close() {
     audio_packet_queue_.reset();
     clearExternalSubtitles();
     chapter_points_.clear();
+    clearABRepeat();
     opened_.store(false);
 }
 
@@ -387,6 +389,84 @@ size_t PlayerCore::chapterCount() const {
     return chapter_points_.size();
 }
 
+bool PlayerCore::setABRepeatStart() {
+    if (!opened_.load()) {
+        return false;
+    }
+
+    double start = position_.load();
+    const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+    if (duration > 0.0) {
+        start = std::max(0.0, std::min(duration, start));
+    } else {
+        start = std::max(0.0, start);
+    }
+
+    ab_repeat_start_.store(start);
+    ab_repeat_end_.store(-1.0);
+    ab_repeat_enabled_.store(false);
+    ab_repeat_last_loop_ms_.store(0);
+    LOG_INFO("A-B repeat start set: A=" << start << "s");
+    return true;
+}
+
+bool PlayerCore::setABRepeatEnd() {
+    if (!opened_.load()) {
+        return false;
+    }
+
+    constexpr double kMinSegmentSeconds = 0.2;
+    const double start = ab_repeat_start_.load();
+    if (start < 0.0) {
+        LOG_WARNING("A-B repeat end ignored: A point is not set");
+        return false;
+    }
+
+    double end = position_.load();
+    const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+    if (duration > 0.0) {
+        end = std::max(0.0, std::min(duration, end));
+    } else {
+        end = std::max(0.0, end);
+    }
+
+    if (end <= start + kMinSegmentSeconds) {
+        LOG_WARNING("A-B repeat end ignored: B(" << end << "s) must be greater than A(" << start << "s)");
+        return false;
+    }
+
+    ab_repeat_end_.store(end);
+    ab_repeat_enabled_.store(true);
+    ab_repeat_last_loop_ms_.store(0);
+    LOG_INFO("A-B repeat enabled: [" << start << "s, " << end << "s]");
+    return true;
+}
+
+void PlayerCore::clearABRepeat() {
+    const bool had_repeat = ab_repeat_enabled_.load() ||
+                            ab_repeat_start_.load() >= 0.0 ||
+                            ab_repeat_end_.load() >= 0.0;
+    ab_repeat_enabled_.store(false);
+    ab_repeat_start_.store(-1.0);
+    ab_repeat_end_.store(-1.0);
+    ab_repeat_last_loop_ms_.store(0);
+    if (had_repeat) {
+        LOG_INFO("A-B repeat cleared");
+    }
+}
+
+bool PlayerCore::isABRepeatEnabled() const {
+    return ab_repeat_enabled_.load();
+}
+
+double PlayerCore::abRepeatStart() const {
+    return ab_repeat_start_.load();
+}
+
+double PlayerCore::abRepeatEnd() const {
+    return ab_repeat_end_.load();
+}
+
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -442,6 +522,18 @@ void PlayerCore::pumpEvents() {
             toggleSubtitleEnabled();
         }
 
+        if (video_renderer_->consumeSetABRepeatStartRequest()) {
+            setABRepeatStart();
+        }
+
+        if (video_renderer_->consumeSetABRepeatEndRequest()) {
+            setABRepeatEnd();
+        }
+
+        if (video_renderer_->consumeClearABRepeatRequest()) {
+            clearABRepeat();
+        }
+
         if (video_renderer_->consumeNextItemRequest()) {
             next_item_requested_.store(true);
             if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
@@ -464,6 +556,7 @@ void PlayerCore::pumpEvents() {
         }
     }
 
+    handleABRepeatLoop();
 }
 
 void PlayerCore::rebuildChapterPoints() {
@@ -488,6 +581,36 @@ void PlayerCore::rebuildChapterPoints() {
     if (!chapter_points_.empty()) {
         LOG_INFO("Detected chapters: " << chapter_points_.size());
     }
+}
+
+void PlayerCore::handleABRepeatLoop() {
+    if (state_.load() != PlaybackState::Playing || !ab_repeat_enabled_.load()) {
+        return;
+    }
+
+    const double start = ab_repeat_start_.load();
+    const double end = ab_repeat_end_.load();
+    if (start < 0.0 || end <= start) {
+        return;
+    }
+
+    constexpr double kLoopTriggerEpsilon = 0.03;
+    constexpr int64_t kLoopMinIntervalMs = 120;
+    const double current = position_.load();
+    if (current + kLoopTriggerEpsilon < end) {
+        return;
+    }
+
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    const int64_t last_ms = ab_repeat_last_loop_ms_.load();
+    if (last_ms != 0 && (now_ms - last_ms) < kLoopMinIntervalMs) {
+        return;
+    }
+    ab_repeat_last_loop_ms_.store(now_ms);
+
+    LOG_INFO("A-B repeat loop: " << current << "s -> " << start << "s");
+    seek(start);
 }
 
 bool PlayerCore::consumeQuitRequest() {

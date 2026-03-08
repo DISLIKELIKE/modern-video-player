@@ -20,6 +20,9 @@ public:
     bool consumeSpeedChangeRequest(double& speed_delta) override;
     bool consumeResetSpeedRequest() override;
     bool consumeToggleSubtitleRequest() override;
+    bool consumeSetABRepeatStartRequest() override;
+    bool consumeSetABRepeatEndRequest() override;
+    bool consumeClearABRepeatRequest() override;
     bool consumeNextChapterRequest() override;
     bool consumePreviousChapterRequest() override;
     bool consumeNextItemRequest() override;

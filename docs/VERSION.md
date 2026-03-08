@@ -1100,3 +1100,66 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（A-B Repeat）
+
+### 交互能力增强
+- 新增 A-B Repeat 默认热键：
+  - `A`：设置 A 点；
+  - `B`：设置 B 点并启用循环；
+  - `C`：清除 A-B Repeat。
+- 帮助信息补充 `A/B/C` 键位说明。
+
+### 播放核心能力增强
+- `PlayerCore` 新增 A-B Repeat 状态管理与查询：
+  - `setABRepeatStart()`；
+  - `setABRepeatEnd()`；
+  - `clearABRepeat()`；
+  - `isABRepeatEnabled()`；
+  - `abRepeatStart()` / `abRepeatEnd()`。
+- 新增播放循环检测 `handleABRepeatLoop()`：
+  - 当播放位置到达 B 点时自动 seek 回 A 点。
+
+### 验收能力补齐
+- 新增 `--ab-repeat-check <media_file>`：
+  - 自动执行“设置 A 点 -> 设置 B 点 -> 观察循环 -> 清除”；
+  - 输出 `ab-repeat-check.*` 与 `PASS/FAIL`。
+- 新增本地报告：`docs/reports/AB_REPEAT_LOCAL_CHECK.md`。
+
+### 回归修复
+- 修复 `--settings-persistence-check` 与新默认热键冲突：
+  - 测试键位由 `b` 调整为 `x`，恢复回归稳定性。
+
+### 本地验证
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`：`PASS`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `4.2 A-B Repeat` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/AB_REPEAT_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

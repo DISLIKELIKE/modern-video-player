@@ -1259,3 +1259,69 @@ windows-backend-check.result=FAIL
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 41: M4 4.2（A-B Repeat）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `4.2` 要求支持 A-B Repeat。
+- 当前主流程缺少 A/B/C 区间循环控制，无法设置 A 点、B 点并重复播放区间。
+
+### 分析记录
+1. 热键与事件请求链路已具备可扩展模式，可复用为 A-B Repeat 请求透传。
+2. `PlayerCore` 已有 seek 与播放位置状态，适合新增区间状态并在播放中触发回跳。
+3. 需要新增命令行自检入口，确保区间循环可稳定回归。
+
+### 解决方案
+- 新增热键动作与默认绑定：
+  - `SetABRepeatStart`（`A`）；
+  - `SetABRepeatEnd`（`B`）；
+  - `ClearABRepeat`（`C`）。
+- 扩展链路：
+  - `Display` 增加 A-B Repeat 请求标记/消费；
+  - `Renderer` 抽象与 SDL/D3D11/OpenGL 实现新增对应透传接口。
+- `PlayerCore` 增加 A-B Repeat 控制能力：
+  - `setABRepeatStart()`、`setABRepeatEnd()`、`clearABRepeat()`；
+  - `isABRepeatEnabled()`、`abRepeatStart()`、`abRepeatEnd()`；
+  - `handleABRepeatLoop()` 在播放中检测到达 B 点后自动 seek 回 A 点。
+- `VideoPlayer` 增加 A-B Repeat API 包装。
+- `main` 新增 `--ab-repeat-check <media_file>` 验收命令与帮助信息。
+- 修复回归检查冲突：
+  - `--settings-persistence-check` 测试键位由 `b` 改为 `x`，避免与新默认 `B` 热键冲突。
+- 任务清单同步：
+  - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md` 标记 `4.2` 完成。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4` 通过（`PASS`）。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/AB_REPEAT_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

@@ -885,7 +885,7 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
     constexpr bool expected_prefer_hardware_decode = false;
     constexpr bool expected_resume_last_playlist = false;
     constexpr int expected_playlist_index = 3;
-    constexpr int expected_subtitle_key = 'b';
+    constexpr int expected_subtitle_key = 'x';
 
     config::SettingsManager writer_manager;
     AppSettings initial = loadAppSettings(writer_manager, check_path_text);
@@ -1428,6 +1428,111 @@ bool runChapterNavigationCheck(const std::string& media_file) {
     return result;
 }
 
+bool runABRepeatCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "ab-repeat-check.path=" << media_file << std::endl;
+        std::cout << "ab-repeat-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    const double duration = player.getDuration();
+
+    bool entered_playback_loop = false;
+    bool a_set = false;
+    bool b_set = false;
+    bool enabled_after_set = false;
+    bool loop_observed = false;
+    bool cleared = false;
+    double point_a = -1.0;
+    double point_b = -1.0;
+    double loop_before = -1.0;
+    double loop_after = -1.0;
+
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(600));
+
+        a_set = player.setABRepeatStart();
+        point_a = player.abRepeatStart();
+
+        if (a_set) {
+            double b_target = point_a + 2.0;
+            if (duration > 0.0) {
+                const double max_target = std::max(point_a + 0.3, duration - 0.3);
+                b_target = std::min(b_target, max_target);
+            }
+            player.seek(b_target);
+            pump_for(player, std::chrono::milliseconds(600));
+            b_set = player.setABRepeatEnd();
+            point_b = player.abRepeatEnd();
+            enabled_after_set = player.isABRepeatEnabled();
+        }
+
+        if (enabled_after_set) {
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+            double previous = player.getCurrentTime();
+            while (std::chrono::steady_clock::now() < deadline &&
+                   (player.isPlaying() || player.isPaused())) {
+                player.pumpEvents();
+                const double current = player.getCurrentTime();
+                if (previous >= point_b - 0.15 && current <= point_a + 0.5) {
+                    loop_observed = true;
+                    loop_before = previous;
+                    loop_after = current;
+                    break;
+                }
+                previous = current;
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        }
+
+        player.clearABRepeat();
+        cleared = !player.isABRepeatEnabled();
+        player.stop();
+        player.close();
+    }
+
+    const bool result = open_ok &&
+                        entered_playback_loop &&
+                        a_set &&
+                        b_set &&
+                        enabled_after_set &&
+                        loop_observed &&
+                        cleared;
+
+    std::cout << "ab-repeat-check.path=" << media_file << std::endl;
+    std::cout << "ab-repeat-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.a_set=" << (a_set ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.b_set=" << (b_set ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.enabled_after_set=" << (enabled_after_set ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.cleared=" << (cleared ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.point_a=" << point_a << std::endl;
+    std::cout << "ab-repeat-check.point_b=" << point_b << std::endl;
+    std::cout << "ab-repeat-check.loop_before=" << loop_before << std::endl;
+    std::cout << "ab-repeat-check.loop_after=" << loop_after << std::endl;
+    std::cout << "ab-repeat-check.loop_observed=" << (loop_observed ? "true" : "false") << std::endl;
+    std::cout << "ab-repeat-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 }  // namespace
 
 void signalHandler(int signal) {
@@ -1450,6 +1555,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --renderer-fallback-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --windows-backend-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
     std::cout << std::endl;
@@ -1462,6 +1568,7 @@ void printUsage(const char* program_name) {
     std::cout << "  CTRL+LEFT/CTRL+RIGHT - Seek -/+30s" << std::endl;
     std::cout << "  PAGEUP/PAGEDOWN - Previous/Next media in playlist" << std::endl;
     std::cout << "  HOME/END - Previous/Next chapter" << std::endl;
+    std::cout << "  A/B/C - Set A point / Set B point / Clear A-B repeat" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -1601,6 +1708,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runChapterNavigationCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--ab-repeat-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runABRepeatCheck(argv[2]) ? 0 : 2;
     }
     
     if (argc < 2) {

@@ -55,6 +55,18 @@ bool OpenGLVideoRenderer::consumeToggleSubtitleRequest() {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeSetABRepeatStartRequest() {
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeSetABRepeatEndRequest() {
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeClearABRepeatRequest() {
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeNextChapterRequest() {
     return false;
 }

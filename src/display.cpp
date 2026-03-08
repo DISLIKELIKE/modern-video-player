@@ -415,6 +415,9 @@ Display::Display()
     , speed_delta_(0.0)
     , speed_reset_requested_(false)
     , subtitle_toggle_requested_(false)
+    , ab_repeat_start_requested_(false)
+    , ab_repeat_end_requested_(false)
+    , ab_repeat_clear_requested_(false)
     , next_chapter_requested_(false)
     , previous_chapter_requested_(false)
     , next_item_requested_(false)
@@ -486,6 +489,9 @@ bool Display::init(int width, int height, const std::string& title) {
         speed_delta_ = 0.0;
         speed_reset_requested_ = false;
         subtitle_toggle_requested_ = false;
+        ab_repeat_start_requested_ = false;
+        ab_repeat_end_requested_ = false;
+        ab_repeat_clear_requested_ = false;
         next_chapter_requested_ = false;
         previous_chapter_requested_ = false;
         next_item_requested_ = false;
@@ -1007,6 +1013,21 @@ void Display::handleEvents() {
                     subtitle_toggle_requested_ = true;
                     break;
                 }
+                case input::PlayerAction::SetABRepeatStart: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    ab_repeat_start_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::SetABRepeatEnd: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    ab_repeat_end_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::ClearABRepeat: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    ab_repeat_clear_requested_ = true;
+                    break;
+                }
                 case input::PlayerAction::PreviousChapter: {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     previous_chapter_requested_ = true;
@@ -1167,6 +1188,33 @@ bool Display::consumeToggleSubtitleRequest() {
         return false;
     }
     subtitle_toggle_requested_ = false;
+    return true;
+}
+
+bool Display::consumeSetABRepeatStartRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!ab_repeat_start_requested_) {
+        return false;
+    }
+    ab_repeat_start_requested_ = false;
+    return true;
+}
+
+bool Display::consumeSetABRepeatEndRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!ab_repeat_end_requested_) {
+        return false;
+    }
+    ab_repeat_end_requested_ = false;
+    return true;
+}
+
+bool Display::consumeClearABRepeatRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!ab_repeat_clear_requested_) {
+        return false;
+    }
+    ab_repeat_clear_requested_ = false;
     return true;
 }
 

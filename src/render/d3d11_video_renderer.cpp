@@ -131,6 +131,18 @@ bool D3D11VideoRenderer::consumeToggleSubtitleRequest() {
     return display_ ? display_->consumeToggleSubtitleRequest() : false;
 }
 
+bool D3D11VideoRenderer::consumeSetABRepeatStartRequest() {
+    return display_ ? display_->consumeSetABRepeatStartRequest() : false;
+}
+
+bool D3D11VideoRenderer::consumeSetABRepeatEndRequest() {
+    return display_ ? display_->consumeSetABRepeatEndRequest() : false;
+}
+
+bool D3D11VideoRenderer::consumeClearABRepeatRequest() {
+    return display_ ? display_->consumeClearABRepeatRequest() : false;
+}
+
 bool D3D11VideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }
