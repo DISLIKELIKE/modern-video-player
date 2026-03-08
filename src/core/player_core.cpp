@@ -107,6 +107,7 @@ bool PlayerCore::open(const std::string& filename) {
             emitError(ErrorCode::DisplayInitFailed, "failed to initialize video renderer");
             return false;
         }
+        video_renderer_->setHotkeyManager(hotkey_manager_);
     }
 
     if (info.audio_stream_idx >= 0) {
@@ -261,6 +262,8 @@ void PlayerCore::pumpEvents() {
     if (!video_renderer_) {
         return;
     }
+
+    video_renderer_->handleEvents();
 
     if (video_renderer_->consumeTogglePauseRequest()) {
         if (state_.load() == PlaybackState::Playing) {

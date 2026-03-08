@@ -22,6 +22,7 @@ extern "C" {
 #include "decoder/decoder_capability.h"
 #include "demuxer.h"
 #include "filters/filter_pipeline.h"
+#include "input/hotkey_manager.h"
 #include "render/video_renderer.h"
 #include "subtitle/subtitle_parser.h"
 #include "thread_safe_queue.h"
@@ -91,6 +92,8 @@ public:
     void setSubtitleEnabled(bool enabled);
     bool isSubtitleEnabled() const;
     bool toggleSubtitleEnabled();
+    void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
+    const input::HotkeyManager& hotkeyManager() const;
 
     using StateCallback = std::function<void(PlaybackState)>;
     using PositionCallback = std::function<void(double)>;
@@ -201,6 +204,7 @@ private:
     std::string subtitle_active_text_;
     int subtitle_active_index_{-1};
     bool subtitle_enabled_{true};
+    input::HotkeyManager hotkey_manager_{};
 };
 
 }  // namespace vp::core
