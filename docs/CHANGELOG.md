@@ -2306,6 +2306,7 @@ void VideoPlayer::play() {
 ### 解决方案
 - 在主线稳定快照上建立 `v0.2.0-rc1` 与 `v0.2.0` 两个里程碑标签。
 - 同步更新 `VERSION / DEVELOP_LOG / MPC_HC_GAP_ANALYSIS / tasklist`，记录标签已建立。
+- 基于 `v0.2.0-rc1` 已成功建立这一事实，同步勾选执行约束 `5.3 每个里程碑结束前必须可打 RC 标签`。
 
 ### 修改文件
 - docs/VERSION.md
