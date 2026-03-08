@@ -32,6 +32,8 @@ public:
     bool consumeScreenshotRequest() override;
     bool consumeStepFrameBackwardRequest() override;
     bool consumeStepFrameForwardRequest() override;
+    bool consumeSubtitleDelayChangeRequest(double& delta_seconds) override;
+    bool consumeAudioDelayChangeRequest(double& delta_seconds) override;
     bool consumeNextChapterRequest() override;
     bool consumePreviousChapterRequest() override;
     bool consumeNextItemRequest() override;

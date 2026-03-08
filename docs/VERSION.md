@@ -1283,3 +1283,52 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 ?????/???????
+
+### ????
+- ?? `J / K` ???????`- / +100ms`??
+- ?? `Ctrl+J / Ctrl+K` ???????`- / +100ms`??
+- ????/??????????
+  - `player.audio_delay_ms`
+  - `player.subtitle_delay_ms`
+
+### ?????
+- ?????????`--delay-adjust-check <media_file> <subtitle.srt>`?
+- ???????
+  - `build/Debug/modern-video-player.exe --settings-persistence-check`
+  - `build/Debug/modern-video-player.exe --delay-adjust-check .\juren-30s.mp4 .\samples\subtitle\subtitle_seek_sync_sample.srt`
+- ?????`docs/reports/DELAY_ADJUST_LOCAL_CHECK.md`
+
+### ??????
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `4.5 ????/??????` ?????
+
+### ????
+- include/core/player_core.h
+- include/video_player.h
+- include/display.h
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- include/input/hotkey_manager.h
+- src/core/player_core.cpp
+- src/video_player.cpp
+- src/display.cpp
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- src/input/hotkey_manager.cpp
+- src/main.cpp
+- config/player_settings.ini
+- README.md
+- README_ZH.md
+- docs/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
+- docs/reports/DELAY_ADJUST_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -421,6 +421,10 @@ Display::Display()
     , screenshot_requested_(false)
     , step_frame_backward_requested_(false)
     , step_frame_forward_requested_(false)
+    , subtitle_delay_change_requested_(false)
+    , subtitle_delay_delta_seconds_(0.0)
+    , audio_delay_change_requested_(false)
+    , audio_delay_delta_seconds_(0.0)
     , next_chapter_requested_(false)
     , previous_chapter_requested_(false)
     , next_item_requested_(false)
@@ -498,6 +502,10 @@ bool Display::init(int width, int height, const std::string& title) {
         screenshot_requested_ = false;
         step_frame_backward_requested_ = false;
         step_frame_forward_requested_ = false;
+        subtitle_delay_change_requested_ = false;
+        subtitle_delay_delta_seconds_ = 0.0;
+        audio_delay_change_requested_ = false;
+        audio_delay_delta_seconds_ = 0.0;
         next_chapter_requested_ = false;
         previous_chapter_requested_ = false;
         next_item_requested_ = false;
@@ -1049,6 +1057,20 @@ void Display::handleEvents() {
                     step_frame_forward_requested_ = true;
                     break;
                 }
+                case input::PlayerAction::SubtitleDelayDown:
+                case input::PlayerAction::SubtitleDelayUp: {
+                    const double delta = (*action == input::PlayerAction::SubtitleDelayUp) ? 0.1 : -0.1;
+                    const bool ctrl_pressed = (event.key.keysym.mod & KMOD_CTRL) != 0;
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    if (ctrl_pressed) {
+                        audio_delay_delta_seconds_ += delta;
+                        audio_delay_change_requested_ = true;
+                    } else {
+                        subtitle_delay_delta_seconds_ += delta;
+                        subtitle_delay_change_requested_ = true;
+                    }
+                    break;
+                }
                 case input::PlayerAction::PreviousChapter: {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     previous_chapter_requested_ = true;
@@ -1263,6 +1285,28 @@ bool Display::consumeStepFrameForwardRequest() {
         return false;
     }
     step_frame_forward_requested_ = false;
+    return true;
+}
+
+bool Display::consumeSubtitleDelayChangeRequest(double& delta_seconds) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!subtitle_delay_change_requested_) {
+        return false;
+    }
+    delta_seconds = subtitle_delay_delta_seconds_;
+    subtitle_delay_delta_seconds_ = 0.0;
+    subtitle_delay_change_requested_ = false;
+    return true;
+}
+
+bool Display::consumeAudioDelayChangeRequest(double& delta_seconds) {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!audio_delay_change_requested_) {
+        return false;
+    }
+    delta_seconds = audio_delay_delta_seconds_;
+    audio_delay_delta_seconds_ = 0.0;
+    audio_delay_change_requested_ = false;
     return true;
 }
 

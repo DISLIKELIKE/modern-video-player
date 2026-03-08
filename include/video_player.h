@@ -50,6 +50,10 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setAudioDelay(double delay_seconds);
+    double getAudioDelay() const;
+    void setSubtitleDelay(double delay_seconds);
+    double getSubtitleDelay() const;
     void setPreferHardwareDecode(bool prefer_hardware_decode);
     bool preferHardwareDecode() const;
     std::string videoRendererBackendName() const;

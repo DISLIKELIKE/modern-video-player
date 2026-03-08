@@ -642,6 +642,8 @@ bool runPlaylistFlowCheck(const std::vector<std::string>& media_inputs, size_t r
 struct AppSettings {
     float volume{1.0f};
     double playback_speed{1.0};
+    double audio_delay_seconds{0.0};
+    double subtitle_delay_seconds{0.0};
     bool prefer_hardware_decode{true};
     bool resume_last_playlist{true};
     int last_playlist_index{0};
@@ -798,6 +800,8 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
     if (!loaded) {
         settings_manager.setInt("player.volume_percent", 100);
         settings_manager.setDouble("player.playback_speed", 1.0);
+        settings_manager.setInt("player.audio_delay_ms", 0);
+        settings_manager.setInt("player.subtitle_delay_ms", 0);
         settings_manager.setBool("decoder.prefer_hardware_decode", true);
         settings_manager.setBool("player.resume_last_playlist", true);
         settings_manager.setInt("player.last_playlist_index", 0);
@@ -812,6 +816,14 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
 
     if (const auto speed = settings_manager.getDouble("player.playback_speed")) {
         settings.playback_speed = std::max(0.5, std::min(2.0, *speed));
+    }
+
+    if (const auto audio_delay_ms = settings_manager.getInt("player.audio_delay_ms")) {
+        settings.audio_delay_seconds = std::max(-5.0, std::min(5.0, static_cast<double>(*audio_delay_ms) / 1000.0));
+    }
+
+    if (const auto subtitle_delay_ms = settings_manager.getInt("player.subtitle_delay_ms")) {
+        settings.subtitle_delay_seconds = std::max(-5.0, std::min(5.0, static_cast<double>(*subtitle_delay_ms) / 1000.0));
     }
 
     if (const auto prefer_hardware = settings_manager.getBool("decoder.prefer_hardware_decode")) {
@@ -829,6 +841,8 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
 
     settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(settings.volume * 100.0f)));
     settings_manager.setDouble("player.playback_speed", settings.playback_speed);
+    settings_manager.setInt("player.audio_delay_ms", static_cast<int>(std::lround(settings.audio_delay_seconds * 1000.0)));
+    settings_manager.setInt("player.subtitle_delay_ms", static_cast<int>(std::lround(settings.subtitle_delay_seconds * 1000.0)));
     settings_manager.setBool("decoder.prefer_hardware_decode", settings.prefer_hardware_decode);
     settings_manager.setBool("player.resume_last_playlist", settings.resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", settings.last_playlist_index);
@@ -842,15 +856,21 @@ void saveAppSettings(config::SettingsManager& settings_manager,
                      const std::string& settings_path,
                      float volume,
                      double playback_speed,
+                     double audio_delay_seconds,
+                     double subtitle_delay_seconds,
                      bool prefer_hardware_decode,
                      bool resume_last_playlist,
                      int last_playlist_index,
                      const input::HotkeyManager& hotkey_manager) {
     const float clamped_volume = std::max(0.0f, std::min(1.0f, volume));
     const double clamped_speed = std::max(0.5, std::min(2.0, playback_speed));
+    const double clamped_audio_delay = std::max(-5.0, std::min(5.0, audio_delay_seconds));
+    const double clamped_subtitle_delay = std::max(-5.0, std::min(5.0, subtitle_delay_seconds));
 
     settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(clamped_volume * 100.0f)));
     settings_manager.setDouble("player.playback_speed", clamped_speed);
+    settings_manager.setInt("player.audio_delay_ms", static_cast<int>(std::lround(clamped_audio_delay * 1000.0)));
+    settings_manager.setInt("player.subtitle_delay_ms", static_cast<int>(std::lround(clamped_subtitle_delay * 1000.0)));
     settings_manager.setBool("decoder.prefer_hardware_decode", prefer_hardware_decode);
     settings_manager.setBool("player.resume_last_playlist", resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", std::max(0, last_playlist_index));
@@ -882,6 +902,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     constexpr float expected_volume = 0.37f;
     constexpr double expected_speed = 1.25;
+    constexpr double expected_audio_delay = 0.2;
+    constexpr double expected_subtitle_delay = -0.3;
     constexpr bool expected_prefer_hardware_decode = false;
     constexpr bool expected_resume_last_playlist = false;
     constexpr int expected_playlist_index = 3;
@@ -895,6 +917,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
                     check_path_text,
                     expected_volume,
                     expected_speed,
+                    expected_audio_delay,
+                    expected_subtitle_delay,
                     expected_prefer_hardware_decode,
                     expected_resume_last_playlist,
                     expected_playlist_index,
@@ -905,6 +929,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     const bool volume_ok = std::abs(restored.volume - expected_volume) < 1e-6f;
     const bool speed_ok = std::abs(restored.playback_speed - expected_speed) < 1e-9;
+    const bool audio_delay_ok = std::abs(restored.audio_delay_seconds - expected_audio_delay) < 1e-9;
+    const bool subtitle_delay_ok = std::abs(restored.subtitle_delay_seconds - expected_subtitle_delay) < 1e-9;
     const bool decode_pref_ok = restored.prefer_hardware_decode == expected_prefer_hardware_decode;
     const bool resume_ok = restored.resume_last_playlist == expected_resume_last_playlist;
     const bool index_ok = restored.last_playlist_index == expected_playlist_index;
@@ -912,11 +938,13 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
     const auto subtitle_key = restored.hotkey_manager.keyForAction(input::PlayerAction::ToggleSubtitle);
     const bool hotkey_ok = subtitle_key.has_value() && *subtitle_key == expected_subtitle_key;
 
-    const bool result = volume_ok && speed_ok && decode_pref_ok && resume_ok && index_ok && hotkey_ok;
+    const bool result = volume_ok && speed_ok && audio_delay_ok && subtitle_delay_ok && decode_pref_ok && resume_ok && index_ok && hotkey_ok;
 
     std::cout << "settings-persistence-check.path=" << check_path_text << std::endl;
     std::cout << "settings-persistence-check.volume_ok=" << (volume_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.speed_ok=" << (speed_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.audio_delay_ok=" << (audio_delay_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.subtitle_delay_ok=" << (subtitle_delay_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.decode_pref_ok=" << (decode_pref_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.resume_ok=" << (resume_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.index_ok=" << (index_ok ? "true" : "false") << std::endl;
@@ -1618,6 +1646,141 @@ bool runFrameStepCheck(const std::string& media_file) {
     return result;
 }
 
+bool runDelayAdjustCheck(const std::string& media_file, const std::string& subtitle_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    const std::filesystem::path subtitle_path(subtitle_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec ||
+        !std::filesystem::exists(subtitle_path, ec) || ec ||
+        !std::filesystem::is_regular_file(subtitle_path, ec) || ec) {
+        std::cout << "delay-adjust-check.path=" << media_file << std::endl;
+        std::cout << "delay-adjust-check.subtitle=" << subtitle_file << std::endl;
+        std::cout << "delay-adjust-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    constexpr double kDelayCheckStepSeconds = 0.1;
+    constexpr double kProbeOffsetSeconds = 0.05;
+    subtitle::SrtParser parser;
+    const bool subtitle_parsed = parser.parseFile(subtitle_file);
+    const auto& items = parser.items();
+    bool probe_found = false;
+    bool baseline_before_clear = false;
+    bool baseline_inside_visible = false;
+    bool subtitle_early_ok = false;
+    bool subtitle_late_ok = false;
+    size_t probe_index = 0;
+    double probe_before = 0.0;
+    double probe_inside = 0.0;
+
+    if (subtitle_parsed) {
+        for (size_t i = 0; i < items.size(); ++i) {
+            const auto& item = items[i];
+            const double gap_before = (i == 0) ? item.start_seconds : (item.start_seconds - items[i - 1].end_seconds);
+            const double duration = item.end_seconds - item.start_seconds;
+            if (item.start_seconds < kProbeOffsetSeconds || gap_before < kProbeOffsetSeconds || duration < kProbeOffsetSeconds) {
+                continue;
+            }
+
+            probe_found = true;
+            probe_index = i;
+            probe_before = item.start_seconds - kProbeOffsetSeconds;
+            probe_inside = item.start_seconds + kProbeOffsetSeconds;
+
+            const int baseline_before_index = subtitle::resolveActiveSubtitleIndex(items, probe_before, -1);
+            const int baseline_inside_index = subtitle::resolveActiveSubtitleIndex(items, probe_inside, -1);
+            const int early_index = subtitle::resolveActiveSubtitleIndex(items, probe_before + kDelayCheckStepSeconds, -1);
+            const int late_index = subtitle::resolveActiveSubtitleIndex(items, probe_inside - kDelayCheckStepSeconds, -1);
+
+            baseline_before_clear = baseline_before_index != static_cast<int>(i);
+            baseline_inside_visible = baseline_inside_index == static_cast<int>(i);
+            subtitle_early_ok = early_index == static_cast<int>(i);
+            subtitle_late_ok = late_index != static_cast<int>(i);
+            break;
+        }
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+
+    bool subtitle_loaded = false;
+    bool entered_playback_loop = false;
+    bool paused_before_adjust = false;
+    bool audio_roundtrip_ok = false;
+    bool subtitle_roundtrip_ok = false;
+    double final_audio_delay = 0.0;
+    double final_subtitle_delay = 0.0;
+
+    if (open_ok) {
+        subtitle_loaded = player.loadExternalSubtitle(subtitle_file);
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(800));
+        if (entered_playback_loop) {
+            player.pause();
+            paused_before_adjust = player.isPaused();
+            pump_for(player, std::chrono::milliseconds(120));
+
+            player.setAudioDelay(kDelayCheckStepSeconds);
+            player.setSubtitleDelay(-kDelayCheckStepSeconds);
+            audio_roundtrip_ok = std::abs(player.getAudioDelay() - kDelayCheckStepSeconds) < 1e-9;
+            subtitle_roundtrip_ok = std::abs(player.getSubtitleDelay() + kDelayCheckStepSeconds) < 1e-9;
+
+            player.play();
+            pump_for(player, std::chrono::milliseconds(250));
+            audio_roundtrip_ok = audio_roundtrip_ok && std::abs(player.getAudioDelay() - kDelayCheckStepSeconds) < 1e-9;
+            subtitle_roundtrip_ok = subtitle_roundtrip_ok && std::abs(player.getSubtitleDelay() + kDelayCheckStepSeconds) < 1e-9;
+            final_audio_delay = player.getAudioDelay();
+            final_subtitle_delay = player.getSubtitleDelay();
+        }
+        player.stop();
+        player.close();
+    }
+
+    const bool subtitle_math_ok = probe_found && baseline_before_clear && baseline_inside_visible && subtitle_early_ok && subtitle_late_ok;
+    const bool result = open_ok &&
+                        subtitle_loaded &&
+                        entered_playback_loop &&
+                        paused_before_adjust &&
+                        audio_roundtrip_ok &&
+                        subtitle_roundtrip_ok &&
+                        subtitle_math_ok;
+
+    std::cout << "delay-adjust-check.path=" << media_file << std::endl;
+    std::cout << "delay-adjust-check.subtitle=" << subtitle_file << std::endl;
+    std::cout << "delay-adjust-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.subtitle_loaded=" << (subtitle_loaded ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.subtitle_entries=" << items.size() << std::endl;
+    std::cout << "delay-adjust-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.paused_before_adjust=" << (paused_before_adjust ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.probe_found=" << (probe_found ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.probe_index=" << probe_index << std::endl;
+    std::cout << "delay-adjust-check.probe_before=" << probe_before << std::endl;
+    std::cout << "delay-adjust-check.probe_inside=" << probe_inside << std::endl;
+    std::cout << "delay-adjust-check.baseline_before_clear=" << (baseline_before_clear ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.baseline_inside_visible=" << (baseline_inside_visible ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.subtitle_early_ok=" << (subtitle_early_ok ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.subtitle_late_ok=" << (subtitle_late_ok ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.audio_roundtrip_ok=" << (audio_roundtrip_ok ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.subtitle_roundtrip_ok=" << (subtitle_roundtrip_ok ? "true" : "false") << std::endl;
+    std::cout << "delay-adjust-check.final_audio_delay_ms=" << std::lround(final_audio_delay * 1000.0) << std::endl;
+    std::cout << "delay-adjust-check.final_subtitle_delay_ms=" << std::lround(final_subtitle_delay * 1000.0) << std::endl;
+    std::cout << "delay-adjust-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1722,6 +1885,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --frame-step-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.srt>" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -1738,6 +1902,8 @@ void printUsage(const char* program_name) {
     std::cout << "  A/B/C - Set A point / Set B point / Clear A-B repeat" << std::endl;
     std::cout << "  S - Save screenshot" << std::endl;
     std::cout << "  , / . - Step backward / forward one frame when paused" << std::endl;
+    std::cout << "  J / K - Subtitle delay -/+100ms" << std::endl;
+    std::cout << "  CTRL+J / CTRL+K - Audio delay -/+100ms" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -1895,6 +2061,14 @@ int main(int argc, char* argv[]) {
         return runFrameStepCheck(argv[2]) ? 0 : 2;
     }
 
+    if (argc >= 2 && std::string(argv[1]) == "--delay-adjust-check") {
+        if (argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runDelayAdjustCheck(argv[2], argv[3]) ? 0 : 2;
+    }
+
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {
         if (argc != 3) {
             printUsage(argv[0]);
@@ -1950,6 +2124,8 @@ int main(int argc, char* argv[]) {
     g_player = std::make_unique<VideoPlayer>();
     g_player->setVolume(app_settings.volume);
     g_player->setPlaybackSpeed(app_settings.playback_speed);
+    g_player->setAudioDelay(app_settings.audio_delay_seconds);
+    g_player->setSubtitleDelay(app_settings.subtitle_delay_seconds);
     g_player->setPreferHardwareDecode(app_settings.prefer_hardware_decode);
     g_player->setHotkeyManager(app_settings.hotkey_manager);
 
@@ -2037,11 +2213,15 @@ int main(int argc, char* argv[]) {
 
     const float final_volume = g_player ? g_player->getVolume() : app_settings.volume;
     const double final_speed = g_player ? g_player->getPlaybackSpeed() : app_settings.playback_speed;
+    const double final_audio_delay = g_player ? g_player->getAudioDelay() : app_settings.audio_delay_seconds;
+    const double final_subtitle_delay = g_player ? g_player->getSubtitleDelay() : app_settings.subtitle_delay_seconds;
     const input::HotkeyManager& final_hotkeys = g_player ? g_player->hotkeyManager() : app_settings.hotkey_manager;
     saveAppSettings(settings_manager,
                     settings_path,
                     final_volume,
                     final_speed,
+                    final_audio_delay,
+                    final_subtitle_delay,
                     app_settings.prefer_hardware_decode,
                     app_settings.resume_last_playlist,
                     static_cast<int>(current_index),

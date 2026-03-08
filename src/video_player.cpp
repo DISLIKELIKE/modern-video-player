@@ -197,6 +197,26 @@ double VideoPlayer::getPlaybackSpeed() const {
     return playback_speed_;
 }
 
+void VideoPlayer::setAudioDelay(double delay_seconds) {
+    if (core_player_) {
+        core_player_->setAudioDelay(delay_seconds);
+    }
+}
+
+double VideoPlayer::getAudioDelay() const {
+    return core_player_ ? core_player_->getAudioDelay() : 0.0;
+}
+
+void VideoPlayer::setSubtitleDelay(double delay_seconds) {
+    if (core_player_) {
+        core_player_->setSubtitleDelay(delay_seconds);
+    }
+}
+
+double VideoPlayer::getSubtitleDelay() const {
+    return core_player_ ? core_player_->getSubtitleDelay() : 0.0;
+}
+
 void VideoPlayer::setPreferHardwareDecode(bool prefer_hardware_decode) {
     prefer_hardware_decode_ = prefer_hardware_decode;
     if (core_player_) {

@@ -49,6 +49,8 @@ public:
     bool consumeScreenshotRequest();
     bool consumeStepFrameBackwardRequest();
     bool consumeStepFrameForwardRequest();
+    bool consumeSubtitleDelayChangeRequest(double& delta_seconds);
+    bool consumeAudioDelayChangeRequest(double& delta_seconds);
     bool consumeNextChapterRequest();
     bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
@@ -139,6 +141,10 @@ private:
     bool screenshot_requested_;
     bool step_frame_backward_requested_;
     bool step_frame_forward_requested_;
+    bool subtitle_delay_change_requested_;
+    double subtitle_delay_delta_seconds_;
+    bool audio_delay_change_requested_;
+    double audio_delay_delta_seconds_;
     bool next_chapter_requested_;
     bool previous_chapter_requested_;
     bool next_item_requested_;

@@ -99,6 +99,10 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setAudioDelay(double delay_seconds);
+    double getAudioDelay() const;
+    void setSubtitleDelay(double delay_seconds);
+    double getSubtitleDelay() const;
     void setPreferHardwareDecode(bool prefer_hardware_decode);
     bool preferHardwareDecode() const;
     decoder::DecoderBackend videoDecoderBackend() const;
@@ -203,6 +207,8 @@ private:
     std::atomic<double> position_{0.0};
     std::atomic<float> volume_{1.0f};
     std::atomic<double> speed_{1.0};
+    std::atomic<double> audio_delay_seconds_{0.0};
+    std::atomic<double> subtitle_delay_seconds_{0.0};
     std::atomic<bool> prefer_hardware_decode_{true};
     std::atomic<bool> opened_{false};
     std::atomic<bool> quit_requested_{false};

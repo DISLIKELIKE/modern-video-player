@@ -32,6 +32,7 @@ namespace vp::core {
 namespace {
 constexpr int kPacketQueueSize = 256;
 constexpr double kMaxAudioBufferedSeconds = 0.35;
+constexpr double kMaxMediaDelaySeconds = 5.0;
 
 int64_t nowSteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -658,6 +659,16 @@ void PlayerCore::pumpEvents() {
             setPlaybackSpeed(1.0);
         }
 
+        double subtitle_delay_delta = 0.0;
+        if (video_renderer_->consumeSubtitleDelayChangeRequest(subtitle_delay_delta) && subtitle_delay_delta != 0.0) {
+            setSubtitleDelay(getSubtitleDelay() + subtitle_delay_delta);
+        }
+
+        double audio_delay_delta = 0.0;
+        if (video_renderer_->consumeAudioDelayChangeRequest(audio_delay_delta) && audio_delay_delta != 0.0) {
+            setAudioDelay(getAudioDelay() + audio_delay_delta);
+        }
+
         if (video_renderer_->consumeToggleSubtitleRequest()) {
             toggleSubtitleEnabled();
         }
@@ -976,6 +987,31 @@ void PlayerCore::setPlaybackSpeed(double speed) {
 
 double PlayerCore::getPlaybackSpeed() const {
     return speed_.load();
+}
+
+void PlayerCore::setAudioDelay(double delay_seconds) {
+    const double clamped = std::max(-kMaxMediaDelaySeconds, std::min(kMaxMediaDelaySeconds, delay_seconds));
+    const double previous = audio_delay_seconds_.exchange(clamped);
+    if (std::abs(previous - clamped) >= 1e-9) {
+        LOG_INFO("Audio delay set to " << std::lround(clamped * 1000.0) << " ms");
+    }
+}
+
+double PlayerCore::getAudioDelay() const {
+    return audio_delay_seconds_.load();
+}
+
+void PlayerCore::setSubtitleDelay(double delay_seconds) {
+    const double clamped = std::max(-kMaxMediaDelaySeconds, std::min(kMaxMediaDelaySeconds, delay_seconds));
+    const double previous = subtitle_delay_seconds_.exchange(clamped);
+    if (std::abs(previous - clamped) >= 1e-9) {
+        updateSubtitleOverlay(position_.load());
+        LOG_INFO("Subtitle delay set to " << std::lround(clamped * 1000.0) << " ms");
+    }
+}
+
+double PlayerCore::getSubtitleDelay() const {
+    return subtitle_delay_seconds_.load();
 }
 
 void PlayerCore::setPreferHardwareDecode(bool prefer_hardware_decode) {
@@ -1670,9 +1706,11 @@ void PlayerCore::startAudioConsumer() {
             AudioFrame frame;
             const double played_pts = audio_player_->getPlaybackPts();
             if (played_pts > 0.0 && state_.load() == PlaybackState::Playing) {
-                clock_.setAudioClock(played_pts);
-                position_.store(played_pts);
-                emitPositionChanged(played_pts);
+                const double audio_delay = audio_delay_seconds_.load();
+                const double content_pts = std::max(0.0, played_pts - audio_delay);
+                clock_.setAudioClock(content_pts);
+                position_.store(content_pts);
+                emitPositionChanged(content_pts);
             }
 
             if (audio_player_->getBufferedSeconds() > kMaxAudioBufferedSeconds) {
@@ -1694,7 +1732,9 @@ void PlayerCore::startAudioConsumer() {
                 const size_t sample_count = frame.samples.size() / 2;
                 filter_pipeline_.processAudio(frame.samples.data(), sample_count, frame.channels);
             }
-            audio_player_->play(frame.samples, frame.pts);
+            const double audio_delay = audio_delay_seconds_.load();
+            const double delayed_pts = std::max(0.0, frame.pts + audio_delay);
+            audio_player_->play(frame.samples, delayed_pts);
             audio_submitted_frames_.fetch_add(1);
             maybeLogDiagnostics("audio-play");
         }
@@ -1971,6 +2011,8 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
         return;
     }
 
+    const double adjusted_position = std::max(0.0, position_seconds - subtitle_delay_seconds_.load());
+
     std::string subtitle_text;
     bool subtitle_changed = false;
     {
@@ -1984,7 +2026,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
         } else {
             const int resolved_index = subtitle::resolveActiveSubtitleIndex(
                 subtitle_items_,
-                position_seconds,
+                adjusted_position,
                 subtitle_active_index_);
             subtitle_active_index_ = resolved_index;
             subtitle_text = (resolved_index >= 0) ? subtitle_items_[resolved_index].text : "";

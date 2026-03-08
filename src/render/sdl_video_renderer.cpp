@@ -102,6 +102,14 @@ bool SdlVideoRenderer::consumeStepFrameForwardRequest() {
     return display_ ? display_->consumeStepFrameForwardRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) {
+    return display_ ? display_->consumeSubtitleDelayChangeRequest(delta_seconds) : false;
+}
+
+bool SdlVideoRenderer::consumeAudioDelayChangeRequest(double& delta_seconds) {
+    return display_ ? display_->consumeAudioDelayChangeRequest(delta_seconds) : false;
+}
+
 bool SdlVideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }

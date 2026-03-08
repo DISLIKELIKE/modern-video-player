@@ -19,7 +19,7 @@ namespace {
 
 using ActionPair = std::pair<PlayerAction, const char*>;
 
-constexpr std::array<ActionPair, 22> kActionKeyPairs{{
+constexpr std::array<ActionPair, 24> kActionKeyPairs{{
     {PlayerAction::PlayPause, "play_pause"},
     {PlayerAction::SeekBackward, "seek_backward"},
     {PlayerAction::SeekForward, "seek_forward"},
@@ -35,6 +35,8 @@ constexpr std::array<ActionPair, 22> kActionKeyPairs{{
     {PlayerAction::TakeScreenshot, "take_screenshot"},
     {PlayerAction::StepFrameBackward, "step_frame_backward"},
     {PlayerAction::StepFrameForward, "step_frame_forward"},
+    {PlayerAction::SubtitleDelayDown, "subtitle_delay_down"},
+    {PlayerAction::SubtitleDelayUp, "subtitle_delay_up"},
     {PlayerAction::PreviousChapter, "previous_chapter"},
     {PlayerAction::NextChapter, "next_chapter"},
     {PlayerAction::PreviousItem, "previous_item"},
@@ -123,6 +125,8 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::TakeScreenshot, 's');
     bind(PlayerAction::StepFrameBackward, SDLK_COMMA);
     bind(PlayerAction::StepFrameForward, SDLK_PERIOD);
+    bind(PlayerAction::SubtitleDelayDown, 'j');
+    bind(PlayerAction::SubtitleDelayUp, 'k');
     bind(PlayerAction::PreviousChapter, SDLK_HOME);
     bind(PlayerAction::NextChapter, SDLK_END);
     bind(PlayerAction::PreviousItem, SDLK_PAGEUP);

@@ -156,6 +156,8 @@ build\Release\modern-video-player.exe your_video.mp4
 | A / B / C | Set A / Set B / Clear A-B repeat |
 | S | Save screenshot |
 | , / . | Step backward / forward one frame when paused |
+| J / K | Subtitle delay -/+100ms |
+| Ctrl+J / Ctrl+K | Audio delay -/+100ms |
 | V | Toggle subtitles |
 
 ## Technical Highlights

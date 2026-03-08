@@ -48,6 +48,8 @@ public:
     virtual bool consumeScreenshotRequest() = 0;
     virtual bool consumeStepFrameBackwardRequest() = 0;
     virtual bool consumeStepFrameForwardRequest() = 0;
+    virtual bool consumeSubtitleDelayChangeRequest(double& delta_seconds) = 0;
+    virtual bool consumeAudioDelayChangeRequest(double& delta_seconds) = 0;
     virtual bool consumeNextChapterRequest() = 0;
     virtual bool consumePreviousChapterRequest() = 0;
     virtual bool consumeNextItemRequest() = 0;

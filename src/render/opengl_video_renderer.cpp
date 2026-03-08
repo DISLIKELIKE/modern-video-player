@@ -79,6 +79,16 @@ bool OpenGLVideoRenderer::consumeStepFrameForwardRequest() {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) {
+    (void)delta_seconds;
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeAudioDelayChangeRequest(double& delta_seconds) {
+    (void)delta_seconds;
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeNextChapterRequest() {
     return false;
 }

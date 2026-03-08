@@ -24,6 +24,8 @@ enum class PlayerAction {
     TakeScreenshot,
     StepFrameBackward,
     StepFrameForward,
+    SubtitleDelayDown,
+    SubtitleDelayUp,
     PreviousChapter,
     NextChapter,
     PreviousItem,

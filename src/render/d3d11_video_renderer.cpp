@@ -155,6 +155,14 @@ bool D3D11VideoRenderer::consumeStepFrameForwardRequest() {
     return display_ ? display_->consumeStepFrameForwardRequest() : false;
 }
 
+bool D3D11VideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) {
+    return display_ ? display_->consumeSubtitleDelayChangeRequest(delta_seconds) : false;
+}
+
+bool D3D11VideoRenderer::consumeAudioDelayChangeRequest(double& delta_seconds) {
+    return display_ ? display_->consumeAudioDelayChangeRequest(delta_seconds) : false;
+}
+
 bool D3D11VideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }
