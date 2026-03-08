@@ -26,6 +26,9 @@
 - `samples/webm/`
 - `samples/flv/`
 - `samples/ts/`
+- `samples/mov/`
+- `samples/avi/`
+- `samples/m2ts/`
 
 推荐命名：
 

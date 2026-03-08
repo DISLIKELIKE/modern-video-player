@@ -643,3 +643,266 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（快捷键配置持久化）
+
+### 持久化能力
+- 新增 `hotkey.*` 配置项，覆盖首版快捷键动作。
+- 启动时读取 `config/player_settings.ini` 并应用键位映射。
+- 退出时将当前键位回写配置文件，保证重启后保持一致。
+
+### 交互链路调整
+- `Display` 改为通过 `HotkeyManager` 处理键位映射，不再固定写死主键值。
+- `Renderer` / `PlayerCore` / `VideoPlayer` 增加热键管理透传接口。
+- 保留 `Esc` 与 `Enter` 的兼容行为，降低默认使用习惯回归风险。
+
+### 异常与兼容
+- 对非法 `hotkey.*` 配置进行容错降级（保留默认并记录告警）。
+- 更新 `config/player_settings.ini` 默认样例，补齐所有快捷键项。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `1.3.2 支持键位配置持久化` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（快捷键冲突检测与恢复默认）
+
+### 冲突检测能力
+- `HotkeyManager` 新增键位冲突检测接口：
+  - `findConflicts()`：返回冲突动作对；
+  - `hasConflicts()`：快速判断是否存在冲突。
+- 启动加载热键配置时，自动检测重复键位并输出冲突日志。
+
+### 恢复默认能力
+- `HotkeyManager` 新增 `resetToDefaults()`，统一回退默认键位。
+- 新增配置开关 `hotkey.restore_defaults`：
+  - 设置为 `true` 后，下一次启动自动恢复默认键位；
+  - 恢复完成后自动回写为 `false`，避免重复触发。
+- 发现冲突时自动恢复默认键位，防止运行期动作歧义。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `1.3.3 支持键位冲突检测与恢复默认` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（字幕 seek 同步验收）
+
+### 验收与可回归能力
+- 新增 `--subtitle-sync-check <subtitle.srt>` 命令，用于自动验证字幕时间轴匹配。
+- 检查覆盖两类场景：
+  - 顺序播放时间轴（ordered）；
+  - 非顺序 seek 跳转（seek）。
+- 输出 `mismatches` 与 `PASS/FAIL`，用于 M1 验收 `1.4.1`。
+
+### 代码结构调整
+- 提取字幕时间轴匹配公共函数：
+  - `include/subtitle/subtitle_timeline.h`
+  - `src/subtitle/subtitle_timeline.cpp`
+- `PlayerCore` 复用统一匹配函数，避免运行路径与验收路径算法分叉。
+
+### 样例与报告
+- 新增样例字幕：`samples/subtitle/subtitle_seek_sync_sample.srt`
+- 新增本地验证报告：`docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`1.4.1` 已完成。
+
+### 修改文件
+- include/subtitle/subtitle_timeline.h
+- src/subtitle/subtitle_timeline.cpp
+- src/core/player_core.cpp
+- src/main.cpp
+- CMakeLists.txt
+- samples/subtitle/subtitle_seek_sync_sample.srt
+- samples/README.md
+- docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（播放列表 5 文件验收）
+
+### 验收能力
+- 新增 `--playlist-flow-check` 命令用于 `1.4.2` 自动验收。
+- 验收包含：
+  - 至少 5 条播放列表输入校验；
+  - 前 5 条媒体可打开检查；
+  - EOF 自动切换顺序覆盖 `0 -> 1 -> 2 -> 3 -> 4`。
+
+### 输出与报告
+- 命令输出 `playlist-flow-check.*` 字段，包含 `PASS/FAIL`。
+- 新增本地报告：`docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`1.4.2` 已完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
+- samples/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（设置重启恢复验收）
+
+### 验收能力
+- 新增 `--settings-persistence-check [settings_file]`，用于 `1.4.3` 自动验收。
+- 验收流程：写入设置 -> 重载设置 -> 字段一致性比对。
+
+### 校验覆盖字段
+- `player.volume_percent`
+- `player.playback_speed`
+- `player.resume_last_playlist`
+- `player.last_playlist_index`
+- `hotkey.toggle_subtitle`
+
+### 输出与报告
+- 命令输出 `settings-persistence-check.*` 字段和 `PASS/FAIL`。
+- 新增本地报告：`docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`1.4.3` 已完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（容器矩阵补齐）
+
+### 覆盖范围
+- 完成 `2.1.2` 容器验收覆盖：`mp4/mkv/mov/avi/webm/flv/ts/m2ts`。
+
+### 回归样本扩展
+- `format_samples.csv` 新增三条样本：
+  - `samples/mov/demo__h264_aac__1920x1080__30fps__2ch.mov`
+  - `samples/avi/demo__h264_mp3__1280x720__30fps__2ch.avi`
+  - `samples/m2ts/demo__h264_ac3__1920x1080__30fps__2ch.m2ts`
+
+### 自动生成脚本扩展
+- `download_test_samples.ps1` 新增 `mov/avi/m2ts` 目录与生成流程。
+
+### 本地回归结果
+- `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
+  - Total=12, PASS=12, PARTIAL=0, FAIL=0, SKIP=0
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`2.1.2` 已完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- samples/.gitignore
+- samples/mov/.gitkeep
+- samples/avi/.gitkeep
+- samples/m2ts/.gitkeep
+- samples/README.md
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（视频编码矩阵补齐）
+
+### 覆盖范围
+- 完成 `2.1.3` 视频编码验收覆盖：`H.264/H.265/VP9/AV1/MPEG-2`。
+
+### 回归样本扩展
+- `format_samples.csv` 新增：
+  - `samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts`
+
+### 自动生成脚本扩展
+- `download_test_samples.ps1` 新增 MPEG-2 视频样本生成流程（`mpeg2video + ac3 + ts`）。
+
+### 本地回归结果
+- `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
+  - Total=13, PASS=13, PARTIAL=0, FAIL=0, SKIP=0
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`2.1.3` 已完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（音频编码矩阵补齐）
+
+### 覆盖范围
+- 完成 `2.1.4` 音频编码验收覆盖：`AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`。
+
+### 回归样本扩展
+- 新增 4 条音频编码样本：
+  - `samples/mkv/demo__h264_eac3__1920x1080__30fps__2ch.mkv`
+  - `samples/mkv/demo__h264_dts__1920x1080__30fps__2ch.mkv`
+  - `samples/webm/demo__vp9_vorbis__1920x1080__30fps__2ch.webm`
+  - `samples/mov/demo__h264_pcm_s16le__1920x1080__30fps__2ch.mov`
+
+### 脚本增强
+- `download_test_samples.ps1` 增加 E-AC3/DTS/Vorbis/PCM 样本生成。
+- DTS (`dca`) 编码添加 `-strict -2`。
+- `run_format_regression.ps1` 增加编码名等价匹配：
+  - `dts` <-> `dca`
+  - `hevc` <-> `h265`
+  - `pcm` <-> `pcm_*`
+
+### 本地回归结果
+- `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
+  - Total=17, PASS=17, PARTIAL=0, FAIL=0, SKIP=0
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：`2.1.4` 已完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- tools/format_regression/run_format_regression.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

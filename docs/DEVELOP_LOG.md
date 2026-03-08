@@ -647,3 +647,330 @@ Display initialized: window 1306x734 (source 1920x1080)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 27: 快捷键配置持久化接入（hotkey.*）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `1.3.2` 需要支持键位配置持久化。
+- 当前快捷键逻辑直接写在 `Display` 的 `SDL_KEYDOWN` 分支，无法从配置加载并在重启后保持。
+
+### 分析记录
+1. 项目已有 `HotkeyManager`，但默认键位与主流程实际键位不一致，且未接入播放链。
+2. `SettingsManager` 已能读写 `player_settings.ini`，可复用为 `hotkey.*` 持久化通道。
+3. 需要打通 `Display -> Renderer -> PlayerCore -> VideoPlayer -> main` 的热键映射透传链路。
+
+### 解决方案
+- 扩展 `HotkeyManager`：
+  - 对齐首版默认动作与键位；
+  - 新增动作键名和键码序列化/反序列化能力。
+- 事件链路接入：
+  - `Display` 改为通过 `HotkeyManager` 解析键位动作；
+  - 渲染器接口新增 `setHotkeyManager()`；
+  - `PlayerCore` 与 `VideoPlayer` 增加热键管理 API 并透传到 SDL 渲染器。
+- 持久化接入：
+  - `main` 新增 `hotkey.*` 配置加载与回写；
+  - 非法配置自动降级默认并记录告警；
+  - 更新 `config/player_settings.ini` 默认样例。
+- 任务状态同步：
+  - `1.3.2` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 28: 快捷键冲突检测与恢复默认能力
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `1.3.3` 需要支持“键位冲突检测与恢复默认”。
+- 当前已具备 `hotkey.*` 持久化，但缺少冲突治理，重复键位会导致动作语义不清晰。
+
+### 分析记录
+1. `HotkeyManager` 已有动作与键位映射，适合扩展冲突扫描接口。
+2. 配置加载流程在 `main` 中集中处理，适合统一加入冲突检测与恢复策略。
+3. 需要一个可显式触发恢复默认的配置通道，便于用户自救。
+
+### 解决方案
+- 在 `HotkeyManager` 增加：
+  - `resetToDefaults()`；
+  - `findConflicts()` / `hasConflicts()`。
+- 在热键加载流程增加冲突治理：
+  - 加载配置后先构建候选映射；
+  - 检测到冲突则记录详细日志并自动回退默认键位；
+  - 非法 token 保留默认并给出告警。
+- 增加恢复默认配置开关：
+  - `hotkey.restore_defaults=true` 时启动自动恢复默认；
+  - 恢复后自动置回 `false`。
+- 任务清单同步：
+  - `1.3.3` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 29: M1 验收 1.4.1（SRT seek 同步自检命令落地）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `1.4.1` 需要验证 SRT 字幕在 seek 后仍与播放时间同步。
+- 当前缺少可重复的本地验收命令，无法稳定做回归。
+
+### 分析记录
+1. `PlayerCore::updateSubtitleOverlay()` 已具备缓存索引 + 二分定位逻辑，但无法脱离播放 UI 独立验证。
+2. 需要把字幕时间轴匹配算法提取为可复用函数，并提供命令行自检入口。
+
+### 解决方案
+- 新增 `subtitle::resolveActiveSubtitleIndex(...)` 并由 `PlayerCore` 统一复用。
+- 新增 `--subtitle-sync-check <subtitle.srt>`：
+  - 有序时间轴检查；
+  - seek 跳转检查；
+  - 输出 mismatch 统计与 PASS/FAIL。
+- 新增样例文件 `samples/subtitle/subtitle_seek_sync_sample.srt` 与本地报告 `docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`。
+- 更新任务清单，勾选 `1.4.1`。
+
+### 修改文件
+- include/subtitle/subtitle_timeline.h
+- src/subtitle/subtitle_timeline.cpp
+- src/core/player_core.cpp
+- src/main.cpp
+- CMakeLists.txt
+- samples/subtitle/subtitle_seek_sync_sample.srt
+- samples/README.md
+- docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 30: M1 验收 1.4.2（播放列表连续播放 5 文件自检）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `1.4.2` 需要验证播放列表连续播放 5 文件。
+- 缺少可重复执行的自动化验收入口。
+
+### 分析记录
+1. 主流程已支持 EOF 自动切换下一条目，但运行结果未结构化输出。
+2. 现有 `--probe-file` 已具备稳定的媒体可打开检测能力，可复用为验收前置检查。
+
+### 解决方案
+- 新增 `--playlist-flow-check`：
+  - 构建播放列表并要求至少 5 条目；
+  - 检查前 5 条的可打开状态；
+  - 按 EOF 自动切换逻辑验证顺序覆盖 `0,1,2,3,4`；
+  - 输出 `playlist-flow-check.result=PASS/FAIL`。
+- 新增本地报告：`docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`。
+- 任务清单 `1.4.2` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
+- samples/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 31: M1 验收 1.4.3（设置重启恢复自检）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `1.4.3` 需要验证设置在重启后可恢复。
+- 当前缺少可重复的命令行验收入口。
+
+### 分析记录
+1. `loadAppSettings/saveAppSettings` 已覆盖播放器核心设置和热键持久化。
+2. 需要新增独立命令将“写入->重载->比对”过程结构化输出。
+
+### 解决方案
+- 新增 `--settings-persistence-check [settings_file]`。
+- 使用测试配置执行 round-trip：
+  - `volume`
+  - `playback_speed`
+  - `resume_last_playlist`
+  - `last_playlist_index`
+  - `toggle_subtitle` 热键
+- 输出每个字段的 `*_ok` 结果与总结果。
+- 默认使用临时路径，避免污染实际配置。
+- 任务清单 `1.4.3` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 32: M2 2.1.2（容器矩阵补齐 mov/avi/m2ts）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `2.1.2` 需要覆盖 `mp4/mkv/mov/avi/webm/flv/ts/m2ts` 容器。
+- 当前回归样本缺失 `mov/avi/m2ts`。
+
+### 分析记录
+1. `FormatSupport` 已声明容器支持，但缺少对应回归样本无法形成验收闭环。
+2. 样本生成脚本仅生成 5 类容器，需同步扩展。
+
+### 解决方案
+- 扩展 `format_samples.csv` 新增 `mov/avi/m2ts` 三条样本。
+- 扩展 `download_test_samples.ps1` 生成三类新样本。
+- 更新样本目录规则与文档。
+- 运行 `run_format_regression.ps1` 产出最新本地报告。
+- 任务清单 `2.1.2` 标记完成。
+
+### 本地验收结果
+- `FORMAT_REGRESSION_LOCAL_CHECK.md`：
+  - Total=12
+  - PASS=12
+  - PARTIAL=0
+  - FAIL=0
+  - SKIP=0
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- samples/.gitignore
+- samples/mov/.gitkeep
+- samples/avi/.gitkeep
+- samples/m2ts/.gitkeep
+- samples/README.md
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 33: M2 2.1.3（视频编码矩阵补齐 MPEG-2）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `2.1.3` 需要覆盖 `H.264/H.265/VP9/AV1/MPEG-2` 视频编码。
+- 回归样本尚缺 `MPEG-2`，无法完成完整验收。
+
+### 分析记录
+1. 现有矩阵包含 h264/hevc/vp9/av1。
+2. `FormatSupport` 已包含 `mpeg2video`，缺口在样本和回归链路。
+
+### 解决方案
+- 新增 `mpeg2video` 回归样本条目（ts 容器，ac3 音频）。
+- 扩展 `download_test_samples.ps1` 自动生成 MPEG-2 样本。
+- 运行回归并更新本地报告。
+- 任务清单 `2.1.3` 标记完成。
+
+### 本地验收结果
+- `FORMAT_REGRESSION_LOCAL_CHECK.md`：
+  - Total=13
+  - PASS=13
+  - PARTIAL=0
+  - FAIL=0
+  - SKIP=0
+- 新增样本结果：
+  - `samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts` -> `PASS (mpeg2video)`
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 34: M2 2.1.4（音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `2.1.4` 需要覆盖 `AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`。
+- 样本矩阵缺少 `E-AC3/DTS/Vorbis/PCM`。
+
+### 分析记录
+1. 现有样本已覆盖 aac/mp3/ac3/flac/opus。
+2. DTS 编码器 `dca` 在当前 FFmpeg 中属于实验特性，需要 `-strict -2`。
+3. 兼容性比对需处理 `dts/dca`、`hevc/h265`、`pcm/pcm_*` 等价关系。
+
+### 解决方案
+- 扩展回归样本与生成脚本，新增四类音频样本。
+- 在 `download_test_samples.ps1` 为 DTS 命令增加 `-strict -2`。
+- 在 `run_format_regression.ps1` 增加等价编码名比较函数。
+- 更新本地回归报告并确认全量通过。
+- 任务清单 `2.1.4` 标记完成。
+
+### 本地验收结果
+- `FORMAT_REGRESSION_LOCAL_CHECK.md`：
+  - Total=17
+  - PASS=17
+  - PARTIAL=0
+  - FAIL=0
+  - SKIP=0
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- tools/format_regression/run_format_regression.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\download_test_samples.ps1
 操作作用：
 
 - 下载基础公开视频到 `samples/source/`。
-- 自动生成 `format_samples.csv` 需要的样本（mp4/mkv/webm/flv/ts，含 h265/vp9/av1 和多音轨样本）。
+- 自动生成 `format_samples.csv` 需要的样本（mp4/mkv/mov/avi/webm/flv/ts/m2ts，含 h265/vp9/av1 和多音轨样本）。
 
 相关文件：
 

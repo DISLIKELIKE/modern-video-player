@@ -29,6 +29,14 @@
 | 24 | 2026-03-07 | 外挂字幕加载入口（SRT）接入主流程 | ✅ 已修复 |
 | 25 | 2026-03-07 | 字幕渲染叠加与播放时序同步接入 | ✅ 已修复 |
 | 26 | 2026-03-08 | 字幕开关控制与字幕加载异常处理完善 | ✅ 已修复 |
+| 27 | 2026-03-08 | 快捷键配置持久化接入（hotkey.*） | ✅ 已修复 |
+| 28 | 2026-03-08 | 快捷键冲突检测与恢复默认能力 | ✅ 已修复 |
+| 29 | 2026-03-08 | M1 验收 1.4.1：SRT seek 同步自检命令落地 | ✅ 已修复 |
+| 30 | 2026-03-08 | M1 验收 1.4.2：播放列表连续播放 5 文件自检通过 | ✅ 已修复 |
+| 31 | 2026-03-08 | M1 验收 1.4.3：设置重启恢复自检通过 | ✅ 已修复 |
+| 32 | 2026-03-08 | M2 2.1.2：容器矩阵补齐 mov/avi/m2ts 并回归通过 | ✅ 已修复 |
+| 33 | 2026-03-08 | M2 2.1.3：视频编码矩阵补齐 MPEG-2 并回归通过 | ✅ 已修复 |
+| 34 | 2026-03-08 | M2 2.1.4：音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM 并回归通过 | ✅ 已修复 |
 
 ---
 
@@ -1037,6 +1045,297 @@ void VideoPlayer::play() {
 - include/video_player.h
 - src/video_player.cpp
 - src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 27: 快捷键配置持久化接入（hotkey.*）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.3.2` 要求支持键位配置持久化，但当前快捷键逻辑固定写死在 `Display` 事件分支中。
+- `HotkeyManager` 仅有骨架实现，未接入主播放链，无法通过配置文件保持自定义键位。
+
+### 解决方案
+- 扩展 `HotkeyManager`：
+  - 对齐当前首版快捷键默认映射（播放、seek、音量、静音、变速、切集、字幕开关、全屏、退出）；
+  - 增加配置序列化能力：`actionConfigKey`、`keyCodeToToken`、`keyCodeFromToken`。
+- 将快捷键映射接入渲染输入链：
+  - `Display` 事件处理改为由 `HotkeyManager` 驱动；
+  - 保留 `Esc` 与 `Enter` 的兼容行为；
+  - `Renderer`/`PlayerCore`/`VideoPlayer` 增加热键管理透传接口。
+- 在 `main` 的设置加载/保存流程中接入 `hotkey.*`：
+  - 启动读取并应用 `player_settings.ini` 的 `hotkey.*`；
+  - 非法键位配置降级为默认并记录告警；
+  - 退出时将当前键位回写配置，实现持久化。
+- 更新默认配置样例 `config/player_settings.ini`，补齐全部 `hotkey.*` 项。
+- 更新任务清单，标记 `1.3.2` 已完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 28: 快捷键冲突检测与恢复默认能力
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.3.3` 要求支持键位冲突检测与恢复默认。
+- 现有 `hotkey.*` 持久化已可工作，但重复键位配置会产生动作冲突，且缺少“一键回到默认”能力。
+
+### 解决方案
+- 扩展 `HotkeyManager`：
+  - 新增 `findConflicts()` / `hasConflicts()`，用于检测重复键位绑定；
+  - 新增 `resetToDefaults()`，统一恢复默认键位映射。
+- 在热键配置加载流程中加入冲突治理：
+  - 启动时先应用配置到候选映射，再执行冲突检测；
+  - 若发现冲突，记录冲突动作与键位日志，自动回退默认键位；
+  - 对非法 token 保留默认并输出告警。
+- 新增恢复默认开关：
+  - 在 `player_settings.ini` 增加 `hotkey.restore_defaults`；
+  - 设置为 `true` 后下次启动自动恢复默认并回写为 `false`。
+- 更新帮助输出，补充恢复默认说明。
+- 更新任务清单，标记 `1.3.3` 已完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- src/main.cpp
+- config/player_settings.ini
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 29: M1 验收 1.4.1（SRT seek 同步自检命令落地）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.4.1` 要求“`SRT 字幕可用且 seek 后同步`”，现有实现缺少可重复执行的验收入口。
+- 若只依赖人工播放观察，回归成本高且难以稳定复现。
+
+### 原因分析
+- 字幕时间轴匹配逻辑仅存在于 `PlayerCore` 内部，无法单独验证“顺序播放 + seek 跳转”两类场景。
+
+### 解决方案
+- 提取公共时间轴函数 `subtitle::resolveActiveSubtitleIndex(...)`，并由 `PlayerCore` 复用。
+- 在 `main` 增加 `--subtitle-sync-check <subtitle.srt>` 命令：
+  - 顺序时间轴检查（ordered）；
+  - 非顺序 seek 跳转检查（seek）；
+  - 输出 `mismatches` 与 `PASS/FAIL`。
+- 新增样例字幕 `samples/subtitle/subtitle_seek_sync_sample.srt` 和本地报告 `docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`。
+- 任务清单 `1.4.1` 标记完成。
+
+### 修改文件
+- include/subtitle/subtitle_timeline.h
+- src/subtitle/subtitle_timeline.cpp
+- src/core/player_core.cpp
+- src/main.cpp
+- CMakeLists.txt
+- samples/subtitle/subtitle_seek_sync_sample.srt
+- samples/README.md
+- docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 30: M1 验收 1.4.2（播放列表连续播放 5 文件自检）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.4.2` 要求“播放列表连续播放 5 文件通过”，但缺少可重复执行的验收命令。
+- 仅靠手工点击验证，回归效率低且结果不稳定。
+
+### 原因分析
+- 当前主流程具备 EOF 自动切换逻辑，但没有结构化输出可用于快速验收。
+
+### 解决方案
+- 在 `main` 新增 `--playlist-flow-check` 命令：
+  - 读取输入并构建播放列表；
+  - 校验至少 5 条目；
+  - 对前 5 条执行可打开探测（`--probe-file` 同源逻辑）；
+  - 模拟 EOF 自动切换顺序，验证 `0,1,2,3,4` 连续覆盖；
+  - 输出 `PASS/FAIL` 与失败索引。
+- 新增本地报告 `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`。
+- 更新任务清单，标记 `1.4.2` 完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
+- samples/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 31: M1 验收 1.4.3（设置重启恢复自检）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `1.4.3` 要求“设置重启后可恢复”，但缺少可重复执行的验收入口。
+- 仅手工重启验证难以覆盖关键字段（音量、速度、恢复标志、播放列表索引、快捷键）。
+
+### 原因分析
+- 主流程已有 `loadAppSettings/saveAppSettings`，但没有独立命令行输出用于回归验收。
+
+### 解决方案
+- 在 `main` 新增 `--settings-persistence-check [settings_file]` 命令：
+  - 写入一组测试设置；
+  - 重新加载并逐项校验 volume/speed/resume/index/hotkey；
+  - 输出 `settings-persistence-check.result=PASS/FAIL`。
+- 默认使用系统临时目录进行检查，不污染项目内 `config/player_settings.ini`。
+- 新增本地报告 `docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`。
+- 更新任务清单，标记 `1.4.3` 完成。
+
+### 修改文件
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 32: M2 2.1.2（容器矩阵补齐 mov/avi/m2ts）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.1.2` 目标要求容器覆盖 `mp4/mkv/mov/avi/webm/flv/ts/m2ts`。
+- 现有格式回归样本仅覆盖了 `mp4/mkv/webm/flv/ts`，缺少 `mov/avi/m2ts` 实测闭环。
+
+### 原因分析
+- 回归样本列表与自动生成脚本未包含 `mov/avi/m2ts` 输出，导致容器矩阵覆盖不完整。
+
+### 解决方案
+- 扩展样本矩阵 `format_samples.csv`，新增：
+  - `mov`（h264 + aac）
+  - `avi`（h264 + mp3）
+  - `m2ts`（h264 + ac3）
+- 扩展 `tools/download_test_samples.ps1`：
+  - 新增 `samples/mov`、`samples/avi`、`samples/m2ts` 目录生成；
+  - 新增三类容器样本生成命令。
+- 更新样本目录文档与忽略规则，补齐 `.gitkeep`。
+- 执行本地回归并更新报告：`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`。
+- 任务清单 `2.1.2` 标记完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- samples/.gitignore
+- samples/mov/.gitkeep
+- samples/avi/.gitkeep
+- samples/m2ts/.gitkeep
+- samples/README.md
+- docs/FORMAT_REGRESSION.md
+- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 33: M2 2.1.3（视频编码矩阵补齐 MPEG-2）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.1.3` 目标为视频编码支持 `H.264/H.265/VP9/AV1/MPEG-2`。
+- 现有回归样本已覆盖前四项，但缺少 `MPEG-2` 视频编码样本，验收闭环不完整。
+
+### 原因分析
+- `format_samples.csv` 与 `download_test_samples.ps1` 未包含 `mpeg2video` 样本。
+
+### 解决方案
+- 在回归样本矩阵中新增 `mpeg2video` 条目：
+  - `samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts`
+- 在样本生成脚本中新增 MPEG-2 样本生成流程：
+  - 视频编码 `mpeg2video`；
+  - 音频编码 `ac3`；
+  - 容器 `mpegts`。
+- 运行本地格式回归并更新报告。
+- 任务清单 `2.1.3` 标记完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 34: M2 2.1.4（音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.1.4` 目标要求音频编码覆盖 `AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`。
+- 现有回归样本缺少 `E-AC3/DTS/Vorbis/PCM` 实测，验收闭环不完整。
+
+### 原因分析
+- 回归样本清单和自动样本生成脚本未覆盖上述四类音频编码。
+
+### 解决方案
+- 扩展 `format_samples.csv` 新增四条样本：
+  - `h264 + eac3 (mkv)`
+  - `h264 + dts (mkv)`
+  - `vp9 + vorbis (webm)`
+  - `h264 + pcm_s16le (mov)`
+- 扩展 `download_test_samples.ps1` 生成流程并修复 DTS 编码：
+  - `dca` 编码使用 `-strict -2` 通过实验特性限制。
+- 扩展回归脚本兼容等价编码名：
+  - `dts` <-> `dca`
+  - `hevc` <-> `h265`
+  - `pcm` <-> `pcm_*`
+- 运行本地回归并更新报告。
+- 任务清单 `2.1.4` 标记完成。
+
+### 修改文件
+- tools/format_regression/format_samples.csv
+- tools/download_test_samples.ps1
+- tools/format_regression/run_format_regression.ps1
+- docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/CHANGELOG.md
 - docs/VERSION.md

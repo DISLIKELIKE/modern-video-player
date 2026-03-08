@@ -29,7 +29,7 @@
 | [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md) | 格式样本回归脚本与报告说明 |
 | [REGRESSION_OPERATION_PLAYBOOK.md](./REGRESSION_OPERATION_PLAYBOOK.md) | 样本准备与回归操作清单（含每步作用） |
 | [format-regression.yml](../.github/workflows/format-regression.yml) | GitHub Actions 自动格式回归工作流 |
-| [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/恢复索引） |
+| [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/恢复索引/快捷键） |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
