@@ -79,6 +79,18 @@ void VideoPlayer::seek(double timestamp) {
     }
 }
 
+bool VideoPlayer::seekToNextChapter() {
+    return core_player_ ? core_player_->seekToNextChapter() : false;
+}
+
+bool VideoPlayer::seekToPreviousChapter() {
+    return core_player_ ? core_player_->seekToPreviousChapter() : false;
+}
+
+size_t VideoPlayer::chapterCount() const {
+    return core_player_ ? core_player_->chapterCount() : 0U;
+}
+
 void VideoPlayer::pumpEvents() {
     if (core_player_) {
         core_player_->pumpEvents();

@@ -37,6 +37,12 @@
 | 32 | 2026-03-08 | M2 2.1.2：容器矩阵补齐 mov/avi/m2ts 并回归通过 | ✅ 已修复 |
 | 33 | 2026-03-08 | M2 2.1.3：视频编码矩阵补齐 MPEG-2 并回归通过 | ✅ 已修复 |
 | 34 | 2026-03-08 | M2 2.1.4：音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM 并回归通过 | ✅ 已修复 |
+| 35 | 2026-03-08 | M3 3.1.1：DecoderFactory 接入真实初始化流程 | ✅ 已修复 |
+| 36 | 2026-03-08 | M3 3.1.2：D3D11VA 协商失败软解兜底完善 | ✅ 已修复 |
+| 37 | 2026-03-08 | M3 3.2.1：D3D11 渲染最小可用链路落地 | ✅ 已修复 |
+| 38 | 2026-03-08 | M3 3.3.2：渲染失败降级回归入口补齐 | ✅ 已修复 |
+| 39 | 2026-03-08 | M3 3.3.1：Windows 软解/硬解主力样本回归通过 | ✅ 已修复 |
+| 40 | 2026-03-08 | M4 4.1：章节导航（上一章/下一章）接入与验收 | ✅ 已修复 |
 
 ---
 
@@ -1503,6 +1509,59 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
+---
+
+## 问题 40: M4 4.1（章节导航：上一章/下一章）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `4.1` 需要支持章节导航（上一章/下一章）。
+- 当前播放链路缺少章节元数据消费与章节跳转入口，无法通过快捷键直接跳章。
+
+### 原因分析
+- `Demuxer` 虽能读取媒体基本信息，但未提取 `AVChapter` 数据。
+- 输入链路缺少章节动作请求（`Display -> Renderer -> PlayerCore`）。
+- 主流程缺少可重复执行的章节导航验收命令。
+
+### 解决方案
+- 在 `Demuxer` 中解析章节元数据，新增 `ChapterInfo` 与 `MediaInfo::chapters`。
+- 新增章节导航动作与请求链路：
+  - `HotkeyManager` 增加 `PreviousChapter/NextChapter`；
+  - 默认键位绑定 `HOME/END`；
+  - `Display`、渲染器接口、`PlayerCore`、`VideoPlayer` 全链路透传章节请求。
+- 在 `PlayerCore` 中新增章节跳转能力：
+  - 打开媒体时构建章节时间点；
+  - `seekToNextChapter()` / `seekToPreviousChapter()` 执行跳章。
+- 在 `main` 新增 `--chapter-nav-check <media_file>` 自检命令，并更新帮助输出。
+- 新增本地报告 `docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`，记录章节样本与 PASS 结果。
+- 更新任务清单，标记 `4.1` 已完成。
+
+### 修改文件
+- include/demuxer.h
+- src/demuxer.cpp
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md

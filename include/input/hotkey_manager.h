@@ -18,6 +18,8 @@ enum class PlayerAction {
     SpeedDown,
     SpeedUp,
     SpeedReset,
+    PreviousChapter,
+    NextChapter,
     PreviousItem,
     NextItem,
     ToggleSubtitle,

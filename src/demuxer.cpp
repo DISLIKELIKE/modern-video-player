@@ -2,6 +2,7 @@
 #include "logger.h"
 
 #include <algorithm>
+#include <string>
 
 namespace vp {
 
@@ -147,6 +148,35 @@ void Demuxer::detectStreams() {
         media_info_.channels = std::max(1, stream->codecpar->ch_layout.nb_channels);
         media_info_.audio_time_base = stream->time_base;
     }
+
+    media_info_.chapters.clear();
+    media_info_.chapters.reserve(format_ctx_->nb_chapters);
+    for (unsigned int i = 0; i < format_ctx_->nb_chapters; ++i) {
+        AVChapter* chapter = format_ctx_->chapters[i];
+        if (!chapter || chapter->time_base.num == 0 || chapter->time_base.den == 0) {
+            continue;
+        }
+
+        ChapterInfo info{};
+        info.start = chapter->start * av_q2d(chapter->time_base);
+        info.end = chapter->end * av_q2d(chapter->time_base);
+        if (AVDictionaryEntry* title = av_dict_get(chapter->metadata, "title", nullptr, 0)) {
+            if (title->value) {
+                info.title = title->value;
+            }
+        }
+
+        if (info.end < info.start) {
+            std::swap(info.start, info.end);
+        }
+        media_info_.chapters.push_back(std::move(info));
+    }
+    std::sort(media_info_.chapters.begin(), media_info_.chapters.end(), [](const ChapterInfo& lhs, const ChapterInfo& rhs) {
+        if (lhs.start == rhs.start) {
+            return lhs.end < rhs.end;
+        }
+        return lhs.start < rhs.start;
+    });
 
     media_info_.duration = format_ctx_->duration / (double)AV_TIME_BASE;
 }

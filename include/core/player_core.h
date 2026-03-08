@@ -73,6 +73,9 @@ public:
     void pause();
     void stop();
     void seek(double timestamp);
+    bool seekToNextChapter();
+    bool seekToPreviousChapter();
+    size_t chapterCount() const;
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -132,6 +135,7 @@ private:
     bool decodeAudioFrame(AudioFrame& out);
     void renderFrame(VideoFrame&& frame);
     void onRenderIdle();
+    void rebuildChapterPoints();
     void updateSubtitleOverlay(double position_seconds);
 
     void emitStateChanged(PlaybackState state);
@@ -185,6 +189,7 @@ private:
     std::atomic<bool> quit_requested_{false};
     std::atomic<bool> next_item_requested_{false};
     std::atomic<bool> previous_item_requested_{false};
+    std::vector<double> chapter_points_;
     filters::FilterPipeline filter_pipeline_;
 
     mutable std::mutex callback_mutex_;

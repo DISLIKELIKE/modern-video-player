@@ -9,8 +9,15 @@ extern "C" {
 #include <memory>
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 namespace vp {
+
+struct ChapterInfo {
+    double start{0.0};
+    double end{0.0};
+    std::string title;
+};
 
 struct MediaInfo {
     int video_stream_idx = -1;
@@ -23,6 +30,7 @@ struct MediaInfo {
     double duration = 0.0;
     AVRational video_time_base = {0, 1};
     AVRational audio_time_base = {0, 1};
+    std::vector<ChapterInfo> chapters;
 };
 
 class Demuxer {

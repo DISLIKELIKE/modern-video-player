@@ -1041,3 +1041,62 @@ make -j$(nproc)
 
 ### 新增报告
 - `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`
+
+## 2026-03-08 更新（章节导航：上一章/下一章）
+
+### 交互能力增强
+- 新增章节导航快捷键：
+  - `HOME`：跳转上一章；
+  - `END`：跳转下一章。
+- 章节请求链路已打通：
+  - `Display -> Renderer -> PlayerCore -> VideoPlayer`。
+
+### 媒体信息能力增强
+- `Demuxer` 新增章节元数据解析：
+  - `ChapterInfo`（start/end/title）；
+  - `MediaInfo::chapters`。
+- `PlayerCore` 在打开媒体后构建章节时间点，并提供：
+  - `seekToNextChapter()`；
+  - `seekToPreviousChapter()`；
+  - `chapterCount()`。
+
+### 验收能力补齐
+- 新增 `--chapter-nav-check <media_file>`：
+  - 自动执行播放、下一章、上一章并校验位置变化；
+  - 输出 `chapter-nav-check.*` 与 `PASS/FAIL`。
+- 新增本地报告：`docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`。
+
+### 本地验证
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `4.1 章节导航（上一章/下一章）` 标记完成。
+
+### 修改文件
+- include/demuxer.h
+- src/demuxer.cpp
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

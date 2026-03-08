@@ -1356,6 +1356,78 @@ bool runWindowsBackendPlaybackCheck(const std::string& program_path, const std::
     return result;
 }
 
+bool runChapterNavigationCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "chapter-nav-check.path=" << media_file << std::endl;
+        std::cout << "chapter-nav-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    const size_t chapter_count = player.chapterCount();
+
+    bool entered_playback_loop = false;
+    bool next_invoked = false;
+    bool prev_invoked = false;
+    double before = 0.0;
+    double after_next = 0.0;
+    double after_prev = 0.0;
+
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(500));
+        before = player.getCurrentTime();
+        next_invoked = player.seekToNextChapter();
+        pump_for(player, std::chrono::milliseconds(500));
+        after_next = player.getCurrentTime();
+        prev_invoked = player.seekToPreviousChapter();
+        pump_for(player, std::chrono::milliseconds(500));
+        after_prev = player.getCurrentTime();
+        player.stop();
+        player.close();
+    }
+
+    const bool moved_forward = after_next > before + 0.5;
+    const bool moved_backward = after_prev + 0.5 < after_next;
+    const bool result = open_ok &&
+                        chapter_count > 0 &&
+                        entered_playback_loop &&
+                        next_invoked &&
+                        prev_invoked &&
+                        moved_forward &&
+                        moved_backward;
+
+    std::cout << "chapter-nav-check.path=" << media_file << std::endl;
+    std::cout << "chapter-nav-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.chapter_count=" << chapter_count << std::endl;
+    std::cout << "chapter-nav-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.next_invoked=" << (next_invoked ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.prev_invoked=" << (prev_invoked ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.before=" << before << std::endl;
+    std::cout << "chapter-nav-check.after_next=" << after_next << std::endl;
+    std::cout << "chapter-nav-check.after_prev=" << after_prev << std::endl;
+    std::cout << "chapter-nav-check.moved_forward=" << (moved_forward ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.moved_backward=" << (moved_backward ? "true" : "false") << std::endl;
+    std::cout << "chapter-nav-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 }  // namespace
 
 void signalHandler(int signal) {
@@ -1377,6 +1449,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --settings-persistence-check [settings_file]" << std::endl;
     std::cout << "       " << program_name << " --renderer-fallback-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --windows-backend-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
     std::cout << std::endl;
@@ -1388,6 +1461,7 @@ void printUsage(const char* program_name) {
     std::cout << "  LEFT/RIGHT - Seek -/+5s" << std::endl;
     std::cout << "  CTRL+LEFT/CTRL+RIGHT - Seek -/+30s" << std::endl;
     std::cout << "  PAGEUP/PAGEDOWN - Previous/Next media in playlist" << std::endl;
+    std::cout << "  HOME/END - Previous/Next chapter" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -1519,6 +1593,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runWindowsBackendPlaybackCheck(argv[0], argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--chapter-nav-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runChapterNavigationCheck(argv[2]) ? 0 : 2;
     }
     
     if (argc < 2) {

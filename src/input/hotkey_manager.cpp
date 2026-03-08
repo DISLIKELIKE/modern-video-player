@@ -19,7 +19,7 @@ namespace {
 
 using ActionPair = std::pair<PlayerAction, const char*>;
 
-constexpr std::array<ActionPair, 14> kActionKeyPairs{{
+constexpr std::array<ActionPair, 16> kActionKeyPairs{{
     {PlayerAction::PlayPause, "play_pause"},
     {PlayerAction::SeekBackward, "seek_backward"},
     {PlayerAction::SeekForward, "seek_forward"},
@@ -29,6 +29,8 @@ constexpr std::array<ActionPair, 14> kActionKeyPairs{{
     {PlayerAction::SpeedDown, "speed_down"},
     {PlayerAction::SpeedUp, "speed_up"},
     {PlayerAction::SpeedReset, "speed_reset"},
+    {PlayerAction::PreviousChapter, "previous_chapter"},
+    {PlayerAction::NextChapter, "next_chapter"},
     {PlayerAction::PreviousItem, "previous_item"},
     {PlayerAction::NextItem, "next_item"},
     {PlayerAction::ToggleSubtitle, "toggle_subtitle"},
@@ -103,6 +105,8 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::SpeedDown, SDLK_LEFTBRACKET);
     bind(PlayerAction::SpeedUp, SDLK_RIGHTBRACKET);
     bind(PlayerAction::SpeedReset, 'r');
+    bind(PlayerAction::PreviousChapter, SDLK_HOME);
+    bind(PlayerAction::NextChapter, SDLK_END);
     bind(PlayerAction::PreviousItem, SDLK_PAGEUP);
     bind(PlayerAction::NextItem, SDLK_PAGEDOWN);
     bind(PlayerAction::ToggleSubtitle, 'v');

@@ -43,6 +43,8 @@ public:
     bool consumeSpeedChangeRequest(double& speed_delta);
     bool consumeResetSpeedRequest();
     bool consumeToggleSubtitleRequest();
+    bool consumeNextChapterRequest();
+    bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
     bool consumePreviousItemRequest();
     void setOverlayState(double position, double duration, float volume, bool paused);
@@ -125,6 +127,8 @@ private:
     double speed_delta_;
     bool speed_reset_requested_;
     bool subtitle_toggle_requested_;
+    bool next_chapter_requested_;
+    bool previous_chapter_requested_;
     bool next_item_requested_;
     bool previous_item_requested_;
     float last_nonzero_volume_;

@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <limits>
 #include <vector>
 
@@ -125,6 +127,7 @@ bool PlayerCore::open(const std::string& filename) {
     }
 
     const MediaInfo& info = demuxer_->getMediaInfo();
+    rebuildChapterPoints();
     if (info.video_stream_idx >= 0) {
         const render::VideoRendererType selected_type = render::RendererFactory::detectBestRendererType();
         render::VideoRendererConfig renderer_config{};
@@ -216,6 +219,7 @@ void PlayerCore::close() {
     video_packet_queue_.reset();
     audio_packet_queue_.reset();
     clearExternalSubtitles();
+    chapter_points_.clear();
     opened_.store(false);
 }
 
@@ -337,6 +341,52 @@ void PlayerCore::seek(double timestamp) {
     }
 }
 
+bool PlayerCore::seekToNextChapter() {
+    if (chapter_points_.empty()) {
+        return false;
+    }
+
+    constexpr double kEpsilonSeconds = 0.2;
+    const double current = position_.load();
+    const auto next_it = std::upper_bound(chapter_points_.begin(), chapter_points_.end(), current + kEpsilonSeconds);
+    if (next_it == chapter_points_.end()) {
+        return false;
+    }
+
+    const double target = *next_it;
+    LOG_INFO("Chapter next: " << current << "s -> " << target << "s");
+    seek(target);
+    return true;
+}
+
+bool PlayerCore::seekToPreviousChapter() {
+    if (chapter_points_.empty()) {
+        return false;
+    }
+
+    constexpr double kEpsilonSeconds = 0.2;
+    const double current = position_.load();
+    const auto first_not_before = std::lower_bound(chapter_points_.begin(), chapter_points_.end(), current - kEpsilonSeconds);
+    if (first_not_before == chapter_points_.begin()) {
+        if (current > kEpsilonSeconds) {
+            LOG_INFO("Chapter previous: " << current << "s -> 0s");
+            seek(0.0);
+            return true;
+        }
+        return false;
+    }
+
+    const auto previous_it = std::prev(first_not_before);
+    const double target = *previous_it;
+    LOG_INFO("Chapter previous: " << current << "s -> " << target << "s");
+    seek(target);
+    return true;
+}
+
+size_t PlayerCore::chapterCount() const {
+    return chapter_points_.size();
+}
+
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -365,6 +415,14 @@ void PlayerCore::pumpEvents() {
                 const double target = std::max(0.0, std::min(duration, current + seek_delta_seconds));
                 seek(target);
             }
+        }
+
+        if (video_renderer_->consumeNextChapterRequest()) {
+            seekToNextChapter();
+        }
+
+        if (video_renderer_->consumePreviousChapterRequest()) {
+            seekToPreviousChapter();
         }
 
         float volume_request = 0.0f;
@@ -406,6 +464,30 @@ void PlayerCore::pumpEvents() {
         }
     }
 
+}
+
+void PlayerCore::rebuildChapterPoints() {
+    chapter_points_.clear();
+    if (!demuxer_) {
+        return;
+    }
+
+    const MediaInfo& info = demuxer_->getMediaInfo();
+    chapter_points_.reserve(info.chapters.size());
+    for (const auto& chapter : info.chapters) {
+        if (chapter.start >= 0.0) {
+            chapter_points_.push_back(chapter.start);
+        }
+    }
+
+    std::sort(chapter_points_.begin(), chapter_points_.end());
+    chapter_points_.erase(std::unique(chapter_points_.begin(), chapter_points_.end(), [](double lhs, double rhs) {
+        return std::abs(lhs - rhs) < 0.001;
+    }), chapter_points_.end());
+
+    if (!chapter_points_.empty()) {
+        LOG_INFO("Detected chapters: " << chapter_points_.size());
+    }
 }
 
 bool PlayerCore::consumeQuitRequest() {

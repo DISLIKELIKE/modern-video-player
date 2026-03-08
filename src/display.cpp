@@ -415,6 +415,8 @@ Display::Display()
     , speed_delta_(0.0)
     , speed_reset_requested_(false)
     , subtitle_toggle_requested_(false)
+    , next_chapter_requested_(false)
+    , previous_chapter_requested_(false)
     , next_item_requested_(false)
     , previous_item_requested_(false)
     , last_nonzero_volume_(1.0f)
@@ -484,6 +486,8 @@ bool Display::init(int width, int height, const std::string& title) {
         speed_delta_ = 0.0;
         speed_reset_requested_ = false;
         subtitle_toggle_requested_ = false;
+        next_chapter_requested_ = false;
+        previous_chapter_requested_ = false;
         next_item_requested_ = false;
         previous_item_requested_ = false;
         last_nonzero_volume_ = 1.0f;
@@ -1003,6 +1007,16 @@ void Display::handleEvents() {
                     subtitle_toggle_requested_ = true;
                     break;
                 }
+                case input::PlayerAction::PreviousChapter: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    previous_chapter_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::NextChapter: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    next_chapter_requested_ = true;
+                    break;
+                }
                 case input::PlayerAction::ToggleFullscreen:
                     toggleFullscreen();
                     break;
@@ -1153,6 +1167,24 @@ bool Display::consumeToggleSubtitleRequest() {
         return false;
     }
     subtitle_toggle_requested_ = false;
+    return true;
+}
+
+bool Display::consumeNextChapterRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!next_chapter_requested_) {
+        return false;
+    }
+    next_chapter_requested_ = false;
+    return true;
+}
+
+bool Display::consumePreviousChapterRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!previous_chapter_requested_) {
+        return false;
+    }
+    previous_chapter_requested_ = false;
     return true;
 }
 

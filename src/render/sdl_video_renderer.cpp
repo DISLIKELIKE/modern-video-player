@@ -78,6 +78,14 @@ bool SdlVideoRenderer::consumeToggleSubtitleRequest() {
     return display_ ? display_->consumeToggleSubtitleRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeNextChapterRequest() {
+    return display_ ? display_->consumeNextChapterRequest() : false;
+}
+
+bool SdlVideoRenderer::consumePreviousChapterRequest() {
+    return display_ ? display_->consumePreviousChapterRequest() : false;
+}
+
 bool SdlVideoRenderer::consumeNextItemRequest() {
     return display_ ? display_->consumeNextItemRequest() : false;
 }

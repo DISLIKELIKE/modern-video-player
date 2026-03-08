@@ -131,6 +131,14 @@ bool D3D11VideoRenderer::consumeToggleSubtitleRequest() {
     return display_ ? display_->consumeToggleSubtitleRequest() : false;
 }
 
+bool D3D11VideoRenderer::consumeNextChapterRequest() {
+    return display_ ? display_->consumeNextChapterRequest() : false;
+}
+
+bool D3D11VideoRenderer::consumePreviousChapterRequest() {
+    return display_ ? display_->consumePreviousChapterRequest() : false;
+}
+
 bool D3D11VideoRenderer::consumeNextItemRequest() {
     return display_ ? display_->consumeNextItemRequest() : false;
 }

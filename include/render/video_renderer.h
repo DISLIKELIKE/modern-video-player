@@ -42,6 +42,8 @@ public:
     virtual bool consumeSpeedChangeRequest(double& speed_delta) = 0;
     virtual bool consumeResetSpeedRequest() = 0;
     virtual bool consumeToggleSubtitleRequest() = 0;
+    virtual bool consumeNextChapterRequest() = 0;
+    virtual bool consumePreviousChapterRequest() = 0;
     virtual bool consumeNextItemRequest() = 0;
     virtual bool consumePreviousItemRequest() = 0;
     virtual void setOverlayState(double position, double duration, float volume, bool paused) = 0;

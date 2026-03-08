@@ -22,6 +22,9 @@ public:
     void pause();
     void stop();
     void seek(double timestamp);
+    bool seekToNextChapter();
+    bool seekToPreviousChapter();
+    size_t chapterCount() const;
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();

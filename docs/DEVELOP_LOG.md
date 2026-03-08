@@ -1191,3 +1191,71 @@ windows-backend-check.result=FAIL
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 40: M4 4.1（章节导航：上一章/下一章）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `4.1` 要求提供章节导航能力（上一章/下一章）。
+- 当前播放主链路没有章节请求动作和跳章入口，无法从键盘直接跳章。
+
+### 分析记录
+1. 章节元数据来自 `AVFormatContext::chapters`，需要在 `Demuxer` 开档阶段提取并保存在媒体信息中。
+2. 输入事件链路需新增章节动作透传：`Display -> Renderer -> PlayerCore -> VideoPlayer`。
+3. 需要新增命令行自检入口，避免章节导航仅依赖手工播放验证。
+
+### 解决方案
+- `Demuxer` 新增章节模型：
+  - 增加 `ChapterInfo` 结构与 `MediaInfo::chapters`；
+  - 解析 `AVChapter` 的起止时间和标题，并按起始时间排序。
+- 快捷键与请求链路扩展：
+  - `HotkeyManager` 新增 `PreviousChapter` / `NextChapter`；
+  - 默认键位绑定 `HOME` / `END`；
+  - `Display`、`IVideoRenderer` 及各渲染器实现新增章节请求消费接口。
+- `PlayerCore` 增加章节跳转逻辑：
+  - `rebuildChapterPoints()` 在 `open()` 后构建章节时间点；
+  - 新增 `seekToNextChapter()` / `seekToPreviousChapter()`；
+  - `pumpEvents()` 消费章节请求并触发 seek。
+- `VideoPlayer` 增加章节 API 包装：
+  - `seekToNextChapter()` / `seekToPreviousChapter()` / `chapterCount()`。
+- `main` 新增 `--chapter-nav-check <media_file>`：
+  - 自动执行播放、下一章、上一章流程；
+  - 输出 `chapter-nav-check.*` 字段与 `PASS/FAIL`。
+- 任务清单同步：
+  - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md` 标记 `4.1` 完成。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4` 通过（`PASS`）。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+
+### 修改文件
+- include/demuxer.h
+- src/demuxer.cpp
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/display.h
+- src/display.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- include/render/opengl_video_renderer.h
+- src/render/opengl_video_renderer.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
