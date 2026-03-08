@@ -1461,3 +1461,32 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 2026-03-08 更新（高码率样本验收）
+
+### 高码率门禁补齐
+- `main` 新增 `--high-bitrate-check <media_file> [sample_ms]`，前置读取格式码率并要求 `>= 80Mbps`。
+- 连续播放窗口同时检查：时间推进、`late_drop`、demux 丢包与实际 decoder / renderer backend。
+- `tools/download_test_samples.ps1` 新增 `stress100m__h264_aac__1920x1080__60fps__2ch.mp4` 生成入口，用于高码率回归。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000`：`PASS`
+- 验收报告：`docs/reports/HIGH_BITRATE_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `2.2.3 大码率样本（>80Mbps）可播放` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- tools/download_test_samples.ps1
+- samples/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/HIGH_BITRATE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -368,6 +368,24 @@ ProbeReport collectFileProbeReport(const std::string& path) {
     return report;
 }
 
+int64_t collectFormatBitrateBitsPerSecond(const std::string& path) {
+    ScopedAvLogLevel quiet_logs(AV_LOG_ERROR);
+    AVFormatContext* fmt_ctx = nullptr;
+    if (avformat_open_input(&fmt_ctx, path.c_str(), nullptr, nullptr) < 0 || !fmt_ctx) {
+        return 0;
+    }
+
+    if (avformat_find_stream_info(fmt_ctx, nullptr) < 0) {
+        const int64_t bitrate = std::max<int64_t>(0, fmt_ctx->bit_rate);
+        avformat_close_input(&fmt_ctx);
+        return bitrate;
+    }
+
+    const int64_t bitrate = std::max<int64_t>(0, fmt_ctx->bit_rate);
+    avformat_close_input(&fmt_ctx);
+    return bitrate;
+}
+
 void printFileProbeTextReport(const ProbeReport& report) {
     std::cout << "probe.path=" << report.path << std::endl;
     std::cout << "probe.open=" << report.open << std::endl;
@@ -2154,6 +2172,95 @@ bool run4kPlaybackCheck(const std::string& program_path, const std::string& medi
     return result;
 }
 
+bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
+    const ProbeReport probe = collectFileProbeReport(media_file);
+    const int64_t format_bitrate_bps = collectFormatBitrateBitsPerSecond(media_file);
+    if (sample_ms < 1500) {
+        std::cout << "high-bitrate-check.path=" << media_file << std::endl;
+        std::cout << "high-bitrate-check.sample_ms=" << sample_ms << std::endl;
+        std::cout << "high-bitrate-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    const double sample_seconds = static_cast<double>(sample_ms) / 1000.0;
+    const bool probe_ok = probe.overall == "PASS";
+    const bool bitrate_ok = format_bitrate_bps >= 80000000LL;
+    const bool duration_ok = probe.duration <= 0.0 || probe.duration >= sample_seconds + 1.0;
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    bool entered_playback_loop = false;
+    bool still_playing_after_window = false;
+    double start_position = 0.0;
+    double end_position = 0.0;
+    double advanced_seconds = 0.0;
+    double advance_ratio = 0.0;
+    core::DiagnosticsSnapshot diag{};
+    std::string renderer_backend = "None";
+    std::string decoder_backend = "Unknown";
+
+    if (open_ok) {
+        player.play();
+        start_position = player.getCurrentTime();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(sample_ms));
+        end_position = player.getCurrentTime();
+        advanced_seconds = std::max(0.0, end_position - start_position);
+        advance_ratio = sample_seconds > 0.0 ? advanced_seconds / sample_seconds : 0.0;
+        still_playing_after_window = player.isPlaying();
+        diag = player.getDiagnosticsSnapshot();
+        renderer_backend = player.videoRendererBackendName();
+        decoder_backend = player.videoDecoderBackendName();
+        player.stop();
+        player.close();
+    }
+
+    const double min_advance_seconds = std::max(1.0, sample_seconds * 0.8);
+    const bool progress_ok = advanced_seconds >= min_advance_seconds;
+    const bool late_drops_ok = diag.scheduler_late_drops == 0;
+    const bool demux_drops_ok = diag.demux_dropped_packets == 0;
+    const bool result = probe_ok && bitrate_ok && duration_ok && open_ok && entered_playback_loop &&
+                        still_playing_after_window && progress_ok && late_drops_ok && demux_drops_ok;
+
+    std::cout << "high-bitrate-check.path=" << media_file << std::endl;
+    std::cout << "high-bitrate-check.sample_ms=" << sample_ms << std::endl;
+    std::cout << "high-bitrate-check.probe_overall=" << probe.overall << std::endl;
+    std::cout << "high-bitrate-check.probe_width=" << probe.width << std::endl;
+    std::cout << "high-bitrate-check.probe_height=" << probe.height << std::endl;
+    std::cout << "high-bitrate-check.probe_fps=" << probe.fps << std::endl;
+    std::cout << "high-bitrate-check.probe_duration=" << probe.duration << std::endl;
+    std::cout << "high-bitrate-check.format_bitrate_bps=" << format_bitrate_bps << std::endl;
+    std::cout << "high-bitrate-check.bitrate_ok=" << (bitrate_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.renderer_backend=" << renderer_backend << std::endl;
+    std::cout << "high-bitrate-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "high-bitrate-check.start_position=" << start_position << std::endl;
+    std::cout << "high-bitrate-check.end_position=" << end_position << std::endl;
+    std::cout << "high-bitrate-check.advanced_seconds=" << advanced_seconds << std::endl;
+    std::cout << "high-bitrate-check.advance_ratio=" << advance_ratio << std::endl;
+    std::cout << "high-bitrate-check.progress_ok=" << (progress_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.duration_ok=" << (duration_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.late_drops=" << diag.scheduler_late_drops << std::endl;
+    std::cout << "high-bitrate-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "high-bitrate-check.demux_drops_ok=" << (demux_drops_ok ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -2263,6 +2370,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --1080p60-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --4k-playback-check <media_file> [sample_ms]" << std::endl;
+    std::cout << "       " << program_name << " --high-bitrate-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2492,6 +2600,19 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return run4kPlaybackCheck(argv[0], argv[2], sample_ms) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--high-bitrate-check") {
+        if (argc != 3 && argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int sample_ms = 3000;
+        if (argc == 4 && !tryParseInt(argv[3], sample_ms)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runHighBitrateCheck(argv[2], sample_ms) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

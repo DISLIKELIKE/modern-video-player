@@ -1883,3 +1883,42 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 56: M2 2.2.3：>80Mbps 高码率样本验收
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 需要一个真正超过 `80Mbps` 的回归样本和对应验收入口，才能完成 `2.2.3`。
+- 当前样本集合虽然覆盖分辨率与格式，但码率普遍偏低，无法作为高码率门禁。
+
+### 分析记录
+1. 现有 `collectFileProbeReport()` 没有直接输出码率，但 FFmpeg 的 `AVFormatContext::bit_rate` 可直接复用。
+2. 高码率任务的核心不在分辨率，而在于样本真实码率、连续播放窗口推进和掉帧/丢包情况。
+3. 基于当前 `D3D11VA + D3D11` 主链，`100Mbps` 级别的 `1080p60` H.264 样本已能稳定进入播放链路，适合作为本地回归基线。
+
+### 解决方案
+- 新增 `collectFormatBitrateBitsPerSecond()` 与 `--high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000`。
+- 在 `tools/download_test_samples.ps1` 增加 `100Mbps` 样本生成路径，并在 `samples/README.md` 标注用途。
+- 新增 `docs/reports/HIGH_BITRATE_LOCAL_CHECK.md`，同步任务清单、差距评估与版本记录。
+
+### 本地校对结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000`：`PASS`
+- 当前样本输出包含 `format_bitrate_bps=102829290`、`advance_ratio=0.988444`、`late_drops=0`、`demux_dropped_packets=0`。
+
+### 修改文件
+- src/main.cpp
+- tools/download_test_samples.ps1
+- samples/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/HIGH_BITRATE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
