@@ -1,5 +1,11 @@
 # 架构设计文档
 
+## 状态说明（2026-03-08）
+
+- 本文档保留了项目从早期单体/旧多线程播放链路演进到当前主链之前的大量设计背景，因此部分章节属于历史方案说明。
+- 当前仓库唯一生效的播放器主链以 `VideoPlayer -> PlayerCore -> Scheduler -> core/*` 为核心，请优先参考 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 与实际代码。
+- 文中出现的 `video_decoder`、`audio_decoder`、`VideoDecodeThread`、`AudioDecodeThread`、`SyncManager` 等命名，仅代表早期实现阶段，不再对应当前仓库文件结构。
+
 ## 项目依赖版本
 
 | 组件 | 版本 |
@@ -183,7 +189,7 @@ class FrameQueue {
 - 支持队列满/空时的超时等待，避免 CPU 忙轮询
 - 默认队列大小为 10 帧
 
-### 2.0.1 PacketReaderThread (Packet 读取线程)
+### 2.0.1 PacketReaderThread（历史实现）
 
 **职责**:
 - 作为唯一调用 `av_read_frame()` 的入口
@@ -207,7 +213,7 @@ class PacketReaderThread {
 - 使用两个 `PacketQueue` 分别缓存视频和音频 packet
 - 支持 EOF 检测和队列停止
 
-### 2.0.3 VideoDecodeThread (视频解码线程)
+### 2.0.3 VideoDecodeThread（历史实现）
 
 **职责**:
 - 独立于主线程进行视频解码
@@ -228,7 +234,7 @@ class VideoDecodeThread {
 };
 ```
 
-### 2.0.4 AudioDecodeThread (音频解码线程)
+### 2.0.4 AudioDecodeThread（历史实现）
 
 **职责**:
 - 独立于主线程进行音频解码
@@ -250,7 +256,7 @@ class AudioDecodeThread {
 };
 ```
 
-### 2.0.5 SyncManager (同步管理器)
+### 2.0.5 SyncManager（历史实现）
 
 **职责**:
 - 管理音视频同步
@@ -278,7 +284,7 @@ class SyncManager {
 };
 ```
 
-### 2.1 VideoPlayer (主播放器)
+### 2.1 VideoPlayer（历史单体主播放器）
 
 **职责**:
 - 管理所有子模块
@@ -308,7 +314,7 @@ class VideoPlayer {
 - 主线程: 处理用户输入
 - 播放线程: 音视频解码和渲染
 
-### 2.2 VideoDecoder (视频解码器)
+### 2.2 VideoDecoder（历史实现）
 
 **职责**:
 - 打开视频流
@@ -345,7 +351,7 @@ sequenceDiagram
 - 使用 `std::mutex` 保护共享资源
 - RAII 管理 FFmpeg 资源
 
-### 2.3 AudioDecoder (音频解码器)
+### 2.3 AudioDecoder（历史实现）
 
 **职责**:
 - 打开音频流
@@ -479,7 +485,7 @@ graph LR
 
 ## 4. 线程模型
 
-### 4.1 多线程版本 (当前实现)
+### 4.1 多线程版本（历史实现）
 
 ```
 主线程:
@@ -785,10 +791,10 @@ linuxdeploy-x86_64.AppImage --appdir AppDir --output appimage
 ### 12.1 日志系统
 
 ```cpp
-#include <spdlog/spdlog.h>
+#include "logger.h"
 
-spdlog::info("Playing video: {}", filename);
-spdlog::error("Failed to open codec");
+LOG_INFO("Playing video: {}", filename);
+LOG_ERROR("Failed to open codec");
 ```
 
 ### 12.2 配置管理
@@ -806,4 +812,4 @@ void saveConfig(const Config& config);
 
 ## 总结
 
-本架构设计采用模块化、面向对象的方式，充分利用 C++17 新特性，实现了清晰、高效的视频播放器。通过良好的架构设计，便于后续功能扩展和性能优化。
+本架构设计文档用于保留项目的设计背景与阶段性演进记录。当前实现已经收敛到 `VideoPlayer + PlayerCore + Scheduler + core/*` 主链；如需了解现行架构，请结合 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 与仓库中的 `include/core/*`、`src/core/*` 阅读。

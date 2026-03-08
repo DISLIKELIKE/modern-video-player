@@ -28,24 +28,39 @@ A modern C++17 video player using FFmpeg and SDL2, supporting both Windows and L
 
 ```
 modern-video-player/
-├── CMakeLists.txt          # CMake build configuration
-├── README.md              # Project documentation
-├── include/               # Header files
-│   ├── video_player.h     # Main player class
-│   ├── video_decoder.h    # Video decoder
-│   ├── audio_decoder.h    # Audio decoder
-│   ├── display.h          # Display window
-│   └── audio_player.h     # Audio player
-├── src/                   # Source files
-│   ├── main.cpp           # Main program entry
-│   ├── video_player.cpp   # Player implementation
-│   ├── video_decoder.cpp  # Video decoder implementation
-│   ├── audio_decoder.cpp  # Audio decoder implementation
-│   ├── display.cpp        # Display implementation
-│   └── audio_player.cpp   # Audio player implementation
-└── docs/                  # Documentation
-    ├── IMPLEMENTATION.md  # Step-by-step implementation guide
-    └── ARCHITECTURE.md    # Architecture design document
+├── CMakeLists.txt                    # CMake build configuration
+├── README.md                         # English overview
+├── README_ZH.md                      # Chinese overview
+├── include/                          # Public headers
+│   ├── core/                         # PlayerCore / Scheduler / Clock / FrameQueue
+│   ├── decoder/                      # Decoder factory and backend selection
+│   ├── filters/                      # Video/audio filter interfaces and registry
+│   ├── input/                        # Hotkey handling
+│   ├── playlist/                     # Playlist management
+│   ├── render/                       # SDL / D3D11 / OpenGL renderer interfaces
+│   ├── subtitle/                     # Subtitle pipeline and loaders
+│   ├── audio_player.h                # Audio output
+│   ├── demuxer.h                     # Demuxer facade
+│   ├── display.h                     # Window and presentation bridge
+│   └── video_player.h                # Public player facade
+├── src/                              # Source files
+│   ├── core/                         # Core scheduling and playback state machine
+│   ├── decoder/                      # Decoder implementation
+│   ├── filters/                      # Built-in filters
+│   ├── input/                        # Hotkey implementation
+│   ├── playlist/                     # Playlist implementation
+│   ├── render/                       # Renderer backends
+│   ├── subtitle/                     # Subtitle implementation
+│   ├── main.cpp                      # Main program entry
+│   ├── demuxer.cpp                   # Demuxer implementation
+│   ├── display.cpp                   # Presentation bridge implementation
+│   └── video_player.cpp              # Facade implementation
+└── docs/                             # Documentation
+    ├── README.md                     # Documentation index
+    ├── ARCHITECTURE.md               # Historical architecture baseline
+    ├── ARCHITECTURE_REFACTOR_2026-03-06.md
+    │                                 # Current main-chain refactor note
+    └── MPC_HC_GAP_ANALYSIS.md        # Current capability gap analysis
 ```
 
 ## Installation
@@ -172,39 +187,41 @@ build\Release\modern-video-player.exe your_video.mp4
 
 ```
 ┌─────────────────────────────────────────┐
-│           VideoPlayer                   │
+│        VideoPlayer (Facade)            │
 │  ┌─────────────────────────────────┐    │
-│  │      VideoDecoder              │    │
-│  │  - Decode video frames         │    │
-│  │  - Format conversion (YUV)     │    │
+│  │      PlayerCore                 │    │
+│  │  - Playback state machine       │    │
+│  │  - Command / seek / screenshot  │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      AudioDecoder              │    │
-│  │  - Decode audio frames         │    │
-│  │  - Format conversion (S16)     │    │
+│  │      Scheduler                  │    │
+│  │  - Decode / render threads      │    │
+│  │  - AV sync and backpressure     │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      Display                    │    │
-│  │  - SDL window management       │    │
-│  │  - YUV texture rendering       │    │
+│  │ Demuxer + DecoderFactory        │    │
+│  │  - Stream selection             │    │
+│  │  - Software / D3D11VA backends  │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      AudioPlayer                │    │
-│  │  - SDL audio playback           │    │
-│  │  - Volume control               │    │
+│  │ Display / Render Backends       │    │
+│  │ SDL / D3D11 / OpenGL            │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      Play Thread                │    │
-│  │  - Audio-video synchronization  │    │
-│  │  - Frame rate control           │    │
+│  │ Playlist / Subtitle / Filters   │    │
+│  │ Settings / Hotkeys / Reports    │    │
 │  └─────────────────────────────────┘    │
 └─────────────────────────────────────────┘
 ```
 
+- Current main chain: `VideoPlayer -> PlayerCore -> Scheduler -> core/*`.
+- Historical decoder/thread layout is retained only in legacy docs; see `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` for the current refactor note.
+
 ## Documentation
 
 - [Implementation Guide](docs/IMPLEMENTATION.md) - Detailed step-by-step implementation
-- [Architecture Design](docs/ARCHITECTURE.md) - System architecture and design patterns
+- [Architecture Design](docs/ARCHITECTURE.md) - Historical architecture baseline and design context
+- [Refactor Note (2026-03-06)](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - Current main-chain architecture
 - [Version History](docs/VERSION.md) - Project version and dependency information
 
 ## Learning Roadmap

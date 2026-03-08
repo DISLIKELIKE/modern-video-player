@@ -1707,3 +1707,31 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 45: README 与架构文档仍混用旧主链表述
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `README.md`、`README_ZH.md` 的项目结构和架构示意仍展示 `video_decoder` / `audio_decoder` 等旧路径。
+- `docs/ARCHITECTURE.md` 也含有“当前实现”字样和旧模块命名，容易与现行 `PlayerCore + Scheduler + core/*` 主链混淆。
+
+### 原因分析
+- 根目录 README 的目录树和架构图来自早期单体/旧多线程实现阶段，后续未随重构同步刷新。
+- `docs/ARCHITECTURE.md` 保留了大量历史设计内容，但缺少清晰的“历史/当前”边界提示。
+
+### 解决方案
+- 更新 `README.md` 与 `README_ZH.md` 的项目结构、架构示意和文档链接，统一指向当前主链。
+- 在 `docs/ARCHITECTURE.md` 顶部增加状态说明，并将旧模块章节显式标记为“历史实现”。
+- 将日志示例从 `spdlog` 改为当前项目使用的 `Quill` 宏接口。
+- 更新 `docs/README.md`，区分历史架构基线与当前重构说明。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/ARCHITECTURE.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

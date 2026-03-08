@@ -1440,3 +1440,38 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 45: README 与架构文档仍混用旧主链表述
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 根目录 `README.md` / `README_ZH.md` 仍把 `video_decoder`、`audio_decoder` 等旧文件写成项目当前结构。
+- `docs/ARCHITECTURE.md` 同时混用了“当前实现”和旧模块命名，读者容易误判现行主链仍依赖这些历史模块。
+
+### 分析记录
+1. `2026-03-06` 架构收敛后，当前播放器主链已经稳定在 `VideoPlayer + PlayerCore + Scheduler + core/*`。
+2. `README` 更偏向“快速理解仓库”的入口文档，因此目录树和架构示意应优先反映现状，而不是保留已删除路径。
+3. `docs/ARCHITECTURE.md` 作为背景文档可以保留历史内容，但必须显式标注哪些章节属于历史实现。
+
+### 解决方案
+- 重写 `README.md` / `README_ZH.md` 的项目结构树和架构示意，改为当前主链口径。
+- 在 `docs/ARCHITECTURE.md` 顶部增加状态说明，并将旧 decoder/thread/sync 章节统一标成“历史实现”。
+- 将文档中的日志示例改为当前 `Quill` 宏接口。
+- 更新 `docs/README.md` 的架构文档索引说明，区分历史基线和当前重构说明。
+
+### 本地校对结果
+- `README.md` / `README_ZH.md` 已不再把 `video_decoder` / `audio_decoder` 写为当前目录结构。
+- `docs/ARCHITECTURE.md` 已明确声明历史章节边界，并不再把旧多线程链路标为“当前实现”。
+- 本次改动仍限定在文档层，未涉及代码和构建配置。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/ARCHITECTURE.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

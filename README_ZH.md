@@ -28,29 +28,40 @@
 
 ```
 modern-video-player/
-├── CMakeLists.txt          # CMake 构建配置
-├── README.md               # 英文项目说明
-├── README_ZH.md            # 中文项目说明
-├── LICENSE                 # MIT 许可证
-├── include/                # 头文件
-│   ├── video_player.h     # 主播放器类
-│   ├── video_decoder.h    # 视频解码器
-│   ├── audio_decoder.h    # 音频解码器
-│   ├── display.h          # 显示窗口
-│   ├── audio_player.h     # 音频播放器
-│   └── logger.h           # 日志系统
-├── src/                    # 源文件
-│   ├── main.cpp           # 主程序入口
-│   ├── video_player.cpp   # 播放器实现
-│   ├── video_decoder.cpp  # 视频解码实现
-│   ├── audio_decoder.cpp  # 音频解码实现
-│   ├── display.cpp        # 显示实现
-│   ├── audio_player.cpp   # 音频播放实现
-│   └── logger.cpp         # 日志实现
-└── docs/                   # 文档
-    ├── WINDOWS_SETUP.md    # Windows 配置指南
-    ├── IMPLEMENTATION.md   # 实现步骤文档
-    └── ARCHITECTURE.md     # 架构设计文档
+├── CMakeLists.txt                    # CMake 构建配置
+├── README.md                         # 英文项目说明
+├── README_ZH.md                      # 中文项目说明
+├── LICENSE                           # MIT 许可证
+├── include/                          # 对外头文件
+│   ├── core/                         # PlayerCore / Scheduler / Clock / FrameQueue
+│   ├── decoder/                      # 解码器工厂与后端选择
+│   ├── filters/                      # 音视频滤镜接口与注册表
+│   ├── input/                        # 快捷键处理
+│   ├── playlist/                     # 播放列表管理
+│   ├── render/                       # SDL / D3D11 / OpenGL 渲染接口
+│   ├── subtitle/                     # 字幕管线与加载器
+│   ├── audio_player.h                # 音频输出
+│   ├── demuxer.h                     # 解封装入口
+│   ├── display.h                     # 窗口与呈现桥接
+│   └── video_player.h                # 播放器 Facade
+├── src/                              # 源文件
+│   ├── core/                         # 核心调度与播放状态机
+│   ├── decoder/                      # 解码实现
+│   ├── filters/                      # 内置滤镜
+│   ├── input/                        # 快捷键实现
+│   ├── playlist/                     # 播放列表实现
+│   ├── render/                       # 渲染后端
+│   ├── subtitle/                     # 字幕实现
+│   ├── main.cpp                      # 主程序入口
+│   ├── demuxer.cpp                   # 解封装实现
+│   ├── display.cpp                   # 呈现桥接实现
+│   └── video_player.cpp              # Facade 实现
+└── docs/                             # 文档
+    ├── README.md                     # 文档索引
+    ├── ARCHITECTURE.md               # 历史架构基线
+    ├── ARCHITECTURE_REFACTOR_2026-03-06.md
+    │                                 # 当前主链重构说明
+    └── MPC_HC_GAP_ANALYSIS.md        # 当前能力差距评估
 ```
 
 ## 安装
@@ -204,44 +215,41 @@ build\Release\modern-video-player.exe your_video.mp4
 
 ```
 ┌─────────────────────────────────────────┐
-│           VideoPlayer                   │
+│        VideoPlayer（Facade）          │
 │  ┌─────────────────────────────────┐    │
-│  │      VideoDecoder              │    │
-│  │  - 解码视频帧                  │    │
-│  │  - 格式转换 (YUV)              │    │
+│  │      PlayerCore                 │    │
+│  │  - 播放状态机                  │    │
+│  │  - 命令 / seek / 截图           │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      AudioDecoder              │    │
-│  │  - 解码音频帧                  │    │
-│  │  - 格式转换 (S16)              │    │
+│  │      Scheduler                  │    │
+│  │  - 解码 / 渲染线程              │    │
+│  │  - 音视频同步与背压控制         │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      Display                    │    │
-│  │  - SDL 窗口管理                │    │
-│  │  - YUV 纹理渲染                │    │
+│  │ Demuxer + DecoderFactory        │    │
+│  │  - 流选择                       │    │
+│  │  - 软解 / D3D11VA 后端协商      │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      AudioPlayer                │    │
-│  │  - SDL 音频播放                │    │
-│  │  - 音量控制                     │    │
+│  │ Display / Render Backends       │    │
+│  │ SDL / D3D11 / OpenGL            │    │
 │  └─────────────────────────────────┘    │
 │  ┌─────────────────────────────────┐    │
-│  │      Logger                     │    │
-│  │  - Quill 日志系统              │    │
-│  │  - 异步日志记录                │    │
-│  └─────────────────────────────────┘    │
-│  ┌─────────────────────────────────┐    │
-│  │      Play Thread                │    │
-│  │  - 音视频同步                  │    │
-│  │  - 帧率控制                     │    │
+│  │ 播放列表 / 字幕 / 滤镜 / 设置   │    │
+│  │ 快捷键 / 报告 / 配置            │    │
 │  └─────────────────────────────────┘    │
 └─────────────────────────────────────────┘
 ```
 
+- 当前主链为 `VideoPlayer -> PlayerCore -> Scheduler -> core/*`。
+- 旧版 decoder / thread 架构仅作为历史说明保留在旧文档中；当前实现请以 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 为准。
+
 ## 文档
 
 - [实现步骤指南](docs/IMPLEMENTATION.md) - 详细的分步实现指南
-- [架构设计文档](docs/ARCHITECTURE.md) - 系统架构和设计模式
+- [架构设计文档](docs/ARCHITECTURE.md) - 历史架构基线与设计背景
+- [架构重构说明](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - 当前主链重构说明
 - [Windows 配置指南](docs/WINDOWS_SETUP.md) - Windows 环境配置详情
 - [版本记录](docs/VERSION.md) - 项目版本和依赖信息
 

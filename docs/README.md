@@ -14,7 +14,8 @@
 
 | 文档 | 说明 |
 |------|------|
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统架构设计 |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | 历史架构基线与设计背景 |
+| [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) | 当前主链重构说明 |
 | [VERSION.md](./VERSION.md) | 版本记录与依赖说明 |
 | [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) | 与 MPC-HC 的功能差距评估 |
 | [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 单人开发可执行迭代计划 |
@@ -39,15 +40,13 @@
 - 新增 [CHANGELOG.md](./CHANGELOG.md) - 问题修复记录文档
 - 更新 [VERSION.md](./VERSION.md) - 记录所有问题修复
 - 更新 [LOGGING.md](./LOGGING.md) - 日志系统说明
+- 同步归档早期问题修复：视频流索引、音频流索引、YUV 渲染错误
 
 ### 2026-03-08 更新
 
 - 更新 [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) - 按当前代码与本地验收报告刷新差距评估
-
-**本次更新解决的问题**:
-1. 视频流索引不匹配问题
-2. 音频流索引不匹配问题
-3. YUV 数据渲染错误
+- 更新 [ARCHITECTURE.md](./ARCHITECTURE.md) / [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) 的索引说明，区分历史基线与当前主链
+- 清理 README / VERSION / ARCHITECTURE 中的历史路径描述，避免将旧模块误写为现行结构
 
 ---
 
