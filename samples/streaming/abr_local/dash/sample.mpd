@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<MPD xmlns="urn:mpeg:dash:schema:mpd:2011"
+     type="static"
+     mediaPresentationDuration="PT8S"
+     minBufferTime="PT1.5S"
+     profiles="urn:mpeg:dash:profile:isoff-main:2011">
+  <Period duration="PT8S">
+    <AdaptationSet mimeType="video/mp4" segmentAlignment="true">
+      <Representation id="video_400k" bandwidth="400000" width="640" height="360">
+        <BaseURL>low/</BaseURL>
+        <SegmentList timescale="1" duration="4">
+          <Initialization sourceURL="init.mp4" />
+          <SegmentURL media="segment000.m4s" />
+          <SegmentURL media="segment001.m4s" />
+        </SegmentList>
+      </Representation>
+      <Representation id="video_1200k" bandwidth="1200000" width="1280" height="720">
+        <BaseURL>medium/</BaseURL>
+        <SegmentList timescale="1" duration="4">
+          <Initialization sourceURL="init.mp4" />
+          <SegmentURL media="segment000.m4s" />
+          <SegmentURL media="segment001.m4s" />
+        </SegmentList>
+      </Representation>
+      <Representation id="video_2200k" bandwidth="2200000" width="1920" height="1080">
+        <BaseURL>high/</BaseURL>
+        <SegmentList timescale="1" duration="4">
+          <Initialization sourceURL="init.mp4" />
+          <SegmentURL media="segment000.m4s" />
+          <SegmentURL media="segment001.m4s" />
+        </SegmentList>
+      </Representation>
+    </AdaptationSet>
+  </Period>
+</MPD>

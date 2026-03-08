@@ -76,3 +76,8 @@ The script will:
   - `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming/hls_local -Port 8765`
   - `.\build\Debug\modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`
 - This fixture is intentionally tiny and byte-oriented; it validates real HTTP segment download and buffering, not media decoding.
+- `samples/streaming/abr_local/hls/*` and `samples/streaming/abr_local/dash/*` are used by:
+  - `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming -Port 8766`
+  - `.\build\Debug\modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/hls/master.m3u8 900000,3500000,1500000 2 128`
+  - `.\build\Debug\modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/dash/sample.mpd 900000,3500000,1500000 2 128`
+- These ABR fixtures validate HLS master playlist / DASH MPD parsing, bitrate selection, and per-variant segment download; they do not validate decode or playback integration.

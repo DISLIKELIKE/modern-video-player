@@ -6,6 +6,8 @@
 #include "playlist/playlist_manager.h"
 #include "plugin/plugin_manager.h"
 #include "logger.h"
+#include "streaming/adaptive_bitrate_selector.h"
+#include "streaming/dash_manifest_parser.h"
 #include "streaming/hls_manifest_parser.h"
 #include "streaming/http_stream_downloader.h"
 #include "subtitle/srt_parser.h"
@@ -27,7 +29,9 @@ extern "C" {
 #include <functional>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <system_error>
 #include <thread>
@@ -2484,6 +2488,291 @@ bool runPluginCheck(const char* program_name, const std::string& plugin_input = 
     return result;
 }
 
+enum class StreamingManifestKind {
+    Unknown,
+    Hls,
+    Dash,
+};
+
+struct StreamingVariantCandidate {
+    std::string id;
+    int bandwidth{0};
+    std::string descriptor_url;
+    std::string initialization_url;
+    std::vector<std::string> segment_urls;
+};
+
+std::string joinIntegers(const std::vector<int>& values, size_t limit = 16) {
+    std::ostringstream oss;
+    const size_t count = std::min(limit, values.size());
+    for (size_t index = 0; index < count; ++index) {
+        if (index > 0) {
+            oss << ", ";
+        }
+        oss << values[index];
+    }
+    if (values.size() > limit) {
+        oss << ", ...";
+    }
+    return oss.str();
+}
+
+bool parseCsvIntegers(const std::string& text, std::vector<int>& values) {
+    values.clear();
+    std::stringstream input(text);
+    std::string token;
+    while (std::getline(input, token, ',')) {
+        const size_t begin = token.find_first_not_of(" \t\r\n");
+        if (begin == std::string::npos) {
+            continue;
+        }
+        const size_t end = token.find_last_not_of(" \t\r\n");
+        const std::string trimmed = token.substr(begin, end - begin + 1);
+        char* parse_end = nullptr;
+        const long parsed = std::strtol(trimmed.c_str(), &parse_end, 10);
+        if (parse_end == trimmed.c_str() || *parse_end != '\0') {
+            values.clear();
+            return false;
+        }
+        values.push_back(static_cast<int>(parsed));
+    }
+    return !values.empty();
+}
+
+std::string urlExtension(const std::string& url) {
+    std::string cleaned = url;
+    const size_t query_pos = cleaned.find_first_of("?#");
+    if (query_pos != std::string::npos) {
+        cleaned = cleaned.substr(0, query_pos);
+    }
+    const size_t slash_pos = cleaned.find_last_of('/');
+    const size_t dot_pos = cleaned.find_last_of('.');
+    if (dot_pos == std::string::npos || (slash_pos != std::string::npos && dot_pos < slash_pos)) {
+        return {};
+    }
+    return toLower(cleaned.substr(dot_pos + 1));
+}
+
+StreamingManifestKind detectManifestKind(const std::string& manifest_url, const std::string& manifest_text) {
+    if (manifest_text.find("#EXTM3U") != std::string::npos) {
+        return StreamingManifestKind::Hls;
+    }
+    if (manifest_text.find("<MPD") != std::string::npos || manifest_text.find("<mpd") != std::string::npos) {
+        return StreamingManifestKind::Dash;
+    }
+
+    const std::string extension = urlExtension(manifest_url);
+    if (extension == "m3u8") {
+        return StreamingManifestKind::Hls;
+    }
+    if (extension == "mpd") {
+        return StreamingManifestKind::Dash;
+    }
+    return StreamingManifestKind::Unknown;
+}
+
+std::string manifestKindName(StreamingManifestKind kind) {
+    switch (kind) {
+    case StreamingManifestKind::Hls:
+        return "HLS";
+    case StreamingManifestKind::Dash:
+        return "DASH";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+bool downloadBufferedUrl(
+    const std::string& url,
+    size_t target_buffer_bytes,
+    size_t& downloaded_bytes,
+    size_t& max_buffered_bytes,
+    size_t& chunk_reads,
+    std::string& error_out) {
+    downloaded_bytes = 0;
+    max_buffered_bytes = 0;
+    chunk_reads = 0;
+    error_out.clear();
+
+    streaming::HttpStreamDownloader downloader;
+    if (!downloader.open(url)) {
+        error_out = downloader.lastError();
+        return false;
+    }
+
+    while (!downloader.eof() || downloader.bufferedBytes() > 0) {
+        if (!downloader.prefetch(target_buffer_bytes, target_buffer_bytes)) {
+            error_out = downloader.lastError();
+            downloader.close();
+            return false;
+        }
+        max_buffered_bytes = std::max(max_buffered_bytes, downloader.bufferedBytes());
+        const auto chunk = downloader.consumeBuffered(target_buffer_bytes);
+        if (chunk.empty()) {
+            continue;
+        }
+        downloaded_bytes += chunk.size();
+        ++chunk_reads;
+    }
+
+    downloader.close();
+    if (downloaded_bytes == 0) {
+        error_out = "download produced no bytes";
+        return false;
+    }
+    return true;
+}
+
+bool buildHlsVariantCandidates(
+    const std::string& manifest_url,
+    const std::string& manifest_text,
+    std::vector<StreamingVariantCandidate>& variants_out,
+    std::string& error_out) {
+    variants_out.clear();
+    error_out.clear();
+
+    streaming::HlsManifest manifest{};
+    if (!streaming::HlsManifestParser::parse(manifest_text, manifest)) {
+        error_out = "failed to parse hls manifest";
+        return false;
+    }
+
+    if (!manifest.variants.empty()) {
+        for (size_t index = 0; index < manifest.variants.size(); ++index) {
+            const auto& variant = manifest.variants[index];
+            const std::string playlist_url = resolveUrl(manifest_url, variant.uri);
+
+            std::string playlist_text;
+            if (!readUrlText(playlist_url, playlist_text, error_out)) {
+                return false;
+            }
+
+            streaming::HlsManifest media_manifest{};
+            if (!streaming::HlsManifestParser::parse(playlist_text, media_manifest) || media_manifest.is_master ||
+                media_manifest.segment_urls.empty()) {
+                error_out = "failed to parse hls media playlist";
+                return false;
+            }
+
+            StreamingVariantCandidate candidate{};
+            candidate.id = !variant.resolution.empty()
+                               ? variant.resolution
+                               : (variant.bandwidth > 0 ? ("hls_" + std::to_string(variant.bandwidth))
+                                                        : ("hls_variant_" + std::to_string(index + 1)));
+            candidate.bandwidth = variant.bandwidth;
+            candidate.descriptor_url = playlist_url;
+            for (const auto& segment_url : media_manifest.segment_urls) {
+                candidate.segment_urls.push_back(resolveUrl(playlist_url, segment_url));
+            }
+            variants_out.push_back(std::move(candidate));
+        }
+        return !variants_out.empty();
+    }
+
+    if (manifest.segment_urls.empty()) {
+        error_out = "hls manifest did not contain variants or segments";
+        return false;
+    }
+
+    StreamingVariantCandidate direct_candidate{};
+    direct_candidate.id = "hls_single_variant";
+    direct_candidate.descriptor_url = manifest_url;
+    for (const auto& segment_url : manifest.segment_urls) {
+        direct_candidate.segment_urls.push_back(resolveUrl(manifest_url, segment_url));
+    }
+    variants_out.push_back(std::move(direct_candidate));
+    return true;
+}
+
+bool buildDashVariantCandidates(
+    const std::string& manifest_url,
+    const std::string& manifest_text,
+    std::vector<StreamingVariantCandidate>& variants_out,
+    std::string& error_out) {
+    variants_out.clear();
+    error_out.clear();
+
+    streaming::DashManifest manifest{};
+    if (!streaming::DashManifestParser::parse(manifest_text, manifest)) {
+        error_out = "failed to parse dash manifest";
+        return false;
+    }
+
+    for (size_t index = 0; index < manifest.representations.size(); ++index) {
+        const auto& representation = manifest.representations[index];
+        StreamingVariantCandidate candidate{};
+        candidate.id = !representation.id.empty()
+                           ? representation.id
+                           : (representation.bandwidth > 0 ? ("dash_" + std::to_string(representation.bandwidth))
+                                                           : ("dash_representation_" + std::to_string(index + 1)));
+        candidate.bandwidth = representation.bandwidth;
+        candidate.descriptor_url = representation.base_url.empty() ? manifest_url : resolveUrl(manifest_url, representation.base_url);
+        if (!representation.initialization_url.empty()) {
+            candidate.initialization_url = resolveUrl(candidate.descriptor_url, representation.initialization_url);
+        }
+        for (const auto& segment_url : representation.segment_urls) {
+            candidate.segment_urls.push_back(resolveUrl(candidate.descriptor_url, segment_url));
+        }
+        variants_out.push_back(std::move(candidate));
+    }
+
+    if (variants_out.empty()) {
+        error_out = "dash manifest did not contain representations";
+        return false;
+    }
+    return true;
+}
+
+bool downloadVariantSelection(
+    const StreamingVariantCandidate& variant,
+    int segment_limit,
+    size_t target_buffer_bytes,
+    std::set<std::string>& initialized_urls,
+    size_t& initialization_count,
+    size_t& segment_count,
+    size_t& buffered_bytes,
+    size_t& max_buffered_bytes,
+    size_t& chunk_reads,
+    std::vector<std::string>& downloaded_urls,
+    std::string& error_out) {
+    if (!variant.initialization_url.empty() && initialized_urls.insert(variant.initialization_url).second) {
+        size_t init_bytes = 0;
+        size_t init_max_buffer = 0;
+        size_t init_reads = 0;
+        if (!downloadBufferedUrl(variant.initialization_url, target_buffer_bytes, init_bytes, init_max_buffer, init_reads, error_out)) {
+            return false;
+        }
+        ++initialization_count;
+        buffered_bytes += init_bytes;
+        max_buffered_bytes = std::max(max_buffered_bytes, init_max_buffer);
+        chunk_reads += init_reads;
+        downloaded_urls.push_back(variant.initialization_url);
+    }
+
+    const size_t segments_to_download = std::min(static_cast<size_t>(segment_limit), variant.segment_urls.size());
+    if (segments_to_download == 0) {
+        error_out = "variant contains no segments";
+        return false;
+    }
+
+    for (size_t index = 0; index < segments_to_download; ++index) {
+        const std::string& segment_url = variant.segment_urls[index];
+        size_t segment_bytes = 0;
+        size_t segment_max_buffer = 0;
+        size_t segment_reads = 0;
+        if (!downloadBufferedUrl(segment_url, target_buffer_bytes, segment_bytes, segment_max_buffer, segment_reads, error_out)) {
+            return false;
+        }
+        ++segment_count;
+        buffered_bytes += segment_bytes;
+        max_buffered_bytes = std::max(max_buffered_bytes, segment_max_buffer);
+        chunk_reads += segment_reads;
+        downloaded_urls.push_back(segment_url);
+    }
+
+    return true;
+}
+
 bool runStreamingBufferCheck(const std::string& playlist_url, int segment_limit = 3, int target_buffer_bytes = 256) {
     if (segment_limit <= 0 || target_buffer_bytes <= 0) {
         std::cout << "streaming-buffer-check.playlist_url=" << playlist_url << std::endl;
@@ -2568,6 +2857,142 @@ bool runStreamingBufferCheck(const std::string& playlist_url, int segment_limit 
               << (segment_error.empty() ? (manifest_error.empty() ? std::string("none") : manifest_error) : segment_error)
               << std::endl;
     std::cout << "streaming-buffer-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
+bool runAdaptiveBitrateCheck(
+    const std::string& manifest_url,
+    const std::string& bandwidth_samples_csv,
+    int segment_limit = 2,
+    int target_buffer_bytes = 256) {
+    if (segment_limit <= 0 || target_buffer_bytes <= 0) {
+        std::cout << "adaptive-bitrate-check.manifest_url=" << manifest_url << std::endl;
+        std::cout << "adaptive-bitrate-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    std::vector<int> bandwidth_samples;
+    const bool bandwidth_samples_ok = parseCsvIntegers(bandwidth_samples_csv, bandwidth_samples);
+
+    std::string manifest_text;
+    std::string manifest_error;
+    const bool manifest_download_ok = readUrlText(manifest_url, manifest_text, manifest_error);
+    const StreamingManifestKind manifest_kind =
+        manifest_download_ok ? detectManifestKind(manifest_url, manifest_text) : StreamingManifestKind::Unknown;
+
+    std::vector<StreamingVariantCandidate> variants;
+    std::string parse_error;
+    bool manifest_parse_ok = false;
+    if (manifest_download_ok) {
+        if (manifest_kind == StreamingManifestKind::Hls) {
+            manifest_parse_ok = buildHlsVariantCandidates(manifest_url, manifest_text, variants, parse_error);
+        } else if (manifest_kind == StreamingManifestKind::Dash) {
+            manifest_parse_ok = buildDashVariantCandidates(manifest_url, manifest_text, variants, parse_error);
+        } else {
+            parse_error = "unsupported manifest type";
+        }
+    }
+
+    std::vector<streaming::AdaptiveStreamVariant> selector_variants;
+    selector_variants.reserve(variants.size());
+    for (const auto& variant : variants) {
+        selector_variants.push_back({variant.id, variant.bandwidth});
+    }
+
+    std::vector<std::string> selected_variants;
+    std::vector<int> selected_bandwidths;
+    std::vector<std::string> downloaded_urls;
+    std::set<std::string> initialized_urls;
+    size_t initialization_count = 0;
+    size_t segments_downloaded = 0;
+    size_t buffered_bytes = 0;
+    size_t max_buffered_bytes = 0;
+    size_t chunk_reads = 0;
+    size_t switch_count = 0;
+    size_t upswitch_count = 0;
+    size_t downswitch_count = 0;
+    size_t fallback_count = 0;
+    std::string download_error;
+
+    if (manifest_parse_ok && bandwidth_samples_ok && !selector_variants.empty()) {
+        size_t previous_variant_index = std::numeric_limits<size_t>::max();
+        int previous_bandwidth = -1;
+
+        for (int sample : bandwidth_samples) {
+            const auto decision = streaming::AdaptiveBitrateSelector::chooseVariant(selector_variants, sample);
+            const auto& variant = variants[decision.variant_index];
+            selected_variants.push_back(variant.id);
+            selected_bandwidths.push_back(variant.bandwidth);
+            if (decision.fallback_to_lowest) {
+                ++fallback_count;
+            }
+            if (previous_variant_index != std::numeric_limits<size_t>::max() && decision.variant_index != previous_variant_index) {
+                ++switch_count;
+                if (variant.bandwidth > previous_bandwidth) {
+                    ++upswitch_count;
+                } else if (variant.bandwidth < previous_bandwidth) {
+                    ++downswitch_count;
+                }
+            }
+            previous_variant_index = decision.variant_index;
+            previous_bandwidth = variant.bandwidth;
+
+            if (!downloadVariantSelection(
+                    variant,
+                    segment_limit,
+                    static_cast<size_t>(target_buffer_bytes),
+                    initialized_urls,
+                    initialization_count,
+                    segments_downloaded,
+                    buffered_bytes,
+                    max_buffered_bytes,
+                    chunk_reads,
+                    downloaded_urls,
+                    download_error)) {
+                break;
+            }
+        }
+    }
+
+    const bool variant_count_ok = variants.size() >= 2;
+    const bool downloads_ok = download_error.empty() && segments_downloaded > 0;
+    const bool abr_ok = selected_variants.size() == bandwidth_samples.size() && switch_count > 0;
+    const bool result = manifest_download_ok && manifest_parse_ok && bandwidth_samples_ok && variant_count_ok && downloads_ok && abr_ok;
+
+    std::cout << "adaptive-bitrate-check.manifest_url=" << manifest_url << std::endl;
+    std::cout << "adaptive-bitrate-check.protocol=" << manifestKindName(manifest_kind) << std::endl;
+    std::cout << "adaptive-bitrate-check.segment_limit=" << segment_limit << std::endl;
+    std::cout << "adaptive-bitrate-check.target_buffer_bytes=" << target_buffer_bytes << std::endl;
+    std::cout << "adaptive-bitrate-check.manifest_download_ok=" << (manifest_download_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.manifest_parse_ok=" << (manifest_parse_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.bandwidth_samples_ok=" << (bandwidth_samples_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.bandwidth_samples="
+              << (bandwidth_samples.empty() ? std::string("none") : joinIntegers(bandwidth_samples, 16)) << std::endl;
+    std::cout << "adaptive-bitrate-check.variant_count=" << variants.size() << std::endl;
+    std::cout << "adaptive-bitrate-check.selected_variants="
+              << (selected_variants.empty() ? std::string("none") : joinTopN(selected_variants, 16)) << std::endl;
+    std::cout << "adaptive-bitrate-check.selected_bandwidths="
+              << (selected_bandwidths.empty() ? std::string("none") : joinIntegers(selected_bandwidths, 16)) << std::endl;
+    std::cout << "adaptive-bitrate-check.switch_count=" << switch_count << std::endl;
+    std::cout << "adaptive-bitrate-check.upswitch_count=" << upswitch_count << std::endl;
+    std::cout << "adaptive-bitrate-check.downswitch_count=" << downswitch_count << std::endl;
+    std::cout << "adaptive-bitrate-check.fallback_count=" << fallback_count << std::endl;
+    std::cout << "adaptive-bitrate-check.initializations_downloaded=" << initialization_count << std::endl;
+    std::cout << "adaptive-bitrate-check.segments_downloaded=" << segments_downloaded << std::endl;
+    std::cout << "adaptive-bitrate-check.buffered_bytes=" << buffered_bytes << std::endl;
+    std::cout << "adaptive-bitrate-check.max_buffered_bytes=" << max_buffered_bytes << std::endl;
+    std::cout << "adaptive-bitrate-check.chunk_reads=" << chunk_reads << std::endl;
+    std::cout << "adaptive-bitrate-check.variant_count_ok=" << (variant_count_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.abr_ok=" << (abr_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.downloads_ok=" << (downloads_ok ? "true" : "false") << std::endl;
+    std::cout << "adaptive-bitrate-check.downloaded_urls="
+              << (downloaded_urls.empty() ? std::string("none") : joinTopN(downloaded_urls, 12)) << std::endl;
+    std::cout << "adaptive-bitrate-check.error="
+              << (download_error.empty() ? (parse_error.empty() ? (manifest_error.empty() ? std::string("none") : manifest_error)
+                                                               : parse_error)
+                                        : download_error)
+              << std::endl;
+    std::cout << "adaptive-bitrate-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
     return result;
 }
 
@@ -2684,6 +3109,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --long-playback-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --plugin-check [plugin_dir_or_file]" << std::endl;
     std::cout << "       " << program_name << " --streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]" << std::endl;
+    std::cout << "       " << program_name << " --adaptive-bitrate-check <manifest_url> <bandwidth_samples_csv> [segment_limit] [target_buffer_bytes]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2966,6 +3392,24 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runStreamingBufferCheck(argv[2], segment_limit, target_buffer_bytes) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--adaptive-bitrate-check") {
+        if (argc != 4 && argc != 5 && argc != 6) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int segment_limit = 2;
+        int target_buffer_bytes = 256;
+        if (argc >= 5 && !tryParseInt(argv[4], segment_limit)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        if (argc == 6 && !tryParseInt(argv[5], target_buffer_bytes)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runAdaptiveBitrateCheck(argv[2], argv[3], segment_limit, target_buffer_bytes) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

@@ -1,4 +1,4 @@
-﻿# 文档索引
+# 文档索引
 
 本项目包含以下文档，请根据需要查阅。
 
@@ -43,6 +43,7 @@
 | [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) | 长时播放稳定性本地验收记录 |
 | [reports/PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) | 插件系统本地验收记录 |
 | [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) | 流媒体 HTTP 分片与缓冲本地验收记录 |
+| [reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) | HLS/DASH 自适应码率本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -72,6 +73,7 @@
 - 新增 [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) - 记录 6.5 长时播放稳定性本地验收结果
 - 新增 [reports/PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) - 记录 7.1 插件系统本地验收结果
 - 新增 [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) - 记录 7.2 流媒体 HTTP 分片与缓冲本地验收结果
+- 新增 [reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) - 记录 7.3 HLS/DASH 自适应码率本地验收结果
 
 ---
 

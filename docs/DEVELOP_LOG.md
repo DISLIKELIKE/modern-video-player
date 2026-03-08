@@ -2044,3 +2044,69 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 问题 60: 7.3 HLS/DASH 自适应码率
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `7.3` 需要一个可重复执行的 HLS/DASH 多码率解析与自适应码率本地验收入口。
+
+### 分析记录
+1. 现有 `HlsManifestParser` 只能读取媒体播放列表，无法处理 `master playlist`。
+2. 现有 `DashManifestParser` 只知道 `Representation` 带宽，无法拿到初始化分片和媒体分片 URL。
+3. 最稳妥的验收方式仍是在本机 HTTP 夹具下，分别验证 HLS/DASH 的档位选择与升降档路径。
+
+### 解决方案
+- 扩展 HLS/DASH 解析器，补齐 variant / representation / `BaseURL` / 初始化分片 / 媒体分片明细。
+- 新增 `AdaptiveBitrateSelector`，并在 `main` 中提供 `--adaptive-bitrate-check` 命令。
+- 新增 `samples/streaming/abr_local/{hls,dash}` 样本与报告，验证 HLS/DASH 在给定带宽序列下的升码率与降码率切换。
+
+### 本地验收结果
+- `cmake --build build --config Debug`：通过。
+- `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming -Port 8766`
+- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8766/hls_local/sample.m3u8 3 128`：`PASS`
+- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/hls/master.m3u8 900000,3500000,1500000 2 128`：`PASS`
+- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/dash/sample.mpd 900000,3500000,1500000 2 128`：`PASS`
+- 当前输出包含 `switch_count=2`、`upswitch_count=1`、`downswitch_count=1`，说明 HLS/DASH 两条路径都完成了一次升档和一次降档。
+
+### 修改文件
+- include/streaming/hls_manifest_parser.h
+- src/streaming/hls_manifest_parser.cpp
+- include/streaming/dash_manifest_parser.h
+- src/streaming/dash_manifest_parser.cpp
+- include/streaming/adaptive_bitrate_selector.h
+- src/streaming/adaptive_bitrate_selector.cpp
+- src/main.cpp
+- CMakeLists.txt
+- tools/start_streaming_fixture_server.ps1
+- samples/README.md
+- samples/streaming/abr_local/hls/master.m3u8
+- samples/streaming/abr_local/hls/low/index.m3u8
+- samples/streaming/abr_local/hls/low/segment000.ts
+- samples/streaming/abr_local/hls/low/segment001.ts
+- samples/streaming/abr_local/hls/medium/index.m3u8
+- samples/streaming/abr_local/hls/medium/segment000.ts
+- samples/streaming/abr_local/hls/medium/segment001.ts
+- samples/streaming/abr_local/hls/high/index.m3u8
+- samples/streaming/abr_local/hls/high/segment000.ts
+- samples/streaming/abr_local/hls/high/segment001.ts
+- samples/streaming/abr_local/dash/sample.mpd
+- samples/streaming/abr_local/dash/low/init.mp4
+- samples/streaming/abr_local/dash/low/segment000.m4s
+- samples/streaming/abr_local/dash/low/segment001.m4s
+- samples/streaming/abr_local/dash/medium/init.mp4
+- samples/streaming/abr_local/dash/medium/segment000.m4s
+- samples/streaming/abr_local/dash/medium/segment001.m4s
+- samples/streaming/abr_local/dash/high/init.mp4
+- samples/streaming/abr_local/dash/high/segment000.m4s
+- samples/streaming/abr_local/dash/high/segment001.m4s
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

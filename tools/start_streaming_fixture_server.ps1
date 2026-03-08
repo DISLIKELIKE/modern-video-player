@@ -15,7 +15,10 @@ Write-Host "Streaming fixture server listening on: http://127.0.0.1:$Port/"
 function Get-ContentType([string]$Path) {
     switch ([System.IO.Path]::GetExtension($Path).ToLowerInvariant()) {
         '.m3u8' { return 'application/vnd.apple.mpegurl' }
+        '.mpd' { return 'application/dash+xml' }
         '.ts' { return 'video/mp2t' }
+        '.m4s' { return 'video/iso.segment' }
+        '.mp4' { return 'video/mp4' }
         default { return 'application/octet-stream' }
     }
 }

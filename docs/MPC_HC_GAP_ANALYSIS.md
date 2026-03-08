@@ -1,4 +1,4 @@
-﻿# MPC-HC 功能差距评估（截至 2026-03-08）
+# MPC-HC 功能差距评估（截至 2026-03-08）
 
 ## 1. 评估口径
 
@@ -41,7 +41,7 @@
 - 稳定性门禁：新增 `--long-playback-check`，可验证固定播放窗口内的真实时间推进、播放态保持与 `late_drop / demux drop`。
 - 发布门禁：`6.1 ~ 6.6` 对应的本地验收证据已齐备，当前仅剩版本标签操作未执行。
 - 插件系统：已具备 `DLL` 动态加载、`API` 版本校验、`load/unload` 生命周期与基础视频滤镜扩展点。
-- 流媒体基础：已具备真实 HTTP 下载器、HLS 清单拉取与分片缓冲 smoke。
+- 流媒体基础：已具备真实 HTTP 下载器、HLS/DASH 清单解析、自适应码率选择与本地分片下载验收。
 
 ## 3. 差距总览（按 14 个模块）
 
@@ -55,7 +55,7 @@
 | 06 播放列表 | 多文件与 `m3u8`、上一项/下一项、EOF 自动下一项、恢复索引已可用，但无 UI/历史/循环模式 | 部分实现 |
 | 07 解码器管理 | `DecoderFactory` 已接入真实初始化，`D3D11VA` 与软件回退可运行，结构化性能日志已可导出，但可配置性仍偏基础 | 部分实现 |
 | 08 文件格式支持 | 主力容器/编码矩阵、`1080p60`、`4K`、`>80Mbps` 高码率样本与性能日志入口已补齐，但更高阶格式策略仍可继续完善 | 部分实现 |
-| 09 流媒体支持 | 已具备真实 HTTP 下载器、HLS 清单拉取与分片缓冲 smoke，DASH 片段明细、ABR 与播放链路仍待补齐 | 部分实现 |
+| 09 流媒体支持 | 已具备真实 HTTP 下载器、HLS/DASH 清单解析、自适应码率与本地分片验收，真正播放链路接入仍待补齐 | 部分实现 |
 | 10 皮肤系统 | 只有主题变量容器，没有资源化主题与组件级样式接入 | 骨架/未接入 |
 | 11 快捷键系统 | 默认键位、增强键位、持久化、冲突检测、恢复默认均已接入，但仍缺少更细粒度的用户侧配置体验 | 部分实现 |
 | 12 设置系统 | 启动加载、退出保存、运行期应用已接入主流程，但覆盖项仍偏少 | 部分实现 |
@@ -92,7 +92,7 @@
 ### P2（平台化与扩展能力）
 
 - 插件生态：在已落地的 `DLL` 插件框架之上补充更强隔离、配置入口与分发策略。
-- 流媒体：在已落地的真实 HTTP 分片与缓冲基础上，补齐 DASH 片段明细、自适应码率与播放链路接入。
+- 流媒体：在已落地的真实 HTTP 分片与缓冲基础上，已补齐 DASH 片段明细与自适应码率，真正播放链路接入仍待补齐。
 - 皮肤系统：主题资源化与组件级样式覆盖。
 
 ## 5. 代码层证据摘要
@@ -109,7 +109,7 @@
 - 设置系统：`src/config/settings_manager.cpp`
 - 快捷键系统：`src/input/hotkey_manager.cpp`
 - 播放列表：`src/playlist/playlist_manager.cpp`
-- 流媒体下载与清单解析：`src/streaming/http_stream_downloader.cpp`、`src/streaming/hls_manifest_parser.cpp`、`src/streaming/dash_manifest_parser.cpp`
+- 流媒体下载、清单解析与 ABR 选择：`src/streaming/http_stream_downloader.cpp`、`src/streaming/hls_manifest_parser.cpp`、`src/streaming/dash_manifest_parser.cpp`、`src/streaming/adaptive_bitrate_selector.cpp`
 - 插件 API 与动态加载：`include/plugin/plugin_api.h`、`src/plugin/plugin_manager.cpp`
 - 示例插件：`src/plugin/sample_logger_plugin.cpp`
 - 皮肤系统仍为骨架：`src/ui/skin_engine.cpp`
@@ -135,6 +135,7 @@
 - 长时播放稳定性：`docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`
 - 插件系统：`docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md`
 - 流媒体 HTTP 分片与缓冲：`docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md`
+- HLS/DASH 自适应码率：`docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md`
 - 格式矩阵：`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
 
 ## 7. 建议里程碑（面向落地）
@@ -149,7 +150,7 @@
 - 明确 `OpenGL` 是继续落地，还是阶段性降级为非目标后端。
 
 里程碑 4（扩展能力）：
-- DASH/HLS 自适应码率与皮肤系统进入真正产品化阶段，插件系统则继续补充配置/UI/分发能力。
+- 流媒体播放链路与皮肤系统进入真正产品化阶段，插件系统则继续补充配置/UI/分发能力。
 
 
 

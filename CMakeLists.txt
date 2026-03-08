@@ -172,6 +172,7 @@ add_executable(${PROJECT_NAME}
     src/streaming/http_stream_downloader.cpp
     src/streaming/hls_manifest_parser.cpp
     src/streaming/dash_manifest_parser.cpp
+    src/streaming/adaptive_bitrate_selector.cpp
     src/ui/skin_engine.cpp
     src/plugin/plugin_manager.cpp
     src/filters/filter_registry.cpp
