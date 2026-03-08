@@ -53,6 +53,7 @@
 | 48 | 2026-03-08 | 根 README 故障排除与历史问题归档仍有旧口径 | ✅ 已修复 |
 | 49 | 2026-03-08 | 缺少独立的文档巡检总表 | ✅ 已修复 |
 | 50 | 2026-03-08 | M4 4.4：暂停态帧步进接入与验收 | ✅ 已修复 |
+| 53 | 2026-03-08 | M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU） | ✅ 已修复 |
 
 ---
 
@@ -1985,6 +1986,45 @@ void VideoPlayer::play() {
 - docs/README.md
 - docs/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 53: M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.2.4` 要求输出播放性能日志，用于评估高分辨率、高码率样本的掉帧、队列与资源占用表现。
+- 当前主链虽然内部已经累计了解封装、解码、渲染和调度统计，但缺少一个可复用、可对比、可直接验收的统一输出入口。
+
+### 原因分析
+- `PlayerCore` 内的诊断计数器和 `Scheduler` 统计分散在内部实现中，外部调用方无法一次性获取完整快照。
+- 命令行自检入口尚未覆盖性能观测场景，导致 `1080p60 / 4K / 高码率` 样本只能依赖零散日志，难以形成稳定门禁。
+- GPU 利用率跨平台直接采样成本较高，因此更适合先输出当前激活的解码/渲染 backend，作为 GPU 路径标识。
+
+### 解决方案
+- 在 `PlayerCore` 中新增 `DiagnosticsSnapshot`，统一导出 demux、decode、render、scheduler 与队列指标。
+- 在 `VideoPlayer` 中透传 `getInfo()` / `getDiagnosticsSnapshot()`，避免验收逻辑直接耦合内部实现。
+- 在 `main` 中新增 `--performance-log-check <media_file> [sample_ms]`：
+  - 采样播放期间的平均 CPU 占用；
+  - 输出 renderer / decoder backend；
+  - 输出掉帧、队列、解码帧数、渲染帧数等结构化指标。
+- 同步补齐任务清单、验收报告、差距评估、版本记录与开发日志。
+
+### 修改文件
+- include/core/player_core.h
+- include/video_player.h
+- src/core/player_core.cpp
+- src/video_player.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md

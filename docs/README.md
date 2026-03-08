@@ -36,6 +36,7 @@
 | [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/音轨字幕时延/恢复索引/快捷键） |
 | [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨/字幕延迟调节本地验收记录 |
 | [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 数字热键 `1..9` 跳转本地验收记录 |
+| [reports/PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) | 播放性能日志本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -58,6 +59,7 @@
 - 新增 [DOC_AUDIT_2026-03-08.md](./DOC_AUDIT_2026-03-08.md) - 汇总本轮文档巡检范围、结论与保留策略
 - 新增 [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) - 记录 4.5 音轨/字幕延迟调节本地验收结果
 - 新增 [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) - 记录 4.6 数字热键跳转本地验收结果
+- 新增 [reports/PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) - 记录 2.2.4 播放性能日志本地验收结果
 
 ---
 

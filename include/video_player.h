@@ -44,6 +44,8 @@ public:
     bool isPaused() const;
     double getDuration() const;
     double getCurrentTime() const;
+    core::PlaybackInfo getInfo() const;
+    core::DiagnosticsSnapshot getDiagnosticsSnapshot() const;
 
     void setVolume(float volume);
     float getVolume() const;

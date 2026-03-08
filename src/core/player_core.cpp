@@ -967,6 +967,28 @@ PlaybackInfo PlayerCore::getInfo() const {
     return info;
 }
 
+DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
+    DiagnosticsSnapshot snapshot;
+    snapshot.demux_video_packets = demux_video_packets_.load();
+    snapshot.demux_audio_packets = demux_audio_packets_.load();
+    snapshot.demux_push_retries = demux_push_retries_.load();
+    snapshot.demux_dropped_packets = demux_dropped_packets_.load();
+    snapshot.decode_video_ok = decode_video_ok_.load();
+    snapshot.decode_audio_ok = decode_audio_ok_.load();
+    snapshot.audio_submitted_frames = audio_submitted_frames_.load();
+    snapshot.render_frames = render_frames_.load();
+
+    const SchedulerStats scheduler_stats = scheduler_.getStats();
+    snapshot.scheduler_video_decoded_frames = scheduler_stats.video_decoded_frames;
+    snapshot.scheduler_audio_decoded_frames = scheduler_stats.audio_decoded_frames;
+    snapshot.scheduler_late_drops = scheduler_stats.dropped_late_frames;
+    snapshot.video_packet_queue_size = video_packet_queue_ ? video_packet_queue_->size() : 0;
+    snapshot.audio_packet_queue_size = audio_packet_queue_ ? audio_packet_queue_->size() : 0;
+    snapshot.video_frame_queue_size = video_queue_.size();
+    snapshot.audio_frame_queue_size = audio_queue_.size();
+    return snapshot;
+}
+
 void PlayerCore::setVolume(float volume) {
     const float clamped = std::max(0.0f, std::min(1.0f, volume));
     volume_.store(clamped);

@@ -1765,3 +1765,45 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 53: M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `2.2.4` 需要一个统一的性能日志入口，用于观察高分辨率/高码率样本的掉帧、队列和资源占用情况。
+- 当前播放器主链已经具备较多内部统计，但外部没有稳定的结构化验收输出，无法直接沉淀为本地报告。
+
+### 分析记录
+1. `PlayerCore` 已经维护了 demux、decode、render 等多组原子计数，`Scheduler` 也有掉帧与解码统计，但缺少统一快照接口。
+2. 现有命令行自检更偏向功能验证，不适合做 `1080p60 / 4K / 高码率` 样本的性能对比留档。
+3. GPU 直接占用率采样跨平台成本较高，因此本轮先输出当前激活的解码 backend / 渲染 backend，作为 GPU 路径观测信息。
+
+### 解决方案
+- 新增 `core::DiagnosticsSnapshot`，在 `PlayerCore` 中收敛 demux / decode / render / scheduler / queue 指标。
+- 在 `VideoPlayer` 中增加 `getInfo()` / `getDiagnosticsSnapshot()` 透传接口。
+- 在 `main` 中新增 `--performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200` 自检命令，输出 CPU 平均占用、逻辑核心数、backend、掉帧与队列指标。
+- 新增 `docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md`，并同步任务清单、差距评估、版本文档与变更记录。
+
+### 本地校对结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200`：`PASS`
+- 当前样本输出包含 `renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`cpu_avg_percent≈100%`、`scheduler_late_drops=0` 等关键指标。
+
+### 修改文件
+- include/core/player_core.h
+- include/video_player.h
+- src/core/player_core.cpp
+- src/video_player.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

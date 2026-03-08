@@ -17,6 +17,7 @@ extern "C" {
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -1878,6 +1879,94 @@ bool runNumericSeekCheck(const std::string& media_file) {
     return result;
 }
 
+bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec ||
+        sample_ms < 500) {
+        std::cout << "performance-log-check.path=" << media_file << std::endl;
+        std::cout << "performance-log-check.sample_ms=" << sample_ms << std::endl;
+        std::cout << "performance-log-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    bool entered_playback_loop = false;
+    double cpu_avg_percent = 0.0;
+    unsigned int logical_cores = std::max(1u, std::thread::hardware_concurrency());
+    core::PlaybackInfo info{};
+    core::DiagnosticsSnapshot diag{};
+    std::string renderer_backend = "None";
+    std::string decoder_backend = "Unknown";
+
+    if (open_ok) {
+        player.play();
+        const auto wall_start = std::chrono::steady_clock::now();
+        const std::clock_t cpu_start = std::clock();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(sample_ms));
+        const auto wall_end = std::chrono::steady_clock::now();
+        const std::clock_t cpu_end = std::clock();
+
+        const double wall_seconds = std::max(0.001,
+            std::chrono::duration_cast<std::chrono::duration<double>>(wall_end - wall_start).count());
+        const double cpu_seconds = static_cast<double>(cpu_end - cpu_start) / static_cast<double>(CLOCKS_PER_SEC);
+        cpu_avg_percent = (cpu_seconds / wall_seconds) * 100.0;
+
+        info = player.getInfo();
+        diag = player.getDiagnosticsSnapshot();
+        renderer_backend = player.videoRendererBackendName();
+        decoder_backend = player.videoDecoderBackendName();
+        player.stop();
+        player.close();
+    }
+
+    const bool result = open_ok && entered_playback_loop && diag.render_frames > 0;
+
+    std::cout << "performance-log-check.path=" << media_file << std::endl;
+    std::cout << "performance-log-check.sample_ms=" << sample_ms << std::endl;
+    std::cout << "performance-log-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.video_width=" << info.video_width << std::endl;
+    std::cout << "performance-log-check.video_height=" << info.video_height << std::endl;
+    std::cout << "performance-log-check.audio_channels=" << info.audio_channels << std::endl;
+    std::cout << "performance-log-check.audio_sample_rate=" << info.audio_sample_rate << std::endl;
+    std::cout << "performance-log-check.renderer_backend=" << renderer_backend << std::endl;
+    std::cout << "performance-log-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "performance-log-check.cpu_avg_percent=" << cpu_avg_percent << std::endl;
+    std::cout << "performance-log-check.cpu_logical_cores=" << logical_cores << std::endl;
+    std::cout << "performance-log-check.demux_video_packets=" << diag.demux_video_packets << std::endl;
+    std::cout << "performance-log-check.demux_audio_packets=" << diag.demux_audio_packets << std::endl;
+    std::cout << "performance-log-check.demux_push_retries=" << diag.demux_push_retries << std::endl;
+    std::cout << "performance-log-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "performance-log-check.decode_video_ok=" << diag.decode_video_ok << std::endl;
+    std::cout << "performance-log-check.decode_audio_ok=" << diag.decode_audio_ok << std::endl;
+    std::cout << "performance-log-check.audio_submitted_frames=" << diag.audio_submitted_frames << std::endl;
+    std::cout << "performance-log-check.render_frames=" << diag.render_frames << std::endl;
+    std::cout << "performance-log-check.scheduler_video_decoded_frames=" << diag.scheduler_video_decoded_frames << std::endl;
+    std::cout << "performance-log-check.scheduler_audio_decoded_frames=" << diag.scheduler_audio_decoded_frames << std::endl;
+    std::cout << "performance-log-check.scheduler_late_drops=" << diag.scheduler_late_drops << std::endl;
+    std::cout << "performance-log-check.video_packet_queue_size=" << diag.video_packet_queue_size << std::endl;
+    std::cout << "performance-log-check.audio_packet_queue_size=" << diag.audio_packet_queue_size << std::endl;
+    std::cout << "performance-log-check.video_frame_queue_size=" << diag.video_frame_queue_size << std::endl;
+    std::cout << "performance-log-check.audio_frame_queue_size=" << diag.audio_frame_queue_size << std::endl;
+    std::cout << "performance-log-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1984,6 +2073,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --frame-step-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.srt>" << std::endl;
     std::cout << "       " << program_name << " --numeric-seek-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2174,6 +2264,19 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runNumericSeekCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--performance-log-check") {
+        if (argc != 3 && argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int sample_ms = 1500;
+        if (argc == 4 && !tryParseInt(argv[3], sample_ms)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runPerformanceLogCheck(argv[2], sample_ms) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

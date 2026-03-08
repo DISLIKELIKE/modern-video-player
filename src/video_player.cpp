@@ -175,6 +175,14 @@ double VideoPlayer::getCurrentTime() const {
     return current_time_.load();
 }
 
+core::PlaybackInfo VideoPlayer::getInfo() const {
+    return core_player_ ? core_player_->getInfo() : core::PlaybackInfo{};
+}
+
+core::DiagnosticsSnapshot VideoPlayer::getDiagnosticsSnapshot() const {
+    return core_player_ ? core_player_->getDiagnosticsSnapshot() : core::DiagnosticsSnapshot{};
+}
+
 void VideoPlayer::setVolume(float volume) {
     volume_ = std::max(0.0f, std::min(1.0f, volume));
     if (core_player_) {

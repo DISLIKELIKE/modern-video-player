@@ -1364,3 +1364,37 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 2026-03-08 更新（播放性能日志验收）
+
+### 可观测性补齐
+- 新增 `core::DiagnosticsSnapshot`，统一导出解封装包计数、重试/丢包、解码帧数、渲染帧数、音频提交帧数、调度器掉帧与队列长度。
+- `VideoPlayer` 新增 `getInfo()` / `getDiagnosticsSnapshot()` 透传接口，供命令行验收和后续诊断复用。
+- `main` 新增 `--performance-log-check <media_file> [sample_ms]`，输出：
+  - renderer / decoder backend（作为当前 GPU 路径标识）；
+  - 进程平均 CPU 占用与逻辑核心数；
+  - demux / decode / render / scheduler / queue 关键指标。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200`：`PASS`
+- 验收报告：`docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `2.2.4 输出性能日志（掉帧/队列/CPU/GPU）` 标记完成。
+
+### 修改文件
+- include/core/player_core.h
+- include/video_player.h
+- src/core/player_core.cpp
+- src/video_player.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

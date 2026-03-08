@@ -61,6 +61,24 @@ struct PlaybackInfo {
     int audio_channels{0};
 };
 
+struct DiagnosticsSnapshot {
+    uint64_t demux_video_packets{0};
+    uint64_t demux_audio_packets{0};
+    uint64_t demux_push_retries{0};
+    uint64_t demux_dropped_packets{0};
+    uint64_t decode_video_ok{0};
+    uint64_t decode_audio_ok{0};
+    uint64_t audio_submitted_frames{0};
+    uint64_t render_frames{0};
+    uint64_t scheduler_video_decoded_frames{0};
+    uint64_t scheduler_audio_decoded_frames{0};
+    uint64_t scheduler_late_drops{0};
+    size_t video_packet_queue_size{0};
+    size_t audio_packet_queue_size{0};
+    size_t video_frame_queue_size{0};
+    size_t audio_frame_queue_size{0};
+};
+
 class PlayerCore {
 public:
     PlayerCore();
@@ -93,6 +111,7 @@ public:
 
     PlaybackState getState() const;
     PlaybackInfo getInfo() const;
+    DiagnosticsSnapshot getDiagnosticsSnapshot() const;
 
     void setVolume(float volume);
     float getVolume() const;
