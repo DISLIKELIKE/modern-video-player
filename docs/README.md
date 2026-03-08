@@ -21,6 +21,7 @@
 | [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) | 与 MPC-HC 的功能差距评估 |
 | [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 2026-03-07 的单人迭代计划快照 |
 | [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 播放能力实现参考（格式/高分高帧/多音道） |
+| [video-stream-index-fix.md](./video-stream-index-fix.md) | 早期流索引问题的历史分析归档 |
 
 ## 开发文档
 
@@ -50,6 +51,7 @@
 - 清理 README / VERSION / ARCHITECTURE 中的历史路径描述，避免将旧模块误写为现行结构
 - 更新 [IMPLEMENTATION.md](./IMPLEMENTATION.md) / [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) 的状态说明，区分历史教程、计划快照与当前实际进度
 - 更新 [FILTERS.md](./FILTERS.md) / [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) / [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) 的状态说明与当前入口描述
+- 更新根 README 的故障排除口径，并为 [video-stream-index-fix.md](./video-stream-index-fix.md) 增加历史归档说明
 
 ---
 

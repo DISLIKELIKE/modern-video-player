@@ -1547,3 +1547,37 @@ windows-backend-check.result=FAIL
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 48: 根 README 故障排除与历史问题归档仍有旧口径
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 根目录 `README.md` / `README_ZH.md` 的 Windows 故障排除仍提示使用 `FFMPEG_DIR` 传参，这与当前 `CMakeLists.txt` 的自动探测 / `external/ffmpeg` 回退逻辑不一致。
+- `docs/video-stream-index-fix.md` 记录的是早期原型阶段的问题，但缺少“历史归档”标识，文中的 `playLoop` 与 `src/video_decoder.cpp` 易被误读为现行实现。
+
+### 分析记录
+1. 前几轮已经清理了 `WINDOWS_SETUP.md` 的构建入口，但根 README 的简版故障排除还残留旧说明。
+2. `video-stream-index-fix.md` 作为问题分析样本仍然有价值，适合保留；重点是让读者明确它属于早期阶段。
+3. 这两类问题都属于“入口文档和历史归档之间边界不清”，适合一起收尾。
+
+### 解决方案
+- 将根 README 的 FFmpeg 故障排除改为当前 `vcpkg toolchain / external/ffmpeg` 口径。
+- 为 `docs/video-stream-index-fix.md` 增加状态说明，标记其为 `2026-02-24` 早期原型问题分析归档。
+- 在 `docs/README.md` 中为该历史文档补充索引，并记录本轮更新。
+
+### 本地校对结果
+- `README.md` / `README_ZH.md` 不再建议使用与当前主链不一致的 `FFMPEG_DIR` 传参方式。
+- `docs/video-stream-index-fix.md` 已明确为历史归档，不再暗示 `playLoop` / `video_decoder.cpp` 属于当前仓库结构。
+- 本次改动仍限定在文档层，未涉及代码、构建脚本和任务清单状态修改。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/video-stream-index-fix.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

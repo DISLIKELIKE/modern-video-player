@@ -286,10 +286,12 @@ build\Release\modern-video-player.exe your_video.mp4
 
 **问题**: FFmpeg 库未找到
 
-**解决方案**: 设置 `FFMPEG_DIR` 指向您的 FFmpeg 安装目录：
+**解决方案**:
+- 如果使用 `vcpkg`，请在配置时传入正确的 toolchain：
 ```bash
-cmake .. -DFFMPEG_DIR=path/to/ffmpeg
+cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg路径]/scripts/buildsystems/vcpkg.cmake
 ```
+- 如果使用仓库内手动依赖布局，请将 FFmpeg 放在 `external/ffmpeg/` 下，让当前 `CMakeLists.txt` 自动探测。
 
 ### Linux
 

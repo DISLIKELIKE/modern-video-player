@@ -255,10 +255,12 @@ build\Release\modern-video-player.exe your_video.mp4
 
 **Problem**: FFmpeg libraries not found
 
-**Solution**: Set `FFMPEG_DIR` to point to your FFmpeg installation:
+**Solution**:
+- If you use `vcpkg`, configure with the correct toolchain file:
 ```bash
-cmake -DFFMPEG_DIR=path/to/ffmpeg ..
+cmake .. -DCMAKE_TOOLCHAIN_FILE=[vcpkg root]/scripts/buildsystems/vcpkg.cmake
 ```
+- If you use the repo-local fallback layout, place FFmpeg under `external/ffmpeg/` so the current `CMakeLists.txt` can detect it automatically.
 
 ### Linux
 

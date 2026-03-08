@@ -1791,3 +1791,30 @@ void VideoPlayer::play() {
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 48: 根 README 故障排除与历史问题归档仍有旧口径
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 根目录 `README.md` / `README_ZH.md` 的 Windows 故障排除仍建议使用 `FFMPEG_DIR` 传参，和当前 `CMakeLists.txt` 的依赖探测方式不一致。
+- `docs/video-stream-index-fix.md` 是早期原型阶段的问题分析，但缺少“历史归档”说明，容易让读者误以为其中的 `playLoop` / `video_decoder.cpp` 仍属当前主链。
+
+### 原因分析
+- README 的故障排除段落保留了旧手动依赖用法，没有跟随 Windows 构建入口一起更新。
+- 历史问题分析文档内容本身有价值，但需要显式说明其适用阶段。
+
+### 解决方案
+- 将 README 中 FFmpeg 故障排除改为当前推荐口径：优先说明 `vcpkg` toolchain，手动安装则使用仓库内 `external/ffmpeg/` 回退布局。
+- 为 `docs/video-stream-index-fix.md` 增加状态说明，标记为早期原型问题分析归档。
+- 在 `docs/README.md` 中补充该历史分析文档的索引与本轮更新记录。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/video-stream-index-fix.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
