@@ -201,6 +201,7 @@ bool PlayerCore::open(const std::string& filename) {
     previous_item_requested_.store(false);
     clearABRepeat();
     screenshot_requested_.store(false);
+    last_video_frame_duration_.store(0.0);
     {
         std::lock_guard<std::mutex> lock(screenshot_mutex_);
         last_screenshot_path_.clear();
@@ -235,6 +236,7 @@ void PlayerCore::close() {
     chapter_points_.clear();
     clearABRepeat();
     screenshot_requested_.store(false);
+    last_video_frame_duration_.store(0.0);
     {
         std::lock_guard<std::mutex> lock(screenshot_mutex_);
         last_screenshot_path_.clear();
@@ -360,6 +362,90 @@ void PlayerCore::seek(double timestamp) {
         }
         scheduler_.resume();
     }
+}
+
+bool PlayerCore::stepFrame(int direction) {
+    if (!opened_.load() || !demuxer_ || !video_renderer_ || state_.load() != PlaybackState::Paused) {
+        return false;
+    }
+    if (direction == 0) {
+        return false;
+    }
+
+    const double step_seconds = std::max(1.0 / 240.0, estimateFrameStepSeconds());
+    const double current = position_.load();
+    const double duration = demuxer_->getMediaInfo().duration;
+    double target = current + (direction < 0 ? -step_seconds : step_seconds);
+    if (duration > 0.0) {
+        target = std::max(0.0, std::min(duration, target));
+    } else {
+        target = std::max(0.0, target);
+    }
+
+    LOG_INFO("Frame step " << (direction < 0 ? "backward" : "forward")
+             << ": current=" << current << "s target=" << target << "s step=" << step_seconds << "s");
+
+    seek(target);
+    return renderPausedFrameAtOrAfter(target);
+}
+
+double PlayerCore::estimateFrameStepSeconds() const {
+    const double cached_duration = last_video_frame_duration_.load();
+    if (cached_duration > 0.0) {
+        return cached_duration;
+    }
+    if (video_codec_ctx_ && video_codec_ctx_->framerate.num > 0 && video_codec_ctx_->framerate.den > 0) {
+        return 1.0 / av_q2d(video_codec_ctx_->framerate);
+    }
+    if (demuxer_) {
+        const double fps = demuxer_->getMediaInfo().fps;
+        if (fps > 0.0) {
+            return 1.0 / fps;
+        }
+    }
+    return 1.0 / 30.0;
+}
+
+bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
+    if (!opened_.load() || !video_renderer_) {
+        return false;
+    }
+
+    constexpr int kMaxAttempts = 120;
+    constexpr double kToleranceSeconds = 0.001;
+    for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+        VideoFrame frame;
+        bool have_frame = video_queue_.pop(frame, std::chrono::milliseconds(0));
+        if (!have_frame || !frame.valid) {
+            have_frame = decodeVideoFrame(frame);
+        }
+        if (!have_frame || !frame.valid) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            continue;
+        }
+        if (frame.pts + kToleranceSeconds < target_seconds) {
+            continue;
+        }
+
+        const double frame_pts = frame.pts;
+        if (frame.duration > 0.0) {
+            last_video_frame_duration_.store(frame.duration);
+        }
+        position_.store(frame_pts);
+        clock_.setTime(frame_pts);
+        clock_.setAudioClock(frame_pts);
+        clock_.setVideoClock(frame_pts);
+        renderFrame(std::move(frame));
+        position_.store(frame_pts);
+        clock_.setTime(frame_pts);
+        clock_.setAudioClock(frame_pts);
+        clock_.setVideoClock(frame_pts);
+        last_position_emit_tp_ = std::chrono::steady_clock::time_point{};
+        emitPositionChanged(frame_pts);
+        return true;
+    }
+
+    return false;
 }
 
 bool PlayerCore::seekToNextChapter() {
@@ -513,6 +599,14 @@ bool PlayerCore::consumeLastScreenshotPath(std::string& path) {
     return true;
 }
 
+bool PlayerCore::stepFrameBackward() {
+    return stepFrame(-1);
+}
+
+bool PlayerCore::stepFrameForward() {
+    return stepFrame(1);
+}
+
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -582,6 +676,14 @@ void PlayerCore::pumpEvents() {
 
         if (video_renderer_->consumeScreenshotRequest() && !requestScreenshot()) {
             LOG_WARNING("Screenshot request failed");
+        }
+
+        if (video_renderer_->consumeStepFrameBackwardRequest() && !stepFrameBackward()) {
+            LOG_WARNING("Frame step backward request failed");
+        }
+
+        if (video_renderer_->consumeStepFrameForwardRequest() && !stepFrameForward()) {
+            LOG_WARNING("Frame step forward request failed");
         }
 
         if (video_renderer_->consumeNextItemRequest()) {
@@ -1567,7 +1669,7 @@ void PlayerCore::startAudioConsumer() {
         while (audio_consumer_running_.load()) {
             AudioFrame frame;
             const double played_pts = audio_player_->getPlaybackPts();
-            if (played_pts > 0.0) {
+            if (played_pts > 0.0 && state_.load() == PlaybackState::Playing) {
                 clock_.setAudioClock(played_pts);
                 position_.store(played_pts);
                 emitPositionChanged(played_pts);
@@ -1830,6 +1932,9 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     video_renderer_->renderFrame(frame);
     video_renderer_->present();
     updateLastRenderedFrame(frame);
+    if (frame.duration > 0.0) {
+        last_video_frame_duration_.store(frame.duration);
+    }
     if (screenshot_requested_.exchange(false)) {
         if (!captureScreenshotFromCachedFrame()) {
             LOG_WARNING("Screenshot request failed");

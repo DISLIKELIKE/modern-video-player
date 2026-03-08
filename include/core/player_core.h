@@ -84,6 +84,8 @@ public:
     double abRepeatEnd() const;
     bool requestScreenshot();
     bool consumeLastScreenshotPath(std::string& path);
+    bool stepFrameBackward();
+    bool stepFrameForward();
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -148,6 +150,9 @@ private:
     bool captureScreenshot(const VideoFrame& frame);
     bool captureScreenshotFrame(const AVFrame* frame);
     bool captureScreenshotFromCachedFrame();
+    bool stepFrame(int direction);
+    bool renderPausedFrameAtOrAfter(double target_seconds);
+    double estimateFrameStepSeconds() const;
     void updateLastRenderedFrame(const VideoFrame& frame);
     void clearLastRenderedFrame();
     void updateSubtitleOverlay(double position_seconds);
@@ -209,6 +214,7 @@ private:
     std::atomic<double> ab_repeat_end_{-1.0};
     std::atomic<int64_t> ab_repeat_last_loop_ms_{0};
     std::atomic<bool> screenshot_requested_{false};
+    std::atomic<double> last_video_frame_duration_{0.0};
     filters::FilterPipeline filter_pipeline_;
 
     mutable std::mutex callback_mutex_;

@@ -33,6 +33,8 @@ public:
     double abRepeatEnd() const;
     bool requestScreenshot();
     bool consumeLastScreenshotPath(std::string& path);
+    bool stepFrameBackward();
+    bool stepFrameForward();
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();

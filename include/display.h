@@ -47,6 +47,8 @@ public:
     bool consumeSetABRepeatEndRequest();
     bool consumeClearABRepeatRequest();
     bool consumeScreenshotRequest();
+    bool consumeStepFrameBackwardRequest();
+    bool consumeStepFrameForwardRequest();
     bool consumeNextChapterRequest();
     bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
@@ -135,6 +137,8 @@ private:
     bool ab_repeat_end_requested_;
     bool ab_repeat_clear_requested_;
     bool screenshot_requested_;
+    bool step_frame_backward_requested_;
+    bool step_frame_forward_requested_;
     bool next_chapter_requested_;
     bool previous_chapter_requested_;
     bool next_item_requested_;

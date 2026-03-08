@@ -419,6 +419,8 @@ Display::Display()
     , ab_repeat_end_requested_(false)
     , ab_repeat_clear_requested_(false)
     , screenshot_requested_(false)
+    , step_frame_backward_requested_(false)
+    , step_frame_forward_requested_(false)
     , next_chapter_requested_(false)
     , previous_chapter_requested_(false)
     , next_item_requested_(false)
@@ -494,6 +496,8 @@ bool Display::init(int width, int height, const std::string& title) {
         ab_repeat_end_requested_ = false;
         ab_repeat_clear_requested_ = false;
         screenshot_requested_ = false;
+        step_frame_backward_requested_ = false;
+        step_frame_forward_requested_ = false;
         next_chapter_requested_ = false;
         previous_chapter_requested_ = false;
         next_item_requested_ = false;
@@ -1035,6 +1039,16 @@ void Display::handleEvents() {
                     screenshot_requested_ = true;
                     break;
                 }
+                case input::PlayerAction::StepFrameBackward: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    step_frame_backward_requested_ = true;
+                    break;
+                }
+                case input::PlayerAction::StepFrameForward: {
+                    std::lock_guard<std::mutex> lock(request_mutex_);
+                    step_frame_forward_requested_ = true;
+                    break;
+                }
                 case input::PlayerAction::PreviousChapter: {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     previous_chapter_requested_ = true;
@@ -1231,6 +1245,24 @@ bool Display::consumeScreenshotRequest() {
         return false;
     }
     screenshot_requested_ = false;
+    return true;
+}
+
+bool Display::consumeStepFrameBackwardRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!step_frame_backward_requested_) {
+        return false;
+    }
+    step_frame_backward_requested_ = false;
+    return true;
+}
+
+bool Display::consumeStepFrameForwardRequest() {
+    std::lock_guard<std::mutex> lock(request_mutex_);
+    if (!step_frame_forward_requested_) {
+        return false;
+    }
+    step_frame_forward_requested_ = false;
     return true;
 }
 

@@ -171,6 +171,7 @@ build\Release\modern-video-player.exe your_video.mp4
 | Home / End | 上一章 / 下一章 |
 | A / B / C | 设置 A 点 / 设置 B 点 / 清除 A-B Repeat |
 | S | 保存截图 |
+| , / . | 暂停态单帧后退 / 前进 |
 | V | 字幕开关 |
 
 ## 技术亮点

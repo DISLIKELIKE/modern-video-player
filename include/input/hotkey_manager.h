@@ -22,6 +22,8 @@ enum class PlayerAction {
     SetABRepeatEnd,
     ClearABRepeat,
     TakeScreenshot,
+    StepFrameBackward,
+    StepFrameForward,
     PreviousChapter,
     NextChapter,
     PreviousItem,

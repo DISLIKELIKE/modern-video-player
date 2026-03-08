@@ -81,8 +81,7 @@
 
 ### P1（补齐体验，接近 MPC-HC 常用操作）
 
-- 帧步进（暂停态）。
-- 全量增强快捷键（`J/K`, `,/.`, `1..9` 等）。
+- 全量增强快捷键（`J/K`, `1..9` 等）。
 - 缩放/画幅比切换、旋转、循环模式、播放历史。
 - 渲染器/解码器/音频输出设备可选项。
 - 滤镜参数用户入口与持久化。
@@ -122,12 +121,13 @@
 - 章节导航：`docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`
 - A-B Repeat：`docs/reports/AB_REPEAT_LOCAL_CHECK.md`
 - 截图：`docs/reports/SCREENSHOT_LOCAL_CHECK.md`
+- 帧步进：`docs/reports/FRAME_STEP_LOCAL_CHECK.md`
 - 格式矩阵：`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
 
 ## 7. 建议里程碑（面向落地）
 
 里程碑 1（先“收敛当前主线”）：
-- 完成 `M4` 剩余项：帧步进、时延调节、全量快捷键。
+- 完成 `M4` 剩余项：时延调节、全量快捷键。
 
 里程碑 2（补“发布门禁”）：
 - 完成 `M2 2.2`：`1080p60`、`4K`、高码率样本与性能日志。

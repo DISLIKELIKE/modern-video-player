@@ -125,6 +125,22 @@ bool VideoPlayer::consumeLastScreenshotPath(std::string& path) {
     return core_player_ ? core_player_->consumeLastScreenshotPath(path) : false;
 }
 
+bool VideoPlayer::stepFrameBackward() {
+    const bool ok = core_player_ ? core_player_->stepFrameBackward() : false;
+    if (ok && core_player_) {
+        current_time_.store(core_player_->getInfo().position);
+    }
+    return ok;
+}
+
+bool VideoPlayer::stepFrameForward() {
+    const bool ok = core_player_ ? core_player_->stepFrameForward() : false;
+    if (ok && core_player_) {
+        current_time_.store(core_player_->getInfo().position);
+    }
+    return ok;
+}
+
 void VideoPlayer::pumpEvents() {
     if (core_player_) {
         core_player_->pumpEvents();

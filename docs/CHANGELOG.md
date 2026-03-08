@@ -44,6 +44,15 @@
 | 39 | 2026-03-08 | M3 3.3.1：Windows 软解/硬解主力样本回归通过 | ✅ 已修复 |
 | 40 | 2026-03-08 | M4 4.1：章节导航（上一章/下一章）接入与验收 | ✅ 已修复 |
 | 41 | 2026-03-08 | M4 4.2：A-B Repeat（A/B/C）接入与验收 | ✅ 已修复 |
+| 42 | 2026-03-08 | M4 4.3（截图） | ✅ 已修复 |
+| 43 | 2026-03-08 | `MPC_HC_GAP_ANALYSIS` 评估结论过期 | ✅ 已修复 |
+| 44 | 2026-03-08 | `docs/VERSION.md` 历史路径描述过期 | ✅ 已修复 |
+| 45 | 2026-03-08 | README 与架构文档仍混用旧主链表述 | ✅ 已修复 |
+| 46 | 2026-03-08 | 实现教程与迭代计划缺少历史/当前边界说明 | ✅ 已修复 |
+| 47 | 2026-03-08 | 辅助说明文档仍缺少当前入口与状态边界 | ✅ 已修复 |
+| 48 | 2026-03-08 | 根 README 故障排除与历史问题归档仍有旧口径 | ✅ 已修复 |
+| 49 | 2026-03-08 | 缺少独立的文档巡检总表 | ✅ 已修复 |
+| 50 | 2026-03-08 | M4 4.4：暂停态帧步进接入与验收 | ✅ 已修复 |
 
 ---
 
@@ -1841,4 +1850,56 @@ void VideoPlayer::play() {
 - docs/DOC_AUDIT_2026-03-08.md
 - docs/README.md
 - docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+
+
+---
+
+## 问题 50: M4 4.4：暂停态帧步进接入与验收
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `4.4` 要求支持暂停态帧步进。
+- 当前播放器虽然已有暂停、截图、章节导航和 A-B Repeat，但缺少可直接逐帧检查画面的交互入口。
+
+### 原因分析
+- 输入层没有单独的帧步进动作，也没有对应的默认键位。
+- `PlayerCore` 的暂停态只会冻结调度器，缺少“seek 后刷新目标帧”的单帧渲染路径。
+- 音频消费线程在暂停态仍会依据旧 `playback_pts` 回写位置，导致单帧步进后的时间点可能被音频时钟覆盖。
+
+### 解决方案
+- 为热键系统新增 `step_frame_backward` / `step_frame_forward` 动作，默认绑定 `,` / `.`。
+- 在 `Display -> Renderer -> PlayerCore` 链路新增帧步进请求通道。
+- `PlayerCore` 新增暂停态帧步进能力：
+  - 估算单帧步长；
+  - 通过 seek 刷新音视频状态；
+  - 主动渲染目标时间点的首帧并保持暂停。
+- 收紧音频消费线程的位置回写条件，避免暂停态覆盖步进结果。
+- 在 `main` 新增 `--frame-step-check <media_file>` 验收命令，并同步 README / 版本文档 / 差距评估 / 任务清单。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/FRAME_STEP_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
 - docs/DEVELOP_LOG.md

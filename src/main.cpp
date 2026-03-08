@@ -1533,6 +1533,91 @@ bool runABRepeatCheck(const std::string& media_file) {
     return result;
 }
 
+bool runFrameStepCheck(const std::string& media_file) {
+    std::error_code ec;
+    const std::filesystem::path media_path(media_file);
+    if (!std::filesystem::exists(media_path, ec) || ec ||
+        !std::filesystem::is_regular_file(media_path, ec) || ec) {
+        std::cout << "frame-step-check.path=" << media_file << std::endl;
+        std::cout << "frame-step-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+
+    bool entered_playback_loop = false;
+    bool paused_before_step = false;
+    bool forward_invoked = false;
+    bool backward_invoked = false;
+    bool paused_after_forward = false;
+    bool paused_after_backward = false;
+    double before = 0.0;
+    double after_forward = 0.0;
+    double after_backward = 0.0;
+
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(800));
+        if (entered_playback_loop) {
+            player.pause();
+            paused_before_step = player.isPaused();
+            pump_for(player, std::chrono::milliseconds(120));
+            before = player.getCurrentTime();
+            forward_invoked = player.stepFrameForward();
+            paused_after_forward = player.isPaused();
+            pump_for(player, std::chrono::milliseconds(120));
+            after_forward = player.getCurrentTime();
+            backward_invoked = player.stepFrameBackward();
+            paused_after_backward = player.isPaused();
+            pump_for(player, std::chrono::milliseconds(120));
+            after_backward = player.getCurrentTime();
+        }
+        player.stop();
+        player.close();
+    }
+
+    const bool moved_forward = after_forward > before + 0.005;
+    const bool moved_backward = after_backward + 0.005 < after_forward;
+    const bool result = open_ok &&
+                        entered_playback_loop &&
+                        paused_before_step &&
+                        forward_invoked &&
+                        backward_invoked &&
+                        paused_after_forward &&
+                        paused_after_backward &&
+                        moved_forward &&
+                        moved_backward;
+
+    std::cout << "frame-step-check.path=" << media_file << std::endl;
+    std::cout << "frame-step-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.paused_before_step=" << (paused_before_step ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.forward_invoked=" << (forward_invoked ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.backward_invoked=" << (backward_invoked ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.paused_after_forward=" << (paused_after_forward ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.paused_after_backward=" << (paused_after_backward ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.before=" << before << std::endl;
+    std::cout << "frame-step-check.after_forward=" << after_forward << std::endl;
+    std::cout << "frame-step-check.after_backward=" << after_backward << std::endl;
+    std::cout << "frame-step-check.moved_forward=" << (moved_forward ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.moved_backward=" << (moved_backward ? "true" : "false") << std::endl;
+    std::cout << "frame-step-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1636,6 +1721,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --windows-backend-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --frame-step-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -1651,6 +1737,7 @@ void printUsage(const char* program_name) {
     std::cout << "  HOME/END - Previous/Next chapter" << std::endl;
     std::cout << "  A/B/C - Set A point / Set B point / Clear A-B repeat" << std::endl;
     std::cout << "  S - Save screenshot" << std::endl;
+    std::cout << "  , / . - Step backward / forward one frame when paused" << std::endl;
     std::cout << "  [/ ] / R - Speed down/up/reset" << std::endl;
     std::cout << "  V - Toggle subtitles on/off" << std::endl;
     std::cout << "  M - Mute/Unmute" << std::endl;
@@ -1798,6 +1885,14 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runABRepeatCheck(argv[2]) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--frame-step-check") {
+        if (argc != 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runFrameStepCheck(argv[2]) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

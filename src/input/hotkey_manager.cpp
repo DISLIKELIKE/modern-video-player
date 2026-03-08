@@ -19,7 +19,7 @@ namespace {
 
 using ActionPair = std::pair<PlayerAction, const char*>;
 
-constexpr std::array<ActionPair, 20> kActionKeyPairs{{
+constexpr std::array<ActionPair, 22> kActionKeyPairs{{
     {PlayerAction::PlayPause, "play_pause"},
     {PlayerAction::SeekBackward, "seek_backward"},
     {PlayerAction::SeekForward, "seek_forward"},
@@ -33,6 +33,8 @@ constexpr std::array<ActionPair, 20> kActionKeyPairs{{
     {PlayerAction::SetABRepeatEnd, "ab_repeat_end"},
     {PlayerAction::ClearABRepeat, "ab_repeat_clear"},
     {PlayerAction::TakeScreenshot, "take_screenshot"},
+    {PlayerAction::StepFrameBackward, "step_frame_backward"},
+    {PlayerAction::StepFrameForward, "step_frame_forward"},
     {PlayerAction::PreviousChapter, "previous_chapter"},
     {PlayerAction::NextChapter, "next_chapter"},
     {PlayerAction::PreviousItem, "previous_item"},
@@ -89,6 +91,12 @@ std::optional<int> parseNamedKeyToken(const std::string& upper_token) {
     if (upper_token == "ENTER") {
         return SDLK_RETURN;
     }
+    if (upper_token == "COMMA" || upper_token == ",") {
+        return SDLK_COMMA;
+    }
+    if (upper_token == "PERIOD" || upper_token == "DOT" || upper_token == ".") {
+        return SDLK_PERIOD;
+    }
     return std::nullopt;
 }
 
@@ -113,6 +121,8 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::SetABRepeatEnd, 'b');
     bind(PlayerAction::ClearABRepeat, 'c');
     bind(PlayerAction::TakeScreenshot, 's');
+    bind(PlayerAction::StepFrameBackward, SDLK_COMMA);
+    bind(PlayerAction::StepFrameForward, SDLK_PERIOD);
     bind(PlayerAction::PreviousChapter, SDLK_HOME);
     bind(PlayerAction::NextChapter, SDLK_END);
     bind(PlayerAction::PreviousItem, SDLK_PAGEUP);
@@ -231,6 +241,10 @@ std::string HotkeyManager::keyCodeToToken(int key_code) {
         return "ESC";
     case SDLK_RETURN:
         return "ENTER";
+    case SDLK_COMMA:
+        return "COMMA";
+    case SDLK_PERIOD:
+        return "PERIOD";
     default:
         break;
     }

@@ -71,6 +71,14 @@ bool OpenGLVideoRenderer::consumeScreenshotRequest() {
     return false;
 }
 
+bool OpenGLVideoRenderer::consumeStepFrameBackwardRequest() {
+    return false;
+}
+
+bool OpenGLVideoRenderer::consumeStepFrameForwardRequest() {
+    return false;
+}
+
 bool OpenGLVideoRenderer::consumeNextChapterRequest() {
     return false;
 }

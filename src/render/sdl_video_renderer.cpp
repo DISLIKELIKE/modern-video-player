@@ -94,6 +94,14 @@ bool SdlVideoRenderer::consumeScreenshotRequest() {
     return display_ ? display_->consumeScreenshotRequest() : false;
 }
 
+bool SdlVideoRenderer::consumeStepFrameBackwardRequest() {
+    return display_ ? display_->consumeStepFrameBackwardRequest() : false;
+}
+
+bool SdlVideoRenderer::consumeStepFrameForwardRequest() {
+    return display_ ? display_->consumeStepFrameForwardRequest() : false;
+}
+
 bool SdlVideoRenderer::consumeNextChapterRequest() {
     return display_ ? display_->consumeNextChapterRequest() : false;
 }

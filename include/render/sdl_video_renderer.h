@@ -33,6 +33,8 @@ public:
     bool consumeSetABRepeatEndRequest() override;
     bool consumeClearABRepeatRequest() override;
     bool consumeScreenshotRequest() override;
+    bool consumeStepFrameBackwardRequest() override;
+    bool consumeStepFrameForwardRequest() override;
     bool consumeNextChapterRequest() override;
     bool consumePreviousChapterRequest() override;
     bool consumeNextItemRequest() override;

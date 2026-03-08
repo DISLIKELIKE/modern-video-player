@@ -1186,6 +1186,54 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 
+## 2026-03-08 更新（帧步进）
+
+### 交互能力增强
+- 新增暂停态帧步进：
+  - `,` 后退一帧；
+  - `.` 前进一帧；
+  - 步进后仍保持暂停状态。
+
+### 主链实现
+- `PlayerCore` 新增 `stepFrameBackward()` / `stepFrameForward()`，采用“暂停态 seek + 首帧刷新”收敛单帧步进。
+- 步进时复用最近渲染帧时长与媒体 FPS 估算步长，并在 seek 后主动渲染目标时间点的首个视频帧。
+- 音频消费线程在暂停态不再用旧 `playback_pts` 回写当前位置，避免帧步进后位置被音频时钟回拉。
+- `main` 新增 `--frame-step-check <media_file>` 自检命令。
+
+### 本地验证
+- `build/Debug/modern-video-player.exe --frame-step-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `4.4 帧步进（暂停态）` 标记完成。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/FRAME_STEP_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
 ## 2026-03-08 更新（差距评估文档对齐）
 
 ### 文档基线刷新
@@ -1210,7 +1258,7 @@ make -j$(nproc)
   - 多音轨/字幕轨/时延调节；
   - `OpenGL` 后端策略收敛；
   - 倍速音频策略继续完善。
-- `P1` 聚焦：帧步进、全量快捷键、画幅/缩放/旋转、滤镜用户入口。
+- `P1` 聚焦：全量快捷键、画幅/缩放/旋转、滤镜用户入口。
 - `P2` 聚焦：插件、流媒体、皮肤系统产品化。
 
 ### 修改文件

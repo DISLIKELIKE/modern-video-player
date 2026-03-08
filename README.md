@@ -155,6 +155,7 @@ build\Release\modern-video-player.exe your_video.mp4
 | Home / End | Previous / Next chapter |
 | A / B / C | Set A / Set B / Clear A-B repeat |
 | S | Save screenshot |
+| , / . | Step backward / forward one frame when paused |
 | V | Toggle subtitles |
 
 ## Technical Highlights

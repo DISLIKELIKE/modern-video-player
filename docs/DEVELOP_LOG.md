@@ -1613,3 +1613,57 @@ windows-backend-check.result=FAIL
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 50: M4 4.4（帧步进）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `4.4` 要求支持暂停态逐帧查看画面。
+- 当前仓库缺少暂停态帧步进入口，无法像 MPC-HC 一样在暂停后逐帧前后检查画面。
+
+### 分析记录
+1. 输入层当前只有播放、seek、音量、章节、A-B Repeat、截图等动作，没有帧步进动作和默认键位。
+2. `PlayerCore` 暂停时会冻结调度器，因此不能直接复用常规渲染循环，需要一条暂停态的定向刷新路径。
+3. 初版实现联调时发现，音频消费线程在暂停态仍会用旧 `playback_pts` 回写 `position_`，会把步进结果覆盖掉，需要同步收口。
+
+### 解决方案
+- 新增 `step_frame_backward` / `step_frame_forward` 热键动作，默认绑定 `,` / `.`。
+- 在 `Display`、渲染器接口、`PlayerCore`、`VideoPlayer` 之间打通帧步进请求与 API。
+- 采用“暂停态 seek + 首帧刷新”的方式实现前后单帧步进，并在步进后维持暂停状态。
+- 调整音频消费线程：仅在 `PlaybackState::Playing` 时才用音频播放位置回写主时间轴。
+- 新增 `--frame-step-check .\\juren-30s.mp4` 自检命令，并记录本地验收结果。
+
+### 本地校对结果
+- `build/Debug/modern-video-player.exe --frame-step-check .\\juren-30s.mp4`：`PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`：`PASS`
+- 默认热键文档已补充 `, / .` 的暂停态帧步进说明。
+
+### 修改文件
+- include/input/hotkey_manager.h
+- src/input/hotkey_manager.cpp
+- include/render/video_renderer.h
+- include/render/sdl_video_renderer.h
+- include/render/d3d11_video_renderer.h
+- include/render/opengl_video_renderer.h
+- src/render/sdl_video_renderer.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- include/display.h
+- src/display.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- include/video_player.h
+- src/video_player.cpp
+- src/main.cpp
+- README.md
+- README_ZH.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/reports/FRAME_STEP_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
