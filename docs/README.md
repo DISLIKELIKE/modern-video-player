@@ -22,6 +22,7 @@
 | [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 2026-03-07 的单人迭代计划快照 |
 | [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 播放能力实现参考（格式/高分高帧/多音道） |
 | [video-stream-index-fix.md](./video-stream-index-fix.md) | 早期流索引问题的历史分析归档 |
+| [DOC_AUDIT_2026-03-08.md](./DOC_AUDIT_2026-03-08.md) | 本轮文档口径巡检与收敛结果总表 |
 
 ## 开发文档
 
@@ -52,6 +53,7 @@
 - 更新 [IMPLEMENTATION.md](./IMPLEMENTATION.md) / [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) 的状态说明，区分历史教程、计划快照与当前实际进度
 - 更新 [FILTERS.md](./FILTERS.md) / [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) / [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) 的状态说明与当前入口描述
 - 更新根 README 的故障排除口径，并为 [video-stream-index-fix.md](./video-stream-index-fix.md) 增加历史归档说明
+- 新增 [DOC_AUDIT_2026-03-08.md](./DOC_AUDIT_2026-03-08.md) - 汇总本轮文档巡检范围、结论与保留策略
 
 ---
 

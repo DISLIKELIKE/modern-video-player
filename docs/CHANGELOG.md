@@ -1818,3 +1818,27 @@ void VideoPlayer::play() {
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 49: 缺少独立的文档巡检总表
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 前几轮文档整理已经完成，但巡检结果分散在对话、日志和多个提交中，缺少一份独立的总表文档。
+- 后续维护者如果想快速了解“哪些文档已收敛、哪些内容属于历史保留、为什么要保留”，需要来回翻阅多个文件。
+
+### 原因分析
+- 现有 `CHANGELOG.md` / `DEVELOP_LOG.md` 适合记录过程，但不适合作为面向后续维护的摘要报告。
+- `docs/README.md` 虽然是索引入口，但没有独立承载本轮巡检结论的专题文档。
+
+### 解决方案
+- 新增 `docs/DOC_AUDIT_2026-03-08.md`，集中归档本轮文档巡检的范围、方法、已完成对齐项、保留历史内容、后续维护建议与关联提交。
+- 更新 `docs/README.md`，把该报告加入索引，并补一条本轮更新记录。
+
+### 修改文件
+- docs/DOC_AUDIT_2026-03-08.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
