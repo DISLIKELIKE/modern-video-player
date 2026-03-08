@@ -9,11 +9,17 @@
 | CMake | 3.15+ |
 | C++ | C++17 |
 
-**注意**: 项目使用 std::cout 日志系统，不需要安装 Quill 日志库。
+**注意**: 项目优先使用 Quill；若未提供 `external/quill` 或未通过包管理器安装，则会自动回退到 stdout / stderr 日志输出，因此 Quill 不是 Windows 构建的强制依赖。
 
 ## Windows 环境配置指南
 
 本指南详细说明如何在 Windows 系统上配置和编译本项目。
+
+## 状态说明（2026-03-08）
+
+- 当前 `CMakeLists.txt` 的 Windows 依赖探测顺序为：优先使用包管理器 / `find_package(... CONFIG)` 结果，其次回退到仓库内固定目录 `external/SDL2`、`external/ffmpeg`，Quill 则优先查找包管理器结果或 `external/quill`。
+- 因此，手动安装模式下，最稳妥的方式是按本文示例把依赖放到仓库约定目录，而不是依赖旧版 `SDL2_DIR` / `FFMPEG_DIR` 传参习惯。
+- 本文档记录的是当前 Windows 构建入口；播放器能力与功能进度请以 `docs/VERSION.md`、`docs/CHANGELOG.md`、`docs/MPC_HC_GAP_ANALYSIS.md` 为准。
 
 ## 前置要求
 
@@ -55,7 +61,7 @@ cd vcpkg
 ### 2. 安装依赖库
 
 ```powershell
-# 安装 SDL2 和 FFmpeg（不需要安装 Quill）
+# 安装 SDL2 和 FFmpeg（Quill 可选）
 .\vcpkg install sdl2 ffmpeg:x64-windows
 
 # 如果使用 MinGW，使用 x64-mingw-static
@@ -136,11 +142,12 @@ modern-video-player/
 mkdir build
 cd build
 
-# 如果 FFmpeg 和 SDL2 在标准位置
+# 当前仓库会优先尝试包管理器结果；
+# 若你按本文把依赖放在 external/SDL2 与 external/ffmpeg，下述命令即可生效
 cmake ..
 
-# 如果需要指定路径
-cmake .. -DSDL2_DIR=..\external\SDL2 -DFFMPEG_DIR=..\external\ffmpeg
+# 如需显式指定本地 Quill 目录（可选）
+# cmake .. -DQUILL_ROOT=..\external\quill
 
 # 编译
 cmake --build . --config Release
@@ -162,18 +169,13 @@ cmake --build . --config Release
 
 1. 访问 [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
 2. 下载 `ffmpeg-git-full.7z`
-3. 解压后，将 `bin/` 目录下的所有 DLL 复制到项目输出目录
+3. 解压后，优先按方法二的目录布局放入 `external/ffmpeg/`
 
-### 2. 修改 CMakeLists.txt (可选)
+### 2. 当前仓库的使用方式
 
-如果需要，可以在 CMakeLists.txt 中添加：
-
-```cmake
-# Windows 下使用共享库
-if(WIN32)
-    add_definitions(-DFFMPEG_SHARED)
-endif()
-```
+- 当前仓库无需额外修改 `CMakeLists.txt` 才能使用 FFmpeg 共享版本。
+- 只要 `external/ffmpeg/bin/` 下存在所需 DLL，构建后的 `POST_BUILD` 步骤会自动复制这些 DLL 到输出目录。
+- 如果你走的是包管理器路径，则以对应包管理器生成的导入目标和运行时 DLL 布局为准。
 
 ## 常见问题
 
@@ -196,8 +198,8 @@ LINK : fatal error LNK1104: 无法打开文件 "avformat.lib"
 ```
 
 **解决方案**:
-- 检查 FFMPEG_DIR 是否正确
-- 确保库文件 (.lib) 在 `ffmpeg/lib/` 目录
+- 检查 `external/ffmpeg/lib/` 下是否存在 `avformat.lib` 等库文件
+- 如果走 vcpkg，请确认配置时传入了正确的 `CMAKE_TOOLCHAIN_FILE`
 - 对于 64 位编译，确保使用的是 64 位版本的 FFmpeg
 
 ### 3. CMake 找不到 SDL2
@@ -208,8 +210,8 @@ Could not find SDL2
 ```
 
 **解决方案**:
-- 设置环境变量: `SDL2_DIR=你的SDL2路径`
-- 或在 CMake 时指定: `cmake .. -DSDL2_DIR=path/to/SDL2`
+- 如果走 vcpkg，请确认配置时传入了正确的 `CMAKE_TOOLCHAIN_FILE`
+- 如果走手动安装，请确认依赖位于 `external/SDL2/`，且包含 `include/` 与 `lib/` 子目录
 
 ### 4. 编译器不匹配
 
@@ -319,9 +321,10 @@ cmake --build . --target clean
 
 安装完成后，您可以：
 
-1. 阅读 [IMPLEMENTATION.md](IMPLEMENTATION.md) 了解实现细节
-2. 阅读 [ARCHITECTURE.md](ARCHITECTURE.md) 了解架构设计
-3. 运行示例视频文件测试功能
+1. 阅读 [README.md](./README.md) 查看文档索引与当前入口说明
+2. 阅读 [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) 了解现行主链结构
+3. 阅读 [VERSION.md](./VERSION.md) / [CHANGELOG.md](./CHANGELOG.md) 了解当前能力与最近变更
+4. 运行示例视频文件测试功能
 
 ## 获取帮助
 

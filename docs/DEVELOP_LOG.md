@@ -1510,3 +1510,40 @@ windows-backend-check.result=FAIL
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 47: 辅助说明文档仍缺少当前入口与状态边界
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `docs/FILTERS.md`、`docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/WINDOWS_SETUP.md` 仍偏向“静态说明”，缺少与当前代码主链、依赖探测方式和文档适用范围的衔接说明。
+- `docs/WINDOWS_SETUP.md` 还保留了旧的 `SDL2_DIR` / `FFMPEG_DIR` 配置示例，与当前 `CMakeLists.txt` 的手动依赖回退路径不完全一致。
+
+### 分析记录
+1. 经过前几轮清理后，入口文档和核心设计文档已经区分了“历史基线”和“当前主链”，但辅助说明文档还没有完全跟上。
+2. `FILTERS.md` 的主要问题不是错误，而是缺少“当前默认主流程入口是 `FilterPipeline`”这一层解释。
+3. `PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 更像专题参考笔记，需要提醒读者不要把其中的目标项直接等同于当前未完成项。
+4. `WINDOWS_SETUP.md` 则需要与现有 `CMakeLists.txt` 的依赖探测顺序保持一致，否则会影响实际搭建体验。
+
+### 解决方案
+- 为 `docs/FILTERS.md` 增加状态说明，并补齐当前内置音频滤镜 `volume_balance` 与链路说明。
+- 为 `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加状态说明，明确其是专题参考而不是全量进度面板。
+- 为 `docs/WINDOWS_SETUP.md` 增加状态说明，修正 Quill 说明、手动安装示例和共享库使用说明，使之与当前 `CMakeLists.txt` 对齐。
+- 更新 `docs/README.md` 索引，将 `FILTERS.md` 纳入可发现入口，并追加本轮文档整理记录。
+
+### 本地校对结果
+- `docs/FILTERS.md` 已明确当前生效的滤镜主链与预留组件边界。
+- `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 已明确为专题参考文档，并指向当前总进度来源。
+- `docs/WINDOWS_SETUP.md` 已不再建议使用与当前仓库不一致的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例。
+- 本次改动仍限定在文档层，未涉及代码、构建脚本和任务清单状态修改。
+
+### 修改文件
+- docs/FILTERS.md
+- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/WINDOWS_SETUP.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

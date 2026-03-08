@@ -1763,3 +1763,31 @@ void VideoPlayer::play() {
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 47: 辅助说明文档仍缺少当前入口与状态边界
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `docs/FILTERS.md`、`docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/WINDOWS_SETUP.md` 虽然内容仍有参考价值，但缺少对“当前主流程入口”和“文档适用范围”的明确说明。
+- 其中 `docs/WINDOWS_SETUP.md` 还保留了与当前 `CMakeLists.txt` 不完全一致的手动配置示例，容易误导 Windows 构建路径。
+
+### 原因分析
+- 这几份文档分别服务于滤镜、能力参考、Windows 环境配置，长期迭代后内容没有统一补齐“当前口径”说明。
+- 文档读者如果直接按旧描述执行，可能会把参考性内容误当成当前唯一入口，或沿用过时的参数传递方式。
+
+### 解决方案
+- 为 `docs/FILTERS.md` 增加状态说明，区分当前生效的 `FilterPipeline` 主链与预留链式封装。
+- 为 `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加适用范围说明，并将总进度参考入口指向差距评估、版本记录和变更日志。
+- 为 `docs/WINDOWS_SETUP.md` 增加当前依赖探测顺序说明，移除误导性的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例，改为与现有 `CMakeLists.txt` 一致的仓库内 `external/*` 回退口径。
+- 更新 `docs/README.md` 索引与本轮文档更新记录。
+
+### 修改文件
+- docs/FILTERS.md
+- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/WINDOWS_SETUP.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
