@@ -634,6 +634,7 @@ bool runPlaylistFlowCheck(const std::vector<std::string>& media_inputs, size_t r
 struct AppSettings {
     float volume{1.0f};
     double playback_speed{1.0};
+    bool prefer_hardware_decode{true};
     bool resume_last_playlist{true};
     int last_playlist_index{0};
     input::HotkeyManager hotkey_manager{};
@@ -789,6 +790,7 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
     if (!loaded) {
         settings_manager.setInt("player.volume_percent", 100);
         settings_manager.setDouble("player.playback_speed", 1.0);
+        settings_manager.setBool("decoder.prefer_hardware_decode", true);
         settings_manager.setBool("player.resume_last_playlist", true);
         settings_manager.setInt("player.last_playlist_index", 0);
         settings_manager.setBool("hotkey.restore_defaults", false);
@@ -804,6 +806,10 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
         settings.playback_speed = std::max(0.5, std::min(2.0, *speed));
     }
 
+    if (const auto prefer_hardware = settings_manager.getBool("decoder.prefer_hardware_decode")) {
+        settings.prefer_hardware_decode = *prefer_hardware;
+    }
+
     if (const auto resume_last = settings_manager.getBool("player.resume_last_playlist")) {
         settings.resume_last_playlist = *resume_last;
     }
@@ -815,6 +821,7 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
 
     settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(settings.volume * 100.0f)));
     settings_manager.setDouble("player.playback_speed", settings.playback_speed);
+    settings_manager.setBool("decoder.prefer_hardware_decode", settings.prefer_hardware_decode);
     settings_manager.setBool("player.resume_last_playlist", settings.resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", settings.last_playlist_index);
     settings_manager.setBool("hotkey.restore_defaults", false);
@@ -827,6 +834,7 @@ void saveAppSettings(config::SettingsManager& settings_manager,
                      const std::string& settings_path,
                      float volume,
                      double playback_speed,
+                     bool prefer_hardware_decode,
                      bool resume_last_playlist,
                      int last_playlist_index,
                      const input::HotkeyManager& hotkey_manager) {
@@ -835,6 +843,7 @@ void saveAppSettings(config::SettingsManager& settings_manager,
 
     settings_manager.setInt("player.volume_percent", static_cast<int>(std::lround(clamped_volume * 100.0f)));
     settings_manager.setDouble("player.playback_speed", clamped_speed);
+    settings_manager.setBool("decoder.prefer_hardware_decode", prefer_hardware_decode);
     settings_manager.setBool("player.resume_last_playlist", resume_last_playlist);
     settings_manager.setInt("player.last_playlist_index", std::max(0, last_playlist_index));
     syncHotkeySettings(settings_manager, hotkey_manager);
@@ -865,6 +874,7 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     constexpr float expected_volume = 0.37f;
     constexpr double expected_speed = 1.25;
+    constexpr bool expected_prefer_hardware_decode = false;
     constexpr bool expected_resume_last_playlist = false;
     constexpr int expected_playlist_index = 3;
     constexpr int expected_subtitle_key = 'b';
@@ -877,6 +887,7 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
                     check_path_text,
                     expected_volume,
                     expected_speed,
+                    expected_prefer_hardware_decode,
                     expected_resume_last_playlist,
                     expected_playlist_index,
                     expected_hotkeys);
@@ -886,17 +897,19 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     const bool volume_ok = std::abs(restored.volume - expected_volume) < 1e-6f;
     const bool speed_ok = std::abs(restored.playback_speed - expected_speed) < 1e-9;
+    const bool decode_pref_ok = restored.prefer_hardware_decode == expected_prefer_hardware_decode;
     const bool resume_ok = restored.resume_last_playlist == expected_resume_last_playlist;
     const bool index_ok = restored.last_playlist_index == expected_playlist_index;
 
     const auto subtitle_key = restored.hotkey_manager.keyForAction(input::PlayerAction::ToggleSubtitle);
     const bool hotkey_ok = subtitle_key.has_value() && *subtitle_key == expected_subtitle_key;
 
-    const bool result = volume_ok && speed_ok && resume_ok && index_ok && hotkey_ok;
+    const bool result = volume_ok && speed_ok && decode_pref_ok && resume_ok && index_ok && hotkey_ok;
 
     std::cout << "settings-persistence-check.path=" << check_path_text << std::endl;
     std::cout << "settings-persistence-check.volume_ok=" << (volume_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.speed_ok=" << (speed_ok ? "true" : "false") << std::endl;
+    std::cout << "settings-persistence-check.decode_pref_ok=" << (decode_pref_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.resume_ok=" << (resume_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.index_ok=" << (index_ok ? "true" : "false") << std::endl;
     std::cout << "settings-persistence-check.hotkey_ok=" << (hotkey_ok ? "true" : "false") << std::endl;
@@ -1092,6 +1105,7 @@ int main(int argc, char* argv[]) {
     g_player = std::make_unique<VideoPlayer>();
     g_player->setVolume(app_settings.volume);
     g_player->setPlaybackSpeed(app_settings.playback_speed);
+    g_player->setPreferHardwareDecode(app_settings.prefer_hardware_decode);
     g_player->setHotkeyManager(app_settings.hotkey_manager);
 
     bool quit_requested = false;
@@ -1183,6 +1197,7 @@ int main(int argc, char* argv[]) {
                     settings_path,
                     final_volume,
                     final_speed,
+                    app_settings.prefer_hardware_decode,
                     app_settings.resume_last_playlist,
                     static_cast<int>(current_index),
                     final_hotkeys);

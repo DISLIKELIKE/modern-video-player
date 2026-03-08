@@ -36,6 +36,7 @@ bool VideoPlayer::open(const std::string& filename) {
     }
     core_player_->setVolume(volume_);
     core_player_->setPlaybackSpeed(playback_speed_);
+    core_player_->setPreferHardwareDecode(prefer_hardware_decode_);
     core_player_->setSubtitleEnabled(subtitle_enabled_);
     if (!subtitle_items_.empty()) {
         core_player_->setExternalSubtitles(subtitle_items_, subtitle_path_);
@@ -131,6 +132,17 @@ void VideoPlayer::setPlaybackSpeed(double speed) {
 
 double VideoPlayer::getPlaybackSpeed() const {
     return playback_speed_;
+}
+
+void VideoPlayer::setPreferHardwareDecode(bool prefer_hardware_decode) {
+    prefer_hardware_decode_ = prefer_hardware_decode;
+    if (core_player_) {
+        core_player_->setPreferHardwareDecode(prefer_hardware_decode_);
+    }
+}
+
+bool VideoPlayer::preferHardwareDecode() const {
+    return prefer_hardware_decode_;
 }
 
 void VideoPlayer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {

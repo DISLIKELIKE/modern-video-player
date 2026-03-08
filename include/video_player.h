@@ -37,6 +37,8 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setPreferHardwareDecode(bool prefer_hardware_decode);
+    bool preferHardwareDecode() const;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
     const input::HotkeyManager& hotkeyManager() const;
 
@@ -56,6 +58,7 @@ private:
     std::atomic<double> current_time_{0.0};
     float volume_{1.0f};
     double playback_speed_{1.0};
+    bool prefer_hardware_decode_{true};
     std::string subtitle_path_;
     std::vector<subtitle::SubtitleItem> subtitle_items_;
     bool subtitle_enabled_{true};

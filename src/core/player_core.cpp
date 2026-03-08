@@ -66,6 +66,21 @@ double framePtsSeconds(const AVFrame* frame, AVRational time_base) {
     }
     return static_cast<double>(pts) * av_q2d(time_base);
 }
+
+const char* rendererTypeName(render::VideoRendererType type) {
+    switch (type) {
+    case render::VideoRendererType::Auto:
+        return "Auto";
+    case render::VideoRendererType::SoftwareSDL:
+        return "SoftwareSDL";
+    case render::VideoRendererType::D3D11:
+        return "D3D11";
+    case render::VideoRendererType::OpenGL:
+        return "OpenGL";
+    default:
+        return "Unknown";
+    }
+}
 }
 
 PlayerCore::PlayerCore() {
@@ -96,19 +111,39 @@ bool PlayerCore::open(const std::string& filename) {
 
     const MediaInfo& info = demuxer_->getMediaInfo();
     if (info.video_stream_idx >= 0) {
-        video_renderer_ = render::RendererFactory::create(render::VideoRendererType::Auto);
-        if (!video_renderer_) {
-            emitError(ErrorCode::DisplayInitFailed, "failed to create video renderer");
-            return false;
-        }
+        const render::VideoRendererType selected_type = render::RendererFactory::detectBestRendererType();
         render::VideoRendererConfig renderer_config{};
         renderer_config.width = info.width;
         renderer_config.height = info.height;
         renderer_config.title = "Video Player";
-        if (!video_renderer_->init(renderer_config)) {
-            emitError(ErrorCode::DisplayInitFailed, "failed to initialize video renderer");
-            return false;
+
+        auto init_renderer = [&](render::VideoRendererType type) -> bool {
+            video_renderer_ = render::RendererFactory::create(type);
+            if (!video_renderer_) {
+                return false;
+            }
+            if (!video_renderer_->init(renderer_config)) {
+                video_renderer_.reset();
+                return false;
+            }
+            LOG_INFO("Video renderer initialized: " << rendererTypeName(type));
+            return true;
+        };
+
+        if (!init_renderer(selected_type)) {
+            LOG_WARNING("Video renderer init failed: " << rendererTypeName(selected_type));
+            if (selected_type != render::VideoRendererType::SoftwareSDL) {
+                LOG_WARNING("Falling back to SoftwareSDL renderer");
+                if (!init_renderer(render::VideoRendererType::SoftwareSDL)) {
+                    emitError(ErrorCode::DisplayInitFailed, "failed to initialize video renderer");
+                    return false;
+                }
+            } else {
+                emitError(ErrorCode::DisplayInitFailed, "failed to initialize video renderer");
+                return false;
+            }
         }
+
         video_renderer_->setHotkeyManager(hotkey_manager_);
     }
 
@@ -415,6 +450,14 @@ double PlayerCore::getPlaybackSpeed() const {
     return speed_.load();
 }
 
+void PlayerCore::setPreferHardwareDecode(bool prefer_hardware_decode) {
+    prefer_hardware_decode_.store(prefer_hardware_decode);
+}
+
+bool PlayerCore::preferHardwareDecode() const {
+    return prefer_hardware_decode_.load();
+}
+
 void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
     std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
         if (lhs.start_seconds == rhs.start_seconds) {
@@ -667,9 +710,13 @@ bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecCo
     }
 
     const std::string codec_name = codec->name ? codec->name : "";
+    const bool prefer_hardware_decode = prefer_hardware_decode_.load();
     const decoder::DecoderBackend preferred_backend =
-        decoder::DecoderFactory::selectBestBackend(codec_name, true);
+        decoder::DecoderFactory::selectBestBackend(codec_name, prefer_hardware_decode);
     if (preferred_backend != decoder::DecoderBackend::D3D11VA) {
+        if (!prefer_hardware_decode) {
+            LOG_INFO("Hardware decode disabled by config, using software decode backend");
+        }
         return false;
     }
 

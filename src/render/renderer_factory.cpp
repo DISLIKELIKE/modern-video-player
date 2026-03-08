@@ -9,7 +9,7 @@ namespace vp::render {
 
 VideoRendererType RendererFactory::detectBestRendererType() {
 #if defined(_WIN32)
-    return VideoRendererType::SoftwareSDL;
+    return VideoRendererType::D3D11;
 #else
     return VideoRendererType::SoftwareSDL;
 #endif

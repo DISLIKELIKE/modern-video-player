@@ -86,6 +86,8 @@ public:
 
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    void setPreferHardwareDecode(bool prefer_hardware_decode);
+    bool preferHardwareDecode() const;
     void setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
     void clearExternalSubtitles();
     bool hasExternalSubtitles() const;
@@ -176,6 +178,7 @@ private:
     std::atomic<double> position_{0.0};
     std::atomic<float> volume_{1.0f};
     std::atomic<double> speed_{1.0};
+    std::atomic<bool> prefer_hardware_decode_{true};
     std::atomic<bool> opened_{false};
     std::atomic<bool> quit_requested_{false};
     std::atomic<bool> next_item_requested_{false};
