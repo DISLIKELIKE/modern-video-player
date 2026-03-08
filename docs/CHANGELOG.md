@@ -2362,3 +2362,32 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 
+
+---
+
+## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `5.2` 的执行手册已经落地，但 `daily_board` 和周报层面仍缺少固定模板，导致后续跨周证据不易统一留存。
+
+### 原因分析
+- 只有流程说明，没有低成本、固定格式的填写模板，执行时容易口径漂移。
+- `5.2` 是否勾选取决于跨周证据，因此模板本身也是守则落地的一部分。
+
+### 解决方案
+- 给 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md` 的两个周五补上收敛日记录卡。
+- 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md` 作为每周收敛/周报模板。
+- 同步更新 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md` 和 `docs/README.md` 的入口说明。
+
+### 修改文件
+- .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+

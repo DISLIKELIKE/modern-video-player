@@ -143,6 +143,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 - 一组可追溯的本地验收输出或报告。
 - 已同步的版本记录、变更记录、开发日志与 README 入口。
 - 一份明确的任务状态更新（如果状态没有变化，也要在记录中说明原因）。
+- 一份周报实例文件，用来沉淀本周是否满足 `5.2` 的过程证据。
 - 一句明确的阶段结论：
   - “本周已收敛，可继续进入下一阶段。”
   - 或“仍有 blocker，禁止打 RC，下一步先处理 xxx。”
@@ -162,3 +163,4 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 - 单人迭代计划快照：`docs/MPC_HC_ITERATION_PLAN.md`
 - 当前任务清单：`.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 - 每日节奏样例：`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`
+- 周报留痕模板：`.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`

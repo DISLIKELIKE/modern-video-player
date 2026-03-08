@@ -1724,3 +1724,37 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
 
+
+## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `5.2` 已有流程手册，但还缺少可直接填写的“日看板记录卡 + 周报模板”，不利于后续沉淀跨周执行证据。
+
+### 分析记录
+1. 仅有 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，还不足以支撑每周实际执行时的低成本留痕。
+2. `daily_board.md` 当前只有任务安排，没有为两个周五预留固定填写位置。
+3. 因此需要同时补齐“周五当日记录卡”和“每周汇总模板”两个载体。
+
+### 解决方案
+- 更新 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`，为 Day 5 / Day 10 增加收敛日记录卡。
+- 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`，作为 `5.2` 的周报留痕模板。
+- 同步 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`、`docs/README.md` 与相关记录文档，明确这两个模板的入口和用途。
+
+### 本地验收结果
+- `daily_board.md` 已可直接填写周五的范围冻结、回归命令、blocker 结论、文档同步和阶段结论。
+- `weekly_report_template.md` 已可用于复制生成每周周报实例，并沉淀 `5.2` 的跨周证据。
+- 任务清单 `5.2` 本次仍未勾选，仅补齐留痕模板。
+
+### 修改文件
+- .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+

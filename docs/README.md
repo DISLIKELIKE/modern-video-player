@@ -33,6 +33,8 @@
 | [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md) | 格式样本回归脚本与报告说明 |
 | [REGRESSION_OPERATION_PLAYBOOK.md](./REGRESSION_OPERATION_PLAYBOOK.md) | 样本准备与回归操作清单（含每步作用） |
 | [WEEKLY_CONVERGENCE_PLAYBOOK.md](./WEEKLY_CONVERGENCE_PLAYBOOK.md) | `5.2` 周节奏与周五收敛日执行手册 |
+| [daily_board.md](../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md) | 10 个工作日看板（含周五收敛记录卡） |
+| [weekly_report_template.md](../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md) | `5.2` 周报与收敛留痕模板 |
 | [format-regression.yml](../.github/workflows/format-regression.yml) | GitHub Actions 自动格式回归工作流 |
 | [player_settings.ini](../config/player_settings.ini) | 播放器运行参数（音量/速度/音轨字幕时延/恢复索引/快捷键） |
 | [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨/字幕延迟调节本地验收记录 |
@@ -76,6 +78,7 @@
 - 新增 [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) - 记录 7.2 流媒体 HTTP 分片与缓冲本地验收结果
 - 新增 [reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) - 记录 7.3 HLS/DASH 自适应码率本地验收结果
 - 新增 [WEEKLY_CONVERGENCE_PLAYBOOK.md](./WEEKLY_CONVERGENCE_PLAYBOOK.md) - 固化 `5.2` 每周五收敛的执行约束与周节奏说明
+- 更新 [daily_board.md](../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md) / 新增 [weekly_report_template.md](../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md) - 补齐 `5.2` 的周五收敛留痕模板
 - 更新 [VERSION.md](./VERSION.md) / [CHANGELOG.md](./CHANGELOG.md) / [DEVELOP_LOG.md](./DEVELOP_LOG.md) / [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) / [tasklist.md](../.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md) - 同步记录 `v0.2.0-rc1` 与 `v0.2.0` 里程碑标签已建立、`5.1 / 5.3` 已勾选，并为 `5.2` 增加流程手册（暂不勾选）
 
 ---

@@ -2197,3 +2197,37 @@ windows-backend-check.result=FAIL
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
 
+
+## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续把 `5.2` 的“留痕模板”补到 `daily_board / 周报` 里，使周五收敛的执行证据有固定载体。
+
+### 分析记录
+1. `5.2` 现在已经有原则和流程，但还没有真正面向执行的填写模板。
+2. 当日看板和每周汇总属于两个不同粒度：前者记录“周五当天做了什么”，后者记录“这一周是否满足 5.2”。
+3. 因此需要同时补齐这两种模板，才能在后续跨周证据累积时保持口径一致。
+
+### 解决方案
+- 在 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md` 中，为 Day 5 / Day 10 增加收敛日记录卡。
+- 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`，作为每周周报与收敛留痕模板。
+- 同步 `tasklist / WEEKLY_CONVERGENCE_PLAYBOOK / README / 版本记录`，把入口和用途写清楚。
+
+### 本地验收结果
+- 现在每个周五都可以在 `daily_board.md` 直接填写范围冻结、回归命令、blocker 结论和阶段结论。
+- 现在可以基于 `weekly_report_template.md` 复制生成每周周报实例，用于判断是否满足 `5.2`。
+- 当前仓库没有新增代码改动，本次只补齐模板与文档入口。
+
+### 修改文件
+- .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+
