@@ -2056,6 +2056,104 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     return result;
 }
 
+bool run4kPlaybackCheck(const std::string& program_path, const std::string& media_file, int sample_ms = 2000) {
+    const ProbeReport probe = collectFileProbeReport(media_file);
+    if (sample_ms < 1000) {
+        std::cout << "4k-playback-check.path=" << media_file << std::endl;
+        std::cout << "4k-playback-check.sample_ms=" << sample_ms << std::endl;
+        std::cout << "4k-playback-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    const double sample_seconds = static_cast<double>(sample_ms) / 1000.0;
+    const bool probe_ok = probe.overall == "PASS" && probe.width >= 3840 && probe.height >= 2160;
+    const bool duration_ok = probe.duration <= 0.0 || probe.duration >= sample_seconds + 1.0;
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    bool entered_playback_loop = false;
+    bool still_playing_after_window = false;
+    double start_position = 0.0;
+    double end_position = 0.0;
+    double advanced_seconds = 0.0;
+    double advance_ratio = 0.0;
+    core::DiagnosticsSnapshot diag{};
+    std::string renderer_backend = "None";
+    std::string decoder_backend = "Unknown";
+
+    if (open_ok) {
+        player.play();
+        start_position = player.getCurrentTime();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(sample_ms));
+        end_position = player.getCurrentTime();
+        advanced_seconds = std::max(0.0, end_position - start_position);
+        advance_ratio = sample_seconds > 0.0 ? advanced_seconds / sample_seconds : 0.0;
+        still_playing_after_window = player.isPlaying();
+        diag = player.getDiagnosticsSnapshot();
+        renderer_backend = player.videoRendererBackendName();
+        decoder_backend = player.videoDecoderBackendName();
+        player.stop();
+        player.close();
+    }
+
+    const double min_advance_seconds = std::max(0.8, sample_seconds * 0.75);
+    const bool progress_ok = advanced_seconds >= min_advance_seconds;
+    const bool late_drops_ok = diag.scheduler_late_drops == 0;
+
+    const BackendSessionResult hard_session = runBackendSessionSubprocess(program_path, media_file, "hard");
+    const BackendSessionResult soft_session = runBackendSessionSubprocess(program_path, media_file, "soft");
+    const bool fallback_ok = hard_session.mode_ok && soft_session.mode_ok &&
+                             hard_session.exit_code == 0 && soft_session.exit_code == 0;
+
+    const bool result = probe_ok && duration_ok && open_ok && entered_playback_loop && still_playing_after_window &&
+                        progress_ok && late_drops_ok && fallback_ok;
+
+    std::cout << "4k-playback-check.path=" << media_file << std::endl;
+    std::cout << "4k-playback-check.sample_ms=" << sample_ms << std::endl;
+    std::cout << "4k-playback-check.probe_overall=" << probe.overall << std::endl;
+    std::cout << "4k-playback-check.probe_width=" << probe.width << std::endl;
+    std::cout << "4k-playback-check.probe_height=" << probe.height << std::endl;
+    std::cout << "4k-playback-check.probe_fps=" << probe.fps << std::endl;
+    std::cout << "4k-playback-check.probe_duration=" << probe.duration << std::endl;
+    std::cout << "4k-playback-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.renderer_backend=" << renderer_backend << std::endl;
+    std::cout << "4k-playback-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "4k-playback-check.start_position=" << start_position << std::endl;
+    std::cout << "4k-playback-check.end_position=" << end_position << std::endl;
+    std::cout << "4k-playback-check.advanced_seconds=" << advanced_seconds << std::endl;
+    std::cout << "4k-playback-check.advance_ratio=" << advance_ratio << std::endl;
+    std::cout << "4k-playback-check.progress_ok=" << (progress_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.duration_ok=" << (duration_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.late_drops=" << diag.scheduler_late_drops << std::endl;
+    std::cout << "4k-playback-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "4k-playback-check.hard.mode_ok=" << (hard_session.mode_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.hard.renderer_backend=" << hard_session.renderer_backend << std::endl;
+    std::cout << "4k-playback-check.hard.decoder_backend=" << hard_session.decoder_backend << std::endl;
+    std::cout << "4k-playback-check.hard.exit_code=" << hard_session.exit_code << std::endl;
+    std::cout << "4k-playback-check.soft.mode_ok=" << (soft_session.mode_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.soft.renderer_backend=" << soft_session.renderer_backend << std::endl;
+    std::cout << "4k-playback-check.soft.decoder_backend=" << soft_session.decoder_backend << std::endl;
+    std::cout << "4k-playback-check.soft.exit_code=" << soft_session.exit_code << std::endl;
+    std::cout << "4k-playback-check.fallback_ok=" << (fallback_ok ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -2164,6 +2262,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --numeric-seek-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --1080p60-check <media_file> [sample_ms]" << std::endl;
+    std::cout << "       " << program_name << " --4k-playback-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2380,6 +2479,19 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return run1080p60Check(argv[2], sample_ms) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--4k-playback-check") {
+        if (argc != 3 && argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int sample_ms = 2000;
+        if (argc == 4 && !tryParseInt(argv[3], sample_ms)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return run4kPlaybackCheck(argv[0], argv[2], sample_ms) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

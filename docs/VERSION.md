@@ -1431,3 +1431,33 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 2026-03-08 更新（4K 播放与降级验收）
+
+### 4K 门禁补齐
+- `main` 新增 `--4k-playback-check <media_file> [sample_ms]`，联合验证：
+  - `4K` 样本在连续播放窗口内是否持续推进；
+  - 当前播放链路是否无 `late_drop`；
+  - hard / soft 两个子进程会话是否均可进入播放，证明硬解失败时可降级。
+- 验收逻辑复用了已有 `runBackendSessionSubprocess()`，避免重复实现 Windows 后端回退校验。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000`：`PASS`
+- 验收报告：`docs/reports/4K_PLAYBACK_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `2.2.2 4K 可播放（优先稳定，再提性能）` 标记完成。
+  - `2.3.3 4K 播放可用并可降级` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

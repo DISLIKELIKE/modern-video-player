@@ -1846,3 +1846,40 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 55: M2 2.2.2 / 2.3.3：4K 播放与降级验收
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 需要把 `4K` 样本播放与“失败时可降级”收敛成一个统一的本地验收入口。
+- 现有能力分散在性能日志与 Windows 后端回退检查中，不利于直接对应任务清单 `2.2.2 / 2.3.3`。
+
+### 分析记录
+1. `collectFileProbeReport()` 已能确认样本是否为 `3840x2160`，适合做 4K 门禁前置判断。
+2. `runBackendSessionSubprocess()` 已能稳定验证 hard / soft 两个后端模式，无需重新实现降级流程。
+3. 还需要一个主进程连续播放窗口，确保 `4K` 样本不是“只打开不推进”，而是真正进入播放状态。
+
+### 解决方案
+- 新增 `--4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000`。
+- 主进程检查 `probe`、时间推进、`late_drop` 与当前 backend；子进程检查 hard / soft 模式都能进入播放。
+- 新增 `docs/reports/4K_PLAYBACK_LOCAL_CHECK.md`，同步任务清单、差距评估与版本记录。
+
+### 本地校对结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000`：`PASS`
+- 当前样本输出包含 `advance_ratio=0.968167`、`late_drops=0`、`hard.decoder_backend=D3D11VA`、`soft.decoder_backend=Software`。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -55,6 +55,7 @@
 | 50 | 2026-03-08 | M4 4.4：暂停态帧步进接入与验收 | ✅ 已修复 |
 | 53 | 2026-03-08 | M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU） | ✅ 已修复 |
 | 54 | 2026-03-08 | M2 2.2.1 / 2.3.2：1080p60 稳定播放验收 | ✅ 已修复 |
+| 55 | 2026-03-08 | M2 2.2.2 / 2.3.3：4K 播放与降级验收 | ✅ 已修复 |
 
 ---
 
@@ -2062,6 +2063,36 @@ void VideoPlayer::play() {
 - docs/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 55: M2 2.2.2 / 2.3.3：4K 播放与降级验收
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.2.2` 与 `2.3.3` 要求确认 `4K` 样本可以播放，并且在硬解不可用时能够降级到软解继续播放。
+- 当前仓库已有性能日志入口和 Windows 后端回退校验，但缺少一个直接面向 `4K` 门禁的聚合验收命令。
+
+### 原因分析
+- `--performance-log-check` 可以说明 4K 样本能进入播放链路，但不直接覆盖“软解降级是否成功”。
+- `--windows-backend-check` 可验证 hard / soft 两个后端模式，但不携带 `4K` 连续播放窗口和时间推进门禁。
+
+### 解决方案
+- 在 `main` 中新增 `--4k-playback-check <media_file> [sample_ms]`，主进程验证 `4K` 样本真实推进与 `late_drop`，子进程复用 hard / soft backend session 验证可降级。
+- 输出 probe 宽高/FPS、时间推进比率、当前 backend、hard / soft 会话结果等结构化字段。
+- 同步补齐任务清单、报告、差距评估、版本记录与开发日志。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
