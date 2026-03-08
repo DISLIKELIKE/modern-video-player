@@ -18,11 +18,13 @@ extern "C" {
 #include "filters/builtin_filters.h"
 #include "logger.h"
 #include "render/renderer_factory.h"
+#include "subtitle/subtitle_timeline.h"
 
 namespace vp::core {
 
 namespace {
 constexpr int kPacketQueueSize = 256;
+constexpr double kMaxAudioBufferedSeconds = 0.35;
 
 int64_t nowSteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -501,6 +503,17 @@ bool PlayerCore::toggleSubtitleEnabled() {
     const bool next_enabled = !isSubtitleEnabled();
     setSubtitleEnabled(next_enabled);
     return next_enabled;
+}
+
+void PlayerCore::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
+    hotkey_manager_ = hotkey_manager;
+    if (video_renderer_) {
+        video_renderer_->setHotkeyManager(hotkey_manager_);
+    }
+}
+
+const input::HotkeyManager& PlayerCore::hotkeyManager() const {
+    return hotkey_manager_;
 }
 
 void PlayerCore::onStateChanged(StateCallback callback) {
@@ -1026,6 +1039,12 @@ void PlayerCore::startAudioConsumer() {
                 emitPositionChanged(played_pts);
             }
 
+            if (audio_player_->getBufferedSeconds() > kMaxAudioBufferedSeconds) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                maybeLogDiagnostics("audio-backpressure");
+                continue;
+            }
+
             if (!audio_queue_.pop(frame, std::chrono::milliseconds(5))) {
                 maybeLogDiagnostics("audio-idle");
                 continue;
@@ -1270,11 +1289,9 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     if (!video_renderer_ || !frame.valid || !frame.frame) {
         return;
     }
-
     const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
     updateSubtitleOverlay(frame.pts);
     video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
-
     filter_pipeline_.processVideo(frame);
     video_renderer_->renderFrame(frame);
     video_renderer_->present();
@@ -1290,13 +1307,6 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
 }
 
 void PlayerCore::onRenderIdle() {
-    if (video_renderer_) {
-        video_renderer_->handleEvents();
-        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
-        updateSubtitleOverlay(position_.load());
-        video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
-    }
-
     if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
         return;
     }
@@ -1327,34 +1337,10 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
                 subtitle_changed = true;
             }
         } else {
-            const auto within_item = [&](int index) -> bool {
-                if (index < 0 || index >= static_cast<int>(subtitle_items_.size())) {
-                    return false;
-                }
-                const subtitle::SubtitleItem& item = subtitle_items_[index];
-                return position_seconds >= item.start_seconds && position_seconds <= item.end_seconds;
-            };
-
-            int resolved_index = -1;
-            if (within_item(subtitle_active_index_)) {
-                resolved_index = subtitle_active_index_;
-            } else {
-                auto it = std::upper_bound(
-                    subtitle_items_.begin(),
-                    subtitle_items_.end(),
-                    position_seconds,
-                    [](double value, const subtitle::SubtitleItem& item) {
-                        return value < item.start_seconds;
-                    });
-
-                if (it != subtitle_items_.begin()) {
-                    --it;
-                    if (position_seconds >= it->start_seconds && position_seconds <= it->end_seconds) {
-                        resolved_index = static_cast<int>(std::distance(subtitle_items_.begin(), it));
-                    }
-                }
-            }
-
+            const int resolved_index = subtitle::resolveActiveSubtitleIndex(
+                subtitle_items_,
+                position_seconds,
+                subtitle_active_index_);
             subtitle_active_index_ = resolved_index;
             subtitle_text = (resolved_index >= 0) ? subtitle_items_[resolved_index].text : "";
             if (subtitle_text != subtitle_active_text_) {
