@@ -1655,3 +1655,30 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 43: `MPC_HC_GAP_ANALYSIS` 评估结论过期
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `docs/MPC_HC_GAP_ANALYSIS.md` 仍保留旧结论，把多项已接入主流程的能力写成“骨架/未接入”。
+- 这会影响后续迭代优先级判断，也会让文档读者对当前实现进度形成错误认知。
+
+### 原因分析
+- 里程碑文档、开发日志和本地报告持续更新，但差距评估文档没有同步维护。
+- 旧评估主要依据“代码骨架是否存在”，没有吸收后续 `docs/reports/*` 验收结果。
+
+### 解决方案
+- 将 `docs/MPC_HC_GAP_ANALYSIS.md` 更新到 2026-03-08 口径。
+- 重写“当前已具备能力”“差距总览”“关键未实现功能清单”“代码层证据摘要”“建议里程碑”。
+- 新增“验收与报告证据”章节，把字幕、播放列表、设置、快捷键、D3D11/回退、章节导航、A-B Repeat、截图、格式矩阵的本地报告纳入评估依据。
+- 更新 `docs/README.md`，补充本次文档对齐说明。
+
+### 修改文件
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

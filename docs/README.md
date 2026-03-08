@@ -40,6 +40,10 @@
 - 更新 [VERSION.md](./VERSION.md) - 记录所有问题修复
 - 更新 [LOGGING.md](./LOGGING.md) - 日志系统说明
 
+### 2026-03-08 更新
+
+- 更新 [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) - 按当前代码与本地验收报告刷新差距评估
+
 **本次更新解决的问题**:
 1. 视频流索引不匹配问题
 2. 音频流索引不匹配问题
