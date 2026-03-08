@@ -2166,3 +2166,34 @@ windows-backend-check.result=FAIL
 - docs/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+## 问题 63: 落地 5.2 周五收敛日执行手册
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续处理守则项口径，并把 `5.2 每周五只做收敛（修复、回归、文档）` 落成一份可执行的流程约束文档与节奏说明。
+
+### 分析记录
+1. `5.2` 当前仍不应直接勾选，因为它要求的是跨周、重复发生的过程证据。
+2. 但在未勾选之前，仍然可以先把“如何执行周五收敛日”文档化，降低后续执行口径漂移。
+3. 最合理的落地方式，是新增一份类似操作手册的文档，把周节奏、允许事项、禁止事项、执行顺序、输出物与勾选依据全部写清楚。
+
+### 解决方案
+- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，将 `5.2` 固化为可执行流程。
+- 在 `docs/README.md` 增加入口，并同步版本记录与变更记录。
+- 保持任务清单 `5.2` 未勾选，待后续跨周执行形成证据后再更新状态。
+
+### 本地验收结果
+- 新文档已覆盖周一到周五的节奏分工。
+- 新文档已列出收敛日允许事项、禁止事项、最短执行路径与输出物。
+- 当前仓库没有新增代码改动，本次只新增流程文档并同步文档索引与记录。
+
+### 修改文件
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+

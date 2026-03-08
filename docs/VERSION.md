@@ -1693,3 +1693,34 @@ make -j$(nproc)
 - docs/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+## 问题 63: 落地 5.2 周五收敛日执行手册
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 守则项 `5.2 每周五只做收敛（修复、回归、文档）` 目前只有原则描述，缺少可重复执行的流程、边界和输出物定义。
+
+### 分析记录
+1. `docs/MPC_HC_ITERATION_PLAN.md` 只给出“每周五固定做收敛日”的节奏建议，但没有落实成逐步操作手册。
+2. `docs/REGRESSION_OPERATION_PLAYBOOK.md` 已覆盖“如何做回归”，但还没有回答“周五当天允许做什么、禁止做什么、什么时候可以得出 RC 结论”。
+3. 因此当前最合适的动作是先把 `5.2` 落成流程文档，再等待后续跨周执行证据决定是否勾选。
+
+### 解决方案
+- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，明确周节奏、周五允许/禁止事项、执行顺序、推荐命令、输出物与勾选口径。
+- 更新 `docs/README.md` 入口，确保该流程文档可直接检索。
+- 同步版本/变更/开发记录，明确 `5.2` 已有执行手册，但任务清单仍保持待完成。
+
+### 本地验收结果
+- 新文档已覆盖“周一至周四开发、周五只做收敛”的节奏说明。
+- 新文档已明确“允许事项 / 禁止事项 / 输出物 / RC 准备结论”的执行边界。
+- 任务清单 `5.2` 本次仍未勾选，待后续形成跨周执行证据后再回写。
+
+### 修改文件
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/VERSION.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md
+

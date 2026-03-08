@@ -2337,3 +2337,28 @@ void VideoPlayer::play() {
 - docs/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 63: 落地 5.2 周五收敛日执行手册
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单中的 `5.2 每周五只做收敛（修复、回归、文档）` 仍停留在原则口径，缺少可执行的周节奏与收敛日约束。
+
+### 原因分析
+- 现有文档已经覆盖回归命令和阶段计划，但还没有把“周五允许什么、禁止什么、结束时要产出什么”写成固定流程。
+- 如果没有这层流程约束，即使当前口径正确，后续也很难稳定积累跨周执行证据。
+
+### 解决方案
+- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，把 `5.2` 固化为可直接执行的周节奏说明与周五收敛手册。
+- 更新 `docs/README.md` 与记录文档，明确 `5.2` 现阶段完成的是“流程落地”，而不是“任务勾选完成”。
+
+### 修改文件
+- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+
