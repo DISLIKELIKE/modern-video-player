@@ -1490,3 +1490,34 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 2026-03-08 更新（长时播放稳定性验收）
+
+- `main` 新增 `--long-playback-check <media_file> [sample_ms]`，要求采样窗口至少 `5000ms`，并输出 `probe`、backend、时间推进与掉帧/丢包门禁字段。
+- 连续播放窗口同时检查：`open_ok`、进入播放循环、窗口结束后仍处于播放态、`advance_ratio` 达标、`scheduler_late_drops=0` 与 `demux_dropped_packets=0`。
+- 新增 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`，并同步发布门禁 `6.1 ~ 6.6` 为已完成。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --long-playback-check .\juren-30s.mp4 10000`：`PASS`
+- 验收报告：`docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `6.1 功能：M1/M2 必须全部通过` 标记完成。
+  - `6.2 格式：主力格式矩阵有结果且可解释` 标记完成。
+  - `6.3 分辨率：1080p60 稳定，4K 可用并可降级` 标记完成。
+  - `6.4 交互：默认快捷键完整可用` 标记完成。
+  - `6.5 稳定性：长时播放无 crash` 标记完成。
+  - `6.6 可观测：关键日志完整` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

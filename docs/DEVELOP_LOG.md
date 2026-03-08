@@ -1922,3 +1922,39 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 57: 发布门禁 6.5（长时播放稳定性）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `6.5` 需要一个可重复执行的本地入口，验证长时播放窗口内无 crash 且仍能持续推进。
+
+### 分析记录
+1. 现有 `1080p60` / `4K` / `>80Mbps` 验收命令都以短窗口为主，不能直接作为“长时播放无 crash”的证明。
+2. `VideoPlayer` 已提供 `play()` / `isPlaying()` / `getCurrentTime()` / `getDiagnosticsSnapshot()`，可以复用为 smoke 验收闭环。
+3. 只要同时验证播放态保持、时间推进与 `late_drop` / demux drop，即可形成一个足够轻量的发布门禁。
+
+### 解决方案
+- 新增 `--long-playback-check .\juren-30s.mp4 10000`，要求采样窗口不少于 `5000ms`。
+- 命令输出 `probe_duration`、`renderer_backend`、`decoder_backend`、`advance_ratio`、`late_drops`、`demux_dropped_packets` 等结构化字段。
+- 新增 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`，并同步任务清单、差距评估、版本记录与变更记录。
+
+### 本地验收结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --long-playback-check .\juren-30s.mp4 10000`：`PASS`
+- 当前输出包含 `probe_duration=30.03`、`entered_playback_loop=true`、`still_playing_after_window=true`、`advance_ratio=0.996267`、`late_drops=0`、`demux_dropped_packets=0`、`renderer_backend=D3D11`、`decoder_backend=D3D11VA`。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

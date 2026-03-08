@@ -2130,3 +2130,31 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 57: 发布门禁 6.5：长时播放稳定性验收
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `6.5` 要求确认播放器在持续播放窗口内无 crash 且能持续推进。
+
+### 原因分析
+- 现有 `1080p60`、`4K`、高码率与性能日志门禁覆盖了短窗口稳定性与可观测性，但缺少一个直接面向“长时播放无 crash”的固定 smoke 命令。
+- 发布门禁 `6.1 ~ 6.6` 的最后缺口是稳定性证据，缺少单独报告就无法收口 DoD。
+
+### 解决方案
+- 在 `main` 中新增 `--long-playback-check <media_file> [sample_ms]`，要求最短采样窗口 `5000ms`，并输出 `open_ok`、是否进入播放循环、窗口结束后是否仍在播放、时间推进比率、`late_drop`、demux 丢包与 backend 信息。
+- 新增 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`，记录 `./juren-30s.mp4` 上 `10000ms` 连续播放 smoke 结果，并同步任务清单、差距评估、版本记录与开发日志。
+
+### 修改文件
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -40,6 +40,7 @@
 | [reports/1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) | 1080p60 稳定播放本地验收记录 |
 | [reports/4K_PLAYBACK_LOCAL_CHECK.md](./reports/4K_PLAYBACK_LOCAL_CHECK.md) | 4K 播放与降级本地验收记录 |
 | [reports/HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) | >80Mbps 高码率样本本地验收记录 |
+| [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) | 长时播放稳定性本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -66,6 +67,7 @@
 - 新增 [reports/1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) - 记录 2.2.1 / 2.3.2 1080p60 稳定播放本地验收结果
 - 新增 [reports/4K_PLAYBACK_LOCAL_CHECK.md](./reports/4K_PLAYBACK_LOCAL_CHECK.md) - 记录 2.2.2 / 2.3.3 4K 播放与降级本地验收结果
 - 新增 [reports/HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) - 记录 2.2.3 >80Mbps 高码率样本本地验收结果
+- 新增 [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) - 记录 6.5 长时播放稳定性本地验收结果
 
 ---
 
