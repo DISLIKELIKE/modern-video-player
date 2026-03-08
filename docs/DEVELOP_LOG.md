@@ -2000,3 +2000,47 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 59: 7.2 流媒体（真实 HTTP 分片与缓冲）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `7.2` 需要一个真正可跑的 HTTP 分片下载与缓冲入口，而不是停留在清单解析骨架。
+
+### 分析记录
+1. `HttpStreamDownloader` 之前没有真实读流实现，`readChunk()` 永远返回空数组。
+2. 当前代码已经具备 HLS 清单解析器，适合以 HLS 媒体清单作为首个流媒体 smoke 入口。
+3. 在受限网络环境下，最稳定的验收方式是在本机起一个小型 HTTP 夹具服务，避免依赖外部站点。
+
+### 解决方案
+- 重写 `HttpStreamDownloader`，基于 FFmpeg `avio` 支持真实 HTTP 打开、分块读取、内部缓冲、EOF 状态与错误透传。
+- 新增 `--streaming-buffer-check`，下载 HLS 清单、解析相对 URL、抓取前 3 个分片并验证缓冲字节数。
+- 新增 `tools/start_streaming_fixture_server.ps1` 与 `samples/streaming/hls_local/*` 夹具，用于本机 HTTP 回归。
+
+### 本地验收结果
+- `cmake --build build --config Debug`：通过。
+- `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming/hls_local -Port 8765`
+- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`：`PASS`
+- 当前输出包含 `manifest_download_ok=true`、`manifest_parse_ok=true`、`segments_downloaded=3`、`buffered_bytes=621`、`buffer_ok=true`、`error=none`。
+
+### 修改文件
+- include/streaming/http_stream_downloader.h
+- src/streaming/http_stream_downloader.cpp
+- src/main.cpp
+- tools/start_streaming_fixture_server.ps1
+- samples/README.md
+- samples/streaming/hls_local/sample.m3u8
+- samples/streaming/hls_local/segment000.ts
+- samples/streaming/hls_local/segment001.ts
+- samples/streaming/hls_local/segment002.ts
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

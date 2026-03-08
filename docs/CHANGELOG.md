@@ -2193,3 +2193,39 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 59: 7.2 流媒体（真实 HTTP 分片与缓冲）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `7.2` 要求把流媒体能力从“解析器骨架”推进到真实 HTTP 分片下载与缓冲闭环。
+
+### 原因分析
+- `HttpStreamDownloader` 之前只保存 URL，不做任何真实网络读取，也没有内部缓冲与 EOF/错误状态。
+- 现有 HLS/DASH 解析器只能处理文本，缺少一套可重复执行的本地 HTTP 夹具来验证分片下载链路。
+
+### 解决方案
+- 重写 `HttpStreamDownloader`，基于 FFmpeg `avio` 支持真实 HTTP 打开、分块读取、内部缓冲、EOF 状态与错误透传。
+- 在 `main` 中新增 `--streaming-buffer-check`，下载 HLS 媒体清单、解析并抓取前 N 个分片，验证缓冲字节数与下载结果。
+- 新增 `samples/streaming/hls_local/*` 本地夹具与 `tools/start_streaming_fixture_server.ps1`，通过本机 HTTP 服务复现实验。
+
+### 修改文件
+- include/streaming/http_stream_downloader.h
+- src/streaming/http_stream_downloader.cpp
+- src/main.cpp
+- tools/start_streaming_fixture_server.ps1
+- samples/README.md
+- samples/streaming/hls_local/sample.m3u8
+- samples/streaming/hls_local/segment000.ts
+- samples/streaming/hls_local/segment001.ts
+- samples/streaming/hls_local/segment002.ts
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

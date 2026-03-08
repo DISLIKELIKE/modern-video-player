@@ -6,6 +6,8 @@
 #include "playlist/playlist_manager.h"
 #include "plugin/plugin_manager.h"
 #include "logger.h"
+#include "streaming/hls_manifest_parser.h"
+#include "streaming/http_stream_downloader.h"
 #include "subtitle/srt_parser.h"
 #include "subtitle/subtitle_timeline.h"
 
@@ -85,8 +87,69 @@ std::string coverageLevel(size_t hit, size_t total) {
     return "PARTIAL";
 }
 
+bool startsWithInsensitive(const std::string& value, const std::string& prefix) {
+    if (value.size() < prefix.size()) {
+        return false;
+    }
+    return toLower(value.substr(0, prefix.size())) == toLower(prefix);
+}
+
 bool containsString(const std::vector<std::string>& values, const std::string& expected) {
     return std::find(values.begin(), values.end(), expected) != values.end();
+}
+
+std::string resolveUrl(const std::string& base_url, const std::string& relative_url) {
+    if (relative_url.empty()) {
+        return base_url;
+    }
+    if (startsWithInsensitive(relative_url, "http://") || startsWithInsensitive(relative_url, "https://")) {
+        return relative_url;
+    }
+
+    const size_t scheme_pos = base_url.find("://");
+    if (scheme_pos == std::string::npos) {
+        return relative_url;
+    }
+    const size_t authority_start = scheme_pos + 3;
+    const size_t path_start = base_url.find('/', authority_start);
+    const std::string origin = (path_start == std::string::npos) ? base_url : base_url.substr(0, path_start);
+
+    if (!relative_url.empty() && relative_url.front() == '/') {
+        return origin + relative_url;
+    }
+
+    const size_t last_slash = base_url.find_last_of('/');
+    if (last_slash == std::string::npos || last_slash < authority_start) {
+        return origin + "/" + relative_url;
+    }
+    return base_url.substr(0, last_slash + 1) + relative_url;
+}
+
+bool readUrlText(const std::string& url, std::string& text_out, std::string& error_out) {
+    streaming::HttpStreamDownloader downloader;
+    if (!downloader.open(url)) {
+        error_out = downloader.lastError();
+        return false;
+    }
+
+    constexpr size_t kChunkSize = 32 * 1024;
+    text_out.clear();
+    while (!downloader.eof() || downloader.bufferedBytes() > 0) {
+        if (!downloader.prefetch(kChunkSize, kChunkSize)) {
+            error_out = downloader.lastError();
+            downloader.close();
+            return false;
+        }
+        const auto chunk = downloader.consumeBuffered(kChunkSize);
+        if (chunk.empty()) {
+            continue;
+        }
+        text_out.append(reinterpret_cast<const char*>(chunk.data()), chunk.size());
+    }
+
+    downloader.close();
+    error_out.clear();
+    return true;
 }
 
 void printCoverageLine(const std::string& category, size_t hit, size_t total, const std::vector<std::string>& missing) {
@@ -2421,6 +2484,93 @@ bool runPluginCheck(const char* program_name, const std::string& plugin_input = 
     return result;
 }
 
+bool runStreamingBufferCheck(const std::string& playlist_url, int segment_limit = 3, int target_buffer_bytes = 256) {
+    if (segment_limit <= 0 || target_buffer_bytes <= 0) {
+        std::cout << "streaming-buffer-check.playlist_url=" << playlist_url << std::endl;
+        std::cout << "streaming-buffer-check.result=FAIL" << std::endl;
+        return false;
+    }
+
+    std::string manifest_text;
+    std::string manifest_error;
+    const bool manifest_download_ok = readUrlText(playlist_url, manifest_text, manifest_error);
+
+    streaming::HlsManifest manifest{};
+    const bool manifest_parse_ok = manifest_download_ok && streaming::HlsManifestParser::parse(manifest_text, manifest);
+
+    size_t requested_segments = 0;
+    size_t segments_downloaded = 0;
+    size_t buffered_bytes = 0;
+    size_t chunk_reads = 0;
+    size_t max_segment_buffer = 0;
+    std::vector<std::string> resolved_segments;
+    std::string segment_error;
+
+    if (manifest_parse_ok) {
+        requested_segments = std::min(static_cast<size_t>(segment_limit), manifest.segment_urls.size());
+        for (size_t index = 0; index < requested_segments; ++index) {
+            const std::string segment_url = resolveUrl(playlist_url, manifest.segment_urls[index]);
+            resolved_segments.push_back(segment_url);
+
+            streaming::HttpStreamDownloader downloader;
+            if (!downloader.open(segment_url)) {
+                segment_error = downloader.lastError();
+                break;
+            }
+
+            std::vector<uint8_t> segment_buffer;
+            while (!downloader.eof() || downloader.bufferedBytes() > 0) {
+                if (!downloader.prefetch(static_cast<size_t>(target_buffer_bytes), static_cast<size_t>(target_buffer_bytes))) {
+                    segment_error = downloader.lastError();
+                    break;
+                }
+                max_segment_buffer = std::max(max_segment_buffer, downloader.bufferedBytes());
+                const auto chunk = downloader.consumeBuffered(static_cast<size_t>(target_buffer_bytes));
+                if (chunk.empty()) {
+                    continue;
+                }
+                segment_buffer.insert(segment_buffer.end(), chunk.begin(), chunk.end());
+                ++chunk_reads;
+            }
+
+            downloader.close();
+            if (!segment_error.empty()) {
+                break;
+            }
+            if (segment_buffer.empty()) {
+                segment_error = "segment download produced no bytes";
+                break;
+            }
+
+            buffered_bytes += segment_buffer.size();
+            ++segments_downloaded;
+        }
+    }
+
+    const bool buffer_ok = buffered_bytes >= static_cast<size_t>(target_buffer_bytes) && max_segment_buffer > 0;
+    const bool result = manifest_download_ok && manifest_parse_ok && segment_error.empty() &&
+                        requested_segments > 0 && segments_downloaded == requested_segments && buffer_ok;
+
+    std::cout << "streaming-buffer-check.playlist_url=" << playlist_url << std::endl;
+    std::cout << "streaming-buffer-check.segment_limit=" << segment_limit << std::endl;
+    std::cout << "streaming-buffer-check.target_buffer_bytes=" << target_buffer_bytes << std::endl;
+    std::cout << "streaming-buffer-check.manifest_download_ok=" << (manifest_download_ok ? "true" : "false") << std::endl;
+    std::cout << "streaming-buffer-check.manifest_parse_ok=" << (manifest_parse_ok ? "true" : "false") << std::endl;
+    std::cout << "streaming-buffer-check.manifest_segments=" << manifest.segment_urls.size() << std::endl;
+    std::cout << "streaming-buffer-check.requested_segments=" << requested_segments << std::endl;
+    std::cout << "streaming-buffer-check.segments_downloaded=" << segments_downloaded << std::endl;
+    std::cout << "streaming-buffer-check.buffered_bytes=" << buffered_bytes << std::endl;
+    std::cout << "streaming-buffer-check.max_segment_buffer=" << max_segment_buffer << std::endl;
+    std::cout << "streaming-buffer-check.chunk_reads=" << chunk_reads << std::endl;
+    std::cout << "streaming-buffer-check.buffer_ok=" << (buffer_ok ? "true" : "false") << std::endl;
+    std::cout << "streaming-buffer-check.resolved_segments=" << (resolved_segments.empty() ? std::string("none") : joinTopN(resolved_segments, 8)) << std::endl;
+    std::cout << "streaming-buffer-check.error="
+              << (segment_error.empty() ? (manifest_error.empty() ? std::string("none") : manifest_error) : segment_error)
+              << std::endl;
+    std::cout << "streaming-buffer-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -2533,6 +2683,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --high-bitrate-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --long-playback-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --plugin-check [plugin_dir_or_file]" << std::endl;
+    std::cout << "       " << program_name << " --streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2797,6 +2948,24 @@ int main(int argc, char* argv[]) {
         }
         const std::string plugin_input = (argc == 3) ? argv[2] : std::string{};
         return runPluginCheck(argv[0], plugin_input) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--streaming-buffer-check") {
+        if (argc != 3 && argc != 4 && argc != 5) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int segment_limit = 3;
+        int target_buffer_bytes = 256;
+        if (argc >= 4 && !tryParseInt(argv[3], segment_limit)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        if (argc == 5 && !tryParseInt(argv[4], target_buffer_bytes)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        return runStreamingBufferCheck(argv[2], segment_limit, target_buffer_bytes) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

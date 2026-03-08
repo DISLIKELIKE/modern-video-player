@@ -42,6 +42,7 @@
 | [reports/HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) | >80Mbps 高码率样本本地验收记录 |
 | [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) | 长时播放稳定性本地验收记录 |
 | [reports/PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) | 插件系统本地验收记录 |
+| [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) | 流媒体 HTTP 分片与缓冲本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -70,6 +71,7 @@
 - 新增 [reports/HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) - 记录 2.2.3 >80Mbps 高码率样本本地验收结果
 - 新增 [reports/LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) - 记录 6.5 长时播放稳定性本地验收结果
 - 新增 [reports/PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) - 记录 7.1 插件系统本地验收结果
+- 新增 [reports/STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) - 记录 7.2 流媒体 HTTP 分片与缓冲本地验收结果
 
 ---
 
@@ -78,5 +80,7 @@
 - **遇到问题？** 查看 [CHANGELOG.md](./CHANGELOG.md)
 - **需要编译？** 查看 [WINDOWS_SETUP.md](./WINDOWS_SETUP.md)
 - **了解架构？** 查看 [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+
 
 

@@ -1553,3 +1553,37 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+## 2026-03-08 更新（流媒体 HTTP 分片与缓冲）
+
+- 重写 `HttpStreamDownloader`：基于 FFmpeg `avio` 支持真实 HTTP 打开、分块读取、内部缓冲、EOF 状态与错误透传。
+- `main` 新增 `--streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]`，可下载 HLS 媒体清单、解析相对分片 URL，并验证分片缓冲闭环。
+- 新增本地夹具 `samples/streaming/hls_local/*` 与 `tools/start_streaming_fixture_server.ps1`，用于在本机启动 HTTP 静态服务并复现实验。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming/hls_local -Port 8765`
+- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`：`PASS`
+- 验收报告：`docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `7.2 流媒体（真实 HTTP 分片与缓冲）` 标记完成。
+
+### 修改文件
+- include/streaming/http_stream_downloader.h
+- src/streaming/http_stream_downloader.cpp
+- src/main.cpp
+- tools/start_streaming_fixture_server.ps1
+- samples/README.md
+- samples/streaming/hls_local/sample.m3u8
+- samples/streaming/hls_local/segment000.ts
+- samples/streaming/hls_local/segment001.ts
+- samples/streaming/hls_local/segment002.ts
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

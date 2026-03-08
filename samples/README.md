@@ -1,4 +1,4 @@
-# Sample Media Layout
+﻿# Sample Media Layout
 
 This folder stores local regression media samples. By default, media files are ignored by git.
 
@@ -13,6 +13,7 @@ This folder stores local regression media samples. By default, media files are i
 - `samples/avi/`
 - `samples/m2ts/`
 - `samples/subtitle/`
+- `samples/streaming/`
 
 ## File naming convention
 
@@ -67,3 +68,11 @@ The script will:
 - generate all regression targets listed in `format_samples.csv`
 - generate an extra `1080p60` stability sample at `samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4` (used by `--1080p60-check`)
 - generate a `>80Mbps` stress sample at `samples/mp4/stress100m__h264_aac__1920x1080__60fps__2ch.mp4` (used by `--high-bitrate-check`)
+
+
+## Streaming fixture sample set
+
+- `samples/streaming/hls_local/sample.m3u8` with `segment000.ts..segment002.ts` is used by:
+  - `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming/hls_local -Port 8765`
+  - `.\build\Debug\modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`
+- This fixture is intentionally tiny and byte-oriented; it validates real HTTP segment download and buffering, not media decoding.
