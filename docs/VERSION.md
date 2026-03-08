@@ -906,3 +906,28 @@ make -j$(nproc)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+## 2026-03-08 更新（DecoderFactory 初始化流程接入）
+
+### 解码初始化链路统一
+- `DecoderFactory` 新增 `selectBackendOrder(codec_name, prefer_hardware)`，输出后端候选序列并保留软件解码兜底。
+- `PlayerCore::initDecoders` 接入候选序列，按顺序尝试后端初始化与 `avcodec_open2`，失败自动回退下一个候选。
+- `tryConfigureD3D11HardwareDecode` 调整为纯 D3D11 配置函数，后端策略统一由 `DecoderFactory` 决定。
+
+### 配置兼容
+- 保持 `decoder.prefer_hardware_decode` 配置项生效：
+  - `true`：优先硬解候选，再回退软解；
+  - `false`：直接走软件解码候选。
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`：
+  - `3.1.1 DecoderFactory 接入真实初始化流程` 标记完成。
+
+### 修改文件
+- include/decoder/decoder_factory.h
+- src/decoder/decoder_factory.cpp
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

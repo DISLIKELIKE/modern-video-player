@@ -1,6 +1,7 @@
 #include "decoder/decoder_factory.h"
 
 #include <algorithm>
+#include <unordered_set>
 
 namespace vp::decoder {
 
@@ -38,11 +39,10 @@ std::vector<DecoderCapability> DecoderFactory::probeCapabilities() {
     return capabilities;
 }
 
-DecoderBackend DecoderFactory::selectBestBackend(const std::string& codec_name, bool prefer_hardware) {
+std::vector<DecoderBackend> DecoderFactory::selectBackendOrder(const std::string& codec_name, bool prefer_hardware) {
     const std::vector<DecoderCapability> capabilities = probeCapabilities();
-
-    DecoderBackend fallback = DecoderBackend::Software;
-    int best_priority = -1;
+    std::vector<DecoderCapability> candidates;
+    candidates.reserve(capabilities.size());
 
     for (const DecoderCapability& capability : capabilities) {
         if (!supportsCodec(capability, codec_name)) {
@@ -51,13 +51,38 @@ DecoderBackend DecoderFactory::selectBestBackend(const std::string& codec_name, 
         if (!prefer_hardware && capability.hardware_accelerated) {
             continue;
         }
-        if (capability.priority > best_priority) {
-            best_priority = capability.priority;
-            fallback = capability.backend;
+        candidates.push_back(capability);
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const DecoderCapability& lhs, const DecoderCapability& rhs) {
+        return lhs.priority > rhs.priority;
+    });
+
+    std::vector<DecoderBackend> order;
+    order.reserve(candidates.size() + 1);
+    std::unordered_set<int> seen;
+
+    for (const DecoderCapability& capability : candidates) {
+        const int key = static_cast<int>(capability.backend);
+        if (seen.insert(key).second) {
+            order.push_back(capability.backend);
         }
     }
 
-    return fallback;
+    const int software_key = static_cast<int>(DecoderBackend::Software);
+    if (seen.find(software_key) == seen.end()) {
+        order.push_back(DecoderBackend::Software);
+    }
+
+    return order;
+}
+
+DecoderBackend DecoderFactory::selectBestBackend(const std::string& codec_name, bool prefer_hardware) {
+    const std::vector<DecoderBackend> order = selectBackendOrder(codec_name, prefer_hardware);
+    if (order.empty()) {
+        return DecoderBackend::Software;
+    }
+    return order.front();
 }
 
 const char* DecoderFactory::backendName(DecoderBackend backend) {

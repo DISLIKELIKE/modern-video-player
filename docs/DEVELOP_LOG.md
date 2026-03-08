@@ -974,3 +974,42 @@ Display initialized: window 1306x734 (source 1920x1080)
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 35: M3 3.1.1（DecoderFactory 接入真实初始化流程）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `3.1.1` 要求 `DecoderFactory` 接入真实解码初始化流程。
+- 现状是 `PlayerCore` 主要走内嵌分支逻辑，`DecoderFactory` 只在硬解配置局部被动参与，未形成统一候选链路。
+
+### 分析记录
+1. `DecoderFactory` 已有能力探测与优先级，但缺少“后端候选序列”接口。
+2. `PlayerCore::initDecoders` 需要按候选序列逐个尝试，以实现统一初始化与回退。
+3. `3.1.3` 已提供“是否偏好硬解”配置，需要保留并复用。
+
+### 解决方案
+- `DecoderFactory` 新增 `selectBackendOrder(codec_name, prefer_hardware)`：
+  - 生成按优先级排序的解码后端候选序列；
+  - 保证软件解码兜底在候选链路中。
+- `PlayerCore::initDecoders` 接入候选序列：
+  - 逐个后端尝试初始化与 `avcodec_open2`；
+  - 失败自动切换下一个候选；
+  - 成功后统一记录最终后端日志。
+- `tryConfigureD3D11HardwareDecode` 去除内部后端选择判断，改为纯 D3D11 配置职责，选择策略由 `DecoderFactory` 统一决定。
+
+### 本地验收结果
+- `cmake --build build --config Debug --target modern-video-player` 通过。
+- `build/Debug/modern-video-player.exe --settings-persistence-check` 通过（`PASS`）。
+
+### 修改文件
+- include/decoder/decoder_factory.h
+- src/decoder/decoder_factory.cpp
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

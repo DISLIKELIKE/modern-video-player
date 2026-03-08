@@ -1340,3 +1340,35 @@ void VideoPlayer::play() {
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 35: M3 3.1.1（DecoderFactory 接入真实初始化流程）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `3.1.1` 要求 `DecoderFactory` 接入真实解码初始化流程。
+- 现有链路中，`DecoderFactory` 未形成统一的“候选后端 -> 逐个尝试 -> 失败回退”主流程。
+
+### 原因分析
+- `DecoderFactory` 仅提供“最佳后端”选择，缺少候选序列接口。
+- `PlayerCore::initDecoders` 的初始化与回退逻辑耦合在局部条件分支中，不利于统一扩展。
+
+### 解决方案
+- `DecoderFactory` 新增 `selectBackendOrder(codec_name, prefer_hardware)`，输出按优先级排序的后端候选序列，并保留软件解码兜底。
+- `PlayerCore::initDecoders` 改为按候选序列逐个尝试初始化：
+  - 对每个候选后端重建并配置 `AVCodecContext`；
+  - 后端配置失败或 `avcodec_open2` 失败时自动切换下一个候选；
+  - 成功后统一记录最终解码后端。
+- `tryConfigureD3D11HardwareDecode` 调整为纯 D3D11 配置职责，不再在函数内做后端策略决策。
+- 任务清单 `3.1.1` 标记完成。
+
+### 修改文件
+- include/decoder/decoder_factory.h
+- src/decoder/decoder_factory.cpp
+- src/core/player_core.cpp
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md

@@ -81,6 +81,21 @@ const char* rendererTypeName(render::VideoRendererType type) {
         return "Unknown";
     }
 }
+
+std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& order) {
+    if (order.empty()) {
+        return "none";
+    }
+
+    std::string result;
+    for (size_t i = 0; i < order.size(); ++i) {
+        if (i > 0) {
+            result += " -> ";
+        }
+        result += decoder::DecoderFactory::backendName(order[i]);
+    }
+    return result;
+}
 }
 
 PlayerCore::PlayerCore() {
@@ -591,10 +606,6 @@ bool PlayerCore::initDecoders() {
         if (!codec) {
             return false;
         }
-        video_codec_ctx_ = avcodec_alloc_context3(codec);
-        if (!video_codec_ctx_) {
-            return false;
-        }
 
         auto configure_video_codec_ctx = [&](AVCodecContext* ctx) -> bool {
             if (!ctx || avcodec_parameters_to_context(ctx, vs->codecpar) < 0) {
@@ -614,46 +625,100 @@ bool PlayerCore::initDecoders() {
             return true;
         };
 
-        if (!configure_video_codec_ctx(video_codec_ctx_)) {
-            return false;
-        }
-
-        video_decoder_backend_ = decoder::DecoderBackend::Software;
-        if (!tryConfigureD3D11HardwareDecode(codec, video_codec_ctx_)) {
-            video_decoder_backend_ = decoder::DecoderBackend::Software;
-            video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
-            LOG_INFO("Video decoder backend: "
-                     << decoder::DecoderFactory::backendName(video_decoder_backend_));
-        }
-
-        if (avcodec_open2(video_codec_ctx_, codec, nullptr) < 0) {
-            if (video_decoder_backend_ == decoder::DecoderBackend::D3D11VA) {
-                LOG_WARNING("D3D11VA open failed, retrying software decode backend");
-
+        auto reset_video_hw_binding = [&]() {
+            if (video_codec_ctx_) {
                 if (video_codec_ctx_->hw_device_ctx) {
                     av_buffer_unref(&video_codec_ctx_->hw_device_ctx);
                 }
                 video_codec_ctx_->get_format = nullptr;
                 video_codec_ctx_->opaque = nullptr;
-                if (video_hw_device_ctx_) {
-                    av_buffer_unref(&video_hw_device_ctx_);
-                }
-                video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
-                video_decoder_backend_ = decoder::DecoderBackend::Software;
+            }
+            if (video_hw_device_ctx_) {
+                av_buffer_unref(&video_hw_device_ctx_);
+            }
+            video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+            video_decoder_backend_ = decoder::DecoderBackend::Software;
+        };
 
+        auto try_open_video_decoder_with_backend = [&](decoder::DecoderBackend backend) -> bool {
+            if (video_codec_ctx_) {
                 avcodec_free_context(&video_codec_ctx_);
-                video_codec_ctx_ = avcodec_alloc_context3(codec);
-                if (!video_codec_ctx_ || !configure_video_codec_ctx(video_codec_ctx_) ||
-                    avcodec_open2(video_codec_ctx_, codec, nullptr) < 0) {
-                    return false;
-                }
+                video_codec_ctx_ = nullptr;
+            }
 
-                LOG_INFO("Video decoder backend: "
-                         << decoder::DecoderFactory::backendName(video_decoder_backend_));
-            } else {
+            video_codec_ctx_ = avcodec_alloc_context3(codec);
+            if (!video_codec_ctx_ || !configure_video_codec_ctx(video_codec_ctx_)) {
                 return false;
             }
+
+            reset_video_hw_binding();
+
+            bool backend_ready = false;
+            switch (backend) {
+            case decoder::DecoderBackend::Software:
+                backend_ready = true;
+                break;
+            case decoder::DecoderBackend::D3D11VA:
+                backend_ready = tryConfigureD3D11HardwareDecode(codec, video_codec_ctx_);
+                break;
+            default:
+                LOG_WARNING("Unsupported decoder backend candidate: "
+                            << decoder::DecoderFactory::backendName(backend));
+                backend_ready = false;
+                break;
+            }
+
+            if (!backend_ready) {
+                reset_video_hw_binding();
+                return false;
+            }
+
+            if (avcodec_open2(video_codec_ctx_, codec, nullptr) < 0) {
+                LOG_WARNING("avcodec_open2 failed for backend "
+                            << decoder::DecoderFactory::backendName(backend)
+                            << ", retrying next candidate");
+                reset_video_hw_binding();
+                return false;
+            }
+
+            LOG_INFO("Video decoder backend: " << decoder::DecoderFactory::backendName(video_decoder_backend_));
+            return true;
+        };
+
+        const std::string codec_name = codec->name ? codec->name : "unknown";
+        const std::vector<decoder::DecoderBackend> backend_order =
+            decoder::DecoderFactory::selectBackendOrder(codec_name, preferHardwareDecode());
+        LOG_INFO("Video decoder backend candidates for codec " << codec_name
+                 << ": " << backendOrderToString(backend_order));
+
+        bool opened_video_decoder = false;
+        for (decoder::DecoderBackend backend : backend_order) {
+            if (try_open_video_decoder_with_backend(backend)) {
+                opened_video_decoder = true;
+                break;
+            }
         }
+        if (!opened_video_decoder) {
+            reset_video_hw_binding();
+            if (video_codec_ctx_) {
+                avcodec_free_context(&video_codec_ctx_);
+                video_codec_ctx_ = nullptr;
+            }
+            return false;
+        }
+
+        if (video_decoder_backend_ == decoder::DecoderBackend::Software && !preferHardwareDecode()) {
+            LOG_INFO("Hardware decode disabled by config, using software decode backend");
+        }
+
+        if (video_codec_ctx_ && video_decoder_backend_ != decoder::DecoderBackend::D3D11VA) {
+            if (video_codec_ctx_->hw_device_ctx) {
+                av_buffer_unref(&video_codec_ctx_->hw_device_ctx);
+                }
+            video_codec_ctx_->get_format = nullptr;
+            video_codec_ctx_->opaque = nullptr;
+        }
+
         video_time_base_ = vs->time_base;
     }
 
@@ -710,15 +775,6 @@ bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecCo
     }
 
     const std::string codec_name = codec->name ? codec->name : "";
-    const bool prefer_hardware_decode = prefer_hardware_decode_.load();
-    const decoder::DecoderBackend preferred_backend =
-        decoder::DecoderFactory::selectBestBackend(codec_name, prefer_hardware_decode);
-    if (preferred_backend != decoder::DecoderBackend::D3D11VA) {
-        if (!prefer_hardware_decode) {
-            LOG_INFO("Hardware decode disabled by config, using software decode backend");
-        }
-        return false;
-    }
 
     video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
     for (int i = 0;; ++i) {
@@ -755,7 +811,6 @@ bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecCo
     }
 
     video_decoder_backend_ = decoder::DecoderBackend::D3D11VA;
-    LOG_INFO("Video decoder backend: " << decoder::DecoderFactory::backendName(video_decoder_backend_));
     return true;
 #else
     (void)codec;
