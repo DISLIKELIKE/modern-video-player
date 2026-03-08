@@ -17,6 +17,16 @@ void FilterRegistry::registerAudioFilter(const std::string& name, AudioFilterFac
     audio_factories_[name] = std::move(factory);
 }
 
+bool FilterRegistry::unregisterVideoFilter(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return video_factories_.erase(name) > 0;
+}
+
+bool FilterRegistry::unregisterAudioFilter(const std::string& name) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return audio_factories_.erase(name) > 0;
+}
+
 std::unique_ptr<IVideoFilter> FilterRegistry::createVideoFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = video_factories_.find(name);

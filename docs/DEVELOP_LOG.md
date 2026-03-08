@@ -1958,3 +1958,45 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 58: 7.1 插件系统（动态加载与生命周期闭环）
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 任务清单 `7.1` 需要一个真正可运行的插件宿主，而不只是内存中的元数据占位。
+
+### 分析记录
+1. 现有 `PluginManager` 只能做静态描述符注册与启停标记，无法覆盖 `DLL` 动态加载、版本兼容和卸载清理场景。
+2. 代码库已经有 `FilterRegistry` 这类天然扩展点，适合作为首个插件闭环的宿主能力。
+3. 如果没有示例 `DLL` 和命令行验收入口，就无法证明插件系统已从“骨架”进入“可运行”。
+
+### 解决方案
+- 新增 `include/plugin/plugin_api.h`，定义插件宿主接口与导出符号。
+- 重写 `PluginManager`，支持按路径加载插件、校验 `API` 版本、执行 `initialize/shutdown` 生命周期，并跟踪插件注册的滤镜工厂用于卸载清理。
+- 新增 `sample_logger_plugin` 示例插件与 `--plugin-check` 验收命令；插件会注册 `sample_identity` 视频滤镜，供宿主验证注册/卸载闭环。
+
+### 本地验收结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --plugin-check`：`PASS`
+- 当前输出包含 `loaded_count=1`、`plugin_ids=sample_logger_plugin@0.1.0`、`sample_video_filter_registered=true`、`sample_video_filter_unloaded=true`、`errors=none`。
+
+### 修改文件
+- CMakeLists.txt
+- include/plugin/plugin_api.h
+- include/plugin/plugin_manager.h
+- include/filters/filter_registry.h
+- src/plugin/plugin_manager.cpp
+- src/plugin/sample_logger_plugin.cpp
+- src/filters/filter_registry.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

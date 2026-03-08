@@ -1,8 +1,10 @@
 #include "video_player.h"
 #include "config/settings_manager.h"
 #include "demuxer.h"
+#include "filters/filter_registry.h"
 #include "media/format_support.h"
 #include "playlist/playlist_manager.h"
+#include "plugin/plugin_manager.h"
 #include "logger.h"
 #include "subtitle/srt_parser.h"
 #include "subtitle/subtitle_timeline.h"
@@ -81,6 +83,10 @@ std::string coverageLevel(size_t hit, size_t total) {
         return "PASS";
     }
     return "PARTIAL";
+}
+
+bool containsString(const std::vector<std::string>& values, const std::string& expected) {
+    return std::find(values.begin(), values.end(), expected) != values.end();
 }
 
 void printCoverageLine(const std::string& category, size_t hit, size_t total, const std::vector<std::string>& missing) {
@@ -2343,6 +2349,78 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
     return result;
 }
 
+bool runPluginCheck(const char* program_name, const std::string& plugin_input = std::string{}) {
+    const std::filesystem::path default_plugin_dir = [&]() {
+        if (program_name && *program_name) {
+            const std::filesystem::path executable_path(program_name);
+            if (executable_path.has_parent_path()) {
+                return executable_path.parent_path() / "plugins";
+            }
+        }
+        return std::filesystem::current_path() / "plugins";
+    }();
+
+    const std::filesystem::path plugin_path = plugin_input.empty() ? default_plugin_dir : std::filesystem::path(plugin_input);
+    auto& registry = filters::FilterRegistry::instance();
+    const auto video_filters_before = registry.getVideoFilterNames();
+    const auto audio_filters_before = registry.getAudioFilterNames();
+
+    plugin::PluginManager manager;
+    std::vector<std::string> errors;
+    size_t loaded_count = 0;
+    std::error_code ec;
+    if (std::filesystem::is_regular_file(plugin_path, ec)) {
+        std::string error_message;
+        if (manager.loadPlugin(plugin_path, &error_message)) {
+            loaded_count = 1;
+        } else if (!error_message.empty()) {
+            errors.push_back(error_message);
+        }
+    } else {
+        loaded_count = manager.loadPluginsFromDirectory(plugin_path, &errors);
+    }
+
+    const auto loaded_plugins = manager.listPlugins();
+    const auto video_filters_loaded = registry.getVideoFilterNames();
+    const auto audio_filters_loaded = registry.getAudioFilterNames();
+
+    const bool sample_plugin_loaded = std::any_of(loaded_plugins.begin(), loaded_plugins.end(), [](const plugin::PluginDescriptor& descriptor) {
+        return descriptor.id == "sample_logger_plugin";
+    });
+    const bool sample_video_filter_registered =
+        !containsString(video_filters_before, "sample_identity") && containsString(video_filters_loaded, "sample_identity");
+
+    manager.unloadAll(&errors);
+
+    const auto video_filters_unloaded = registry.getVideoFilterNames();
+    const auto audio_filters_unloaded = registry.getAudioFilterNames();
+    const bool sample_video_filter_unloaded = !containsString(video_filters_unloaded, "sample_identity");
+
+    const bool result = loaded_count > 0 && sample_plugin_loaded && sample_video_filter_registered && sample_video_filter_unloaded;
+
+    std::vector<std::string> plugin_ids;
+    plugin_ids.reserve(loaded_plugins.size());
+    for (const auto& descriptor : loaded_plugins) {
+        plugin_ids.push_back(descriptor.id + "@" + descriptor.version);
+    }
+
+    std::cout << "plugin-check.path=" << plugin_path.generic_string() << std::endl;
+    std::cout << "plugin-check.loaded_count=" << loaded_count << std::endl;
+    std::cout << "plugin-check.plugin_ids=" << (plugin_ids.empty() ? std::string("none") : joinTopN(plugin_ids, 16)) << std::endl;
+    std::cout << "plugin-check.video_filters_before=" << video_filters_before.size() << std::endl;
+    std::cout << "plugin-check.video_filters_loaded=" << video_filters_loaded.size() << std::endl;
+    std::cout << "plugin-check.video_filters_unloaded=" << video_filters_unloaded.size() << std::endl;
+    std::cout << "plugin-check.audio_filters_before=" << audio_filters_before.size() << std::endl;
+    std::cout << "plugin-check.audio_filters_loaded=" << audio_filters_loaded.size() << std::endl;
+    std::cout << "plugin-check.audio_filters_unloaded=" << audio_filters_unloaded.size() << std::endl;
+    std::cout << "plugin-check.sample_plugin_loaded=" << (sample_plugin_loaded ? "true" : "false") << std::endl;
+    std::cout << "plugin-check.sample_video_filter_registered=" << (sample_video_filter_registered ? "true" : "false") << std::endl;
+    std::cout << "plugin-check.sample_video_filter_unloaded=" << (sample_video_filter_unloaded ? "true" : "false") << std::endl;
+    std::cout << "plugin-check.errors=" << (errors.empty() ? std::string("none") : joinTopN(errors, 8)) << std::endl;
+    std::cout << "plugin-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -2454,6 +2532,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --4k-playback-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --high-bitrate-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --long-playback-check <media_file> [sample_ms]" << std::endl;
+    std::cout << "       " << program_name << " --plugin-check [plugin_dir_or_file]" << std::endl;
     std::cout << "       " << program_name << " --screenshot-check <media_file>" << std::endl;
     std::cout << "       " << program_name
               << " --evaluate-target <width> <height> <fps> <audio_channels> <video_bitrate_mbps>" << std::endl;
@@ -2709,6 +2788,15 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         return runLongPlaybackCheck(argv[2], sample_ms) ? 0 : 2;
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--plugin-check") {
+        if (argc > 3) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        const std::string plugin_input = (argc == 3) ? argv[2] : std::string{};
+        return runPluginCheck(argv[0], plugin_input) ? 0 : 2;
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--screenshot-check") {

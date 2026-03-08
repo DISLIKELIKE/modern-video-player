@@ -1521,3 +1521,35 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+## 2026-03-08 更新（插件系统）
+
+- 新增 `include/plugin/plugin_api.h` 与重写 `PluginManager`，补齐 `DLL` 动态加载、`API` 版本校验、`load/unload` 生命周期与异常保护。
+- `PluginManager` 现可作为插件宿主注册外部视频/音频滤镜工厂；`FilterRegistry` 同步补充注销接口，支持卸载时清理扩展点。
+- 新增 `sample_logger_plugin` 示例 `DLL` 与 `--plugin-check [plugin_dir_or_file]` 验收命令，验证插件加载、滤镜注册与卸载清理闭环。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --plugin-check`：`PASS`
+- 验收报告：`docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `7.1 插件系统` 标记完成。
+
+### 修改文件
+- CMakeLists.txt
+- include/plugin/plugin_api.h
+- include/plugin/plugin_manager.h
+- include/filters/filter_registry.h
+- src/plugin/plugin_manager.cpp
+- src/plugin/sample_logger_plugin.cpp
+- src/filters/filter_registry.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

@@ -21,6 +21,8 @@ public:
 
     void registerVideoFilter(const std::string& name, VideoFilterFactory factory);
     void registerAudioFilter(const std::string& name, AudioFilterFactory factory);
+    bool unregisterVideoFilter(const std::string& name);
+    bool unregisterAudioFilter(const std::string& name);
 
     std::unique_ptr<IVideoFilter> createVideoFilter(const std::string& name);
     std::unique_ptr<IAudioFilter> createAudioFilter(const std::string& name);

@@ -2158,3 +2158,38 @@ void VideoPlayer::play() {
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+---
+
+## 问题 58: 7.1 插件系统（动态加载与生命周期闭环）
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `7.1` 需要把现有仅支持内存注册/启停状态的插件骨架，补成可实际加载和验收的插件系统。
+
+### 原因分析
+- `PluginManager` 之前只维护元数据列表，没有 `DLL` 动态加载、版本兼容校验、生命周期回调和卸载清理能力。
+- `FilterRegistry` 缺少注销接口，导致即使插件能注册滤镜，也无法在卸载时安全回收扩展点。
+
+### 解决方案
+- 新增 `include/plugin/plugin_api.h`，定义插件宿主接口、`API` 版本常量和导出符号约定。
+- 重写 `PluginManager`：支持按文件/目录加载插件、校验 `API` 版本、调用 `initialize/shutdown`、捕获插件异常，并在卸载时注销插件注册的滤镜工厂。
+- 新增 `sample_logger_plugin` 示例 `DLL` 与 `--plugin-check [plugin_dir_or_file]` 命令，验证 `sample_identity` 视频滤镜的注册与卸载清理闭环。
+
+### 修改文件
+- CMakeLists.txt
+- include/plugin/plugin_api.h
+- include/plugin/plugin_manager.h
+- include/filters/filter_registry.h
+- src/plugin/plugin_manager.cpp
+- src/plugin/sample_logger_plugin.cpp
+- src/filters/filter_registry.cpp
+- src/main.cpp
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

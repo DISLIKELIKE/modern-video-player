@@ -186,6 +186,24 @@ add_executable(${PROJECT_NAME}
 )
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 
+add_library(sample_logger_plugin SHARED
+    src/plugin/sample_logger_plugin.cpp
+)
+target_compile_features(sample_logger_plugin PRIVATE cxx_std_17)
+target_include_directories(sample_logger_plugin PRIVATE
+    ${CMAKE_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
+    ${QUILL_INCLUDE_DIRS}
+)
+target_compile_definitions(sample_logger_plugin PRIVATE VP_PLUGIN_BUILD)
+
+add_custom_command(TARGET sample_logger_plugin POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:${PROJECT_NAME}>/plugins
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:sample_logger_plugin>
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/plugins/
+)
+
 if(WIN32)
     target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
