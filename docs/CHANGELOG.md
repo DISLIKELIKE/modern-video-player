@@ -1735,3 +1735,31 @@ void VideoPlayer::play() {
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 46: 实现教程与迭代计划缺少历史/当前边界说明
+
+**日期**: 2026-03-08
+
+### 问题描述
+- `docs/IMPLEMENTATION.md` 仍以早期 `video_decoder/audio_decoder/playLoop` 原型路径讲解实现步骤，容易被误读为当前仓库的逐文件开发指南。
+- `docs/MPC_HC_ITERATION_PLAN.md` 是 `2026-03-07` 的规划快照，但未明确说明部分计划项已在 `2026-03-08` 前后落地。
+
+### 原因分析
+- 这两份文档本身仍有参考价值，但缺少“历史教程 / 计划快照 / 当前进度”之间的边界说明。
+- 当用户按文档遍历仓库时，会把教程示例和规划文字误当作现行结构与当前待办。
+
+### 解决方案
+- 为 `docs/IMPLEMENTATION.md` 增加状态说明，明确其属于早期原型教程，并指向当前主链参考文档。
+- 为 `docs/MPC_HC_ITERATION_PLAN.md` 增加状态说明，明确其属于 `2026-03-07` 的计划快照，并补充当前进度参考入口。
+- 更新 `docs/README.md`、`README.md`、`README_ZH.md` 的文档说明，统一区分历史教程、规划快照与当前实现说明。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/IMPLEMENTATION.md
+- docs/MPC_HC_ITERATION_PLAN.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

@@ -3,6 +3,16 @@
 更新时间：2026-03-07  
 适用范围：`modern-video-player` 当前代码基线（见 `docs/MPC_HC_GAP_ANALYSIS.md`）
 
+## 状态说明（2026-03-08）
+
+- 本文档是 `2026-03-07` 制定的单人迭代计划快照，用于说明当时的优先级、节奏和发布门禁。
+- 截至 `2026-03-08`，其中一部分“首发能力”已经提前落地或进入部分实现，例如：字幕入口、播放列表、设置持久化、快捷键、章节导航、A-B Repeat、截图。
+- 因此，本文件更适合作为“规划基线”阅读，而不是作为当前完成度的唯一依据。
+- 当前实际进度请优先查看：
+  - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `docs/MPC_HC_GAP_ANALYSIS.md`
+  - `docs/VERSION.md` / `docs/CHANGELOG.md`
+
 ## 1. 前提与原则
 
 前提：

@@ -8,7 +8,7 @@
 |------|------|
 | [README.md](../README.md) | 项目简介 |
 | [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) | Windows 环境配置 |
-| [IMPLEMENTATION.md](./IMPLEMENTATION.md) | 实现步骤详解 |
+| [IMPLEMENTATION.md](./IMPLEMENTATION.md) | 早期原型的从零实现教程（历史实现基线） |
 
 ## 设计文档
 
@@ -18,7 +18,7 @@
 | [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) | 当前主链重构说明 |
 | [VERSION.md](./VERSION.md) | 版本记录与依赖说明 |
 | [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) | 与 MPC-HC 的功能差距评估 |
-| [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 单人开发可执行迭代计划 |
+| [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) | 2026-03-07 的单人迭代计划快照 |
 | [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 播放能力实现参考（格式/高分高帧/多音道） |
 
 ## 开发文档
@@ -47,6 +47,7 @@
 - 更新 [MPC_HC_GAP_ANALYSIS.md](./MPC_HC_GAP_ANALYSIS.md) - 按当前代码与本地验收报告刷新差距评估
 - 更新 [ARCHITECTURE.md](./ARCHITECTURE.md) / [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) 的索引说明，区分历史基线与当前主链
 - 清理 README / VERSION / ARCHITECTURE 中的历史路径描述，避免将旧模块误写为现行结构
+- 更新 [IMPLEMENTATION.md](./IMPLEMENTATION.md) / [MPC_HC_ITERATION_PLAN.md](./MPC_HC_ITERATION_PLAN.md) 的状态说明，区分历史教程、计划快照与当前实际进度
 
 ---
 

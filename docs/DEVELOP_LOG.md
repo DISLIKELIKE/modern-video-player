@@ -1475,3 +1475,38 @@ windows-backend-check.result=FAIL
 - docs/README.md
 - docs/CHANGELOG.md
 - docs/DEVELOP_LOG.md
+
+---
+
+## 问题 46: 实现教程与迭代计划缺少历史/当前边界说明
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- `docs/IMPLEMENTATION.md` 保留的是早期原型的从零实现教程，但没有明确声明其中 `video_decoder`、`audio_decoder`、单体 `playLoop` 等内容属于历史实现。
+- `docs/MPC_HC_ITERATION_PLAN.md` 记录的是 `2026-03-07` 的计划基线，但没有提示其中部分能力已在后续提交中落地。
+
+### 分析记录
+1. 这两份文档都还有使用价值：前者偏教程，后者偏规划；问题在于缺少和“当前代码状态”的显式分界。
+2. 经过前几轮清理后，`README`、`VERSION`、`ARCHITECTURE` 已经区分历史与当前，如果这两份文档不跟进，读者仍会在入口层产生混淆。
+3. 最合适的做法不是重写全文，而是在文档顶部补充状态说明，并把索引描述统一到同一口径。
+
+### 解决方案
+- 为 `docs/IMPLEMENTATION.md` 增加“状态说明（2026-03-08）”，明确其为早期原型教程，并指向当前主链参考文档。
+- 为 `docs/MPC_HC_ITERATION_PLAN.md` 增加“状态说明（2026-03-08）”，明确其为 `2026-03-07` 的计划快照，并列出当前进度参考入口。
+- 更新 `docs/README.md`、`README.md`、`README_ZH.md` 的文档说明，使历史教程、计划快照、当前主链说明三者边界一致。
+
+### 本地校对结果
+- `docs/IMPLEMENTATION.md` 已不再被表述为当前仓库的逐文件实施清单。
+- `docs/MPC_HC_ITERATION_PLAN.md` 已明确为计划快照，并指向当前进度来源。
+- 本次改动仍限定在文档层，未涉及代码、构建和任务清单状态修改。
+
+### 修改文件
+- README.md
+- README_ZH.md
+- docs/IMPLEMENTATION.md
+- docs/MPC_HC_ITERATION_PLAN.md
+- docs/README.md
+- docs/CHANGELOG.md
+- docs/DEVELOP_LOG.md

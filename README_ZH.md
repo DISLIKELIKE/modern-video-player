@@ -247,7 +247,7 @@ build\Release\modern-video-player.exe your_video.mp4
 
 ## 文档
 
-- [实现步骤指南](docs/IMPLEMENTATION.md) - 详细的分步实现指南
+- [实现步骤指南](docs/IMPLEMENTATION.md) - 早期原型的从零实现教程
 - [架构设计文档](docs/ARCHITECTURE.md) - 历史架构基线与设计背景
 - [架构重构说明](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - 当前主链重构说明
 - [Windows 配置指南](docs/WINDOWS_SETUP.md) - Windows 环境配置详情

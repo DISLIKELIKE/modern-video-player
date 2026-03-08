@@ -219,7 +219,7 @@ build\Release\modern-video-player.exe your_video.mp4
 
 ## Documentation
 
-- [Implementation Guide](docs/IMPLEMENTATION.md) - Detailed step-by-step implementation
+- [Implementation Guide](docs/IMPLEMENTATION.md) - Historical from-scratch prototype walkthrough
 - [Architecture Design](docs/ARCHITECTURE.md) - Historical architecture baseline and design context
 - [Refactor Note (2026-03-06)](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - Current main-chain architecture
 - [Version History](docs/VERSION.md) - Project version and dependency information
