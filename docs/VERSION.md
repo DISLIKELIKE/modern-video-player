@@ -1398,3 +1398,36 @@ make -j$(nproc)
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+## 2026-03-08 更新（1080p60 稳定播放验收）
+
+### 稳定性门禁补齐
+- `main` 新增 `--1080p60-check <media_file> [sample_ms]`，复用 `probe + diagnostics` 口径验证：
+  - `1920x1080 @ 60fps` 样本是否匹配目标；
+  - 连续播放窗口内时间是否持续推进；
+  - 调度器是否出现 `late_drop`；
+  - 解封装是否发生丢包。
+- 新增 `samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4` 的样本生成脚本入口，用于本地稳定性回归。
+
+### 本地验证
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --1080p60-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 5000`：`PASS`
+- 验收报告：`docs/reports/1080P60_STABILITY_LOCAL_CHECK.md`
+
+### 任务清单同步
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
+  - `2.2.1 1080p60 长时稳定` 标记完成。
+  - `2.3.2 1080p60 稳定播放达标` 标记完成。
+
+### 修改文件
+- src/main.cpp
+- tools/download_test_samples.ps1
+- samples/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

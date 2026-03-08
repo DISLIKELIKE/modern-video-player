@@ -37,6 +37,7 @@
 | [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨/字幕延迟调节本地验收记录 |
 | [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 数字热键 `1..9` 跳转本地验收记录 |
 | [reports/PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) | 播放性能日志本地验收记录 |
+| [reports/1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) | 1080p60 稳定播放本地验收记录 |
 | [samples/README.md](../samples/README.md) | 回归样本目录与命名规范 |
 
 ## 文档更新历史
@@ -60,6 +61,7 @@
 - 新增 [reports/DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) - 记录 4.5 音轨/字幕延迟调节本地验收结果
 - 新增 [reports/NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) - 记录 4.6 数字热键跳转本地验收结果
 - 新增 [reports/PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) - 记录 2.2.4 播放性能日志本地验收结果
+- 新增 [reports/1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) - 记录 2.2.1 / 2.3.2 1080p60 稳定播放本地验收结果
 
 ---
 

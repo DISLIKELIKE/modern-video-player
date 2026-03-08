@@ -54,6 +54,7 @@
 | 49 | 2026-03-08 | 缺少独立的文档巡检总表 | ✅ 已修复 |
 | 50 | 2026-03-08 | M4 4.4：暂停态帧步进接入与验收 | ✅ 已修复 |
 | 53 | 2026-03-08 | M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU） | ✅ 已修复 |
+| 54 | 2026-03-08 | M2 2.2.1 / 2.3.2：1080p60 稳定播放验收 | ✅ 已修复 |
 
 ---
 
@@ -2025,6 +2026,42 @@ void VideoPlayer::play() {
 - docs/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 54: M2 2.2.1 / 2.3.2：1080p60 稳定播放验收
+
+**日期**: 2026-03-08
+
+### 问题描述
+- 任务清单 `2.2.1` 与 `2.3.2` 需要确认 `1080p60` 样本能够连续稳定播放。
+- 当前主链虽然已有性能日志入口，但缺少一个直接面向 `1080p60` 门禁的稳定性验收命令和配套样本入口。
+
+### 原因分析
+- 现有 `--performance-log-check` 更偏向观测指标导出，不直接判断时间推进、连续播放窗口与掉帧门禁是否达标。
+- 仓库现有样本集中在 `1080p30` 与 `4K60`，缺少明确的 `1080p60` 稳定性样本生成入口。
+
+### 解决方案
+- 在 `main` 中新增 `--1080p60-check <media_file> [sample_ms]`，联合 `collectFileProbeReport()` 与 `DiagnosticsSnapshot` 输出稳定性门禁结果。
+- 验收逻辑重点检查：
+  - 样本是否为 `1920x1080 @ 60fps`；
+  - `5s` 连续播放窗口内时间是否稳定推进；
+  - `scheduler_late_drops` 与 `demux_dropped_packets` 是否为 `0`。
+- 在 `tools/download_test_samples.ps1` 中补充 `1080p60 AAC 2ch` 样本生成，并在 `samples/README.md` 中记录用途。
+- 同步补齐任务清单、报告、差距评估、版本文档与开发日志。
+
+### 修改文件
+- src/main.cpp
+- tools/download_test_samples.ps1
+- samples/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
 - docs/CHANGELOG.md
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md

@@ -1807,3 +1807,42 @@ windows-backend-check.result=FAIL
 - docs/VERSION.md
 - docs/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
+
+
+---
+
+## 问题 54: M2 2.2.1 / 2.3.2：1080p60 稳定播放验收
+
+**日期**: 2026-03-08
+**状态**: 已解决
+
+### 问题描述
+- 需要为 `1080p60` 稳定播放建立明确的本地验收入口，避免只凭性能日志或人工观察判断。
+- 当前样本包没有显式的 `1080p60` 稳定性样本生成说明，复现实验路径不够清晰。
+
+### 分析记录
+1. `collectFileProbeReport()` 已经能给出宽高、FPS、推荐 backend 等元信息，适合做稳定性验收前置条件。
+2. `DiagnosticsSnapshot` 已可提供 `scheduler_late_drops` / `demux_dropped_packets` 等关键稳定性指标。
+3. 还需要补一个“连续播放窗口内时间推进”的判断，才能把 `1080p60` 验收从观测日志提升为明确门禁。
+
+### 解决方案
+- 新增 `--1080p60-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 5000`，检查 `probe`、时间推进、late drop 与 demux drop。
+- 在 `tools/download_test_samples.ps1` 增加 `1080p60 AAC 2ch` 样本生成路径，并在 `samples/README.md` 标记其用于 `2.2.1 / 2.3.2`。
+- 新增 `docs/reports/1080P60_STABILITY_LOCAL_CHECK.md`，同步任务清单、差距评估与版本记录。
+
+### 本地校对结果
+- `cmake --build build --config Debug`：通过。
+- `build/Debug/modern-video-player.exe --1080p60-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 5000`：`PASS`
+- 当前样本输出包含 `advance_ratio=0.994133`、`late_drops=0`、`demux_dropped_packets=0`、`decoder_backend=D3D11VA`。
+
+### 修改文件
+- src/main.cpp
+- tools/download_test_samples.ps1
+- samples/README.md
+- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/README.md
+- docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
+- docs/CHANGELOG.md
+- docs/VERSION.md
+- docs/DEVELOP_LOG.md
+- .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md

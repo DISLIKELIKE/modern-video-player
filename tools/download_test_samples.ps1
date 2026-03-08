@@ -89,6 +89,7 @@ $d = [Math]::Max(2, $DurationSec)
 
 $outputFiles = @{
     mp4_hevc_aac = "samples/mp4/demo__hevc_aac__1920x1080__30fps__2ch.mp4"
+    mp4_h264_aac_1080p60 = "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4"
     mkv_hevc_ac3_ma2 = "samples/mkv/demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv"
     webm_vp9_opus = "samples/webm/demo__vp9_opus__1920x1080__30fps__2ch.webm"
     flv_h264_aac = "samples/flv/demo__h264_aac__1280x720__30fps__2ch.flv"
@@ -129,6 +130,17 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-c:v", "libx265", "-preset", "fast", "-crf", "30", "-pix_fmt", "yuv420p",
     "-c:a", "aac", "-ac", "2", "-ar", "48000",
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_hevc_aac)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=60",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_h264_aac_1080p60)
 )
 
 Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(

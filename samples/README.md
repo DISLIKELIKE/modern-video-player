@@ -23,6 +23,7 @@ Use this template:
 Examples:
 
 - `demo__hevc_aac__1920x1080__30fps__2ch.mp4`
+- `demo__h264_aac__1920x1080__60fps__2ch.mp4`
 - `demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv`
 - `demo__av1_flac__3840x2160__60fps__8ch__ma2.mkv`
 
@@ -63,3 +64,4 @@ The script will:
 
 - download one public base clip into `samples/source/`
 - generate all regression targets listed in `format_samples.csv`
+- generate an extra `1080p60` stability sample at `samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4` (used by `--1080p60-check`)
