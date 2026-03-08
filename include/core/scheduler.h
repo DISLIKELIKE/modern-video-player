@@ -38,6 +38,7 @@ public:
     void resume();
     void stop();
     void flush();
+    void pumpRenderOnce();
 
     size_t getVideoQueueSize() const;
     size_t getAudioQueueSize() const;

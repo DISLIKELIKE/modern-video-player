@@ -288,75 +288,74 @@ void PlayerCore::seek(double timestamp) {
 }
 
 void PlayerCore::pumpEvents() {
-    if (!video_renderer_) {
-        return;
-    }
+    if (video_renderer_) {
+        video_renderer_->handleEvents();
 
-    video_renderer_->handleEvents();
+        if (video_renderer_->consumeTogglePauseRequest()) {
+            if (state_.load() == PlaybackState::Playing) {
+                pause();
+            } else if (state_.load() == PlaybackState::Paused) {
+                play();
+            }
+        }
 
-    if (video_renderer_->consumeTogglePauseRequest()) {
-        if (state_.load() == PlaybackState::Playing) {
-            pause();
-        } else if (state_.load() == PlaybackState::Paused) {
-            play();
+        double seek_ratio = 0.0;
+        if (video_renderer_->consumeSeekRequest(seek_ratio)) {
+            const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+            if (duration > 0.0) {
+                seek(duration * std::max(0.0, std::min(1.0, seek_ratio)));
+            }
+        }
+
+        double seek_delta_seconds = 0.0;
+        if (video_renderer_->consumeSeekDeltaRequest(seek_delta_seconds) && seek_delta_seconds != 0.0) {
+            const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+            const double current = position_.load();
+            if (duration > 0.0) {
+                const double target = std::max(0.0, std::min(duration, current + seek_delta_seconds));
+                seek(target);
+            }
+        }
+
+        float volume_request = 0.0f;
+        if (video_renderer_->consumeVolumeChangeRequest(volume_request)) {
+            setVolume(volume_request);
+        }
+
+        double speed_delta = 0.0;
+        if (video_renderer_->consumeSpeedChangeRequest(speed_delta) && speed_delta != 0.0) {
+            setPlaybackSpeed(getPlaybackSpeed() + speed_delta);
+        }
+        if (video_renderer_->consumeResetSpeedRequest()) {
+            setPlaybackSpeed(1.0);
+        }
+
+        if (video_renderer_->consumeToggleSubtitleRequest()) {
+            toggleSubtitleEnabled();
+        }
+
+        if (video_renderer_->consumeNextItemRequest()) {
+            next_item_requested_.store(true);
+            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+                emitStateChanged(PlaybackState::Stopped);
+            }
+        }
+
+        if (video_renderer_->consumePreviousItemRequest()) {
+            previous_item_requested_.store(true);
+            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+                emitStateChanged(PlaybackState::Stopped);
+            }
+        }
+
+        if (video_renderer_->shouldQuit()) {
+            quit_requested_.store(true);
+            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+                emitStateChanged(PlaybackState::Stopped);
+            }
         }
     }
 
-    double seek_ratio = 0.0;
-    if (video_renderer_->consumeSeekRequest(seek_ratio)) {
-        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
-        if (duration > 0.0) {
-            seek(duration * std::max(0.0, std::min(1.0, seek_ratio)));
-        }
-    }
-
-    double seek_delta_seconds = 0.0;
-    if (video_renderer_->consumeSeekDeltaRequest(seek_delta_seconds) && seek_delta_seconds != 0.0) {
-        const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
-        const double current = position_.load();
-        if (duration > 0.0) {
-            const double target = std::max(0.0, std::min(duration, current + seek_delta_seconds));
-            seek(target);
-        }
-    }
-
-    float volume_request = 0.0f;
-    if (video_renderer_->consumeVolumeChangeRequest(volume_request)) {
-        setVolume(volume_request);
-    }
-
-    double speed_delta = 0.0;
-    if (video_renderer_->consumeSpeedChangeRequest(speed_delta) && speed_delta != 0.0) {
-        setPlaybackSpeed(getPlaybackSpeed() + speed_delta);
-    }
-    if (video_renderer_->consumeResetSpeedRequest()) {
-        setPlaybackSpeed(1.0);
-    }
-
-    if (video_renderer_->consumeToggleSubtitleRequest()) {
-        toggleSubtitleEnabled();
-    }
-
-    if (video_renderer_->consumeNextItemRequest()) {
-        next_item_requested_.store(true);
-        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-            emitStateChanged(PlaybackState::Stopped);
-        }
-    }
-
-    if (video_renderer_->consumePreviousItemRequest()) {
-        previous_item_requested_.store(true);
-        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-            emitStateChanged(PlaybackState::Stopped);
-        }
-    }
-
-    if (video_renderer_->shouldQuit()) {
-        quit_requested_.store(true);
-        if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-            emitStateChanged(PlaybackState::Stopped);
-        }
-    }
 }
 
 bool PlayerCore::consumeQuitRequest() {

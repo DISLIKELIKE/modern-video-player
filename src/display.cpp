@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
+#include <cstddef>
 #include <cmath>
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -57,6 +60,18 @@ WindowSize computeInitialWindowSize(int video_width, int video_height) {
     result.width = std::max(1, static_cast<int>(std::lround(static_cast<double>(safe_video_width) * scale)));
     result.height = std::max(1, static_cast<int>(std::lround(static_cast<double>(safe_video_height) * scale)));
     return result;
+}
+
+void updateWindowSizeFromSdl(SDL_Window* window, std::atomic<int>& width, std::atomic<int>& height) {
+    if (!window) {
+        return;
+    }
+
+    int window_width = width.load();
+    int window_height = height.load();
+    SDL_GetWindowSize(window, &window_width, &window_height);
+    width.store(std::max(1, window_width));
+    height.store(std::max(1, window_height));
 }
 
 SDL_Rect computeRenderRect(int window_width, int window_height, int frame_width, int frame_height) {
@@ -376,7 +391,13 @@ Display::Display()
     , should_quit_(false)
     , toggle_pause_requested_(false)
     , fullscreen_(false)
+    , minimized_(false)
+    , renderer_reset_requested_(false)
+    , texture_reset_requested_(false)
+    , fullscreen_toggle_requested_(false)
     , initialized_(false)
+    , texture_width_(0)
+    , texture_height_(0)
     , seek_requested_(false)
     , seek_ratio_(0.0)
     , seek_delta_requested_(false)
@@ -434,29 +455,16 @@ bool Display::init(int width, int height, const std::string& title) {
 
     SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
     
-    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
-    if (!renderer_) {
-        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
-    }
-    if (!renderer_) {
-        std::cerr << "Error: Could not create SDL renderer: " << SDL_GetError() << std::endl;
-        SDL_DestroyWindow(window_);
-        window_ = nullptr;
-        return false;
-    }
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-    
-    if (!createTexture(width, height)) {
-        SDL_DestroyRenderer(renderer_);
-        SDL_DestroyWindow(window_);
-        renderer_ = nullptr;
-        window_ = nullptr;
-        return false;
-    }
-    
     initialized_ = true;
     should_quit_.store(false);
     toggle_pause_requested_.store(false);
+    minimized_.store(false);
+    fullscreen_toggle_requested_.store(false);
+    renderer_reset_requested_.store(false);
+    texture_reset_requested_.store(false);
+    render_initialized_.store(false);
+    render_init_success_.store(false);
+    pending_frame_ready_ = false;
     {
         std::lock_guard<std::mutex> lock(request_mutex_);
         seek_requested_ = false;
@@ -477,6 +485,17 @@ bool Display::init(int width, int height, const std::string& title) {
         seek_preview_active_ = false;
         seek_preview_ratio_ = 0.0;
     }
+
+    render_running_.store(true);
+    render_thread_ = std::thread(&Display::renderLoop, this);
+    for (int i = 0; i < 200 && !render_initialized_.load(); ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    if (!render_initialized_.load() || !render_init_success_.load()) {
+        std::cerr << "Error: Could not initialize render thread resources" << std::endl;
+        close();
+        return false;
+    }
     
     std::cout << "Display initialized: window " << width_.load() << "x" << height_.load()
               << " (source " << width << "x" << height << ")" << std::endl;
@@ -485,6 +504,18 @@ bool Display::init(int width, int height, const std::string& title) {
 }
 
 void Display::close() {
+    render_running_.store(false);
+    render_queue_cv_.notify_all();
+    if (render_thread_.joinable()) {
+        render_thread_.join();
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(render_queue_mutex_);
+        pending_frame_ = PendingVideoFrame{};
+        pending_frame_ready_ = false;
+    }
+
     if (texture_) {
         SDL_DestroyTexture(texture_);
         texture_ = nullptr;
@@ -504,7 +535,46 @@ void Display::close() {
     
     width_.store(0);
     height_.store(0);
+    texture_width_ = 0;
+    texture_height_ = 0;
+    minimized_.store(false);
+    fullscreen_toggle_requested_.store(false);
+    renderer_reset_requested_.store(false);
+    texture_reset_requested_.store(false);
+    render_initialized_.store(false);
+    render_init_success_.store(false);
     initialized_ = false;
+}
+
+bool Display::createRenderer() {
+    if (!window_) {
+        return false;
+    }
+
+    if (texture_) {
+        SDL_DestroyTexture(texture_);
+        texture_ = nullptr;
+    }
+    if (renderer_) {
+        SDL_DestroyRenderer(renderer_);
+        renderer_ = nullptr;
+    }
+
+    renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_ACCELERATED);
+    if (!renderer_) {
+        renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+    }
+    if (!renderer_) {
+        std::cerr << "Error: Could not create SDL renderer: " << SDL_GetError() << std::endl;
+        return false;
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+    texture_width_ = 0;
+    texture_height_ = 0;
+    texture_reset_requested_.store(true);
+    renderer_reset_requested_.store(false);
+    return true;
 }
 
 bool Display::createTexture(int width, int height) {
@@ -525,63 +595,259 @@ bool Display::createTexture(int width, int height) {
         std::cerr << "Error: Could not create SDL texture: " << SDL_GetError() << std::endl;
         return false;
     }
-    
+
+    texture_width_ = std::max(1, width);
+    texture_height_ = std::max(1, height);
     return true;
 }
 
-bool Display::updateTexture(const uint8_t* data, int width, int height) {
-    (void)width;
-    (void)height;
-    if (!texture_ || !data) {
+bool Display::ensureTextureForFrame(int width, int height) {
+    const int safe_width = std::max(1, width);
+    const int safe_height = std::max(1, height);
+
+    if (!texture_ ||
+        texture_reset_requested_.exchange(false) ||
+        texture_width_ != safe_width ||
+        texture_height_ != safe_height) {
+        return createTexture(safe_width, safe_height);
+    }
+    return true;
+}
+
+bool Display::ensureRenderResources(int frame_width, int frame_height) {
+    if (!window_) {
         return false;
     }
-    
-    const AVFrame* frame = reinterpret_cast<const AVFrame*>(data);
-    
+    if (!renderer_ || renderer_reset_requested_.exchange(false)) {
+        if (!createRenderer()) {
+            return false;
+        }
+    }
+    return ensureTextureForFrame(frame_width, frame_height);
+}
+
+bool Display::updateTexture(const PendingVideoFrame& frame) {
+    if (!texture_ || !frame.valid) {
+        return false;
+    }
+
     const int ret = SDL_UpdateYUVTexture(
         texture_,
         nullptr,
-        frame->data[0], frame->linesize[0],
-        frame->data[1], frame->linesize[1],
-        frame->data[2], frame->linesize[2]
+        frame.y_plane.data(), frame.y_pitch,
+        frame.u_plane.data(), frame.u_pitch,
+        frame.v_plane.data(), frame.v_pitch
     );
-    
+
     if (ret < 0) {
         std::cerr << "Error: Could not update texture: " << SDL_GetError() << std::endl;
         return false;
     }
-    
+
     return true;
 }
 
 void Display::renderFrame(const uint8_t* data, int width, int height) {
-    if (!renderer_ || !texture_ || !data) {
+    (void)width;
+    (void)height;
+    if (!data) {
         return;
     }
 
-    std::lock_guard<std::mutex> lock(sdl_mutex_);
-    SDL_RenderClear(renderer_);
-    if (!updateTexture(data, width, height)) {
+    const AVFrame* frame = reinterpret_cast<const AVFrame*>(data);
+    if (!frame) {
         return;
     }
-    
-    const SDL_Rect dst_rect = computeRenderRect(width_.load(), height_.load(), width, height);
-    SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect);
-    drawSubtitleOverlay(width_.load(), height_.load());
-    drawControls(width_.load(), height_.load());
+
+    PendingVideoFrame copied_frame;
+    if (!copyFrameData(*frame, copied_frame)) {
+        return;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(render_queue_mutex_);
+        pending_frame_ = std::move(copied_frame);
+        pending_frame_ready_ = true;
+    }
+    render_queue_cv_.notify_one();
 }
 
 void Display::present() {
-    if (renderer_) {
-        std::lock_guard<std::mutex> lock(sdl_mutex_);
-        SDL_RenderPresent(renderer_);
-    }
+    // Present is driven by renderLoop() on the render owner thread.
 }
 
 void Display::clear() {
-    if (renderer_) {
+    {
+        std::lock_guard<std::mutex> lock(render_queue_mutex_);
+        pending_frame_ready_ = false;
+        pending_frame_ = PendingVideoFrame{};
+    }
+    render_queue_cv_.notify_one();
+}
+
+bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
+    if (!frame.data[0] || !frame.data[1] || !frame.data[2] || frame.width <= 0 || frame.height <= 0) {
+        return false;
+    }
+
+    const int width = std::max(1, frame.width);
+    const int height = std::max(1, frame.height);
+    const int chroma_width = std::max(1, (width + 1) / 2);
+    const int chroma_height = std::max(1, (height + 1) / 2);
+
+    const int src_y_stride = frame.linesize[0];
+    const int src_u_stride = frame.linesize[1];
+    const int src_v_stride = frame.linesize[2];
+    if (src_y_stride == 0 || src_u_stride == 0 || src_v_stride == 0) {
+        return false;
+    }
+
+    const int y_pitch = width;
+    const int u_pitch = chroma_width;
+    const int v_pitch = chroma_width;
+
+    out = PendingVideoFrame{};
+    out.width = width;
+    out.height = height;
+    out.y_pitch = y_pitch;
+    out.u_pitch = u_pitch;
+    out.v_pitch = v_pitch;
+    out.y_plane.resize(static_cast<size_t>(y_pitch) * static_cast<size_t>(height));
+    out.u_plane.resize(static_cast<size_t>(u_pitch) * static_cast<size_t>(chroma_height));
+    out.v_plane.resize(static_cast<size_t>(v_pitch) * static_cast<size_t>(chroma_height));
+
+    const uint8_t* y_src = frame.data[0];
+    const uint8_t* u_src = frame.data[1];
+    const uint8_t* v_src = frame.data[2];
+    if (src_y_stride < 0) {
+        y_src += static_cast<ptrdiff_t>(src_y_stride) * (height - 1);
+    }
+    if (src_u_stride < 0) {
+        u_src += static_cast<ptrdiff_t>(src_u_stride) * (chroma_height - 1);
+    }
+    if (src_v_stride < 0) {
+        v_src += static_cast<ptrdiff_t>(src_v_stride) * (chroma_height - 1);
+    }
+
+    for (int row = 0; row < height; ++row) {
+        std::memcpy(out.y_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(y_pitch),
+                    y_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_y_stride),
+                    static_cast<size_t>(width));
+    }
+    for (int row = 0; row < chroma_height; ++row) {
+        std::memcpy(out.u_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(u_pitch),
+                    u_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_u_stride),
+                    static_cast<size_t>(chroma_width));
+        std::memcpy(out.v_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(v_pitch),
+                    v_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_v_stride),
+                    static_cast<size_t>(chroma_width));
+    }
+
+    out.valid = true;
+    return true;
+}
+
+void Display::renderLoop() {
+    {
         std::lock_guard<std::mutex> lock(sdl_mutex_);
-        SDL_RenderClear(renderer_);
+        render_init_success_.store(createRenderer());
+        render_initialized_.store(true);
+    }
+    render_queue_cv_.notify_all();
+    if (!render_init_success_.load()) {
+        render_running_.store(false);
+        return;
+    }
+
+    PendingVideoFrame last_frame;
+    bool has_last_frame = false;
+
+    while (render_running_.load()) {
+        PendingVideoFrame frame_to_render;
+        bool have_frame = false;
+
+        {
+            std::unique_lock<std::mutex> lock(render_queue_mutex_);
+            render_queue_cv_.wait_for(lock, std::chrono::milliseconds(5), [this] {
+                return !render_running_.load() || pending_frame_ready_ ||
+                       fullscreen_toggle_requested_.load() ||
+                       renderer_reset_requested_.load() ||
+                       texture_reset_requested_.load();
+            });
+            if (!render_running_.load()) {
+                break;
+            }
+            if (pending_frame_ready_) {
+                frame_to_render = std::move(pending_frame_);
+                pending_frame_ = PendingVideoFrame{};
+                pending_frame_ready_ = false;
+                have_frame = frame_to_render.valid;
+                if (have_frame) {
+                    last_frame = frame_to_render;
+                    has_last_frame = true;
+                }
+            }
+        }
+
+        std::lock_guard<std::mutex> sdl_lock(sdl_mutex_);
+        if (!window_) {
+            continue;
+        }
+
+        if (fullscreen_toggle_requested_.exchange(false)) {
+            const bool next_fullscreen = !fullscreen_.load();
+            const int ret = SDL_SetWindowFullscreen(window_,
+                                                    next_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+            if (ret == 0) {
+                fullscreen_.store(next_fullscreen);
+            } else {
+                std::cerr << "Warning: toggle fullscreen failed: " << SDL_GetError() << std::endl;
+            }
+            updateWindowSizeFromSdl(window_, width_, height_);
+            minimized_.store(false);
+            texture_reset_requested_.store(true);
+        }
+
+        if (minimized_.load()) {
+            continue;
+        }
+
+        const bool redraw_requested =
+            renderer_reset_requested_.load() || texture_reset_requested_.load();
+        if (!have_frame && redraw_requested && has_last_frame) {
+            frame_to_render = last_frame;
+            have_frame = true;
+        }
+
+        if (have_frame) {
+            if (!ensureRenderResources(frame_to_render.width, frame_to_render.height)) {
+                continue;
+            }
+            int render_width = width_.load();
+            int render_height = height_.load();
+            if (SDL_GetRendererOutputSize(renderer_, &render_width, &render_height) == 0) {
+                width_.store(std::max(1, render_width));
+                height_.store(std::max(1, render_height));
+            } else {
+                render_width = std::max(1, width_.load());
+                render_height = std::max(1, height_.load());
+            }
+            SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
+            SDL_RenderClear(renderer_);
+            if (!updateTexture(frame_to_render)) {
+                texture_reset_requested_.store(true);
+                continue;
+            }
+            const SDL_Rect dst_rect = computeRenderRect(render_width, render_height,
+                                                        frame_to_render.width, frame_to_render.height);
+            if (SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect) < 0) {
+                renderer_reset_requested_.store(true);
+                continue;
+            }
+            drawSubtitleOverlay(render_width, render_height);
+            drawControls(render_width, render_height);
+            SDL_RenderPresent(renderer_);
+        }
     }
 }
 
@@ -706,16 +972,41 @@ void Display::handleEvents() {
             }
                 
             case SDL_WINDOWEVENT:
+                if (event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
+                    event.window.event == SDL_WINDOWEVENT_HIDDEN) {
+                    minimized_.store(true);
+                    render_queue_cv_.notify_one();
+                } else if (event.window.event == SDL_WINDOWEVENT_RESTORED ||
+                           event.window.event == SDL_WINDOWEVENT_SHOWN ||
+                           event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
+                           event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                           event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                    minimized_.store(false);
+                    texture_reset_requested_.store(true);
+                    render_queue_cv_.notify_one();
+                }
+
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED ||
                     event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                     event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
                     event.window.event == SDL_WINDOWEVENT_RESTORED) {
-                    const int new_width = event.window.data1;
-                    const int new_height = event.window.data2;
-                    width_.store(std::max(1, new_width));
-                    height_.store(std::max(1, new_height));
+                    updateWindowSizeFromSdl(window_, width_, height_);
                 }
                 break;
+#if defined(SDL_RENDER_TARGETS_RESET)
+            case SDL_RENDER_TARGETS_RESET:
+                renderer_reset_requested_.store(true);
+                texture_reset_requested_.store(true);
+                render_queue_cv_.notify_one();
+                break;
+#endif
+#if defined(SDL_RENDER_DEVICE_RESET)
+            case SDL_RENDER_DEVICE_RESET:
+                renderer_reset_requested_.store(true);
+                texture_reset_requested_.store(true);
+                render_queue_cv_.notify_one();
+                break;
+#endif
 
             case SDL_MOUSEBUTTONDOWN:
                 if (event.button.button != SDL_BUTTON_LEFT) {
@@ -1065,25 +1356,8 @@ void Display::updateVolumeFromMouse(int mouse_x) {
 }
 
 void Display::toggleFullscreen() {
-    std::lock_guard<std::mutex> lock(sdl_mutex_);
-    if (!window_) {
-        return;
-    }
-
-    const bool next_fullscreen = !fullscreen_.load();
-    fullscreen_.store(next_fullscreen);
-
-    if (next_fullscreen) {
-        SDL_SetWindowFullscreen(window_, SDL_WINDOW_FULLSCREEN_DESKTOP);
-    } else {
-        SDL_SetWindowFullscreen(window_, 0);
-    }
-
-    int updated_width = width_.load();
-    int updated_height = height_.load();
-    SDL_GetWindowSize(window_, &updated_width, &updated_height);
-    width_.store(std::max(1, updated_width));
-    height_.store(std::max(1, updated_height));
+    fullscreen_toggle_requested_.store(true);
+    render_queue_cv_.notify_one();
 }
 
 } // namespace vp

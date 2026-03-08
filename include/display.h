@@ -12,8 +12,10 @@ extern "C" {
 #error "SDL2 headers not found"
 #endif
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "input/hotkey_manager.h"
@@ -52,14 +54,31 @@ public:
     int getHeight() const { return height_.load(); }
 
 private:
+    struct PendingVideoFrame {
+        int width{0};
+        int height{0};
+        int y_pitch{0};
+        int u_pitch{0};
+        int v_pitch{0};
+        std::vector<uint8_t> y_plane;
+        std::vector<uint8_t> u_plane;
+        std::vector<uint8_t> v_plane;
+        bool valid{false};
+    };
+
     struct ControlLayout {
         SDL_Rect panel;
         SDL_Rect progress_track;
         SDL_Rect volume_track;
     };
 
+    bool createRenderer();
     bool createTexture(int width, int height);
-    bool updateTexture(const uint8_t* data, int width, int height);
+    bool ensureTextureForFrame(int width, int height);
+    bool ensureRenderResources(int frame_width, int frame_height);
+    bool updateTexture(const PendingVideoFrame& frame);
+    bool copyFrameData(const AVFrame& frame, PendingVideoFrame& out);
+    void renderLoop();
     void drawControls(int window_width, int window_height);
     void drawSubtitleOverlay(int window_width, int window_height);
     ControlLayout computeControlLayout(int window_width, int window_height) const;
@@ -75,8 +94,22 @@ private:
     std::atomic<bool> should_quit_;
     std::atomic<bool> toggle_pause_requested_;
     std::atomic<bool> fullscreen_;
+    std::atomic<bool> minimized_;
+    std::atomic<bool> renderer_reset_requested_;
+    std::atomic<bool> texture_reset_requested_;
+    std::atomic<bool> fullscreen_toggle_requested_;
     bool initialized_;
     std::mutex sdl_mutex_;
+    int texture_width_;
+    int texture_height_;
+    std::thread render_thread_;
+    std::atomic<bool> render_running_{false};
+    std::atomic<bool> render_initialized_{false};
+    std::atomic<bool> render_init_success_{false};
+    std::mutex render_queue_mutex_;
+    std::condition_variable render_queue_cv_;
+    PendingVideoFrame pending_frame_;
+    bool pending_frame_ready_{false};
 
     std::mutex request_mutex_;
     bool seek_requested_;

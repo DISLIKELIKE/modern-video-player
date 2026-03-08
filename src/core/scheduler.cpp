@@ -174,53 +174,56 @@ void Scheduler::audioDecoderLoop() {
     }
 }
 
+void Scheduler::pumpRenderOnce() {
+    if (paused_.load()) {
+        if (idle_callback_) {
+            idle_callback_();
+        }
+        return;
+    }
+    if (!video_queue_ || !render_callback_) {
+        if (idle_callback_) {
+            idle_callback_();
+        }
+        return;
+    }
+
+    VideoFrame frame;
+    if (!video_queue_->pop(frame, std::chrono::milliseconds(0))) {
+        if (idle_callback_) {
+            idle_callback_();
+        }
+        return;
+    }
+    if (!frame.valid) {
+        return;
+    }
+
+    if (clock_) {
+        const double master = clock_->getTime();
+        const double diff = frame.pts - master;
+        if (diff > 0.0) {
+            wait_events_.fetch_add(1);
+            // Keep main-thread stalls short; additional frames are rendered on subsequent pump ticks.
+            const double wait_s = std::min(diff, 0.005);
+            std::this_thread::sleep_for(std::chrono::duration<double>(wait_s));
+        } else if (diff < -0.25) {
+            dropped_late_frames_.fetch_add(1);
+            if (idle_callback_) {
+                idle_callback_();
+            }
+            return;
+        }
+    }
+
+    render_callback_(std::move(frame));
+    rendered_frames_.fetch_add(1);
+}
+
 void Scheduler::renderLoop() {
     while (running_.load()) {
-        if (paused_.load()) {
-            if (idle_callback_) {
-                idle_callback_();
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }
-        if (!video_queue_ || !render_callback_) {
-            if (idle_callback_) {
-                idle_callback_();
-            }
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-            continue;
-        }
-
-        VideoFrame frame;
-        if (!video_queue_->pop(frame, std::chrono::milliseconds(20))) {
-            if (idle_callback_) {
-                idle_callback_();
-            }
-            continue;
-        }
-        if (!frame.valid) {
-            continue;
-        }
-
-        if (clock_) {
-            const double master = clock_->getTime();
-            const double diff = frame.pts - master;
-            if (diff > 0.0) {
-                wait_events_.fetch_add(1);
-                const double wait_s = std::min(diff, 0.05);
-                std::this_thread::sleep_for(std::chrono::duration<double>(wait_s));
-            } else if (diff < -0.25) {
-                dropped_late_frames_.fetch_add(1);
-                if (idle_callback_) {
-                    // Keep UI/event pumping alive even when rendering drops late frames continuously.
-                    idle_callback_();
-                }
-                continue;
-            }
-        }
-
-        render_callback_(std::move(frame));
-        rendered_frames_.fetch_add(1);
+        pumpRenderOnce();
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
