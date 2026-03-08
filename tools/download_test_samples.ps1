@@ -71,7 +71,7 @@ if (-not (Test-Path $ffmpeg)) {
 $baseSourceDir = Resolve-ProjectPath -Root $repoRoot -PathValue "samples/source"
 New-Item -ItemType Directory -Force -Path $baseSourceDir | Out-Null
 
-$sampleDirs = @("samples/mp4", "samples/mkv", "samples/webm", "samples/flv", "samples/ts")
+$sampleDirs = @("samples/mp4", "samples/mkv", "samples/webm", "samples/flv", "samples/ts", "samples/mov", "samples/avi", "samples/m2ts")
 foreach ($dir in $sampleDirs) {
     New-Item -ItemType Directory -Force -Path (Resolve-ProjectPath -Root $repoRoot -PathValue $dir) | Out-Null
 }
@@ -93,6 +93,14 @@ $outputFiles = @{
     webm_vp9_opus = "samples/webm/demo__vp9_opus__1920x1080__30fps__2ch.webm"
     flv_h264_aac = "samples/flv/demo__h264_aac__1280x720__30fps__2ch.flv"
     ts_h264_aac = "samples/ts/demo__h264_aac__1920x1080__25fps__2ch.ts"
+    ts_mpeg2video_ac3 = "samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts"
+    mkv_h264_eac3 = "samples/mkv/demo__h264_eac3__1920x1080__30fps__2ch.mkv"
+    mkv_h264_dts = "samples/mkv/demo__h264_dts__1920x1080__30fps__2ch.mkv"
+    webm_vp9_vorbis = "samples/webm/demo__vp9_vorbis__1920x1080__30fps__2ch.webm"
+    mov_h264_pcm_s16le = "samples/mov/demo__h264_pcm_s16le__1920x1080__30fps__2ch.mov"
+    mov_h264_aac = "samples/mov/demo__h264_aac__1920x1080__30fps__2ch.mov"
+    avi_h264_mp3 = "samples/avi/demo__h264_mp3__1280x720__30fps__2ch.avi"
+    m2ts_h264_ac3 = "samples/m2ts/demo__h264_ac3__1920x1080__30fps__2ch.m2ts"
     mp4_av1_aac = "samples/mp4/demo__av1_aac__1920x1080__30fps__2ch.mp4"
     mkv_av1_flac_ma2 = "samples/mkv/demo__av1_flac__3840x2160__60fps__8ch__ma2.mkv"
     mkv_vp9_opus_ma2 = "samples/mkv/demo__vp9_opus__1920x1080__30fps__2ch__ma2.mkv"
@@ -170,6 +178,97 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-c:a", "aac", "-ac", "2", "-ar", "48000",
     "-f", "mpegts",
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.ts_h264_aac)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=640:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "mpeg2video", "-q:v", "5", "-pix_fmt", "yuv420p",
+    "-c:a", "ac3", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+    "-f", "mpegts",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.ts_mpeg2video_ac3)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=990:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:a", "eac3", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_h264_eac3)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=720:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:a", "dca", "-strict", "-2", "-b:a", "512k", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_h264_dts)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=960:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "38", "-row-mt", "1", "-cpu-used", "4",
+    "-c:a", "libvorbis", "-q:a", "4", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.webm_vp9_vorbis)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=845:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:a", "pcm_s16le", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mov_h264_pcm_s16le)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=910:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-ac", "2", "-ar", "48000",
+    "-movflags", "+faststart",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mov_h264_aac)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=730:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1280:720,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-pix_fmt", "yuv420p",
+    "-c:a", "libmp3lame", "-b:a", "192k", "-ac", "2", "-ar", "48000",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.avi_h264_mp3)
+)
+
+Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+    "-y", "-hide_banner", "-loglevel", "error",
+    "-i", $baseFile,
+    "-f", "lavfi", "-i", "sine=frequency=860:sample_rate=48000:duration=$d",
+    "-t", "$d",
+    "-vf", "scale=1920:1080,fps=30",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-pix_fmt", "yuv420p",
+    "-c:a", "ac3", "-b:a", "256k", "-ac", "2", "-ar", "48000",
+    "-f", "mpegts",
+    "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.m2ts_h264_ac3)
 )
 
 Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(

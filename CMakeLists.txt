@@ -164,6 +164,7 @@ add_executable(${PROJECT_NAME}
     src/audio/audio_mixer.cpp
     src/decoder/decoder_factory.cpp
     src/subtitle/srt_parser.cpp
+    src/subtitle/subtitle_timeline.cpp
     src/playlist/playlist_manager.cpp
     src/config/settings_manager.cpp
     src/input/hotkey_manager.cpp

@@ -39,6 +39,38 @@ function Normalize-Status {
     return $Text.Trim().ToUpperInvariant()
 }
 
+function Test-EquivalentCodec {
+    param(
+        [string]$Expected,
+        [string]$Actual
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Expected) -or [string]::IsNullOrWhiteSpace($Actual)) {
+        return $false
+    }
+
+    $expectedNorm = Normalize-Token $Expected
+    $actualNorm = Normalize-Token $Actual
+    if ($expectedNorm -eq $actualNorm) {
+        return $true
+    }
+
+    if ((@("hevc", "h265") -contains $expectedNorm) -and (@("hevc", "h265") -contains $actualNorm)) {
+        return $true
+    }
+
+    if ((@("dts", "dca") -contains $expectedNorm) -and (@("dts", "dca") -contains $actualNorm)) {
+        return $true
+    }
+
+    if (($expectedNorm -eq "pcm" -and $actualNorm.StartsWith("pcm")) -or
+        ($actualNorm -eq "pcm" -and $expectedNorm.StartsWith("pcm"))) {
+        return $true
+    }
+
+    return $false
+}
+
 function Escape-MarkdownCell {
     param([string]$Text)
 
@@ -222,10 +254,10 @@ foreach ($sample in $samples) {
     if (-not [string]::IsNullOrWhiteSpace($expectedContainer) -and $containerActual -ne $expectedContainer) {
         $compatibilityNotes += "container expected=$expectedContainer actual=$containerActual"
     }
-    if (-not [string]::IsNullOrWhiteSpace($expectedVideo) -and $videoActual -ne $expectedVideo) {
+    if (-not [string]::IsNullOrWhiteSpace($expectedVideo) -and -not (Test-EquivalentCodec -Expected $expectedVideo -Actual $videoActual)) {
         $compatibilityNotes += "video expected=$expectedVideo actual=$videoActual"
     }
-    if (-not [string]::IsNullOrWhiteSpace($expectedAudio) -and $audioActual -ne $expectedAudio) {
+    if (-not [string]::IsNullOrWhiteSpace($expectedAudio) -and -not (Test-EquivalentCodec -Expected $expectedAudio -Actual $audioActual)) {
         $compatibilityNotes += "audio expected=$expectedAudio actual=$audioActual"
     }
 

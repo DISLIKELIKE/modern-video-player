@@ -8,8 +8,14 @@
 !webm/
 !flv/
 !ts/
+!mov/
+!avi/
+!m2ts/
 !mp4/.gitkeep
 !mkv/.gitkeep
 !webm/.gitkeep
 !flv/.gitkeep
 !ts/.gitkeep
+!mov/.gitkeep
+!avi/.gitkeep
+!m2ts/.gitkeep

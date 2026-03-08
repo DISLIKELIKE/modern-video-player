@@ -9,6 +9,10 @@ This folder stores local regression media samples. By default, media files are i
 - `samples/webm/`
 - `samples/flv/`
 - `samples/ts/`
+- `samples/mov/`
+- `samples/avi/`
+- `samples/m2ts/`
+- `samples/subtitle/`
 
 ## File naming convention
 
@@ -36,6 +40,18 @@ Field notes:
 3. Run:
    - `.\tools\format_regression\run_format_regression.ps1`
    - or `.\tools\run_all_checks.ps1`
+
+## Subtitle sync sample
+
+- `samples/subtitle/subtitle_seek_sync_sample.srt` is used by:
+  - `.\build\Debug\modern-video-player.exe --subtitle-sync-check samples\subtitle\subtitle_seek_sync_sample.srt`
+
+## Playlist flow check sample set
+
+- 5-file continuous playlist acceptance (`1.4.2`) can be checked by:
+  - `.\build\Debug\modern-video-player.exe --playlist-flow-check <5 media files...>`
+- Example command is recorded in:
+  - `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`
 
 ## Bootstrap sample pack
 
