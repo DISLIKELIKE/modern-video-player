@@ -226,5 +226,5 @@ void VideoPlayer::playLoop() {
 ## 相关文档
 
 - [播放循环问题调试](./playback-loop-exit-issue.md)
-- [日志系统说明](./LOGGING.md)
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [日志系统说明](../design/LOGGING.md)
+- [ARCHITECTURE.md](../design/ARCHITECTURE.md)

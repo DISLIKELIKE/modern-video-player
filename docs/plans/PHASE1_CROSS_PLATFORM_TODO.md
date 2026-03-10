@@ -4,7 +4,7 @@
 
 ## 1. 文档定位
 
-这份文档是对 `docs/CROSS_PLATFORM_REFACTOR_TASKLIST.md` 里 **Phase 1：抽平台能力与播放策略层** 的单独展开。
+这份文档是对 `docs/plans/CROSS_PLATFORM_REFACTOR_TASKLIST.md` 里 **Phase 1：抽平台能力与播放策略层** 的单独展开。
 
 目标不是继续讲 roadmap，而是把这一阶段拆成：
 

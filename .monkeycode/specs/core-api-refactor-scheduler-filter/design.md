@@ -629,6 +629,6 @@ gantt
 
 ## References
 
-[^1]: docs/ARCHITECTURE.md - 现有架构设计
-[^2]: docs/IMPLEMENTATION.md - 实现指南
+[^1]: docs/design/ARCHITECTURE.md - 现有架构设计
+[^2]: docs/guides/IMPLEMENTATION.md - 实现指南
 [^3]: .monkeycode/specs/enterprise-quill-logging/design.md - 日志系统设计

@@ -18,7 +18,7 @@
 ### 周二到周四
 
 - 允许推进主线功能开发。
-- 每天结束前至少完成一次 smoke 检查，并把新增问题同步到 `docs/DEVELOP_LOG.md`。
+- 每天结束前至少完成一次 smoke 检查，并把新增问题同步到 `docs/records/DEVELOP_LOG.md`。
 - 如果出现 blocker，优先降级为“周五收敛日处理”，不要在当日继续扩张范围。
 
 ### 周五（收敛日）
@@ -51,9 +51,9 @@
 - 当前可执行程序、样本、脚本路径已确认可用。
 - 已打开以下入口文档：
   - `docs/README.md`
-  - `docs/VERSION.md`
-  - `docs/CHANGELOG.md`
-  - `docs/DEVELOP_LOG.md`
+  - `docs/records/VERSION.md`
+  - `docs/records/CHANGELOG.md`
+  - `docs/records/DEVELOP_LOG.md`
   - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 - 本周若涉及流媒体能力，已准备好本地 HTTP 夹具与样本目录。
 
@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 
 - 本周新增或更新的本地验收报告。
 - `docs/README.md` 索引入口。
-- `docs/VERSION.md`、`docs/CHANGELOG.md`、`docs/DEVELOP_LOG.md`。
+- `docs/records/VERSION.md`、`docs/records/CHANGELOG.md`、`docs/records/DEVELOP_LOG.md`。
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`（仅在状态确实变化时更新）。
 
 ### 步骤 6：给出 RC 准备结论
@@ -159,8 +159,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 
 ## 10. 关联文档
 
-- 回归执行细节：`docs/REGRESSION_OPERATION_PLAYBOOK.md`
-- 单人迭代计划快照：`docs/MPC_HC_ITERATION_PLAN.md`
+- 回归执行细节：`docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
+- 单人迭代计划快照：`docs/plans/MPC_HC_ITERATION_PLAN.md`
 - 当前任务清单：`.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 - 每日节奏样例：`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`
 - 周报留痕模板：`.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`

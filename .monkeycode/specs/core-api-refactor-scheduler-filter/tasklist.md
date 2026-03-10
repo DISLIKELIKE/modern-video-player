@@ -149,9 +149,9 @@
     - 链接线程库
 
   - [ ] 11.3 更新文档
-    - 更新 docs/VERSION.md 记录新功能
-    - 更新 docs/CHANGELOG.md 添加变更记录
-    - 创建 docs/FILTERS.md 说明滤镜使用方法
+    - 更新 docs/records/VERSION.md 记录新功能
+    - 更新 docs/records/CHANGELOG.md 添加变更记录
+    - 创建 docs/design/FILTERS.md 说明滤镜使用方法
 
 - [ ] 12. 最终检查点
   - 确保所有测试通过，新旧实现切换正常，如有疑问请询问用户

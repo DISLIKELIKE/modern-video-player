@@ -8,9 +8,9 @@
 
 前面的文档已经覆盖了：
 
-- 整体学习路径：`docs/OPEN_SOURCE_PLAYER_LEARNING_PATH.md`
-- 源码分析提问方案：`docs/AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md`
-- 按文件名展开的阅读清单：`docs/SOURCE_FILE_READING_CHECKLIST.md`
+- 整体学习路径：`docs/reference/OPEN_SOURCE_PLAYER_LEARNING_PATH.md`
+- 源码分析提问方案：`docs/workflows/AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md`
+- 按文件名展开的阅读清单：`docs/workflows/SOURCE_FILE_READING_CHECKLIST.md`
 
 而本文档解决的是更细的一层：
 

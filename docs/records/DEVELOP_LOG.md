@@ -184,13 +184,13 @@ queue_.pop();
 - `VideoPlayer` 仅保留 `PlayerCore` 包装实现，删除旧链路分支。
 - CMake 删除旧模块编译入口，统一到 `core/*` + `filters/*`。
 - 清理旧头源文件，保留必要基础设施和输出模块。
-- 新增架构重构文档：`docs/ARCHITECTURE_REFACTOR_2026-03-06.md`。
+- 新增架构重构文档：`docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md`。
 
 ### 修改文件
 - CMakeLists.txt
 - include/video_player.h
 - src/video_player.cpp
-- docs/ARCHITECTURE_REFACTOR_2026-03-06.md
+- docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md
 - 删除旧模块文件（decoder/thread/sync/packet/legacy clock/frame_queue）
 
 ---
@@ -351,7 +351,7 @@ Display initialized: window 1306x734 (source 1920x1080)
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
-- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
 - docs/README.md
 
 ---
@@ -402,7 +402,7 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/main.cpp
 - tools/format_regression/run_format_regression.ps1
 - tools/format_regression/format_samples.csv
-- docs/FORMAT_REGRESSION.md
+- docs/workflows/FORMAT_REGRESSION.md
 - docs/README.md
 
 ---
@@ -433,8 +433,8 @@ Display initialized: window 1306x734 (source 1920x1080)
 - .github/workflows/format-regression.yml
 - CMakeLists.txt
 - tools/download_test_samples.ps1
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
@@ -507,9 +507,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - CMakeLists.txt
 - tests/core_frame_queue_tests.cpp（删除）
 - tests/core_clock_tests.cpp（删除）
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -540,9 +540,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -595,9 +595,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - include/video_player.h
 - src/video_player.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -644,9 +644,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -698,9 +698,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -738,9 +738,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -776,9 +776,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - samples/README.md
 - docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -809,9 +809,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
 - samples/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -844,9 +844,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -886,13 +886,13 @@ Display initialized: window 1306x734 (source 1920x1080)
 - samples/avi/.gitkeep
 - samples/m2ts/.gitkeep
 - samples/README.md
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -930,9 +930,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - tools/download_test_samples.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -971,9 +971,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - tools/format_regression/run_format_regression.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1010,9 +1010,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/decoder/decoder_factory.cpp
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1045,9 +1045,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 ### 修改文件
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1087,9 +1087,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - include/render/d3d11_video_renderer.h
 - src/render/d3d11_video_renderer.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1138,9 +1138,9 @@ Display initialized: window 1306x734 (source 1920x1080)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1188,9 +1188,9 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1256,9 +1256,9 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1322,9 +1322,9 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/AB_REPEAT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1370,9 +1370,9 @@ windows-backend-check.result=FAIL
 - README_ZH.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SCREENSHOT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1382,7 +1382,7 @@ windows-backend-check.result=FAIL
 **状态**: 已解决
 
 ### 问题描述
-- `docs/MPC_HC_GAP_ANALYSIS.md` 仍停留在 2026-03-07 之前的评估口径。
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 仍停留在 2026-03-07 之前的评估口径。
 - 文档把字幕、快捷键、设置、播放列表、解码器管理等能力写成“未接入/骨架”，与当前代码和本地验收报告不一致。
 
 ### 分析记录
@@ -1391,33 +1391,33 @@ windows-backend-check.result=FAIL
 3. 差距评估文档需要同时参考代码入口和 `docs/reports/*` 验收报告，而不是只看类/接口是否存在。
 
 ### 解决方案
-- 将 `docs/MPC_HC_GAP_ANALYSIS.md` 全文更新到 2026-03-08 版本。
+- 将 `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 全文更新到 2026-03-08 版本。
 - 重写模块总览、模块统计、剩余差距清单与建议里程碑。
 - 把字幕、播放列表、设置、快捷键、解码器管理、截图等已落地能力从“骨架/未接入”纠正为“部分实现”。
 - 新增“验收与报告证据”章节，明确评估依据包含本地回归报告。
 - 更新文档索引，补一条本次差距评估对齐说明。
 
 ### 本地校对结果
-- `docs/MPC_HC_GAP_ANALYSIS.md` 标题日期已更新为 `2026-03-08`。
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 标题日期已更新为 `2026-03-08`。
 - 模块统计更新为：`部分实现 11 / 14`、`骨架/未接入 3 / 14`。
 - `P0/P1/P2` 剩余项已与当前任务清单和验收报告保持一致。
 
 ### 修改文件
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
-## 问题 44: `docs/VERSION.md` 历史路径描述过期
+## 问题 44: `docs/records/VERSION.md` 历史路径描述过期
 
 **日期**: 2026-03-08
 **状态**: 已解决
 
 ### 问题描述
-- `docs/VERSION.md` 的早期阶段描述仍保留旧版 decoder/thread/test 文件级表述，看起来像当前仓库仍在使用这些路径。
+- `docs/records/VERSION.md` 的早期阶段描述仍保留旧版 decoder/thread/test 文件级表述，看起来像当前仓库仍在使用这些路径。
 - 这会影响按文档遍历仓库时的进度判断，也容易把历史实现和当前主链结构混为一谈。
 
 ### 分析记录
@@ -1429,17 +1429,17 @@ windows-backend-check.result=FAIL
 - 将阶段一改写为“历史起点”，并补充旧版 `decoder / playLoop` 架构已并入当前主链的说明。
 - 将 `video_decoder` / `audio_decoder`、`VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 等旧路径改写为能力级历史表述。
 - 将“下一步计划”、`USE_NEW_PLAYER_CORE`、临时 `tests/core_*` 的相关描述调整为历史记录口径。
-- 在 `docs/VERSION.md` 的文档更新日志中补记本次清理。
+- 在 `docs/records/VERSION.md` 的文档更新日志中补记本次清理。
 
 ### 本地校对结果
-- `docs/VERSION.md` 不再出现“当前阶段”“下一步计划”等易误导当前状态的旧口径。
+- `docs/records/VERSION.md` 不再出现“当前阶段”“下一步计划”等易误导当前状态的旧口径。
 - 早期章节对旧版 decoder/thread 的表述已改为历史说明，并指向当前 `core/*` 主链。
 - 本次变更限定在文档层，未扩散到代码或构建配置。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1450,31 +1450,31 @@ windows-backend-check.result=FAIL
 
 ### 问题描述
 - 根目录 `README.md` / `README_ZH.md` 仍把 `video_decoder`、`audio_decoder` 等旧文件写成项目当前结构。
-- `docs/ARCHITECTURE.md` 同时混用了“当前实现”和旧模块命名，读者容易误判现行主链仍依赖这些历史模块。
+- `docs/design/ARCHITECTURE.md` 同时混用了“当前实现”和旧模块命名，读者容易误判现行主链仍依赖这些历史模块。
 
 ### 分析记录
 1. `2026-03-06` 架构收敛后，当前播放器主链已经稳定在 `VideoPlayer + PlayerCore + Scheduler + core/*`。
 2. `README` 更偏向“快速理解仓库”的入口文档，因此目录树和架构示意应优先反映现状，而不是保留已删除路径。
-3. `docs/ARCHITECTURE.md` 作为背景文档可以保留历史内容，但必须显式标注哪些章节属于历史实现。
+3. `docs/design/ARCHITECTURE.md` 作为背景文档可以保留历史内容，但必须显式标注哪些章节属于历史实现。
 
 ### 解决方案
 - 重写 `README.md` / `README_ZH.md` 的项目结构树和架构示意，改为当前主链口径。
-- 在 `docs/ARCHITECTURE.md` 顶部增加状态说明，并将旧 decoder/thread/sync 章节统一标成“历史实现”。
+- 在 `docs/design/ARCHITECTURE.md` 顶部增加状态说明，并将旧 decoder/thread/sync 章节统一标成“历史实现”。
 - 将文档中的日志示例改为当前 `Quill` 宏接口。
 - 更新 `docs/README.md` 的架构文档索引说明，区分历史基线和当前重构说明。
 
 ### 本地校对结果
 - `README.md` / `README_ZH.md` 已不再把 `video_decoder` / `audio_decoder` 写为当前目录结构。
-- `docs/ARCHITECTURE.md` 已明确声明历史章节边界，并不再把旧多线程链路标为“当前实现”。
+- `docs/design/ARCHITECTURE.md` 已明确声明历史章节边界，并不再把旧多线程链路标为“当前实现”。
 - 本次改动仍限定在文档层，未涉及代码和构建配置。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/ARCHITECTURE.md
+- docs/design/ARCHITECTURE.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1484,8 +1484,8 @@ windows-backend-check.result=FAIL
 **状态**: 已解决
 
 ### 问题描述
-- `docs/IMPLEMENTATION.md` 保留的是早期原型的从零实现教程，但没有明确声明其中 `video_decoder`、`audio_decoder`、单体 `playLoop` 等内容属于历史实现。
-- `docs/MPC_HC_ITERATION_PLAN.md` 记录的是 `2026-03-07` 的计划基线，但没有提示其中部分能力已在后续提交中落地。
+- `docs/guides/IMPLEMENTATION.md` 保留的是早期原型的从零实现教程，但没有明确声明其中 `video_decoder`、`audio_decoder`、单体 `playLoop` 等内容属于历史实现。
+- `docs/plans/MPC_HC_ITERATION_PLAN.md` 记录的是 `2026-03-07` 的计划基线，但没有提示其中部分能力已在后续提交中落地。
 
 ### 分析记录
 1. 这两份文档都还有使用价值：前者偏教程，后者偏规划；问题在于缺少和“当前代码状态”的显式分界。
@@ -1493,23 +1493,23 @@ windows-backend-check.result=FAIL
 3. 最合适的做法不是重写全文，而是在文档顶部补充状态说明，并把索引描述统一到同一口径。
 
 ### 解决方案
-- 为 `docs/IMPLEMENTATION.md` 增加“状态说明（2026-03-08）”，明确其为早期原型教程，并指向当前主链参考文档。
-- 为 `docs/MPC_HC_ITERATION_PLAN.md` 增加“状态说明（2026-03-08）”，明确其为 `2026-03-07` 的计划快照，并列出当前进度参考入口。
+- 为 `docs/guides/IMPLEMENTATION.md` 增加“状态说明（2026-03-08）”，明确其为早期原型教程，并指向当前主链参考文档。
+- 为 `docs/plans/MPC_HC_ITERATION_PLAN.md` 增加“状态说明（2026-03-08）”，明确其为 `2026-03-07` 的计划快照，并列出当前进度参考入口。
 - 更新 `docs/README.md`、`README.md`、`README_ZH.md` 的文档说明，使历史教程、计划快照、当前主链说明三者边界一致。
 
 ### 本地校对结果
-- `docs/IMPLEMENTATION.md` 已不再被表述为当前仓库的逐文件实施清单。
-- `docs/MPC_HC_ITERATION_PLAN.md` 已明确为计划快照，并指向当前进度来源。
+- `docs/guides/IMPLEMENTATION.md` 已不再被表述为当前仓库的逐文件实施清单。
+- `docs/plans/MPC_HC_ITERATION_PLAN.md` 已明确为计划快照，并指向当前进度来源。
 - 本次改动仍限定在文档层，未涉及代码、构建和任务清单状态修改。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/IMPLEMENTATION.md
-- docs/MPC_HC_ITERATION_PLAN.md
+- docs/guides/IMPLEMENTATION.md
+- docs/plans/MPC_HC_ITERATION_PLAN.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1519,8 +1519,8 @@ windows-backend-check.result=FAIL
 **状态**: 已解决
 
 ### 问题描述
-- `docs/FILTERS.md`、`docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/WINDOWS_SETUP.md` 仍偏向“静态说明”，缺少与当前代码主链、依赖探测方式和文档适用范围的衔接说明。
-- `docs/WINDOWS_SETUP.md` 还保留了旧的 `SDL2_DIR` / `FFMPEG_DIR` 配置示例，与当前 `CMakeLists.txt` 的手动依赖回退路径不完全一致。
+- `docs/design/FILTERS.md`、`docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/guides/WINDOWS_SETUP.md` 仍偏向“静态说明”，缺少与当前代码主链、依赖探测方式和文档适用范围的衔接说明。
+- `docs/guides/WINDOWS_SETUP.md` 还保留了旧的 `SDL2_DIR` / `FFMPEG_DIR` 配置示例，与当前 `CMakeLists.txt` 的手动依赖回退路径不完全一致。
 
 ### 分析记录
 1. 经过前几轮清理后，入口文档和核心设计文档已经区分了“历史基线”和“当前主链”，但辅助说明文档还没有完全跟上。
@@ -1529,24 +1529,24 @@ windows-backend-check.result=FAIL
 4. `WINDOWS_SETUP.md` 则需要与现有 `CMakeLists.txt` 的依赖探测顺序保持一致，否则会影响实际搭建体验。
 
 ### 解决方案
-- 为 `docs/FILTERS.md` 增加状态说明，并补齐当前内置音频滤镜 `volume_balance` 与链路说明。
-- 为 `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加状态说明，明确其是专题参考而不是全量进度面板。
-- 为 `docs/WINDOWS_SETUP.md` 增加状态说明，修正 Quill 说明、手动安装示例和共享库使用说明，使之与当前 `CMakeLists.txt` 对齐。
+- 为 `docs/design/FILTERS.md` 增加状态说明，并补齐当前内置音频滤镜 `volume_balance` 与链路说明。
+- 为 `docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加状态说明，明确其是专题参考而不是全量进度面板。
+- 为 `docs/guides/WINDOWS_SETUP.md` 增加状态说明，修正 Quill 说明、手动安装示例和共享库使用说明，使之与当前 `CMakeLists.txt` 对齐。
 - 更新 `docs/README.md` 索引，将 `FILTERS.md` 纳入可发现入口，并追加本轮文档整理记录。
 
 ### 本地校对结果
-- `docs/FILTERS.md` 已明确当前生效的滤镜主链与预留组件边界。
-- `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 已明确为专题参考文档，并指向当前总进度来源。
-- `docs/WINDOWS_SETUP.md` 已不再建议使用与当前仓库不一致的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例。
+- `docs/design/FILTERS.md` 已明确当前生效的滤镜主链与预留组件边界。
+- `docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 已明确为专题参考文档，并指向当前总进度来源。
+- `docs/guides/WINDOWS_SETUP.md` 已不再建议使用与当前仓库不一致的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例。
 - 本次改动仍限定在文档层，未涉及代码、构建脚本和任务清单状态修改。
 
 ### 修改文件
-- docs/FILTERS.md
-- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
-- docs/WINDOWS_SETUP.md
+- docs/design/FILTERS.md
+- docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/guides/WINDOWS_SETUP.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1557,7 +1557,7 @@ windows-backend-check.result=FAIL
 
 ### 问题描述
 - 根目录 `README.md` / `README_ZH.md` 的 Windows 故障排除仍提示使用 `FFMPEG_DIR` 传参，这与当前 `CMakeLists.txt` 的自动探测 / `external/ffmpeg` 回退逻辑不一致。
-- `docs/video-stream-index-fix.md` 记录的是早期原型阶段的问题，但缺少“历史归档”标识，文中的 `playLoop` 与 `src/video_decoder.cpp` 易被误读为现行实现。
+- `docs/analysis/video-stream-index-fix.md` 记录的是早期原型阶段的问题，但缺少“历史归档”标识，文中的 `playLoop` 与 `src/video_decoder.cpp` 易被误读为现行实现。
 
 ### 分析记录
 1. 前几轮已经清理了 `WINDOWS_SETUP.md` 的构建入口，但根 README 的简版故障排除还残留旧说明。
@@ -1566,21 +1566,21 @@ windows-backend-check.result=FAIL
 
 ### 解决方案
 - 将根 README 的 FFmpeg 故障排除改为当前 `vcpkg toolchain / external/ffmpeg` 口径。
-- 为 `docs/video-stream-index-fix.md` 增加状态说明，标记其为 `2026-02-24` 早期原型问题分析归档。
+- 为 `docs/analysis/video-stream-index-fix.md` 增加状态说明，标记其为 `2026-02-24` 早期原型问题分析归档。
 - 在 `docs/README.md` 中为该历史文档补充索引，并记录本轮更新。
 
 ### 本地校对结果
 - `README.md` / `README_ZH.md` 不再建议使用与当前主链不一致的 `FFMPEG_DIR` 传参方式。
-- `docs/video-stream-index-fix.md` 已明确为历史归档，不再暗示 `playLoop` / `video_decoder.cpp` 属于当前仓库结构。
+- `docs/analysis/video-stream-index-fix.md` 已明确为历史归档，不再暗示 `playLoop` / `video_decoder.cpp` 属于当前仓库结构。
 - 本次改动仍限定在文档层，未涉及代码、构建脚本和任务清单状态修改。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/video-stream-index-fix.md
+- docs/analysis/video-stream-index-fix.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1599,20 +1599,20 @@ windows-backend-check.result=FAIL
 3. 增加单独报告文档，可以把“当前主链基线、已收敛文档、保留历史内容、后续建议”固定下来，减少重复解释成本。
 
 ### 解决方案
-- 新增 `docs/DOC_AUDIT_2026-03-08.md`，作为本轮文档巡检总表。
+- 新增 `docs/analysis/DOC_AUDIT_2026-03-08.md`，作为本轮文档巡检总表。
 - 报告中集中记录：巡检范围、关键词方法、当前主链基线、已完成对齐项、保留但合理的历史内容、后续维护建议、关联提交。
 - 在 `docs/README.md` 中将该报告纳入索引，并追加更新历史说明。
 
 ### 本地校对结果
-- `docs/DOC_AUDIT_2026-03-08.md` 已可独立说明本轮文档清理工作的范围与结论。
+- `docs/analysis/DOC_AUDIT_2026-03-08.md` 已可独立说明本轮文档清理工作的范围与结论。
 - `docs/README.md` 已可直接定位到该巡检报告。
 - 本次改动仍限定在文档层，未涉及代码、构建脚本和任务清单状态修改。
 
 ### 修改文件
-- docs/DOC_AUDIT_2026-03-08.md
+- docs/analysis/DOC_AUDIT_2026-03-08.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1661,12 +1661,12 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - README.md
 - README_ZH.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/FRAME_STEP_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1718,12 +1718,12 @@ windows-backend-check.result=FAIL
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
 - docs/reports/DELAY_ADJUST_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -1759,11 +1759,11 @@ windows-backend-check.result=FAIL
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1800,12 +1800,12 @@ windows-backend-check.result=FAIL
 - src/core/player_core.cpp
 - src/video_player.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1839,12 +1839,12 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1876,12 +1876,12 @@ windows-backend-check.result=FAIL
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1915,12 +1915,12 @@ windows-backend-check.result=FAIL
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/HIGH_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1951,12 +1951,12 @@ windows-backend-check.result=FAIL
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -1993,12 +1993,12 @@ windows-backend-check.result=FAIL
 - src/plugin/sample_logger_plugin.cpp
 - src/filters/filter_registry.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -2037,12 +2037,12 @@ windows-backend-check.result=FAIL
 - samples/streaming/hls_local/segment000.ts
 - samples/streaming/hls_local/segment001.ts
 - samples/streaming/hls_local/segment002.ts
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2103,12 +2103,12 @@ windows-backend-check.result=FAIL
 - samples/streaming/abr_local/dash/high/init.mp4
 - samples/streaming/abr_local/dash/high/segment000.m4s
 - samples/streaming/abr_local/dash/high/segment001.m4s
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ## 问题 61: 建立里程碑标签（v0.2.0-rc1 / v0.2.0）
 
@@ -2120,7 +2120,7 @@ windows-backend-check.result=FAIL
 
 ### 分析记录
 1. 当前仓库 `git tag --list` 为空，说明还没有任何正式里程碑标记。
-2. `docs/MPC_HC_GAP_ANALYSIS.md` 仍写着“当前仅剩版本标签操作未执行”，需要在标签建立后立即回写。
+2. `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 仍写着“当前仅剩版本标签操作未执行”，需要在标签建立后立即回写。
 3. 里程碑标签属于仓库状态的一部分，除了创建标签本身，还需要同步任务状态与版本记录。
 
 ### 解决方案
@@ -2134,10 +2134,10 @@ windows-backend-check.result=FAIL
 - 标签建立后可通过 `git show <tag> --no-patch --stat` 验证指向提交。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ## 问题 62: 执行守则口径同步（5.1 / 5.2）
 
@@ -2161,9 +2161,9 @@ windows-backend-check.result=FAIL
 - 当前仓库没有新增代码改动，本次只同步过程约束口径。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
@@ -2181,7 +2181,7 @@ windows-backend-check.result=FAIL
 3. 最合理的落地方式，是新增一份类似操作手册的文档，把周节奏、允许事项、禁止事项、执行顺序、输出物与勾选依据全部写清楚。
 
 ### 解决方案
-- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，将 `5.2` 固化为可执行流程。
+- 新增 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`，将 `5.2` 固化为可执行流程。
 - 在 `docs/README.md` 增加入口，并同步版本记录与变更记录。
 - 保持任务清单 `5.2` 未勾选，待后续跨周执行形成证据后再更新状态。
 
@@ -2191,11 +2191,11 @@ windows-backend-check.result=FAIL
 - 当前仓库没有新增代码改动，本次只新增流程文档并同步文档索引与记录。
 
 ### 修改文件
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 
 ## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
@@ -2225,11 +2225,11 @@ windows-backend-check.result=FAIL
 - .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 
 ## 问题 65: 汇总当前功能、使用方式与验证入口
@@ -2246,7 +2246,7 @@ windows-backend-check.result=FAIL
 3. 最合适的做法是新增一份“功能 / 使用 / 验证”总览文档，并同步索引与根 README 入口。
 
 ### 解决方案
-- 新增 `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`，把当前主程序能力分成“用户可直接使用”和“开发/验收能力”两层来整理。
+- 新增 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`，把当前主程序能力分成“用户可直接使用”和“开发/验收能力”两层来整理。
 - 在文档中给出普通播放方式、能力探测方式、配置方式、默认交互方式和功能验证表。
 - 同步更新 `docs/README.md` 与根 `README.md`，保证入口可见。
 
@@ -2256,10 +2256,10 @@ windows-backend-check.result=FAIL
 - 当前仓库没有新增代码改动，本次只新增说明文档并同步索引。
 
 ### 修改文件
-- docs/PLAYER_FEATURES_USAGE_VALIDATION.md
+- docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md
 - docs/README.md
 - README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 

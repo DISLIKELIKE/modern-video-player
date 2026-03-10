@@ -46,7 +46,7 @@
 | 41 | 2026-03-08 | M4 4.2：A-B Repeat（A/B/C）接入与验收 | ✅ 已修复 |
 | 42 | 2026-03-08 | M4 4.3（截图） | ✅ 已修复 |
 | 43 | 2026-03-08 | `MPC_HC_GAP_ANALYSIS` 评估结论过期 | ✅ 已修复 |
-| 44 | 2026-03-08 | `docs/VERSION.md` 历史路径描述过期 | ✅ 已修复 |
+| 44 | 2026-03-08 | `docs/records/VERSION.md` 历史路径描述过期 | ✅ 已修复 |
 | 45 | 2026-03-08 | README 与架构文档仍混用旧主链表述 | ✅ 已修复 |
 | 46 | 2026-03-08 | 实现教程与迭代计划缺少历史/当前边界说明 | ✅ 已修复 |
 | 47 | 2026-03-08 | 辅助说明文档仍缺少当前入口与状态边界 | ✅ 已修复 |
@@ -366,9 +366,9 @@ int ret = SDL_UpdateYUVTexture(
 - `include/logger.h`
 - `src/logger.cpp`
 - `config/logging.conf`
-- `docs/LOGGING.md`
-- `docs/CHANGELOG.md`
-- `docs/VERSION.md`
+- `docs/design/LOGGING.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
 
 ---
 
@@ -561,9 +561,9 @@ void VideoPlayer::play() {
 ## 相关文档
 
 - [VERSION.md](./VERSION.md) - 版本记录
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - 架构设计
-- [WINDOWS_SETUP.md](./WINDOWS_SETUP.md) - Windows 配置指南
-- [LOGGING.md](./LOGGING.md) - 日志系统说明
+- [ARCHITECTURE.md](../design/ARCHITECTURE.md) - 架构设计
+- [WINDOWS_SETUP.md](../guides/WINDOWS_SETUP.md) - Windows 配置指南
+- [LOGGING.md](../design/LOGGING.md) - 日志系统说明
 
 ---
 
@@ -633,7 +633,7 @@ void VideoPlayer::play() {
 - CMakeLists.txt
 - include/video_player.h
 - src/video_player.cpp
-- docs/ARCHITECTURE_REFACTOR_2026-03-06.md
+- docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md
 - 旧模块头源文件删除（见 DEVELOP_LOG 问题 14）
 
 ---
@@ -658,9 +658,9 @@ void VideoPlayer::play() {
 
 ### 修改文件
 - src/display.cpp
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ## 问题 16: 最大化/缩放时画面卡住，并补充基础交互控制
 
@@ -685,9 +685,9 @@ void VideoPlayer::play() {
 - src/display.cpp
 - src/core/player_core.cpp
 - src/main.cpp
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ## 问题 17: 企业级 MPC-HC 模块骨架落地（阶段二/三推进）
 
@@ -750,9 +750,9 @@ void VideoPlayer::play() {
 - include/audio_player.h
 - src/audio_player.cpp
 - .monkeycode/specs/enterprise-quill-logging/tasklist.md
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ---
 
@@ -789,7 +789,7 @@ void VideoPlayer::play() {
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
-- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
 - docs/README.md
 
 ---
@@ -833,13 +833,13 @@ void VideoPlayer::play() {
   - 逐个调用 `--probe-file`；
   - 生成 `docs/reports/FORMAT_REGRESSION_*.md` 报告；
   - 返回码语义：`0=全部PASS`，`1=存在PARTIAL`，`2=存在FAIL`。
-- 补充 `docs/FORMAT_REGRESSION.md` 与文档索引，便于在 VS2022/PowerShell 下直接执行。
+- 补充 `docs/workflows/FORMAT_REGRESSION.md` 与文档索引，便于在 VS2022/PowerShell 下直接执行。
 
 ### 修改文件
 - src/main.cpp
 - tools/format_regression/run_format_regression.ps1
 - tools/format_regression/format_samples.csv
-- docs/FORMAT_REGRESSION.md
+- docs/workflows/FORMAT_REGRESSION.md
 - docs/README.md
 
 ---
@@ -868,8 +868,8 @@ void VideoPlayer::play() {
 - .github/workflows/format-regression.yml
 - CMakeLists.txt
 - tools/download_test_samples.ps1
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
@@ -946,9 +946,9 @@ void VideoPlayer::play() {
 - CMakeLists.txt
 - tests/core_frame_queue_tests.cpp（删除）
 - tests/core_clock_tests.cpp（删除）
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -976,9 +976,9 @@ void VideoPlayer::play() {
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1023,9 +1023,9 @@ void VideoPlayer::play() {
 - include/video_player.h
 - src/video_player.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1066,9 +1066,9 @@ void VideoPlayer::play() {
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1114,9 +1114,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1148,9 +1148,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1184,9 +1184,9 @@ void VideoPlayer::play() {
 - samples/README.md
 - docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1216,9 +1216,9 @@ void VideoPlayer::play() {
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
 - samples/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1246,9 +1246,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1283,13 +1283,13 @@ void VideoPlayer::play() {
 - samples/avi/.gitkeep
 - samples/m2ts/.gitkeep
 - samples/README.md
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1319,9 +1319,9 @@ void VideoPlayer::play() {
 - tools/download_test_samples.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1357,9 +1357,9 @@ void VideoPlayer::play() {
 - tools/format_regression/run_format_regression.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1389,9 +1389,9 @@ void VideoPlayer::play() {
 - src/decoder/decoder_factory.cpp
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1417,9 +1417,9 @@ void VideoPlayer::play() {
 ### 修改文件
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1452,9 +1452,9 @@ void VideoPlayer::play() {
 - include/render/d3d11_video_renderer.h
 - src/render/d3d11_video_renderer.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1495,9 +1495,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1523,9 +1523,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1576,9 +1576,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1633,9 +1633,9 @@ void VideoPlayer::play() {
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/AB_REPEAT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1665,9 +1665,9 @@ void VideoPlayer::play() {
 - README_ZH.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SCREENSHOT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1676,7 +1676,7 @@ void VideoPlayer::play() {
 **日期**: 2026-03-08
 
 ### 问题描述
-- `docs/MPC_HC_GAP_ANALYSIS.md` 仍保留旧结论，把多项已接入主流程的能力写成“骨架/未接入”。
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 仍保留旧结论，把多项已接入主流程的能力写成“骨架/未接入”。
 - 这会影响后续迭代优先级判断，也会让文档读者对当前实现进度形成错误认知。
 
 ### 原因分析
@@ -1684,26 +1684,26 @@ void VideoPlayer::play() {
 - 旧评估主要依据“代码骨架是否存在”，没有吸收后续 `docs/reports/*` 验收结果。
 
 ### 解决方案
-- 将 `docs/MPC_HC_GAP_ANALYSIS.md` 更新到 2026-03-08 口径。
+- 将 `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 更新到 2026-03-08 口径。
 - 重写“当前已具备能力”“差距总览”“关键未实现功能清单”“代码层证据摘要”“建议里程碑”。
 - 新增“验收与报告证据”章节，把字幕、播放列表、设置、快捷键、D3D11/回退、章节导航、A-B Repeat、截图、格式矩阵的本地报告纳入评估依据。
 - 更新 `docs/README.md`，补充本次文档对齐说明。
 
 ### 修改文件
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
-## 问题 44: `docs/VERSION.md` 历史路径描述过期
+## 问题 44: `docs/records/VERSION.md` 历史路径描述过期
 
 **日期**: 2026-03-08
 
 ### 问题描述
-- `docs/VERSION.md` 的“阶段一”历史章节仍把早期 decoder/thread/test 文件名写成当前仓库结构说明。
+- `docs/records/VERSION.md` 的“阶段一”历史章节仍把早期 decoder/thread/test 文件名写成当前仓库结构说明。
 - 在基于文档遍历仓库时，容易把已移除的旧实现与当前 `PlayerCore + Scheduler + core/*` 主链混淆。
 
 ### 原因分析
@@ -1717,9 +1717,9 @@ void VideoPlayer::play() {
 - 同步补写版本文档的更新日志条目。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1729,25 +1729,25 @@ void VideoPlayer::play() {
 
 ### 问题描述
 - `README.md`、`README_ZH.md` 的项目结构和架构示意仍展示 `video_decoder` / `audio_decoder` 等旧路径。
-- `docs/ARCHITECTURE.md` 也含有“当前实现”字样和旧模块命名，容易与现行 `PlayerCore + Scheduler + core/*` 主链混淆。
+- `docs/design/ARCHITECTURE.md` 也含有“当前实现”字样和旧模块命名，容易与现行 `PlayerCore + Scheduler + core/*` 主链混淆。
 
 ### 原因分析
 - 根目录 README 的目录树和架构图来自早期单体/旧多线程实现阶段，后续未随重构同步刷新。
-- `docs/ARCHITECTURE.md` 保留了大量历史设计内容，但缺少清晰的“历史/当前”边界提示。
+- `docs/design/ARCHITECTURE.md` 保留了大量历史设计内容，但缺少清晰的“历史/当前”边界提示。
 
 ### 解决方案
 - 更新 `README.md` 与 `README_ZH.md` 的项目结构、架构示意和文档链接，统一指向当前主链。
-- 在 `docs/ARCHITECTURE.md` 顶部增加状态说明，并将旧模块章节显式标记为“历史实现”。
+- 在 `docs/design/ARCHITECTURE.md` 顶部增加状态说明，并将旧模块章节显式标记为“历史实现”。
 - 将日志示例从 `spdlog` 改为当前项目使用的 `Quill` 宏接口。
 - 更新 `docs/README.md`，区分历史架构基线与当前重构说明。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/ARCHITECTURE.md
+- docs/design/ARCHITECTURE.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1756,26 +1756,26 @@ void VideoPlayer::play() {
 **日期**: 2026-03-08
 
 ### 问题描述
-- `docs/IMPLEMENTATION.md` 仍以早期 `video_decoder/audio_decoder/playLoop` 原型路径讲解实现步骤，容易被误读为当前仓库的逐文件开发指南。
-- `docs/MPC_HC_ITERATION_PLAN.md` 是 `2026-03-07` 的规划快照，但未明确说明部分计划项已在 `2026-03-08` 前后落地。
+- `docs/guides/IMPLEMENTATION.md` 仍以早期 `video_decoder/audio_decoder/playLoop` 原型路径讲解实现步骤，容易被误读为当前仓库的逐文件开发指南。
+- `docs/plans/MPC_HC_ITERATION_PLAN.md` 是 `2026-03-07` 的规划快照，但未明确说明部分计划项已在 `2026-03-08` 前后落地。
 
 ### 原因分析
 - 这两份文档本身仍有参考价值，但缺少“历史教程 / 计划快照 / 当前进度”之间的边界说明。
 - 当用户按文档遍历仓库时，会把教程示例和规划文字误当作现行结构与当前待办。
 
 ### 解决方案
-- 为 `docs/IMPLEMENTATION.md` 增加状态说明，明确其属于早期原型教程，并指向当前主链参考文档。
-- 为 `docs/MPC_HC_ITERATION_PLAN.md` 增加状态说明，明确其属于 `2026-03-07` 的计划快照，并补充当前进度参考入口。
+- 为 `docs/guides/IMPLEMENTATION.md` 增加状态说明，明确其属于早期原型教程，并指向当前主链参考文档。
+- 为 `docs/plans/MPC_HC_ITERATION_PLAN.md` 增加状态说明，明确其属于 `2026-03-07` 的计划快照，并补充当前进度参考入口。
 - 更新 `docs/README.md`、`README.md`、`README_ZH.md` 的文档说明，统一区分历史教程、规划快照与当前实现说明。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/IMPLEMENTATION.md
-- docs/MPC_HC_ITERATION_PLAN.md
+- docs/guides/IMPLEMENTATION.md
+- docs/plans/MPC_HC_ITERATION_PLAN.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1784,26 +1784,26 @@ void VideoPlayer::play() {
 **日期**: 2026-03-08
 
 ### 问题描述
-- `docs/FILTERS.md`、`docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/WINDOWS_SETUP.md` 虽然内容仍有参考价值，但缺少对“当前主流程入口”和“文档适用范围”的明确说明。
-- 其中 `docs/WINDOWS_SETUP.md` 还保留了与当前 `CMakeLists.txt` 不完全一致的手动配置示例，容易误导 Windows 构建路径。
+- `docs/design/FILTERS.md`、`docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/guides/WINDOWS_SETUP.md` 虽然内容仍有参考价值，但缺少对“当前主流程入口”和“文档适用范围”的明确说明。
+- 其中 `docs/guides/WINDOWS_SETUP.md` 还保留了与当前 `CMakeLists.txt` 不完全一致的手动配置示例，容易误导 Windows 构建路径。
 
 ### 原因分析
 - 这几份文档分别服务于滤镜、能力参考、Windows 环境配置，长期迭代后内容没有统一补齐“当前口径”说明。
 - 文档读者如果直接按旧描述执行，可能会把参考性内容误当成当前唯一入口，或沿用过时的参数传递方式。
 
 ### 解决方案
-- 为 `docs/FILTERS.md` 增加状态说明，区分当前生效的 `FilterPipeline` 主链与预留链式封装。
-- 为 `docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加适用范围说明，并将总进度参考入口指向差距评估、版本记录和变更日志。
-- 为 `docs/WINDOWS_SETUP.md` 增加当前依赖探测顺序说明，移除误导性的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例，改为与现有 `CMakeLists.txt` 一致的仓库内 `external/*` 回退口径。
+- 为 `docs/design/FILTERS.md` 增加状态说明，区分当前生效的 `FilterPipeline` 主链与预留链式封装。
+- 为 `docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加适用范围说明，并将总进度参考入口指向差距评估、版本记录和变更日志。
+- 为 `docs/guides/WINDOWS_SETUP.md` 增加当前依赖探测顺序说明，移除误导性的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例，改为与现有 `CMakeLists.txt` 一致的仓库内 `external/*` 回退口径。
 - 更新 `docs/README.md` 索引与本轮文档更新记录。
 
 ### 修改文件
-- docs/FILTERS.md
-- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
-- docs/WINDOWS_SETUP.md
+- docs/design/FILTERS.md
+- docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/guides/WINDOWS_SETUP.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1813,7 +1813,7 @@ void VideoPlayer::play() {
 
 ### 问题描述
 - 根目录 `README.md` / `README_ZH.md` 的 Windows 故障排除仍建议使用 `FFMPEG_DIR` 传参，和当前 `CMakeLists.txt` 的依赖探测方式不一致。
-- `docs/video-stream-index-fix.md` 是早期原型阶段的问题分析，但缺少“历史归档”说明，容易让读者误以为其中的 `playLoop` / `video_decoder.cpp` 仍属当前主链。
+- `docs/analysis/video-stream-index-fix.md` 是早期原型阶段的问题分析，但缺少“历史归档”说明，容易让读者误以为其中的 `playLoop` / `video_decoder.cpp` 仍属当前主链。
 
 ### 原因分析
 - README 的故障排除段落保留了旧手动依赖用法，没有跟随 Windows 构建入口一起更新。
@@ -1821,16 +1821,16 @@ void VideoPlayer::play() {
 
 ### 解决方案
 - 将 README 中 FFmpeg 故障排除改为当前推荐口径：优先说明 `vcpkg` toolchain，手动安装则使用仓库内 `external/ffmpeg/` 回退布局。
-- 为 `docs/video-stream-index-fix.md` 增加状态说明，标记为早期原型问题分析归档。
+- 为 `docs/analysis/video-stream-index-fix.md` 增加状态说明，标记为早期原型问题分析归档。
 - 在 `docs/README.md` 中补充该历史分析文档的索引与本轮更新记录。
 
 ### 修改文件
 - README.md
 - README_ZH.md
-- docs/video-stream-index-fix.md
+- docs/analysis/video-stream-index-fix.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1847,14 +1847,14 @@ void VideoPlayer::play() {
 - `docs/README.md` 虽然是索引入口，但没有独立承载本轮巡检结论的专题文档。
 
 ### 解决方案
-- 新增 `docs/DOC_AUDIT_2026-03-08.md`，集中归档本轮文档巡检的范围、方法、已完成对齐项、保留历史内容、后续维护建议与关联提交。
+- 新增 `docs/analysis/DOC_AUDIT_2026-03-08.md`，集中归档本轮文档巡检的范围、方法、已完成对齐项、保留历史内容、后续维护建议与关联提交。
 - 更新 `docs/README.md`，把该报告加入索引，并补一条本轮更新记录。
 
 ### 修改文件
-- docs/DOC_AUDIT_2026-03-08.md
+- docs/analysis/DOC_AUDIT_2026-03-08.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 
 ---
@@ -1901,12 +1901,12 @@ void VideoPlayer::play() {
 - src/main.cpp
 - README.md
 - README_ZH.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/FRAME_STEP_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ---
 
@@ -1951,12 +1951,12 @@ void VideoPlayer::play() {
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
 - docs/reports/DELAY_ADJUST_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -1987,11 +1987,11 @@ void VideoPlayer::play() {
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2025,12 +2025,12 @@ void VideoPlayer::play() {
 - src/core/player_core.cpp
 - src/video_player.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2061,12 +2061,12 @@ void VideoPlayer::play() {
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2091,12 +2091,12 @@ void VideoPlayer::play() {
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2123,12 +2123,12 @@ void VideoPlayer::play() {
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/HIGH_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -2151,12 +2151,12 @@ void VideoPlayer::play() {
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -2186,12 +2186,12 @@ void VideoPlayer::play() {
 - src/plugin/sample_logger_plugin.cpp
 - src/filters/filter_registry.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -2222,12 +2222,12 @@ void VideoPlayer::play() {
 - samples/streaming/hls_local/segment000.ts
 - samples/streaming/hls_local/segment001.ts
 - samples/streaming/hls_local/segment002.ts
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ---
@@ -2283,12 +2283,12 @@ void VideoPlayer::play() {
 - samples/streaming/abr_local/dash/high/init.mp4
 - samples/streaming/abr_local/dash/high/segment000.m4s
 - samples/streaming/abr_local/dash/high/segment001.m4s
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ---
 
@@ -2309,10 +2309,10 @@ void VideoPlayer::play() {
 - 基于 `v0.2.0-rc1` 已成功建立这一事实，同步勾选执行约束 `5.3 每个里程碑结束前必须可打 RC 标签`。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ---
 
@@ -2332,9 +2332,9 @@ void VideoPlayer::play() {
 - 保留 `5.2 每周五只做收敛（修复、回归、文档）` 为待完成，并在文档中明确原因。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
@@ -2352,15 +2352,15 @@ void VideoPlayer::play() {
 - 如果没有这层流程约束，即使当前口径正确，后续也很难稳定积累跨周执行证据。
 
 ### 解决方案
-- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，把 `5.2` 固化为可直接执行的周节奏说明与周五收敛手册。
+- 新增 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`，把 `5.2` 固化为可直接执行的周节奏说明与周五收敛手册。
 - 更新 `docs/README.md` 与记录文档，明确 `5.2` 现阶段完成的是“流程落地”，而不是“任务勾选完成”。
 
 ### 修改文件
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 
 ---
@@ -2379,17 +2379,17 @@ void VideoPlayer::play() {
 ### 解决方案
 - 给 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md` 的两个周五补上收敛日记录卡。
 - 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md` 作为每周收敛/周报模板。
-- 同步更新 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md` 和 `docs/README.md` 的入口说明。
+- 同步更新 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md` 和 `docs/README.md` 的入口说明。
 
 ### 修改文件
 - .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 
 ---
@@ -2406,14 +2406,14 @@ void VideoPlayer::play() {
 - 如果没有统一总览，后续继续维护文档时容易遗漏“功能”和“验证”之间的对应关系。
 
 ### 解决方案
-- 新增 `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`，统一记录当前功能、使用方式、配置入口、专项验收命令与报告映射。
+- 新增 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`，统一记录当前功能、使用方式、配置入口、专项验收命令与报告映射。
 - 更新 `docs/README.md` 和根 `README.md`，增加该总览文档的入口。
 
 ### 修改文件
-- docs/PLAYER_FEATURES_USAGE_VALIDATION.md
+- docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md
 - docs/README.md
 - README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 

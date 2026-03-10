@@ -19,7 +19,7 @@
 
 - 当前 `CMakeLists.txt` 的 Windows 依赖探测顺序为：优先使用包管理器 / `find_package(... CONFIG)` 结果，其次回退到仓库内固定目录 `external/SDL2`、`external/ffmpeg`，Quill 则优先查找包管理器结果或 `external/quill`。
 - 因此，手动安装模式下，最稳妥的方式是按本文示例把依赖放到仓库约定目录，而不是依赖旧版 `SDL2_DIR` / `FFMPEG_DIR` 传参习惯。
-- 本文档记录的是当前 Windows 构建入口；播放器能力与功能进度请以 `docs/VERSION.md`、`docs/CHANGELOG.md`、`docs/MPC_HC_GAP_ANALYSIS.md` 为准。
+- 本文档记录的是当前 Windows 构建入口；播放器能力与功能进度请以 `docs/records/VERSION.md`、`docs/records/CHANGELOG.md`、`docs/analysis/MPC_HC_GAP_ANALYSIS.md` 为准。
 
 ## 前置要求
 
@@ -321,9 +321,9 @@ cmake --build . --target clean
 
 安装完成后，您可以：
 
-1. 阅读 [README.md](./README.md) 查看文档索引与当前入口说明
-2. 阅读 [ARCHITECTURE_REFACTOR_2026-03-06.md](./ARCHITECTURE_REFACTOR_2026-03-06.md) 了解现行主链结构
-3. 阅读 [VERSION.md](./VERSION.md) / [CHANGELOG.md](./CHANGELOG.md) 了解当前能力与最近变更
+1. 阅读 [README.md](../README.md) 查看文档索引与当前入口说明
+2. 阅读 [ARCHITECTURE_REFACTOR_2026-03-06.md](../design/ARCHITECTURE_REFACTOR_2026-03-06.md) 了解现行主链结构
+3. 阅读 [VERSION.md](../records/VERSION.md) / [CHANGELOG.md](../records/CHANGELOG.md) 了解当前能力与最近变更
 4. 运行示例视频文件测试功能
 
 ## 获取帮助

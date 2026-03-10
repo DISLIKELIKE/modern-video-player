@@ -3,7 +3,7 @@
 ## 状态说明（2026-03-08）
 
 - 本文档保留了项目从早期单体/旧多线程播放链路演进到当前主链之前的大量设计背景，因此部分章节属于历史方案说明。
-- 当前仓库唯一生效的播放器主链以 `VideoPlayer -> PlayerCore -> Scheduler -> core/*` 为核心，请优先参考 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 与实际代码。
+- 当前仓库唯一生效的播放器主链以 `VideoPlayer -> PlayerCore -> Scheduler -> core/*` 为核心，请优先参考 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md` 与实际代码。
 - 文中出现的 `video_decoder`、`audio_decoder`、`VideoDecodeThread`、`AudioDecodeThread`、`SyncManager` 等命名，仅代表早期实现阶段，不再对应当前仓库文件结构。
 
 ## 项目依赖版本
@@ -812,4 +812,4 @@ void saveConfig(const Config& config);
 
 ## 总结
 
-本架构设计文档用于保留项目的设计背景与阶段性演进记录。当前实现已经收敛到 `VideoPlayer + PlayerCore + Scheduler + core/*` 主链；如需了解现行架构，请结合 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 与仓库中的 `include/core/*`、`src/core/*` 阅读。
+本架构设计文档用于保留项目的设计背景与阶段性演进记录。当前实现已经收敛到 `VideoPlayer + PlayerCore + Scheduler + core/*` 主链；如需了解现行架构，请结合 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md` 与仓库中的 `include/core/*`、`src/core/*` 阅读。

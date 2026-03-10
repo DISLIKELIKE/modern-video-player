@@ -53,10 +53,14 @@ enum class ErrorCode {
 };
 
 struct PlaybackInfo {
+    // 媒体总时长（秒），未知时为 0。
     double duration{0.0};
+    // 当前播放位置（秒）。
     double position{0.0};
+    // 当前视频分辨率，纯音频时为 0。
     int video_width{0};
     int video_height{0};
+    // 当前音频参数，纯视频时为 0。
     int audio_sample_rate{0};
     int audio_channels{0};
 };
@@ -84,12 +88,16 @@ public:
     PlayerCore();
     ~PlayerCore();
 
+    // 打开媒体并初始化渲染/解码/队列资源；失败时返回 false。
     bool open(const std::string& filename);
+    // 停止播放并释放全部运行时资源。
     void close();
 
+    // 播放控制：play/pause/stop 支持在 UI 线程直接调用。
     void play();
     void pause();
     void stop();
+    // 按秒 seek 到目标位置（内部会执行队列与解码器 flush）。
     void seek(double timestamp);
     bool seekToNextChapter();
     bool seekToPreviousChapter();
@@ -101,9 +109,11 @@ public:
     double abRepeatStart() const;
     double abRepeatEnd() const;
     bool requestScreenshot();
+    // 取走最近一次截图路径；若无新截图返回 false。
     bool consumeLastScreenshotPath(std::string& path);
     bool stepFrameBackward();
     bool stepFrameForward();
+    // 处理渲染器事件（热键、拖动进度、窗口关闭等）。
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -111,13 +121,17 @@ public:
 
     PlaybackState getState() const;
     PlaybackInfo getInfo() const;
+    // 读取关键诊断计数，便于定位“读包/解码/渲染”瓶颈。
     DiagnosticsSnapshot getDiagnosticsSnapshot() const;
 
+    // 音量范围 [0,1]。
     void setVolume(float volume);
     float getVolume() const;
 
+    // 倍速范围 [0.5,2.0]，具体能力受解码与音频链路约束。
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
+    // 音频/字幕延迟单位均为秒，正值表示“更晚播放/显示”。
     void setAudioDelay(double delay_seconds);
     double getAudioDelay() const;
     void setSubtitleDelay(double delay_seconds);
@@ -140,6 +154,7 @@ public:
     using ErrorCallback = std::function<void(ErrorCode, const std::string&)>;
     using FrameCallback = std::function<void()>;
 
+    // 回调在内部线程触发，回调实现需避免长时间阻塞。
     void onStateChanged(StateCallback callback);
     void onPositionChanged(PositionCallback callback);
     void onError(ErrorCallback callback);

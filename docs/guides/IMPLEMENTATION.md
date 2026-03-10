@@ -5,7 +5,7 @@
 - 本文档主要保留项目早期“从零搭建原型播放器”的教程性实现记录，适合作为 FFmpeg + SDL2 播放器的学习参考。
 - 文中出现的 `video_decoder`、`audio_decoder`、单体 `playLoop` 等路径与流程，属于早期原型阶段，不再代表当前仓库的实际主链结构。
 - 当前仓库已经收敛到 `VideoPlayer -> PlayerCore -> Scheduler -> core/*` 主链，并扩展了 `decoder/`、`render/`、`playlist/`、`subtitle/`、`input/` 等模块。
-- 如需理解现行实现，请优先结合 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md`、`docs/MPC_HC_GAP_ANALYSIS.md` 与实际代码阅读。
+- 如需理解现行实现，请优先结合 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md`、`docs/analysis/MPC_HC_GAP_ANALYSIS.md` 与实际代码阅读。
 
 ## 项目依赖版本
 

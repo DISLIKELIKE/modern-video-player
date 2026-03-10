@@ -65,7 +65,7 @@
 - 重新启用 Quill，构建 ConsoleSink + RotatingFileSink 异步日志通道，并保持 stdout/stderr 备援。
 - `config/logging.conf` 与 `MVP_LOG_*` 环境变量支持运行时调整 `log_dir`、轮转大小/数量及日志等级。
 - 初始化失败或目录不可写时自动告警并降级；宏接口与 `DEBUG_MODE` 行为保持兼容。
-- 修改文件：`include/logger.h`、`src/logger.cpp`、`config/logging.conf`、`docs/LOGGING.md`、`docs/CHANGELOG.md`、`docs/VERSION.md`
+- 修改文件：`include/logger.h`、`src/logger.cpp`、`config/logging.conf`、`docs/design/LOGGING.md`、`docs/records/CHANGELOG.md`、`docs/records/VERSION.md`
 - 编译输出示例：`Quill: enabled`，运行期日志写入 `logs/modern-video-player.log`
 
 #### 多线程播放架构重构 (2026-02-25)
@@ -310,7 +310,7 @@ make -j$(nproc)
 - `CMakeLists.txt` 仅保留新架构编译项。
 
 ### 文档
-- 新增 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md`，包含重构目标、删除模块、保留文件清单。
+- 新增 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md`，包含重构目标、删除模块、保留文件清单。
 
 ---
 
@@ -323,9 +323,9 @@ make -j$(nproc)
 
 ### 修改文件
 - `src/display.cpp`
-- `docs/DEVELOP_LOG.md`
-- `docs/CHANGELOG.md`
-- `docs/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
 
 ## 2026-03-07 更新
 
@@ -341,9 +341,9 @@ make -j$(nproc)
 - src/display.cpp
 - src/core/player_core.cpp
 - src/main.cpp
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ## 2026-03-07 更新（企业级模块推进）
 
@@ -386,9 +386,9 @@ make -j$(nproc)
 - include/filters/*
 - src/filters/*
 - .monkeycode/specs/enterprise-quill-logging/tasklist.md
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ## 2026-03-07 更新（格式能力矩阵与高分高帧评估）
 
@@ -412,7 +412,7 @@ make -j$(nproc)
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
-- docs/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
+- docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md
 - docs/README.md
 
 ## 2026-03-07 更新（D3D11VA 硬解回退链路）
@@ -437,7 +437,7 @@ make -j$(nproc)
 ### 回归工具链
 - 新增 `tools/format_regression/run_format_regression.ps1`：按样本清单自动批量执行探测。
 - 新增 `tools/format_regression/format_samples.csv`：维护格式样本与预期编码信息。
-- 新增 `docs/FORMAT_REGRESSION.md`：记录脚本参数、输出路径和使用方式。
+- 新增 `docs/workflows/FORMAT_REGRESSION.md`：记录脚本参数、输出路径和使用方式。
 - 报告输出：`docs/reports/FORMAT_REGRESSION_*.md`。
 - 返回码语义：`0=全部PASS`，`1=存在PARTIAL`，`2=存在FAIL`。
 
@@ -445,7 +445,7 @@ make -j$(nproc)
 - src/main.cpp
 - tools/format_regression/run_format_regression.ps1
 - tools/format_regression/format_samples.csv
-- docs/FORMAT_REGRESSION.md
+- docs/workflows/FORMAT_REGRESSION.md
 - docs/README.md
 
 ## 2026-03-07 更新（GitHub Actions 自动回归）
@@ -472,13 +472,13 @@ make -j$(nproc)
 - .github/workflows/format-regression.yml
 - CMakeLists.txt
 - tools/download_test_samples.ps1
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/DEVELOP_LOG.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
 
 ## 2026-03-07 更新（播放列表 + 设置 + 快捷键首版）
 
@@ -537,9 +537,9 @@ make -j$(nproc)
 - CMakeLists.txt
 - tests/core_frame_queue_tests.cpp（删除）
 - tests/core_clock_tests.cpp（删除）
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-07 更新（外挂字幕加载入口）
 
@@ -553,9 +553,9 @@ make -j$(nproc)
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-07 更新（字幕渲染叠加与时序同步）
 
@@ -590,9 +590,9 @@ make -j$(nproc)
 - include/video_player.h
 - src/video_player.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（字幕开关与异常处理）
 
@@ -626,9 +626,9 @@ make -j$(nproc)
 - src/video_player.cpp
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（快捷键配置持久化）
 
@@ -669,9 +669,9 @@ make -j$(nproc)
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（快捷键冲突检测与恢复默认）
 
@@ -698,9 +698,9 @@ make -j$(nproc)
 - src/main.cpp
 - config/player_settings.ini
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（字幕 seek 同步验收）
 
@@ -734,9 +734,9 @@ make -j$(nproc)
 - samples/README.md
 - docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（播放列表 5 文件验收）
 
@@ -759,9 +759,9 @@ make -j$(nproc)
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md
 - samples/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（设置重启恢复验收）
 
@@ -787,9 +787,9 @@ make -j$(nproc)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（容器矩阵补齐）
 
@@ -820,13 +820,13 @@ make -j$(nproc)
 - samples/avi/.gitkeep
 - samples/m2ts/.gitkeep
 - samples/README.md
-- docs/FORMAT_REGRESSION.md
-- docs/REGRESSION_OPERATION_PLAYBOOK.md
+- docs/workflows/FORMAT_REGRESSION.md
+- docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（视频编码矩阵补齐）
 
@@ -852,9 +852,9 @@ make -j$(nproc)
 - tools/download_test_samples.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（音频编码矩阵补齐）
 
@@ -889,9 +889,9 @@ make -j$(nproc)
 - tools/format_regression/run_format_regression.ps1
 - docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（DecoderFactory 初始化流程接入）
 
@@ -914,9 +914,9 @@ make -j$(nproc)
 - src/decoder/decoder_factory.cpp
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（D3D11VA 协商失败软解兜底）
 
@@ -933,9 +933,9 @@ make -j$(nproc)
 ### 修改文件
 - src/core/player_core.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（D3D11 渲染最小可用链路）
 
@@ -964,9 +964,9 @@ make -j$(nproc)
 - include/render/d3d11_video_renderer.h
 - src/render/d3d11_video_renderer.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（渲染失败自动降级回归入口）
 
@@ -1001,9 +1001,9 @@ make -j$(nproc)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（Windows 软解/硬解主力样本回归）
 
@@ -1083,9 +1083,9 @@ make -j$(nproc)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/CHAPTER_NAV_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（A-B Repeat）
 
@@ -1146,9 +1146,9 @@ make -j$(nproc)
 - src/main.cpp
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/AB_REPEAT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（截图）
 
@@ -1182,9 +1182,9 @@ make -j$(nproc)
 - README_ZH.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/SCREENSHOT_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（帧步进）
 
@@ -1227,17 +1227,17 @@ make -j$(nproc)
 - src/main.cpp
 - README.md
 - README_ZH.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 - docs/reports/FRAME_STEP_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（差距评估文档对齐）
 
 ### 文档基线刷新
-- `docs/MPC_HC_GAP_ANALYSIS.md` 更新为截至 `2026-03-08` 的实现状态。
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 更新为截至 `2026-03-08` 的实现状态。
 - 评估依据从“只看接口/骨架”升级为“代码入口 + 本地验收报告”联合判断。
 
 ### 结论修正
@@ -1262,11 +1262,11 @@ make -j$(nproc)
 - `P2` 聚焦：插件、流媒体、皮肤系统产品化。
 
 ### 修改文件
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 更新（版本文档历史段落清理）
 
@@ -1280,9 +1280,9 @@ make -j$(nproc)
 - 将 `USE_NEW_PLAYER_CORE` 和临时 `tests/core_*` 的历史描述改写为“架构收敛 / 后续清理”口径。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 ## 2026-03-08 ?????/???????
 
@@ -1325,12 +1325,12 @@ make -j$(nproc)
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md
 - docs/reports/DELAY_ADJUST_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ## 2026-03-08 ??????????
@@ -1358,11 +1358,11 @@ make -j$(nproc)
 - README.md
 - README_ZH.md
 - docs/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1391,12 +1391,12 @@ make -j$(nproc)
 - src/core/player_core.cpp
 - src/video_player.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1424,12 +1424,12 @@ make -j$(nproc)
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/1080P60_STABILITY_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1454,12 +1454,12 @@ make -j$(nproc)
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/4K_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1483,12 +1483,12 @@ make -j$(nproc)
 - src/main.cpp
 - tools/download_test_samples.ps1
 - samples/README.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/HIGH_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1514,12 +1514,12 @@ make -j$(nproc)
 
 ### 修改文件
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ## 2026-03-08 更新（插件系统）
@@ -1546,12 +1546,12 @@ make -j$(nproc)
 - src/plugin/sample_logger_plugin.cpp
 - src/filters/filter_registry.cpp
 - src/main.cpp
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 ## 2026-03-08 更新（流媒体 HTTP 分片与缓冲）
@@ -1580,12 +1580,12 @@ make -j$(nproc)
 - samples/streaming/hls_local/segment000.ts
 - samples/streaming/hls_local/segment001.ts
 - samples/streaming/hls_local/segment002.ts
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
 
@@ -1639,12 +1639,12 @@ make -j$(nproc)
 - samples/streaming/abr_local/dash/high/init.mp4
 - samples/streaming/abr_local/dash/high/segment000.m4s
 - samples/streaming/abr_local/dash/high/segment001.m4s
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - docs/README.md
 - docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md
-- docs/CHANGELOG.md
-- docs/VERSION.md
-- docs/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ## 2026-03-08 更新（建立里程碑标签）
 
@@ -1668,10 +1668,10 @@ make -j$(nproc)
   - `5.3 每个里程碑结束前必须可打 RC 标签` 标记完成。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
-- docs/MPC_HC_GAP_ANALYSIS.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+- docs/analysis/MPC_HC_GAP_ANALYSIS.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 ## 2026-03-08 更新（执行守则口径同步）
 
@@ -1688,9 +1688,9 @@ make -j$(nproc)
   - `5.2 每周五只做收敛（修复、回归、文档）` 保持待完成。
 
 ### 修改文件
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 - docs/README.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
@@ -1703,12 +1703,12 @@ make -j$(nproc)
 - 守则项 `5.2 每周五只做收敛（修复、回归、文档）` 目前只有原则描述，缺少可重复执行的流程、边界和输出物定义。
 
 ### 分析记录
-1. `docs/MPC_HC_ITERATION_PLAN.md` 只给出“每周五固定做收敛日”的节奏建议，但没有落实成逐步操作手册。
-2. `docs/REGRESSION_OPERATION_PLAYBOOK.md` 已覆盖“如何做回归”，但还没有回答“周五当天允许做什么、禁止做什么、什么时候可以得出 RC 结论”。
+1. `docs/plans/MPC_HC_ITERATION_PLAN.md` 只给出“每周五固定做收敛日”的节奏建议，但没有落实成逐步操作手册。
+2. `docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md` 已覆盖“如何做回归”，但还没有回答“周五当天允许做什么、禁止做什么、什么时候可以得出 RC 结论”。
 3. 因此当前最合适的动作是先把 `5.2` 落成流程文档，再等待后续跨周执行证据决定是否勾选。
 
 ### 解决方案
-- 新增 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，明确周节奏、周五允许/禁止事项、执行顺序、推荐命令、输出物与勾选口径。
+- 新增 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`，明确周节奏、周五允许/禁止事项、执行顺序、推荐命令、输出物与勾选口径。
 - 更新 `docs/README.md` 入口，确保该流程文档可直接检索。
 - 同步版本/变更/开发记录，明确 `5.2` 已有执行手册，但任务清单仍保持待完成。
 
@@ -1718,11 +1718,11 @@ make -j$(nproc)
 - 任务清单 `5.2` 本次仍未勾选，待后续形成跨周执行证据后再回写。
 
 ### 修改文件
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 
 ## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
@@ -1734,14 +1734,14 @@ make -j$(nproc)
 - `5.2` 已有流程手册，但还缺少可直接填写的“日看板记录卡 + 周报模板”，不利于后续沉淀跨周执行证据。
 
 ### 分析记录
-1. 仅有 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`，还不足以支撑每周实际执行时的低成本留痕。
+1. 仅有 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`，还不足以支撑每周实际执行时的低成本留痕。
 2. `daily_board.md` 当前只有任务安排，没有为两个周五预留固定填写位置。
 3. 因此需要同时补齐“周五当日记录卡”和“每周汇总模板”两个载体。
 
 ### 解决方案
 - 更新 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`，为 Day 5 / Day 10 增加收敛日记录卡。
 - 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`，作为 `5.2` 的周报留痕模板。
-- 同步 `docs/WEEKLY_CONVERGENCE_PLAYBOOK.md`、`docs/README.md` 与相关记录文档，明确这两个模板的入口和用途。
+- 同步 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`、`docs/README.md` 与相关记录文档，明确这两个模板的入口和用途。
 
 ### 本地验收结果
 - `daily_board.md` 已可直接填写周五的范围冻结、回归命令、blocker 结论、文档同步和阶段结论。
@@ -1752,11 +1752,11 @@ make -j$(nproc)
 - .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
-- docs/WEEKLY_CONVERGENCE_PLAYBOOK.md
+- docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 - docs/README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 
 
 ## 问题 65: 汇总当前功能、使用方式与验证入口
@@ -1773,7 +1773,7 @@ make -j$(nproc)
 3. 因此需要新增一份总览文档，把“功能、用法、验证”集中整理，并同步入口索引。
 
 ### 解决方案
-- 新增 `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`，系统整理当前功能、使用方式、配置方式、验证命令与报告映射。
+- 新增 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`，系统整理当前功能、使用方式、配置方式、验证命令与报告映射。
 - 更新 `docs/README.md`，为该总览文档增加入口，并在更新历史中记账。
 - 更新根 `README.md`，补充到当前总览文档的入口，避免使用说明继续停留在旧口径。
 
@@ -1783,10 +1783,10 @@ make -j$(nproc)
 - 当前仓库没有新增代码改动，本次只补齐功能与使用说明文档。
 
 ### 修改文件
-- docs/PLAYER_FEATURES_USAGE_VALIDATION.md
+- docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md
 - docs/README.md
 - README.md
-- docs/VERSION.md
-- docs/CHANGELOG.md
-- docs/DEVELOP_LOG.md
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
 

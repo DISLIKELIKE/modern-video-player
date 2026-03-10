@@ -1,7 +1,7 @@
 # MPC-HC 对齐迭代计划（单人开发版）
 
 更新时间：2026-03-07  
-适用范围：`modern-video-player` 当前代码基线（见 `docs/MPC_HC_GAP_ANALYSIS.md`）
+适用范围：`modern-video-player` 当前代码基线（见 `docs/analysis/MPC_HC_GAP_ANALYSIS.md`）
 
 ## 状态说明（2026-03-08）
 
@@ -10,8 +10,8 @@
 - 因此，本文件更适合作为“规划基线”阅读，而不是作为当前完成度的唯一依据。
 - 当前实际进度请优先查看：
   - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
-  - `docs/MPC_HC_GAP_ANALYSIS.md`
-  - `docs/VERSION.md` / `docs/CHANGELOG.md`
+  - `docs/analysis/MPC_HC_GAP_ANALYSIS.md`
+  - `docs/records/VERSION.md` / `docs/records/CHANGELOG.md`
 
 ## 1. 前提与原则
 

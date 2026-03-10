@@ -14,6 +14,7 @@ AdaptiveBitrateDecision AdaptiveBitrateSelector::chooseVariant(
         return decision;
     }
 
+    // 预留 headroom 给吞吐抖动，避免频繁“刚好够带宽”导致的码率抖动。
     const double clamped_headroom = std::clamp(headroom_ratio, 0.1, 1.0);
     const double effective_bandwidth = std::max(0, estimated_bandwidth_bps) * clamped_headroom;
 
@@ -34,6 +35,7 @@ AdaptiveBitrateDecision AdaptiveBitrateSelector::chooseVariant(
         if (bandwidth <= 0 || static_cast<double>(bandwidth) > effective_bandwidth) {
             continue;
         }
+        // 在可承载集合里选最高码率，尽量提高画质。
         if (!found_fit || bandwidth > best_bandwidth) {
             found_fit = true;
             best_bandwidth = bandwidth;
@@ -42,6 +44,7 @@ AdaptiveBitrateDecision AdaptiveBitrateSelector::chooseVariant(
     }
 
     if (!found_fit) {
+        // 没有任何可承载档位时，回退到最低码率以优先保证连续播放。
         decision.variant_index = lowest_index;
         decision.fallback_to_lowest = true;
     }

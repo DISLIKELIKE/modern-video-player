@@ -58,10 +58,14 @@ modern-video-player/
 │   └── video_player.cpp              # Facade 实现
 └── docs/                             # 文档
     ├── README.md                     # 文档索引
-    ├── ARCHITECTURE.md               # 历史架构基线
-    ├── ARCHITECTURE_REFACTOR_2026-03-06.md
-    │                                 # 当前主链重构说明
-    └── MPC_HC_GAP_ANALYSIS.md        # 当前能力差距评估
+    ├── guides/                       # 环境配置 / 使用 / 入门
+    ├── design/                       # 架构 / 设计说明 / 草案
+    ├── analysis/                     # 差距评估 / 巡检 / 问题分析
+    ├── reference/                    # 外部参考 / 学习资料
+    ├── plans/                        # 路线图 / 任务清单 / TODO
+    ├── workflows/                    # 操作手册 / 清单 / 工作流
+    ├── records/                      # 版本 / 修复 / 开发记录
+    └── reports/                      # 本地验收报告
 ```
 
 ## 安装
@@ -247,15 +251,16 @@ build\Release\modern-video-player.exe your_video.mp4
 ```
 
 - 当前主链为 `VideoPlayer -> PlayerCore -> Scheduler -> core/*`。
-- 旧版 decoder / thread 架构仅作为历史说明保留在旧文档中；当前实现请以 `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` 为准。
+- 旧版 decoder / thread 架构仅作为历史说明保留在旧文档中；当前实现请以 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md` 为准。
 
 ## 文档
 
-- [实现步骤指南](docs/IMPLEMENTATION.md) - 早期原型的从零实现教程
-- [架构设计文档](docs/ARCHITECTURE.md) - 历史架构基线与设计背景
-- [架构重构说明](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - 当前主链重构说明
-- [Windows 配置指南](docs/WINDOWS_SETUP.md) - Windows 环境配置详情
-- [版本记录](docs/VERSION.md) - 项目版本和依赖信息
+- [文档索引](docs/README.md) - 按分类浏览所有文档的统一入口
+- [实现步骤指南](docs/guides/IMPLEMENTATION.md) - 早期原型的从零实现教程
+- [架构设计文档](docs/design/ARCHITECTURE.md) - 历史架构基线与设计背景
+- [架构重构说明](docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md) - 当前主链重构说明
+- [Windows 配置指南](docs/guides/WINDOWS_SETUP.md) - Windows 环境配置详情
+- [版本记录](docs/records/VERSION.md) - 项目版本和依赖信息
 
 ## 学习路线
 

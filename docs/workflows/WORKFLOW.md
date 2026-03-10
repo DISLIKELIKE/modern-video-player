@@ -32,13 +32,15 @@ docs: 更新文档，添加问题修复记录
 
 ```
 docs/
-├── README.md          # 文档索引（入口）
-├── CHANGELOG.md      # 问题修复记录（重要）
-├── VERSION.md        # 版本记录与依赖说明
-├── ARCHITECTURE.md   # 架构设计
-├── IMPLEMENTATION.md # 实现步骤
-├── WINDOWS_SETUP.md  # Windows 配置
-└── LOGGING.md        # 日志系统说明
+├── README.md             # 文档总入口
+├── guides/               # 环境搭建、功能使用、快速上手
+├── design/               # 架构设计、模块说明、设计草案
+├── analysis/             # 差距评估、问题分析、文档巡检
+├── reference/            # 学习资料、外部参考、补充说明
+├── plans/                # 路线图、任务清单、阶段 TODO
+├── workflows/            # 回归手册、阅读清单、团队工作流
+├── records/              # VERSION / CHANGELOG / DEVELOP_LOG
+└── reports/              # 本地验收与验证报告
 ```
 
 ### 文档同步要求
@@ -47,10 +49,10 @@ docs/
 
 | 修复类型 | 需要更新的文档 |
 |----------|---------------|
-| Bug 修复 | CHANGELOG.md + VERSION.md |
-| 新增功能 | VERSION.md + 相关功能文档 |
+| Bug 修复 | `docs/records/CHANGELOG.md` + `docs/records/VERSION.md` |
+| 新增功能 | `docs/records/VERSION.md` + 相关功能文档 |
 | 文档更新 | 文档更新日志 |
-| 依赖变更 | VERSION.md + WINDOWS_SETUP.md |
+| 依赖变更 | `docs/records/VERSION.md` + `docs/guides/WINDOWS_SETUP.md` |
 
 ### CHANGELOG.md 结构
 
@@ -139,7 +141,7 @@ cmake --build build
 
 ### 规范说明
 
-每次发现新问题时，应该实时记录到 `docs/DEVELOP_LOG.md` 文档中，方便追踪问题进度。
+每次发现新问题时，应该实时记录到 `docs/records/DEVELOP_LOG.md` 文档中，方便追踪问题进度。
 
 ### 文档结构
 
@@ -165,13 +167,13 @@ cmake --build build
 
 ### 同步要求
 
-- 发现问题时立即记录到 DEVELOP_LOG.md
+- 发现问题时立即记录到 `docs/records/DEVELOP_LOG.md`
 - 问题解决后更新状态
-- 定期同步到 CHANGELOG.md
+- 定期同步到 `docs/records/CHANGELOG.md`
 
 ---
 
 ## 相关文档
 
-- [CHANGELOG.md](./CHANGELOG.md) - 问题修复记录
-- [VERSION.md](./VERSION.md) - 版本记录
+- [CHANGELOG.md](../records/CHANGELOG.md) - 问题修复记录
+- [VERSION.md](../records/VERSION.md) - 版本记录

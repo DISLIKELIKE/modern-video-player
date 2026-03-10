@@ -99,5 +99,5 @@ log_level=info
 
 - `include/logger.h` / `src/logger.cpp`
 - `config/logging.conf`
-- `docs/CHANGELOG.md`（问题 5，企业级日志改造）
-- `docs/VERSION.md`（依赖状态与配置说明）
+- `docs/records/CHANGELOG.md`（问题 5，企业级日志改造）
+- `docs/records/VERSION.md`（依赖状态与配置说明）

@@ -33,8 +33,8 @@ powershell -ExecutionPolicy Bypass -File .\tools\download_test_samples.ps1
 
 相关文件：
 
-- 脚本：[download_test_samples.ps1](../tools/download_test_samples.ps1)
-- 样本目录规范：[samples/README.md](../samples/README.md)
+- 脚本：[download_test_samples.ps1](../../tools/download_test_samples.ps1)
+- 样本目录规范：[samples/README.md](../../samples/README.md)
 
 ## 3. 单文件探测（文本模式）
 
@@ -123,7 +123,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 `
 
 操作位置：
 
-- 文件：[format_samples.csv](../tools/format_regression/format_samples.csv)
+- 文件：[format_samples.csv](../../tools/format_regression/format_samples.csv)
 
 操作作用：
 

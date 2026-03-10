@@ -212,7 +212,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 - 截图输出：`screenshots/`
 - 持久化配置：`config/player_settings.ini`
 - 本地验收报告：`docs/reports/`
-- 格式回归脚本与操作手册：`docs/FORMAT_REGRESSION.md`、`docs/REGRESSION_OPERATION_PLAYBOOK.md`
+- 格式回归脚本与操作手册：`docs/workflows/FORMAT_REGRESSION.md`、`docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
 - 每周收敛留痕：`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`、`.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`
 
 ## 4. 当前边界与未完成功能
@@ -229,7 +229,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 ## 5. 推荐阅读
 
 - 入口索引：`docs/README.md`
-- 回归手册：`docs/REGRESSION_OPERATION_PLAYBOOK.md`
-- 格式回归说明：`docs/FORMAT_REGRESSION.md`
-- 当前差距评估：`docs/MPC_HC_GAP_ANALYSIS.md`
+- 回归手册：`docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
+- 格式回归说明：`docs/workflows/FORMAT_REGRESSION.md`
+- 当前差距评估：`docs/analysis/MPC_HC_GAP_ANALYSIS.md`
 - 根文档概览：`README.md`

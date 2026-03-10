@@ -171,6 +171,7 @@ bool PlayerCore::open(const std::string& filename) {
         video_renderer_->setHotkeyManager(hotkey_manager_);
     }
 
+    // Audio output is optional; if initialization fails we allow video-only playback.
     if (info.audio_stream_idx >= 0) {
         audio_player_ = std::make_unique<AudioPlayer>();
         if (!audio_player_->init(info.sample_rate, info.channels)) {
@@ -179,11 +180,13 @@ bool PlayerCore::open(const std::string& filename) {
         }
     }
 
+    // Decoder init is required for playback; fail fast if it cannot be set up.
     if (!initDecoders()) {
         emitError(ErrorCode::DecoderInitFailed, "failed to initialize decoders");
         return false;
     }
 
+    // Create packet queues only for streams we can actually decode/output.
     if (info.video_stream_idx >= 0) {
         video_packet_queue_ = std::make_unique<PacketQueue>(kPacketQueueSize);
     } else {
@@ -265,6 +268,7 @@ void PlayerCore::play() {
         return;
     }
 
+    // Transition from Stopped -> Playing: start the pipeline threads.
     startDemuxThread();
     startAudioConsumer();
     scheduler_.start();
@@ -319,6 +323,7 @@ void PlayerCore::seek(double timestamp) {
     LOG_INFO("Seek request: target=" << timestamp << "s");
     const bool was_playing = state_.load() == PlaybackState::Playing;
     const bool demux_was_running = demux_running_.load();
+    // Seek 的核心顺序：先暂停生产/消费，再清理旧数据，最后恢复线程，避免旧包与新时间点混播。
     if (was_playing) {
         scheduler_.pause();
     }
@@ -330,6 +335,7 @@ void PlayerCore::seek(double timestamp) {
     flushPipelines();
     const bool seek_ok = demuxer_->seek(timestamp);
     {
+        // 解码器内部也会缓存参考帧，必须同步 flush；音频重采样器也要重建输入状态。
         std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
         if (video_codec_ctx_) {
             avcodec_flush_buffers(video_codec_ctx_);
@@ -414,6 +420,7 @@ bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
 
     constexpr int kMaxAttempts = 120;
     constexpr double kToleranceSeconds = 0.001;
+    // 单帧步进优先消费已解码队列，拿不到再主动解码，避免 pause 状态长时间阻塞。
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
         VideoFrame frame;
         bool have_frame = video_queue_.pop(frame, std::chrono::milliseconds(0));
@@ -424,6 +431,7 @@ bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
+        // 跳过目标时间点之前的残留帧，直到命中或超过目标帧。
         if (frame.pts + kToleranceSeconds < target_seconds) {
             continue;
         }
@@ -1648,6 +1656,7 @@ void PlayerCore::startDemuxThread() {
         return;
     }
     demux_thread_ = std::thread([this] {
+        // 解复用线程只负责“读包 + 分发”，不做解码；读失败时向下游显式广播 EOF。
         while (demux_running_.load() && demuxer_ && !demuxer_->isEof()) {
             if (!video_packet_queue_ && !audio_packet_queue_) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -1674,6 +1683,7 @@ void PlayerCore::startDemuxThread() {
             const MediaInfo& info = demuxer_->getMediaInfo();
             bool queued = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
+                // push 成功后队列接管 packet 生命周期；失败则由当前线程释放。
                 while (demux_running_.load() && !(queued = video_packet_queue_->push(packet, 20))) {
                     demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1728,6 +1738,7 @@ void PlayerCore::startAudioConsumer() {
             AudioFrame frame;
             const double played_pts = audio_player_->getPlaybackPts();
             if (played_pts > 0.0 && state_.load() == PlaybackState::Playing) {
+                // 音频设备真实播放进度作为主时钟，UI 进度与同步都围绕它推进。
                 const double audio_delay = audio_delay_seconds_.load();
                 const double content_pts = std::max(0.0, played_pts - audio_delay);
                 clock_.setAudioClock(content_pts);
@@ -1736,6 +1747,7 @@ void PlayerCore::startAudioConsumer() {
             }
 
             if (audio_player_->getBufferedSeconds() > kMaxAudioBufferedSeconds) {
+                // 缓冲过深会让 seek/暂停响应变慢，这里用背压控制音频前置时长。
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 maybeLogDiagnostics("audio-backpressure");
                 continue;
@@ -1834,6 +1846,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     av_frame_unref(out.frame);
     int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
     if (ret >= 0) {
+        // 优先“先收后送”：尽可能先消费解码器内部已产出的帧，降低包队列压力。
         if (!prepareVideoOutputFrame(out.frame, out)) {
             return false;
         }
@@ -1859,6 +1872,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
         return false;
     }
 
+    // 只有在 EAGAIN/EOF 需要新输入时才取包发送，保持 send/receive 配对关系稳定。
     ret = avcodec_send_packet(video_codec_ctx_, packet);
     av_packet_free(&packet);
     if (ret < 0) {
@@ -1899,6 +1913,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
 
     int ret = avcodec_receive_frame(audio_codec_ctx_, frame);
     if (ret == AVERROR(EAGAIN)) {
+        // 音频路径与视频一致：先尝试 receive，缺输入再从包队列补充。
         AVPacket* packet = nullptr;
         if (!audio_packet_queue_->pop(packet, 20) || !packet) {
             av_frame_free(&frame);
@@ -1920,6 +1935,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         return false;
     }
 
+    // Resample/convert to the SDL output format expected by AudioPlayer.
     if (!ensureAudioResampler(frame)) {
         av_frame_free(&frame);
         return false;
@@ -1947,6 +1963,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         return false;
     }
 
+    // 输出时长优先使用解码时间戳，缺失时再按采样数反推，避免 UI 进度抖动。
     const int byte_count = av_samples_get_buffer_size(
         nullptr, channels, converted, swr_out_sample_fmt_, 1);
     if (byte_count <= 0) {
@@ -1988,6 +2005,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
         return;
     }
     const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
+    // 渲染顺序固定为：字幕状态 -> OSD 叠加态 -> 视频滤镜 -> 渲染提交 -> present。
     updateSubtitleOverlay(frame.pts);
     video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
     filter_pipeline_.processVideo(frame);
@@ -2005,6 +2023,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
 
     clock_.setVideoClock(frame.pts);
     render_frames_.fetch_add(1);
+    // When audio is not the master clock, drive position from video PTS.
     if (clock_.getSource() != ClockSource::Audio) {
         position_.store(frame.pts);
         emitPositionChanged(frame.pts);
@@ -2038,6 +2057,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     std::string subtitle_text;
     bool subtitle_changed = false;
     {
+        // 只在文本发生变化时更新渲染器，避免每帧重复提交同一字幕内容。
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
         if (!subtitle_enabled_ || subtitle_items_.empty()) {
             subtitle_active_index_ = -1;
@@ -2077,6 +2097,7 @@ void PlayerCore::emitStateChanged(PlaybackState state) {
 
 void PlayerCore::emitPositionChanged(double position) {
     const auto now = std::chrono::steady_clock::now();
+    // 位置回调做节流，避免高频回调拖慢 UI 线程。
     if (now - last_position_emit_tp_ < std::chrono::milliseconds(100)) {
         return;
     }

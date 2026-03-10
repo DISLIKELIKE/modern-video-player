@@ -127,6 +127,7 @@ void Scheduler::videoDecoderLoop() {
             continue;
         }
 
+        // 高低水位背压：队列超过 80% 暂停解码，回落到 50% 再继续，减少无效堆积。
         while (running_.load() && video_queue_->getFillRatio() >= 0.8) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
             if (video_queue_->getFillRatio() < 0.5) {
@@ -156,6 +157,7 @@ void Scheduler::audioDecoderLoop() {
             continue;
         }
 
+        // 音频沿用同样的背压策略，保持 A/V 队列增长趋势一致。
         while (running_.load() && audio_queue_->getFillRatio() >= 0.8) {
             std::this_thread::sleep_for(std::chrono::milliseconds(2));
             if (audio_queue_->getFillRatio() < 0.5) {
@@ -204,10 +206,11 @@ void Scheduler::pumpRenderOnce() {
         const double diff = frame.pts - master;
         if (diff > 0.0) {
             wait_events_.fetch_add(1);
-            // Keep main-thread stalls short; additional frames are rendered on subsequent pump ticks.
+            // 仅做短等待，避免渲染线程长时间阻塞；剩余等待交给下一轮 pump。
             const double wait_s = std::min(diff, 0.005);
             std::this_thread::sleep_for(std::chrono::duration<double>(wait_s));
         } else if (diff < -0.25) {
+            // 帧落后主时钟超过阈值直接丢弃，优先追赶实时播放。
             dropped_late_frames_.fetch_add(1);
             if (idle_callback_) {
                 idle_callback_();
@@ -240,6 +243,7 @@ void Scheduler::runProtectedLoop(Func&& fn, std::atomic<int>& restart_counter) {
         }
 
         const int count = ++restart_counter;
+        // 允许一次自动重启，第二次崩溃后停止调度，避免无限重启掩盖问题。
         if (count > 1) {
             LOG_ERROR("Scheduler thread restart limit reached");
             running_.store(false);

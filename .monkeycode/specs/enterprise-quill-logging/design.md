@@ -5,7 +5,7 @@ Updated: 2026-02-24
 
 ## Description
 
-本设计将 Modern Video Player 的日志系统升级为企业级 Quill 管道：在启用 `USE_QUILL_LOGGING` 时，通过异步后台线程同时输出到 `ConsoleSink` 与 `RotatingFileSink`，并提供运行时配置（目录/大小/保留数量/日志级别），兼容原有 `LOG_*` 宏与 `DEBUG_MODE` 控制。配置文件与环境变量驱动新的 `LoggingConfig`，并在未启用 Quill 时保持 stdout fallback。文档（`docs/LOGGING.md`、`docs/CHANGELOG.md`、`docs/VERSION.md`）将描述该方案与新配置项。
+本设计将 Modern Video Player 的日志系统升级为企业级 Quill 管道：在启用 `USE_QUILL_LOGGING` 时，通过异步后台线程同时输出到 `ConsoleSink` 与 `RotatingFileSink`，并提供运行时配置（目录/大小/保留数量/日志级别），兼容原有 `LOG_*` 宏与 `DEBUG_MODE` 控制。配置文件与环境变量驱动新的 `LoggingConfig`，并在未启用 Quill 时保持 stdout fallback。文档（`docs/design/LOGGING.md`、`docs/records/CHANGELOG.md`、`docs/records/VERSION.md`）将描述该方案与新配置项。
 
 ## Architecture
 
@@ -62,7 +62,7 @@ flowchart LR
 - **StdoutFallback**:
   - 当 `LoggingConfig::enabled` 为 false 或启动失败时启用。
   - 继续复用当前 `std::cout/std::cerr` 实现；在 Quill 初始化失败时打印一次诊断信息。
-- **Documentation Tasks**: `docs/LOGGING.md` 新增配置章节；`docs/CHANGELOG.md` & `docs/VERSION.md` 记录 Quill 已重启用与配置细节。
+- **Documentation Tasks**: `docs/design/LOGGING.md` 新增配置章节；`docs/records/CHANGELOG.md` & `docs/records/VERSION.md` 记录 Quill 已重启用与配置细节。
 
 ## Data Models
 
@@ -101,13 +101,13 @@ flowchart LR
    - 运行播放器或专用测试可执行，触发大量 `LOG_INFO` / `LOG_TRACE_*`，验证 `logs/modern-player.log` 轮转与 `stdout` 同步输出。
    - 强制日志目录不可写（临时目录 + chmod），确认 fallback 行为与告警日志。
 3. **Documentation Validation**
-   - 检查 `docs/LOGGING.md`、`docs/CHANGELOG.md`、`docs/VERSION.md` 中的配置示例与字段描述与实现一致。
+   - 检查 `docs/design/LOGGING.md`、`docs/records/CHANGELOG.md`、`docs/records/VERSION.md` 中的配置示例与字段描述与实现一致。
 4. **Manual Checklist**
    - 构建 `-DUSE_QUILL_LOGGING=ON` 与 `OFF` 两种二进制，运行示例媒体文件，确认双通道与 stdout-only 模式都可用。
 
 ## References
 
-[^1]: docs/LOGGING.md  
+[^1]: docs/design/LOGGING.md  
 [^2]: include/logger.h  
-[^3]: docs/VERSION.md  
-[^4]: docs/CHANGELOG.md
+[^3]: docs/records/VERSION.md  
+[^4]: docs/records/CHANGELOG.md

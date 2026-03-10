@@ -1,8 +1,8 @@
 # 需求实施计划 - MPC-HC 对齐迭代任务清单（单人开发版）
 
 基线文档：
-- `docs/MPC_HC_GAP_ANALYSIS.md`
-- `docs/MPC_HC_ITERATION_PLAN.md`
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md`
+- `docs/plans/MPC_HC_ITERATION_PLAN.md`
 - `./daily_board.md`（10 个工作日单人看板，含周五收敛日记录卡）
 - `./weekly_report_template.md`（每周收敛/周报留痕模板）
 

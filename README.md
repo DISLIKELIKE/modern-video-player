@@ -57,10 +57,14 @@ modern-video-player/
 │   └── video_player.cpp              # Facade implementation
 └── docs/                             # Documentation
     ├── README.md                     # Documentation index
-    ├── ARCHITECTURE.md               # Historical architecture baseline
-    ├── ARCHITECTURE_REFACTOR_2026-03-06.md
-    │                                 # Current main-chain refactor note
-    └── MPC_HC_GAP_ANALYSIS.md        # Current capability gap analysis
+    ├── guides/                       # Setup / usage / onboarding
+    ├── design/                       # Architecture / design notes / drafts
+    ├── analysis/                     # Gap analysis / audits / issue analysis
+    ├── reference/                    # External references / learning notes
+    ├── plans/                        # Roadmaps / tasklists / TODOs
+    ├── workflows/                    # Playbooks / checklists / team workflows
+    ├── records/                      # Version / changelog / development logs
+    └── reports/                      # Local validation reports
 ```
 
 ## Installation
@@ -138,7 +142,7 @@ build\Release\modern-video-player.exe your_video.mp4
 ./build/modern-video-player your_video.mp4
 ```
 
-For the current feature / usage / validation matrix, see `docs/PLAYER_FEATURES_USAGE_VALIDATION.md`.
+For the current feature / usage / validation matrix, see `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`.
 
 ## Keyboard Shortcuts
 
@@ -221,15 +225,16 @@ For the current feature / usage / validation matrix, see `docs/PLAYER_FEATURES_U
 ```
 
 - Current main chain: `VideoPlayer -> PlayerCore -> Scheduler -> core/*`.
-- Historical decoder/thread layout is retained only in legacy docs; see `docs/ARCHITECTURE_REFACTOR_2026-03-06.md` for the current refactor note.
+- Historical decoder/thread layout is retained only in legacy docs; see `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md` for the current refactor note.
 
 ## Documentation
 
-- [Implementation Guide](docs/IMPLEMENTATION.md) - Historical from-scratch prototype walkthrough
-- [Architecture Design](docs/ARCHITECTURE.md) - Historical architecture baseline and design context
-- [Refactor Note (2026-03-06)](docs/ARCHITECTURE_REFACTOR_2026-03-06.md) - Current main-chain architecture
-- [Version History](docs/VERSION.md) - Project version and dependency information
-- [Current Features / Usage / Validation](docs/PLAYER_FEATURES_USAGE_VALIDATION.md) - Up-to-date capability summary, usage patterns, and verification entry points
+- [Documentation Index](docs/README.md) - Category-based entry for all docs
+- [Implementation Guide](docs/guides/IMPLEMENTATION.md) - Historical from-scratch prototype walkthrough
+- [Architecture Design](docs/design/ARCHITECTURE.md) - Historical architecture baseline and design context
+- [Refactor Note (2026-03-06)](docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md) - Current main-chain architecture
+- [Version History](docs/records/VERSION.md) - Project version and dependency information
+- [Current Features / Usage / Validation](docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md) - Up-to-date capability summary, usage patterns, and verification entry points
 
 ## Learning Roadmap
 

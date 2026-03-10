@@ -75,16 +75,16 @@
   - [x] 5.3 确认两种模式都能正常工作
 
 - [x] 6. 更新文档
-  - [x] 6.1 创建或更新 docs/LOGGING.md
+  - [x] 6.1 创建或更新 docs/design/LOGGING.md
     - 描述 Quill 配置工作流
     - 说明默认值和 fallback 行为
     - 列出环境变量覆盖方式
     - 提供权限错误排查步骤
 
-  - [x] 6.2 更新 docs/CHANGELOG.md
+  - [x] 6.2 更新 docs/records/CHANGELOG.md
     - 添加 enterprise logging 功能条目
 
-  - [x] 6.3 更新 docs/VERSION.md
+  - [x] 6.3 更新 docs/records/VERSION.md
     - 添加 Quill 依赖状态
     - 列出新的配置产物
 

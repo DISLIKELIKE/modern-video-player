@@ -1,0 +1,34 @@
+# Workflows 文档入口
+
+本目录存放操作手册、检查清单、回归流程和 AI 阅读剧本，适合需要照流程执行或系统化阅读代码时查看。
+
+## 适合什么时候看
+
+- 需要做格式回归或功能回归
+- 需要遵循当前团队工作流
+- 需要用 AI 辅助阅读源码、分模块分析代码
+
+## 推荐优先级
+
+1. [WORKFLOW.md](./WORKFLOW.md)
+2. [REGRESSION_OPERATION_PLAYBOOK.md](./REGRESSION_OPERATION_PLAYBOOK.md)
+3. [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md)
+
+## 文档清单
+
+| 文档 | 用途 |
+|------|------|
+| [WORKFLOW.md](./WORKFLOW.md) | 工作流程规范与文档同步要求 |
+| [REGRESSION_OPERATION_PLAYBOOK.md](./REGRESSION_OPERATION_PLAYBOOK.md) | 样本准备与回归操作手册 |
+| [FORMAT_REGRESSION.md](./FORMAT_REGRESSION.md) | 格式回归脚本与报告说明 |
+| [WEEKLY_CONVERGENCE_PLAYBOOK.md](./WEEKLY_CONVERGENCE_PLAYBOOK.md) | 周节奏与周五收敛手册 |
+| [SOURCE_FILE_READING_CHECKLIST.md](./SOURCE_FILE_READING_CHECKLIST.md) | 按文件名展开的阅读清单 |
+| [MODULE_BASED_ANALYSIS_SCRIPTS.md](./MODULE_BASED_ANALYSIS_SCRIPTS.md) | 按模块的连续提问剧本 |
+| [AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md](./AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md) | AI 源码分析提问方案 |
+| [AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md](./AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md) | AI 逐函数提问模板清单 |
+
+## 相关入口
+
+- 验收报告目录：[../reports/README.md](../reports/README.md)
+- 回归样本目录：[../../samples/README.md](../../samples/README.md)
+- 总索引：[../README.md](../README.md)
