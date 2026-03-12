@@ -52,6 +52,125 @@ sequenceDiagram
     AudioCb->>AudioCb: callback consume & playback
 ```
 
+### 补充图：渲染落地类图（Display 链路）
+
+```mermaid
+classDiagram
+    class PlayerCore {
+        +renderFrame(VideoFrame)
+        +pumpEvents()
+    }
+
+    class IVideoRenderer {
+        <<interface>>
+        +renderFrame(VideoFrame)
+        +present()
+        +handleEvents()
+        +consume*Request()
+        +setOverlayState()
+        +setSubtitleText()
+    }
+
+    class SdlVideoRenderer {
+        -Display* display_
+    }
+
+    class D3D11VideoRenderer {
+        -Display* display_
+    }
+
+    class Display {
+        -SDL_Window* window_
+        -SDL_Renderer* renderer_
+        -SDL_Texture* texture_
+        -PendingVideoFrame pending_frame_
+        -thread render_thread_
+        +renderFrame(data,width,height)
+        +handleEvents()
+        +consume*Request()
+        +setOverlayState()
+        +setSubtitleText()
+        -copyFrameData(frame,out)
+        -updateTexture(frame)
+        -renderLoop()
+        -drawSubtitleOverlay()
+        -drawControls()
+    }
+
+    class PendingVideoFrame {
+        +width
+        +height
+        +y_plane
+        +u_plane
+        +v_plane
+        +valid
+    }
+
+    class VideoFrame {
+        +AVFrame* frame
+        +pts
+        +duration
+        +valid
+    }
+
+    class AVFrame
+    class SDL_Window
+    class SDL_Renderer
+    class SDL_Texture
+
+    PlayerCore --> IVideoRenderer : renderFrame()/handleEvents()
+    IVideoRenderer <|.. SdlVideoRenderer
+    IVideoRenderer <|.. D3D11VideoRenderer
+    SdlVideoRenderer --> Display
+    D3D11VideoRenderer --> Display
+    PlayerCore --> VideoFrame
+    VideoFrame --> AVFrame
+    Display *-- PendingVideoFrame
+    Display --> SDL_Window
+    Display --> SDL_Renderer
+    Display --> SDL_Texture
+```
+
+### 补充图：渲染落地线程边界图（Display 链路）
+
+```mermaid
+flowchart LR
+    subgraph T0[Scheduler Render Thread]
+        A[Scheduler::pumpRenderOnce]
+        B[PlayerCore::renderFrame]
+        C[IVideoRenderer::renderFrame]
+        D[Display::renderFrame]
+        E[copyFrameData]
+        F[pending_frame_ 覆盖写入]
+    end
+
+    subgraph T1[Display Render Thread]
+        G[Display::renderLoop]
+        H[ensureRenderResources]
+        I[updateTexture]
+        J[SDL_UpdateYUVTexture]
+        K[SDL_RenderCopy]
+        L[drawSubtitleOverlay / drawControls]
+        M[SDL_RenderPresent]
+    end
+
+    subgraph T2[UI/Event Thread]
+        N[PlayerCore::pumpEvents]
+        O[IVideoRenderer::handleEvents]
+        P[Display::handleEvents]
+        Q[consumePause/Seek/Volume/...]
+    end
+
+    A --> B --> C --> D --> E --> F
+    F -. notify_one .-> G
+    G --> H --> I --> J --> K --> L --> M
+
+    N --> O --> P --> Q
+    Q --> N
+```
+
+阅读提示：`Display::renderFrame()` 只负责“复制 AVFrame 到 pending_frame_ 并唤醒渲染线程”；真正的 `SDL_UpdateYUVTexture / SDL_RenderPresent` 发生在 `Display::renderLoop()` 所在线程。
+
 ---
 
 ## 4. 固定产出 C：疑问清单（>=10，已按优先级）
