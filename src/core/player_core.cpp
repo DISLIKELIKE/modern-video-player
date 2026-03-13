@@ -106,6 +106,7 @@ std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& ord
 }
 }
 
+/// 构造播放核心并绑定调度器、队列、滤镜与默认回调。
 PlayerCore::PlayerCore() {
     filters::builtin::registerBuiltinFilters();
     scheduler_.setVideoQueue(&video_queue_);
@@ -123,6 +124,7 @@ PlayerCore::~PlayerCore() {
     close();
 }
 
+/// 打开媒体并串起渲染器、音频设备、解码器和内部队列资源。
 bool PlayerCore::open(const std::string& filename) {
     close();
 
@@ -219,6 +221,7 @@ bool PlayerCore::open(const std::string& filename) {
     return true;
 }
 
+/// 停止全链路线程并释放解码、渲染、字幕和截图缓存资源。
 void PlayerCore::close() {
     stop();
     releaseDecoders();
@@ -250,6 +253,7 @@ void PlayerCore::close() {
     opened_.store(false);
 }
 
+/// 从停止态启动线程，或从暂停态恢复调度、时钟和音频设备。
 void PlayerCore::play() {
     if (!opened_.load()) {
         return;
@@ -277,6 +281,7 @@ void PlayerCore::play() {
     emitStateChanged(PlaybackState::Playing);
 }
 
+/// 暂停调度器与主时钟，但保留当前解码器和缓冲队列状态。
 void PlayerCore::pause() {
     if (state_.load() != PlaybackState::Playing) {
         return;
@@ -290,6 +295,7 @@ void PlayerCore::pause() {
     emitStateChanged(PlaybackState::Paused);
 }
 
+/// 停止生产/消费线程并清空管线，同时把媒体位置复位到开头。
 void PlayerCore::stop() {
     if (state_.load() == PlaybackState::Stopped && !demux_running_.load()) {
         return;
@@ -310,6 +316,7 @@ void PlayerCore::stop() {
     emitStateChanged(PlaybackState::Stopped);
 }
 
+/// 执行一次带 flush 的时间线切换，确保旧包、旧帧和旧音频缓冲全部失效。
 void PlayerCore::seek(double timestamp) {
     if (!opened_.load() || !demuxer_) {
         return;
@@ -371,6 +378,7 @@ void PlayerCore::seek(double timestamp) {
     }
 }
 
+/// 在暂停态按估算帧间隔执行单帧步进，并尝试命中目标时间附近的视频帧。
 bool PlayerCore::stepFrame(int direction) {
     if (!opened_.load() || !demuxer_ || !video_renderer_ || state_.load() != PlaybackState::Paused) {
         return false;
@@ -396,6 +404,7 @@ bool PlayerCore::stepFrame(int direction) {
     return renderPausedFrameAtOrAfter(target);
 }
 
+/// 按最近渲染帧时长、编码器帧率和媒体帧率估算单帧时长。
 double PlayerCore::estimateFrameStepSeconds() const {
     const double cached_duration = last_video_frame_duration_.load();
     if (cached_duration > 0.0) {
@@ -413,6 +422,7 @@ double PlayerCore::estimateFrameStepSeconds() const {
     return 1.0 / 30.0;
 }
 
+/// 在暂停态消费或主动解码一帧，并渲染到不早于目标时间的位置。
 bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
     if (!opened_.load() || !video_renderer_) {
         return false;
@@ -616,6 +626,7 @@ bool PlayerCore::stepFrameForward() {
     return stepFrame(1);
 }
 
+/// 拉取显示层一次性请求，并映射为 seek、音量、章节和字幕等播放控制。
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -730,6 +741,7 @@ void PlayerCore::pumpEvents() {
     handleABRepeatLoop();
 }
 
+/// 从章节元数据重建有序跳转时间点，供上一章/下一章逻辑复用。
 void PlayerCore::rebuildChapterPoints() {
     chapter_points_.clear();
     if (!demuxer_) {
@@ -754,6 +766,7 @@ void PlayerCore::rebuildChapterPoints() {
     }
 }
 
+/// 在播放位置触达 B 点附近时回跳到 A 点，形成闭环播放。
 void PlayerCore::handleABRepeatLoop() {
     if (state_.load() != PlaybackState::Playing || !ab_repeat_enabled_.load()) {
         return;
@@ -792,6 +805,7 @@ bool PlayerCore::captureScreenshot(const VideoFrame& frame) {
     return captureScreenshotFrame(frame.frame);
 }
 
+/// 缓存最近一次成功渲染的帧，供暂停态截图和逐帧浏览复用。
 void PlayerCore::updateLastRenderedFrame(const VideoFrame& frame) {
     if (!frame.valid || !frame.frame) {
         return;
@@ -820,6 +834,7 @@ void PlayerCore::clearLastRenderedFrame() {
     }
 }
 
+/// 从缓存帧复制出一个快照，并复用统一的截图落盘逻辑。
 bool PlayerCore::captureScreenshotFromCachedFrame() {
     AVFrame* cached_frame = nullptr;
     {
@@ -1187,6 +1202,7 @@ void PlayerCore::onFrameRendered(FrameCallback callback) {
     frame_callbacks_.push_back(std::move(callback));
 }
 
+/// 初始化视频/音频解码器，并根据配置选择硬解或软解回退顺序。
 bool PlayerCore::initDecoders() {
     if (!demuxer_) {
         return false;
@@ -1347,6 +1363,7 @@ bool PlayerCore::initDecoders() {
     return true;
 }
 
+/// 释放解码器、硬件设备上下文以及音视频格式转换器。
 void PlayerCore::releaseDecoders() {
     std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
     releaseVideoScaler();
@@ -1367,6 +1384,7 @@ void PlayerCore::releaseDecoders() {
     }
 }
 
+/// 在 Windows 上为视频解码器绑定 D3D11VA 设备；失败时回退软解。
 bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx) {
 #if defined(_WIN32)
     if (!codec || !codec_ctx) {
@@ -1440,6 +1458,7 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
     return pix_fmts[0];
 }
 
+/// 将解码帧整理为渲染路径可直接消费的 `YUV420P` 输出帧。
 bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out) {
     if (!decoded_frame || !out.frame) {
         return false;
@@ -1495,6 +1514,7 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
     return ok;
 }
 
+/// 按当前源帧尺寸和像素格式准备 `swscale` 上下文。
 bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     if (!src_frame || src_frame->width <= 0 || src_frame->height <= 0 || src_frame->format == AV_PIX_FMT_NONE) {
         return false;
@@ -1522,6 +1542,7 @@ bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     return true;
 }
 
+/// 把任意输入像素格式转换为渲染链路统一使用的 `YUV420P`。
 bool PlayerCore::convertVideoFrameToYuv420(const AVFrame* src_frame, AVFrame* dst_frame) {
     if (!src_frame || !dst_frame || !ensureVideoScaler(src_frame)) {
         return false;
@@ -1564,6 +1585,7 @@ void PlayerCore::releaseVideoScaler() {
     video_sws_src_fmt_ = AV_PIX_FMT_NONE;
 }
 
+/// 确保音频重采样器输出格式与当前 SDL 设备配置一致。
 bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     if (!frame || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -1638,6 +1660,7 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     return true;
 }
 
+/// 释放音频重采样上下文，并清空输入输出布局缓存。
 void PlayerCore::releaseAudioResampler() {
     if (audio_swr_ctx_) {
         swr_free(&audio_swr_ctx_);
@@ -1651,6 +1674,7 @@ void PlayerCore::releaseAudioResampler() {
     swr_out_sample_rate_ = 0;
 }
 
+/// 启动解复用线程；负责读包、分发到音视频包队列并传播 EOF。
 void PlayerCore::startDemuxThread() {
     if (demux_running_.exchange(true)) {
         return;
@@ -1710,6 +1734,7 @@ void PlayerCore::startDemuxThread() {
     });
 }
 
+/// 停止解复用线程，并重置包队列的停止状态以便后续复用。
 void PlayerCore::stopDemuxThread() {
     demux_running_.store(false);
     if (video_packet_queue_) {
@@ -1729,6 +1754,7 @@ void PlayerCore::stopDemuxThread() {
     }
 }
 
+/// 启动音频消费线程；把解码 PCM 提交给 `AudioPlayer` 并推进音频主时钟。
 void PlayerCore::startAudioConsumer() {
     if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_running_.exchange(true)) {
         return;
@@ -1775,6 +1801,7 @@ void PlayerCore::startAudioConsumer() {
     });
 }
 
+/// 停止音频消费线程并等待退出。
 void PlayerCore::stopAudioConsumer() {
     audio_consumer_running_.store(false);
     if (audio_consumer_thread_.joinable()) {
@@ -1782,6 +1809,7 @@ void PlayerCore::stopAudioConsumer() {
     }
 }
 
+/// 清空调度帧队列和压缩包队列，丢弃当前时间线上的残留数据。
 void PlayerCore::flushPipelines() {
     scheduler_.flush();
     if (video_packet_queue_) {
@@ -1792,6 +1820,7 @@ void PlayerCore::flushPipelines() {
     }
 }
 
+/// 重置链路诊断计数器，为新一轮播放或 seek 观察窗口做准备。
 void PlayerCore::resetDiagnostics() {
     demux_video_packets_.store(0);
     demux_audio_packets_.store(0);
@@ -1804,6 +1833,7 @@ void PlayerCore::resetDiagnostics() {
     last_diag_log_ms_.store(nowSteadyMs());
 }
 
+/// 节流输出链路诊断日志，便于观察 demux/decoder/render/audio 健康度。
 void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     const int64_t now_ms = nowSteadyMs();
     int64_t last_ms = last_diag_log_ms_.load();
@@ -1837,6 +1867,7 @@ void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     }
 }
 
+/// 从视频包队列和解码器内部缓存提取一帧，并规范化到渲染输出格式。
 bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     if (!video_codec_ctx_ || !video_packet_queue_) {
         return false;
@@ -1900,6 +1931,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     return true;
 }
 
+/// 从音频包队列解码一帧 PCM，并重采样到 SDL 输出格式。
 bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     if (!audio_codec_ctx_ || !audio_packet_queue_ || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -2000,6 +2032,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     return out.valid;
 }
 
+/// 提交一帧视频到渲染器，并同步字幕、OSD、截图和视频时钟。
 void PlayerCore::renderFrame(VideoFrame&& frame) {
     if (!video_renderer_ || !frame.valid || !frame.frame) {
         return;
@@ -2032,6 +2065,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     emitFrameRendered();
 }
 
+/// 在渲染空闲期检查 EOF 收尾条件，必要时自动切到停止态。
 void PlayerCore::onRenderIdle() {
     if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
         return;
@@ -2047,6 +2081,7 @@ void PlayerCore::onRenderIdle() {
     }
 }
 
+/// 根据当前位置和字幕延迟计算当前应显示的字幕文本。
 void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     if (!video_renderer_) {
         return;
@@ -2084,6 +2119,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     }
 }
 
+/// 向外分发状态回调；先复制回调列表以降低持锁时间。
 void PlayerCore::emitStateChanged(PlaybackState state) {
     std::vector<StateCallback> callbacks;
     {
@@ -2095,6 +2131,7 @@ void PlayerCore::emitStateChanged(PlaybackState state) {
     }
 }
 
+/// 节流分发位置回调，避免高频渲染推进直接压垮 UI 层。
 void PlayerCore::emitPositionChanged(double position) {
     const auto now = std::chrono::steady_clock::now();
     // 位置回调做节流，避免高频回调拖慢 UI 线程。
@@ -2113,6 +2150,7 @@ void PlayerCore::emitPositionChanged(double position) {
     }
 }
 
+/// 广播一次帧渲染完成事件。
 void PlayerCore::emitFrameRendered() {
     std::vector<FrameCallback> callbacks;
     {
@@ -2124,6 +2162,7 @@ void PlayerCore::emitFrameRendered() {
     }
 }
 
+/// 记录错误日志并向外广播错误码与说明文本。
 void PlayerCore::emitError(ErrorCode code, const std::string& message) {
     LOG_ERROR("PlayerCore error: " << message);
     std::vector<ErrorCallback> callbacks;

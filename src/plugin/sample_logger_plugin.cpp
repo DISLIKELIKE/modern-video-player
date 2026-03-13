@@ -54,10 +54,12 @@ private:
 
 }  // namespace
 
+/// 导出插件 API 版本号，供宿主做 ABI 兼容性校验。
 extern "C" VP_PLUGIN_EXPORT uint32_t vp_plugin_api_version() {
     return vp::plugin::kPluginApiVersion;
 }
 
+/// 导出插件元数据，供宿主在激活前读取插件信息。
 extern "C" VP_PLUGIN_EXPORT bool vp_plugin_query_descriptor(vp::plugin::PluginDescriptor* descriptor) {
     if (!descriptor) {
         return false;
@@ -71,6 +73,7 @@ extern "C" VP_PLUGIN_EXPORT bool vp_plugin_query_descriptor(vp::plugin::PluginDe
     return true;
 }
 
+/// 插件初始化入口；注册示例滤镜并输出启动日志。
 extern "C" VP_PLUGIN_EXPORT bool vp_plugin_initialize(vp::plugin::IPluginHost* host) {
     if (!host) {
         return false;
@@ -86,6 +89,7 @@ extern "C" VP_PLUGIN_EXPORT bool vp_plugin_initialize(vp::plugin::IPluginHost* h
     return true;
 }
 
+/// 插件卸载入口；用于输出收尾日志。
 extern "C" VP_PLUGIN_EXPORT void vp_plugin_shutdown(vp::plugin::IPluginHost* host) {
     if (host) {
         host->logInfo("sample_logger_plugin shutdown");

@@ -25,6 +25,7 @@ std::string trimCopy(const std::string& text) {
 
 }  // namespace
 
+/// 逐块解析 SRT 文本，生成按出现顺序排列的字幕条目。
 bool SrtParser::parseFile(const std::string& file_path) {
     items_.clear();
 
@@ -86,6 +87,7 @@ const std::vector<SubtitleItem>& SrtParser::items() const {
     return items_;
 }
 
+/// 解析单个 SRT 时间码文本并换算为秒。
 bool SrtParser::parseTimecode(const std::string& text, double& seconds) {
     int hh = 0;
     int mm = 0;

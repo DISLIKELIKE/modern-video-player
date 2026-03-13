@@ -5,6 +5,7 @@
 
 namespace vp::streaming {
 
+/// 根据带宽估计与安全余量选择最优码率变体。
 AdaptiveBitrateDecision AdaptiveBitrateSelector::chooseVariant(
     const std::vector<AdaptiveStreamVariant>& variants,
     int estimated_bandwidth_bps,

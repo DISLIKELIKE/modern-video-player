@@ -446,10 +446,12 @@ void Logger::ensureInitialized() {
     std::call_once(initFlag(), []() { initializeLogger(); });
 }
 
+/// 初始化全局日志系统，并按配置选择具体日志后端。
 void Logger::init() {
     ensureInitialized();
 }
 
+/// 关闭日志系统并在支持的后端上做资源回收。
 void Logger::shutdown() {
     auto& state = globalState();
     if (!state.initialized || state.shutdown_requested) {
@@ -492,6 +494,7 @@ void Logger::debug(const std::string& msg) {
 #endif
 }
 
+/// 写入一条日志；内部会根据配置过滤级别并路由到具体后端。
 void Logger::log(LogSeverity severity, std::string_view category, const std::string& message) {
     ensureInitialized();
     dispatchLog(severity, category, message);

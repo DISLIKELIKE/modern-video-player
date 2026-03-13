@@ -117,6 +117,7 @@ HotkeyManager::HotkeyManager() {
     resetToDefaults();
 }
 
+/// 重建默认热键表，作为配置缺省值和回退方案。
 void HotkeyManager::resetToDefaults() {
     action_to_key_.clear();
     bind(PlayerAction::PlayPause, ' ');
@@ -183,6 +184,7 @@ const std::unordered_map<PlayerAction, int>& HotkeyManager::bindings() const {
     return action_to_key_;
 }
 
+/// 扫描当前绑定表，找出多个动作共用同一按键的冲突。
 std::vector<std::pair<PlayerAction, PlayerAction>> HotkeyManager::findConflicts() const {
     std::unordered_map<int, PlayerAction> key_owner;
     std::vector<std::pair<PlayerAction, PlayerAction>> conflicts;
@@ -235,6 +237,7 @@ std::optional<PlayerAction> HotkeyManager::actionFromConfigKey(const std::string
     return std::nullopt;
 }
 
+/// 将 SDL 按键码序列化为配置文件可读 token。
 std::string HotkeyManager::keyCodeToToken(int key_code) {
     switch (key_code) {
     case SDLK_SPACE:

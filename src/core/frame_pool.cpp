@@ -2,6 +2,7 @@
 
 namespace vp::core {
 
+/// 预分配一批空闲 `AVFrame`，降低运行期频繁分配成本。
 FramePool::FramePool(size_t capacity) : capacity_(capacity) {
     idle_frames_.reserve(capacity_);
     for (size_t i = 0; i < capacity_; ++i) {
@@ -16,6 +17,7 @@ FramePool::~FramePool() {
     clear();
 }
 
+/// 优先复用空闲帧；池空时退化为即时分配。
 AVFrame* FramePool::acquire() {
     std::lock_guard<std::mutex> lock(mutex_);
     if (idle_frames_.empty()) {
@@ -28,6 +30,7 @@ AVFrame* FramePool::acquire() {
     return frame;
 }
 
+/// 归还帧到对象池；若池已满则直接释放。
 void FramePool::release(AVFrame* frame) {
     if (!frame) {
         return;

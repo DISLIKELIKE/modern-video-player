@@ -47,6 +47,7 @@ int parsePositiveInt(const std::string& value) {
 
 }  // namespace
 
+/// 从 DASH MPD 文本中提取表示列表、初始化段和媒体分片 URL。
 bool DashManifestParser::parse(const std::string& text, DashManifest& manifest) {
     manifest.base_url = findFirstTagValue(text, "BaseURL");
     manifest.representations.clear();

@@ -17,6 +17,7 @@ bool supportsCodec(const DecoderCapability& capability, const std::string& codec
 
 }  // namespace
 
+/// 返回当前平台编译期可用的解码后端能力清单。
 std::vector<DecoderCapability> DecoderFactory::probeCapabilities() {
     std::vector<DecoderCapability> capabilities;
 
@@ -39,6 +40,7 @@ std::vector<DecoderCapability> DecoderFactory::probeCapabilities() {
     return capabilities;
 }
 
+/// 根据编码名与硬解偏好筛选并排序可用解码后端。
 std::vector<DecoderBackend> DecoderFactory::selectBackendOrder(const std::string& codec_name, bool prefer_hardware) {
     const std::vector<DecoderCapability> capabilities = probeCapabilities();
     std::vector<DecoderCapability> candidates;
@@ -77,6 +79,7 @@ std::vector<DecoderBackend> DecoderFactory::selectBackendOrder(const std::string
     return order;
 }
 
+/// 返回排序结果中的首选解码后端；兜底为软件解码。
 DecoderBackend DecoderFactory::selectBestBackend(const std::string& codec_name, bool prefer_hardware) {
     const std::vector<DecoderBackend> order = selectBackendOrder(codec_name, prefer_hardware);
     if (order.empty()) {

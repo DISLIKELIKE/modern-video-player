@@ -2,6 +2,7 @@
 
 namespace vp::filters {
 
+/// 返回进程内全局滤镜注册表单例。
 FilterRegistry& FilterRegistry::instance() {
     static FilterRegistry registry;
     return registry;
@@ -27,6 +28,7 @@ bool FilterRegistry::unregisterAudioFilter(const std::string& name) {
     return audio_factories_.erase(name) > 0;
 }
 
+/// 按名称创建视频滤镜实例；未注册时返回空。
 std::unique_ptr<IVideoFilter> FilterRegistry::createVideoFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = video_factories_.find(name);
@@ -36,6 +38,7 @@ std::unique_ptr<IVideoFilter> FilterRegistry::createVideoFilter(const std::strin
     return it->second();
 }
 
+/// 按名称创建音频滤镜实例；未注册时返回空。
 std::unique_ptr<IAudioFilter> FilterRegistry::createAudioFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     const auto it = audio_factories_.find(name);

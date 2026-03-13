@@ -23,6 +23,7 @@ std::string avErrorToString(int error_code) {
 
 }  // namespace
 
+/// 打开远端 HTTP 流，并初始化 FFmpeg 网络 IO 上下文。
 bool HttpStreamDownloader::open(const std::string& url) {
     close();
 
@@ -99,6 +100,7 @@ std::vector<uint8_t> HttpStreamDownloader::readChunk(size_t max_bytes) {
     return consumeBuffered(max_bytes);
 }
 
+/// 持续从网络读取数据，直到达到目标缓冲量、EOF 或错误。
 bool HttpStreamDownloader::prefetch(size_t target_bytes, size_t chunk_size) {
     if (!open_ || !io_ctx_) {
         last_error_ = "stream is not open";
@@ -129,6 +131,7 @@ bool HttpStreamDownloader::prefetch(size_t target_bytes, size_t chunk_size) {
     return true;
 }
 
+/// 仅从内部缓冲提取数据，不会发起新的网络读取。
 std::vector<uint8_t> HttpStreamDownloader::consumeBuffered(size_t max_bytes) {
     if (max_bytes == 0 || buffer_.empty()) {
         return {};

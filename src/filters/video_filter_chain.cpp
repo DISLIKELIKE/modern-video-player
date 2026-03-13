@@ -23,6 +23,7 @@ void VideoFilterChain::removeFilter(const std::string& name) {
                    filters_.end());
 }
 
+/// 顺序执行全部已启用视频滤镜；单个滤镜失败不会中断整条链。
 void VideoFilterChain::process(core::VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const std::unique_ptr<IVideoFilter>& filter : filters_) {

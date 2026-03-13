@@ -129,6 +129,7 @@ std::string resolveUrl(const std::string& base_url, const std::string& relative_
     return base_url.substr(0, last_slash + 1) + relative_url;
 }
 
+/// 读取整个远端文本资源；供 HLS/DASH 清单和远端播放列表检查复用。
 bool readUrlText(const std::string& url, std::string& text_out, std::string& error_out) {
     streaming::HttpStreamDownloader downloader;
     if (!downloader.open(url)) {
@@ -166,6 +167,7 @@ void printCoverageLine(const std::string& category, size_t hit, size_t total, co
     std::cout << std::endl;
 }
 
+/// 打印运行时容器/编码能力与主流格式覆盖矩阵。
 void printCapabilityMatrix() {
     const auto report = media::FormatSupport::queryRuntimeCapabilities();
 
@@ -279,6 +281,7 @@ struct ScopedAvLogLevel {
     int previous_level;
 };
 
+/// 单文件探测报告；汇总容器、音视频流与播放建议。
 struct ProbeReport {
     std::string path;
     std::string open = "FAIL";
@@ -345,6 +348,7 @@ void detectProbeStreams(AVFormatContext* fmt_ctx, int& video_stream_idx, int& au
     }
 }
 
+/// 对单个媒体文件做静态探测，生成可打印的能力与风险报告。
 ProbeReport collectFileProbeReport(const std::string& path) {
     ProbeReport report;
     report.path = path;
@@ -596,6 +600,7 @@ std::vector<double> buildSeekValidationTimeline(const std::vector<double>& order
     return seek_timeline;
 }
 
+/// 验证字幕时间线解析是否稳定，覆盖顺序播放和跳转场景。
 bool runSubtitleSyncCheck(const std::string& subtitle_path) {
     subtitle::SrtParser parser;
     if (!parser.parseFile(subtitle_path)) {
@@ -674,6 +679,7 @@ std::string joinIndexList(const std::vector<size_t>& indices) {
     return oss.str();
 }
 
+/// 验证播放列表的装载、遍历和基础探测流程。
 bool runPlaylistFlowCheck(const std::vector<std::string>& media_inputs, size_t required_items = 5) {
     const playlist::PlaylistManager playlist_manager = buildPlaylistFromInputs(media_inputs);
     const size_t total_entries = playlist_manager.size();
@@ -731,6 +737,7 @@ bool runPlaylistFlowCheck(const std::vector<std::string>& media_inputs, size_t r
     return result;
 }
 
+/// 应用级持久化设置快照。
 struct AppSettings {
     float volume{1.0f};
     double playback_speed{1.0};
@@ -742,6 +749,7 @@ struct AppSettings {
     input::HotkeyManager hotkey_manager{};
 };
 
+/// 播放模式下的 CLI 参数解析结果。
 struct PlaybackCliArgs {
     std::vector<std::string> media_inputs;
     std::string subtitle_file;
@@ -757,6 +765,7 @@ bool isM3U8File(const std::string& value) {
     return toLower(extensionFromPath(value)) == "m3u8";
 }
 
+/// 解析普通播放模式参数，并分离媒体输入与外挂字幕参数。
 bool parsePlaybackCliArgs(int argc, char* argv[], PlaybackCliArgs& out, std::string& error) {
     out = PlaybackCliArgs{};
     error.clear();
@@ -827,6 +836,7 @@ std::string hotkeySettingKey(input::PlayerAction action) {
     return "hotkey." + input::HotkeyManager::actionConfigKey(action);
 }
 
+/// 从配置文件恢复热键绑定，并在冲突或非法配置时回退默认值。
 void loadHotkeySettings(config::SettingsManager& settings_manager, input::HotkeyManager& hotkey_manager) {
     const bool restore_defaults_requested = settings_manager.getBool("hotkey.restore_defaults").value_or(false);
     if (restore_defaults_requested) {
@@ -944,6 +954,7 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
     return settings;
 }
 
+/// 将当前播放偏好和热键配置写回设置文件。
 void saveAppSettings(config::SettingsManager& settings_manager,
                      const std::string& settings_path,
                      float volume,
@@ -973,6 +984,7 @@ void saveAppSettings(config::SettingsManager& settings_manager,
     }
 }
 
+/// 验证播放器设置的保存与重新加载流程。
 bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
     std::error_code ec;
     std::filesystem::path check_path;
@@ -1113,6 +1125,7 @@ private:
     bool had_previous_{false};
 };
 
+/// 验证渲染后端初始化失败时是否能正确回退到可用路径。
 bool runRendererFallbackCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1175,6 +1188,7 @@ bool runRendererFallbackCheck(const std::string& media_file) {
     return result;
 }
 
+/// Windows 渲染后端会话检查结果。
 struct BackendSessionResult {
     bool open_ok{false};
     bool entered_playback_loop{false};
@@ -1377,6 +1391,7 @@ BackendSessionResult runBackendSessionSubprocess(const std::string& program_path
     return result;
 }
 
+/// 在 Windows 上验证指定渲染后端模式能否稳定启动会话。
 bool runWindowsBackendSessionCheck(const std::string& media_file, const std::string& mode) {
     const bool hard_mode = mode == "hard";
     const bool soft_mode = mode == "soft";
@@ -1440,6 +1455,7 @@ bool runWindowsBackendSessionCheck(const std::string& media_file, const std::str
     return session.mode_ok;
 }
 
+/// Windows 播放回归入口；串联多种后端模式检查。
 bool runWindowsBackendPlaybackCheck(const std::string& program_path, const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1476,6 +1492,7 @@ bool runWindowsBackendPlaybackCheck(const std::string& program_path, const std::
     return result;
 }
 
+/// 验证章节信息读取与前后章节跳转行为。
 bool runChapterNavigationCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1548,6 +1565,7 @@ bool runChapterNavigationCheck(const std::string& media_file) {
     return result;
 }
 
+/// 验证 A-B Repeat 的起止点设置、循环与清除行为。
 bool runABRepeatCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1653,6 +1671,7 @@ bool runABRepeatCheck(const std::string& media_file) {
     return result;
 }
 
+/// 验证暂停态下逐帧前进/后退逻辑。
 bool runFrameStepCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1738,6 +1757,7 @@ bool runFrameStepCheck(const std::string& media_file) {
     return result;
 }
 
+/// 验证音频延迟和字幕延迟调节的状态持有与恢复行为。
 bool runDelayAdjustCheck(const std::string& media_file, const std::string& subtitle_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1873,6 +1893,7 @@ bool runDelayAdjustCheck(const std::string& media_file, const std::string& subti
     return result;
 }
 
+/// 验证按比例数字跳转与位置同步行为。
 bool runNumericSeekCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -1970,6 +1991,7 @@ bool runNumericSeekCheck(const std::string& media_file) {
     return result;
 }
 
+/// 在短播放窗口内采集诊断计数，检查性能日志链路是否工作。
 bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -2058,6 +2080,7 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     return result;
 }
 
+/// 面向 1080p60 场景的实时播放回归检查。
 bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     const ProbeReport probe = collectFileProbeReport(media_file);
     if (sample_ms < 2000) {
@@ -2147,6 +2170,7 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     return result;
 }
 
+/// 面向 4K 场景的播放压力与后端可用性检查。
 bool run4kPlaybackCheck(const std::string& program_path, const std::string& media_file, int sample_ms = 2000) {
     const ProbeReport probe = collectFileProbeReport(media_file);
     if (sample_ms < 1000) {
@@ -2245,6 +2269,7 @@ bool run4kPlaybackCheck(const std::string& program_path, const std::string& medi
     return result;
 }
 
+/// 面向高码率媒体的稳定性检查。
 bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
     const ProbeReport probe = collectFileProbeReport(media_file);
     const int64_t format_bitrate_bps = collectFormatBitrateBitsPerSecond(media_file);
@@ -2334,6 +2359,7 @@ bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
     return result;
 }
 
+/// 长时间播放窗口检查，用于验证持续推进和丢帧控制。
 bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) {
     const ProbeReport probe = collectFileProbeReport(media_file);
     if (sample_ms < 5000) {
@@ -2416,6 +2442,7 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
     return result;
 }
 
+/// 验证插件加载、滤镜注册和卸载清理流程。
 bool runPluginCheck(const char* program_name, const std::string& plugin_input = std::string{}) {
     const std::filesystem::path default_plugin_dir = [&]() {
         if (program_name && *program_name) {
@@ -2488,12 +2515,14 @@ bool runPluginCheck(const char* program_name, const std::string& plugin_input = 
     return result;
 }
 
+/// 流媒体清单类型。
 enum class StreamingManifestKind {
     Unknown,
     Hls,
     Dash,
 };
 
+/// 流媒体码率候选项；统一承载 HLS/DASH 变体下载信息。
 struct StreamingVariantCandidate {
     std::string id;
     int bandwidth{0};
@@ -2582,6 +2611,7 @@ std::string manifestKindName(StreamingManifestKind kind) {
     }
 }
 
+/// 下载一个 URL，并记录缓冲峰值、读取块数等观测指标。
 bool downloadBufferedUrl(
     const std::string& url,
     size_t target_buffer_bytes,
@@ -2623,6 +2653,7 @@ bool downloadBufferedUrl(
     return true;
 }
 
+/// 从 HLS 主/媒体清单构建可下载的变体候选列表。
 bool buildHlsVariantCandidates(
     const std::string& manifest_url,
     const std::string& manifest_text,
@@ -2684,6 +2715,7 @@ bool buildHlsVariantCandidates(
     return true;
 }
 
+/// 从 DASH MPD 清单构建可下载的表示候选列表。
 bool buildDashVariantCandidates(
     const std::string& manifest_url,
     const std::string& manifest_text,
@@ -2723,6 +2755,7 @@ bool buildDashVariantCandidates(
     return true;
 }
 
+/// 下载选定变体的初始化段和若干媒体分片。
 bool downloadVariantSelection(
     const StreamingVariantCandidate& variant,
     int segment_limit,
@@ -2773,6 +2806,7 @@ bool downloadVariantSelection(
     return true;
 }
 
+/// 验证流媒体清单解析、远端读取与基础缓冲行为。
 bool runStreamingBufferCheck(const std::string& playlist_url, int segment_limit = 3, int target_buffer_bytes = 256) {
     if (segment_limit <= 0 || target_buffer_bytes <= 0) {
         std::cout << "streaming-buffer-check.playlist_url=" << playlist_url << std::endl;
@@ -2860,6 +2894,7 @@ bool runStreamingBufferCheck(const std::string& playlist_url, int segment_limit 
     return result;
 }
 
+/// 验证自适应码率选择逻辑与各变体下载可达性。
 bool runAdaptiveBitrateCheck(
     const std::string& manifest_url,
     const std::string& bandwidth_samples_csv,
@@ -2996,6 +3031,7 @@ bool runAdaptiveBitrateCheck(
     return result;
 }
 
+/// 验证暂停态截图请求、落盘和路径回传链路。
 bool runScreenshotCheck(const std::string& media_file) {
     std::error_code ec;
     const std::filesystem::path media_path(media_file);
@@ -3078,6 +3114,7 @@ bool runScreenshotCheck(const std::string& media_file) {
 
 }  // namespace
 
+/// 进程信号处理入口；优先停止播放并关闭日志系统。
 void signalHandler(int signal) {
     if (g_player) {
         g_player->stop();
@@ -3086,6 +3123,7 @@ void signalHandler(int signal) {
     exit(0);
 }
 
+/// 打印 CLI 用法、验证命令和播放器交互快捷键说明。
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
     std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.srt>" << std::endl;
@@ -3140,6 +3178,7 @@ void printUsage(const char* program_name) {
     std::cout << std::endl;
 }
 
+/// 程序主入口；分发 CLI 检查命令或进入正常播放模式。
 int main(int argc, char* argv[]) {
     if (argc >= 2 && std::string(argv[1]) == "--capabilities") {
         printCapabilityMatrix();

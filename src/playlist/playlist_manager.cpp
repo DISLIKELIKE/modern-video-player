@@ -44,6 +44,7 @@ void PlaylistManager::sortByDuration() {
     });
 }
 
+/// 从 EXTINF/M3U8 文本重建播放列表条目。
 bool PlaylistManager::loadM3U8(const std::string& file_path) {
     std::ifstream input(file_path);
     if (!input.good()) {
@@ -89,6 +90,7 @@ bool PlaylistManager::loadM3U8(const std::string& file_path) {
     return !items_.empty();
 }
 
+/// 将当前播放列表导出为标准 `#EXTM3U` 文本。
 bool PlaylistManager::saveM3U8(const std::string& file_path) const {
     std::ofstream output(file_path, std::ios::trunc);
     if (!output.good()) {

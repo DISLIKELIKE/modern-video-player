@@ -15,6 +15,7 @@ int16_t clampSample(int sample) {
 
 }  // namespace
 
+/// 对 PCM 声道应用音量和左右平衡系数。
 void VolumeBalanceFilter::process(uint8_t* samples, size_t sample_count, int channels) {
     if (!enabled_ || !samples || sample_count == 0 || channels <= 0) {
         return;
@@ -43,6 +44,7 @@ void VolumeBalanceFilter::process(uint8_t* samples, size_t sample_count, int cha
     }
 }
 
+/// 设置音量或平衡参数；非法参数名会抛异常。
 void VolumeBalanceFilter::setParameter(const std::string& name, double value) {
     if (name == "volume") {
         volume_ = std::max(0.0, std::min(4.0, value));

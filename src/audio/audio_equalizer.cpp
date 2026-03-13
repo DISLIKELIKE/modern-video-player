@@ -25,6 +25,7 @@ int16_t clampSample(float sample) {
 
 }  // namespace
 
+/// 初始化均衡器参数；默认所有频段为 0dB。
 AudioEqualizer::AudioEqualizer() {
     band_gains_db_.fill(0.0f);
 }
@@ -51,6 +52,7 @@ float AudioEqualizer::getMasterGain() const {
     return master_gain_;
 }
 
+/// 原地处理 PCM 缓冲；当前按平均频段增益与总增益统一缩放。
 void AudioEqualizer::apply(int16_t* samples, size_t sample_count, int channels) const {
     (void)channels;
     if (!samples || sample_count == 0) {

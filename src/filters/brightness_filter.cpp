@@ -12,6 +12,7 @@ inline uint8_t clampByte(int value) {
 }
 }  // namespace
 
+/// 直接修改 Y 平面，整体抬升或压低画面亮度。
 void BrightnessFilter::process(core::VideoFrame& frame) {
     if (!enabled_ || !frame.frame || !frame.frame->data[0]) {
         return;
@@ -29,6 +30,7 @@ void BrightnessFilter::process(core::VideoFrame& frame) {
     }
 }
 
+/// 设置亮度参数；范围限制在 [-100, 100]。
 void BrightnessFilter::setParameter(const std::string& name, double value) {
     if (name != "brightness") {
         throw std::invalid_argument("unknown brightness parameter");

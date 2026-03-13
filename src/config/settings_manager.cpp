@@ -21,6 +21,7 @@ std::string trimCopy(const std::string& text) {
 
 }  // namespace
 
+/// 从磁盘读取简单键值 INI，并覆盖当前内存配置。
 bool SettingsManager::loadIni(const std::string& file_path) {
     std::ifstream input(file_path);
     if (!input.good()) {
@@ -50,6 +51,7 @@ bool SettingsManager::loadIni(const std::string& file_path) {
     return true;
 }
 
+/// 将内存中的键值对按 `key=value` 形式写回磁盘。
 bool SettingsManager::saveIni(const std::string& file_path) const {
     std::ofstream output(file_path, std::ios::trunc);
     if (!output.good()) {
@@ -62,6 +64,7 @@ bool SettingsManager::saveIni(const std::string& file_path) const {
     return true;
 }
 
+/// 使用最近一次成功加载路径重新读取配置。
 bool SettingsManager::reload() {
     if (loaded_path_.empty()) {
         return false;

@@ -17,6 +17,7 @@ AudioPlayer::~AudioPlayer() {
     close();
 }
 
+/// 初始化 SDL 音频设备，并记录实际生效的输出参数。
 bool AudioPlayer::init(int sample_rate, int channels) {
     if (initialized_) {
         close();
@@ -60,6 +61,7 @@ bool AudioPlayer::init(int sample_rate, int channels) {
     return true;
 }
 
+/// 关闭音频设备并清空播放队列；供重开设备和析构路径复用。
 void AudioPlayer::close() {
     stop();
     
@@ -79,6 +81,7 @@ void AudioPlayer::close() {
     channels_ = 0;
 }
 
+/// 追加一段 PCM 到播放队列；若未提供 PTS，则按队列尾部自动推算。
 void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
     if (!initialized_ || data.empty()) {
         return;
@@ -110,6 +113,7 @@ void AudioPlayer::play(const std::vector<uint8_t>& data, double pts) {
     SDL_PauseAudioDevice(audio_device_, 0);
 }
 
+/// 暂停 SDL 音频设备回调，但保留当前缓冲数据。
 void AudioPlayer::pause() {
     if (initialized_) {
         paused_.store(true);
@@ -117,6 +121,7 @@ void AudioPlayer::pause() {
     }
 }
 
+/// 恢复 SDL 音频设备回调，继续消费已排队的 PCM 数据。
 void AudioPlayer::resume() {
     if (initialized_) {
         paused_.store(false);
@@ -124,6 +129,7 @@ void AudioPlayer::resume() {
     }
 }
 
+/// 停止音频播放并丢弃当前缓冲，使下次播放从干净状态开始。
 void AudioPlayer::stop() {
     if (initialized_) {
         SDL_PauseAudioDevice(audio_device_, 1);
@@ -137,10 +143,12 @@ void AudioPlayer::stop() {
     }
 }
 
+/// 更新音量原子值；真正的混音缩放发生在 SDL 回调线程。
 void AudioPlayer::setVolume(float volume) {
     volume_ = std::max(0.0f, std::min(1.0f, volume));
 }
 
+/// 更新静音标记；不会清空已经排队的音频块。
 void AudioPlayer::setMuted(bool muted) {
     muted_ = muted;
 }
@@ -153,6 +161,7 @@ size_t AudioPlayer::getQueuedBytes() const {
     return queued_bytes_.load();
 }
 
+/// 根据当前排队字节数估算音频缓冲时长。
 double AudioPlayer::getBufferedSeconds() const {
     const double bytes_per_second = static_cast<double>(audio_spec_.freq) *
                                     static_cast<double>(audio_spec_.channels) *
@@ -170,6 +179,7 @@ int AudioPlayer::outputBytesPerSample() const {
     return static_cast<int>(SDL_AUDIO_BITSIZE(audio_spec_.format) / 8);
 }
 
+/// SDL 音频回调线程入口；从队列拉取样本、混音并推进 `playback_pts_`。
 void AudioPlayer::audioCallback(void* userdata, uint8_t* stream, int len) {
     AudioPlayer* player = static_cast<AudioPlayer*>(userdata);
     std::lock_guard<std::mutex> lock(player->queue_mutex_);

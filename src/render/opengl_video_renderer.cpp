@@ -2,6 +2,7 @@
 
 namespace vp::render {
 
+/// OpenGL 渲染路径当前未实现，初始化固定返回 false。
 bool OpenGLVideoRenderer::init(const VideoRendererConfig& config) {
     (void)config;
     return false;

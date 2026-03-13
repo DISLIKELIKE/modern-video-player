@@ -12,6 +12,7 @@ inline uint8_t clampByte(int value) {
 }
 }  // namespace
 
+/// 调整 U/V 色度平面，改变画面饱和度。
 void SaturationFilter::process(core::VideoFrame& frame) {
     if (!enabled_ || !frame.frame || !frame.frame->data[1] || !frame.frame->data[2]) {
         return;
@@ -33,6 +34,7 @@ void SaturationFilter::process(core::VideoFrame& frame) {
     }
 }
 
+/// 设置饱和度参数；范围限制在 [0.0, 2.0]。
 void SaturationFilter::setParameter(const std::string& name, double value) {
     if (name != "saturation") {
         throw std::invalid_argument("unknown saturation parameter");

@@ -8,6 +8,7 @@ SdlVideoRenderer::~SdlVideoRenderer() {
     close();
 }
 
+/// 创建 `Display` 并使用 SDL 通用渲染路径初始化窗口。
 bool SdlVideoRenderer::init(const VideoRendererConfig& config) {
     close();
     display_ = std::make_unique<Display>();
@@ -21,6 +22,7 @@ void SdlVideoRenderer::close() {
     }
 }
 
+/// 把 `VideoFrame` 中的 `AVFrame` 交给 `Display` 做异步显示。
 void SdlVideoRenderer::renderFrame(const core::VideoFrame& frame) {
     if (!display_ || !frame.valid || !frame.frame) {
         return;

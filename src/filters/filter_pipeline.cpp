@@ -39,6 +39,7 @@ void FilterPipeline::removeAudioFilter(const std::string& name) {
         audio_filters_.end());
 }
 
+/// 执行视频滤镜管线；异常会被记录但不会向上传播。
 void FilterPipeline::processVideo(core::VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(video_mutex_);
     for (const auto& filter : video_filters_) {
@@ -55,6 +56,7 @@ void FilterPipeline::processVideo(core::VideoFrame& frame) {
     }
 }
 
+/// 执行音频滤镜管线；异常会被记录但不会向上传播。
 void FilterPipeline::processAudio(uint8_t* samples, size_t sample_count, int channels) {
     std::lock_guard<std::mutex> lock(audio_mutex_);
     for (const auto& filter : audio_filters_) {

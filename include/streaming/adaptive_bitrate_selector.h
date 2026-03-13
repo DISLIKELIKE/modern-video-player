@@ -6,6 +6,7 @@
 
 namespace vp::streaming {
 
+/// 自适应流中的单个码率变体。
 struct AdaptiveStreamVariant {
     // 变体标识（如清晰度标签或清单中的 id）。
     std::string id;
@@ -13,6 +14,7 @@ struct AdaptiveStreamVariant {
     int bandwidth{0};
 };
 
+/// 自适应码率选择结果。
 struct AdaptiveBitrateDecision {
     // 选中的变体索引（对应 variants）。
     size_t variant_index{0};
@@ -20,6 +22,7 @@ struct AdaptiveBitrateDecision {
     bool fallback_to_lowest{false};
 };
 
+/// 自适应码率选择器；根据估算带宽挑选最合适的变体。
 class AdaptiveBitrateSelector {
 public:
     // 基于估算带宽与安全系数选择最合适变体。

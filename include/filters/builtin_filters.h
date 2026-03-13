@@ -5,6 +5,7 @@
 
 namespace vp::filters::builtin {
 
+/// 亮度滤镜；直接调整 Y 平面亮度。
 class BrightnessFilter : public IVideoFilter {
 public:
     std::string getName() const override { return "brightness"; }
@@ -27,6 +28,7 @@ private:
     bool enabled_{true};
 };
 
+/// 对比度滤镜；围绕中性灰度重映射 Y 平面。
 class ContrastFilter : public IVideoFilter {
 public:
     std::string getName() const override { return "contrast"; }
@@ -49,6 +51,7 @@ private:
     bool enabled_{true};
 };
 
+/// 饱和度滤镜；调整 U/V 色度平面偏移量。
 class SaturationFilter : public IVideoFilter {
 public:
     std::string getName() const override { return "saturation"; }
@@ -71,6 +74,7 @@ private:
     bool enabled_{true};
 };
 
+/// 音量/声像滤镜；对 PCM 声道执行线性缩放。
 class VolumeBalanceFilter : public IAudioFilter {
 public:
     std::string getName() const override { return "volume_balance"; }
@@ -94,7 +98,7 @@ private:
     bool enabled_{true};
 };
 
+/// 把内建滤镜注册到全局 `FilterRegistry`。
 void registerBuiltinFilters();
 
 }  // namespace vp::filters::builtin
-

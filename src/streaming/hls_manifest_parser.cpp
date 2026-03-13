@@ -42,6 +42,7 @@ int parsePositiveInt(const std::string& value) {
 
 }  // namespace
 
+/// 解析 HLS 主清单或媒体清单，并识别变体流与分片 URL。
 bool HlsManifestParser::parse(const std::string& text, HlsManifest& manifest) {
     manifest.is_master = false;
     manifest.segment_urls.clear();

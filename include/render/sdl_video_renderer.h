@@ -7,6 +7,7 @@
 
 namespace vp::render {
 
+/// SDL 通用渲染后端；通过 `Display` 提供窗口、事件和软件纹理显示能力。
 class SdlVideoRenderer final : public IVideoRenderer {
 public:
     SdlVideoRenderer();

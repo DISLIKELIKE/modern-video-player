@@ -444,6 +444,7 @@ Display::~Display() {
     close();
 }
 
+/// 初始化窗口、请求状态和内部渲染线程。
 bool Display::init(int width, int height, const std::string& title) {
     if (initialized_) {
         close();
@@ -534,6 +535,7 @@ bool Display::init(int width, int height, const std::string& title) {
     return true;
 }
 
+/// 停止渲染线程并释放窗口、renderer、texture 和待渲染缓存。
 void Display::close() {
     render_running_.store(false);
     render_queue_cv_.notify_all();
@@ -581,6 +583,7 @@ void Display::close() {
     }
 }
 
+/// 按当前偏好重建 SDL renderer，并记录实际生效的驱动名称。
 bool Display::createRenderer() {
     if (!window_) {
         return false;
@@ -680,6 +683,7 @@ bool Display::ensureTextureForFrame(int width, int height) {
     return true;
 }
 
+/// 确保 renderer 与 texture 与当前帧尺寸匹配；必要时执行重建。
 bool Display::ensureRenderResources(int frame_width, int frame_height) {
     if (!window_) {
         return false;
@@ -692,6 +696,7 @@ bool Display::ensureRenderResources(int frame_width, int frame_height) {
     return ensureTextureForFrame(frame_width, frame_height);
 }
 
+/// 把待渲染帧的 YUV 平面上传到 SDL texture。
 bool Display::updateTexture(const PendingVideoFrame& frame) {
     if (!texture_ || !frame.valid) {
         return false;
@@ -713,6 +718,7 @@ bool Display::updateTexture(const PendingVideoFrame& frame) {
     return true;
 }
 
+/// 把外部提交的 `AVFrame` 复制到待渲染缓冲，由渲染线程异步显示。
 void Display::renderFrame(const uint8_t* data, int width, int height) {
     (void)width;
     (void)height;
@@ -738,10 +744,12 @@ void Display::renderFrame(const uint8_t* data, int width, int height) {
     render_queue_cv_.notify_one();
 }
 
+/// `present()` 由渲染线程统一驱动；显式调用时不做额外工作。
 void Display::present() {
     // Present is driven by renderLoop() on the render owner thread.
 }
 
+/// 清空待渲染帧缓存，避免 seek/停止后继续显示旧帧。
 void Display::clear() {
     {
         std::lock_guard<std::mutex> lock(render_queue_mutex_);
@@ -751,6 +759,7 @@ void Display::clear() {
     render_queue_cv_.notify_one();
 }
 
+/// 从 `AVFrame` 深拷贝 YUV 平面数据，切断与解码缓冲的生命周期耦合。
 bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     if (!frame.data[0] || !frame.data[1] || !frame.data[2] || frame.width <= 0 || frame.height <= 0) {
         return false;
@@ -813,6 +822,7 @@ bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     return true;
 }
 
+/// 渲染线程主循环：等待新帧或重建请求，并负责真正的 SDL 呈现。
 void Display::renderLoop() {
     {
         std::lock_guard<std::mutex> lock(sdl_mutex_);
@@ -917,6 +927,7 @@ void Display::renderLoop() {
     }
 }
 
+/// UI 线程事件泵；把键鼠事件翻译为一次性控制请求。
 void Display::handleEvents() {
     SDL_Event event;
     
@@ -1393,6 +1404,7 @@ bool Display::consumePreviousItemRequest() {
     return true;
 }
 
+/// 更新叠加层状态；供渲染线程绘制进度、音量和暂停标记。
 void Display::setOverlayState(double position, double duration, float volume, bool paused) {
     overlay_position_.store(std::max(0.0, position));
     overlay_duration_.store(std::max(0.0, duration));
@@ -1600,6 +1612,7 @@ void Display::drawControls(int window_width, int window_height) {
     }
 }
 
+/// 根据鼠标位置更新 seek 预览；提交时只记录一次性 seek 请求。
 void Display::updateSeekFromMouse(int mouse_x, bool commit) {
     const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
     if (layout.progress_track.w <= 0) {
@@ -1618,6 +1631,7 @@ void Display::updateSeekFromMouse(int mouse_x, bool commit) {
     }
 }
 
+/// 根据鼠标位置更新音量请求，并同步刷新叠加层显示。
 void Display::updateVolumeFromMouse(int mouse_x) {
     const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
     if (layout.volume_track.w <= 0) {
@@ -1633,6 +1647,7 @@ void Display::updateVolumeFromMouse(int mouse_x) {
     overlay_volume_.store(next_volume);
 }
 
+/// 仅设置全屏切换请求，真正切换由渲染线程执行。
 void Display::toggleFullscreen() {
     fullscreen_toggle_requested_.store(true);
     render_queue_cv_.notify_one();

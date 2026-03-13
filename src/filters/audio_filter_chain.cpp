@@ -23,6 +23,7 @@ void AudioFilterChain::removeFilter(const std::string& name) {
                    filters_.end());
 }
 
+/// 顺序执行全部已启用音频滤镜；单个滤镜失败不会中断整条链。
 void AudioFilterChain::process(uint8_t* samples, size_t sample_count, int channels) {
     std::lock_guard<std::mutex> lock(mutex_);
     for (const std::unique_ptr<IAudioFilter>& filter : filters_) {

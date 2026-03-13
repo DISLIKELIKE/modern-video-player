@@ -6,6 +6,7 @@
 
 namespace vp {
 
+/// 日志严重级别。
 enum class LogSeverity {
     Trace = 0,
     Debug,
@@ -14,16 +15,24 @@ enum class LogSeverity {
     Error
 };
 
+/// 日志门面；对外屏蔽具体日志后端并提供统一类别/级别接口。
 class Logger {
 public:
+    /// 初始化全局日志系统。
     static void init();
+    /// 关闭全局日志系统并刷新尾部日志。
     static void shutdown();
 
+    /// 记录一条 Info 日志。
     static void info(const std::string& msg);
+    /// 记录一条 Warning 日志。
     static void warning(const std::string& msg);
+    /// 记录一条 Error 日志。
     static void error(const std::string& msg);
+    /// 记录一条 Debug 日志。
     static void debug(const std::string& msg);
 
+    /// 记录指定级别与类别的日志。
     static void log(LogSeverity severity, std::string_view category, const std::string& message);
 
 private:

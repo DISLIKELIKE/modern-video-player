@@ -8,6 +8,7 @@ Clock::Clock() {
     reset();
 }
 
+/// 切换主时钟来源；后续 `getTime()` 会按该来源解析播放时间。
 void Clock::setSource(ClockSource source) {
     source_.store(source);
 }
@@ -16,6 +17,7 @@ ClockSource Clock::getSource() const {
     return source_.load();
 }
 
+/// 根据当前主时钟来源返回解析后的播放时间。
 double Clock::getTime() const {
     if (paused_.load()) {
         std::lock_guard<std::mutex> lock(mutex_);
@@ -36,12 +38,14 @@ double Clock::getTime() const {
     return base_time_ + elapsed * speed_.load();
 }
 
+/// 重置系统时钟基准到指定时间；常用于 seek 或单帧步进后同步。
 void Clock::setTime(double time) {
     std::lock_guard<std::mutex> lock(mutex_);
     base_time_ = std::max(0.0, time);
     base_tp_ = std::chrono::steady_clock::now();
 }
 
+/// 更新音频时钟值；通常由音频消费线程按真实播放进度推进。
 void Clock::setAudioClock(double time) {
     audio_clock_.store(std::max(0.0, time));
 }
@@ -50,6 +54,7 @@ double Clock::getAudioClock() const {
     return audio_clock_.load();
 }
 
+/// 更新视频时钟值；通常由渲染线程在提交视频帧后推进。
 void Clock::setVideoClock(double time) {
     video_clock_.store(std::max(0.0, time));
 }
@@ -58,6 +63,7 @@ double Clock::getVideoClock() const {
     return video_clock_.load();
 }
 
+/// 更新系统时钟倍速；仅在以系统时钟为主时直接影响 `getTime()`。
 void Clock::setSpeed(double speed) {
     speed_.store(std::max(0.1, speed));
 }
@@ -66,6 +72,7 @@ double Clock::getSpeed() const {
     return speed_.load();
 }
 
+/// 将当前解析时间冻结到 `base_time_`，供暂停态持续读取。
 void Clock::pause() {
     if (paused_.exchange(true)) {
         return;
@@ -73,6 +80,7 @@ void Clock::pause() {
     setTime(getTime());
 }
 
+/// 从冻结时间继续推进系统时钟基准。
 void Clock::resume() {
     if (!paused_.exchange(false)) {
         return;
@@ -81,6 +89,7 @@ void Clock::resume() {
     base_tp_ = std::chrono::steady_clock::now();
 }
 
+/// 清空音视频时钟与系统基准，恢复默认播放速度。
 void Clock::reset() {
     std::lock_guard<std::mutex> lock(mutex_);
     audio_clock_.store(0.0);

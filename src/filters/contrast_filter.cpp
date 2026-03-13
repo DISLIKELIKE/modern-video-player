@@ -12,6 +12,7 @@ inline uint8_t clampByte(int value) {
 }
 }  // namespace
 
+/// 围绕中性灰度调整 Y 平面对比度。
 void ContrastFilter::process(core::VideoFrame& frame) {
     if (!enabled_ || !frame.frame || !frame.frame->data[0]) {
         return;
@@ -29,6 +30,7 @@ void ContrastFilter::process(core::VideoFrame& frame) {
     }
 }
 
+/// 设置对比度参数；范围限制在 [0.5, 2.0]。
 void ContrastFilter::setParameter(const std::string& name, double value) {
     if (name != "contrast") {
         throw std::invalid_argument("unknown contrast parameter");

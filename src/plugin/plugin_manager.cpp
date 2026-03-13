@@ -160,6 +160,7 @@ bool PluginManager::setEnabled(const std::string& id, bool enabled) {
     return true;
 }
 
+/// 从动态库加载插件、校验导出符号，并执行初始化。
 bool PluginManager::loadPlugin(const std::filesystem::path& path, std::string* error_message) {
     std::error_code ec;
     const std::filesystem::path normalized_path = std::filesystem::weakly_canonical(path, ec);
@@ -259,6 +260,7 @@ bool PluginManager::loadPlugin(const std::filesystem::path& path, std::string* e
     return true;
 }
 
+/// 扫描目录中的插件动态库并按文件名顺序加载。
 size_t PluginManager::loadPluginsFromDirectory(const std::filesystem::path& directory,
                                                std::vector<std::string>* errors) {
     std::error_code ec;
@@ -305,6 +307,7 @@ size_t PluginManager::loadPluginsFromDirectory(const std::filesystem::path& dire
     return loaded_count;
 }
 
+/// 逆序卸载全部插件，确保先加载的插件最后释放。
 void PluginManager::unloadAll(std::vector<std::string>* errors) {
     for (auto it = plugins_.rbegin(); it != plugins_.rend(); ++it) {
         try {
@@ -366,6 +369,7 @@ void PluginManager::logError(const std::string& message) {
     Logger::error("[plugin] " + message);
 }
 
+/// 执行插件初始化，并跟踪其运行期注册的滤镜资源。
 bool PluginManager::activatePlugin(PluginRecord& plugin, std::string* error_message) {
     if (plugin.active) {
         return true;
@@ -430,6 +434,7 @@ bool PluginManager::activatePlugin(PluginRecord& plugin, std::string* error_mess
     return true;
 }
 
+/// 执行插件卸载，并回收该插件注册的全部滤镜。
 void PluginManager::deactivatePlugin(PluginRecord& plugin) {
     if (!plugin.active) {
         return;

@@ -35,6 +35,7 @@ D3D11VideoRenderer::~D3D11VideoRenderer() {
     close();
 }
 
+/// 初始化 D3D11 偏好的 SDL 渲染驱动，并校验实际后端是否匹配。
 bool D3D11VideoRenderer::init(const VideoRendererConfig& config) {
     close();
     display_ = std::make_unique<Display>();
@@ -74,6 +75,7 @@ void D3D11VideoRenderer::close() {
     }
 }
 
+/// 把 `VideoFrame` 中的 `AVFrame` 交给 D3D11 偏好的显示封装。
 void D3D11VideoRenderer::renderFrame(const core::VideoFrame& frame) {
     if (!display_ || !frame.valid || !frame.frame) {
         return;

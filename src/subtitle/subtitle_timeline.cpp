@@ -13,6 +13,7 @@ bool isWithinSubtitleRange(const SubtitleItem& item, double position_seconds) {
 
 }  // namespace
 
+/// 根据播放位置查找当前命中的字幕索引；优先复用上一次命中结果。
 int resolveActiveSubtitleIndex(const std::vector<SubtitleItem>& items,
                                double position_seconds,
                                int active_index_hint) {

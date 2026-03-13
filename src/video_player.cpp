@@ -11,6 +11,7 @@
 
 namespace vp {
 
+/// 构造时创建 `PlayerCore`，并把底层状态同步到门面缓存。
 VideoPlayer::VideoPlayer() : core_player_(std::make_unique<core::PlayerCore>()) {
     core_player_->onStateChanged([this](core::PlaybackState state) {
         playing_.store(state == core::PlaybackState::Playing);
@@ -25,6 +26,7 @@ VideoPlayer::~VideoPlayer() {
     close();
 }
 
+/// 打开媒体并把当前用户态配置重新下发到底层播放核心。
 bool VideoPlayer::open(const std::string& filename) {
     if (!core_player_) {
         core_player_ = std::make_unique<core::PlayerCore>();
@@ -45,6 +47,7 @@ bool VideoPlayer::open(const std::string& filename) {
     return true;
 }
 
+/// 关闭底层链路并重置门面层缓存状态。
 void VideoPlayer::close() {
     if (core_player_) {
         core_player_->close();
@@ -55,24 +58,28 @@ void VideoPlayer::close() {
     current_time_.store(0.0);
 }
 
+/// 转发播放请求；从暂停态恢复或从停止态启动底层播放链路。
 void VideoPlayer::play() {
     if (core_player_) {
         core_player_->play();
     }
 }
 
+/// 转发暂停请求；底层会冻结调度、时钟和音频设备。
 void VideoPlayer::pause() {
     if (core_player_) {
         core_player_->pause();
     }
 }
 
+/// 转发停止请求；底层会清空管线并回到停止态。
 void VideoPlayer::stop() {
     if (core_player_) {
         core_player_->stop();
     }
 }
 
+/// 转发按秒 seek 请求；实际 flush 与时钟重同步由 `PlayerCore` 完成。
 void VideoPlayer::seek(double timestamp) {
     if (core_player_) {
         core_player_->seek(timestamp);
@@ -125,6 +132,7 @@ bool VideoPlayer::consumeLastScreenshotPath(std::string& path) {
     return core_player_ ? core_player_->consumeLastScreenshotPath(path) : false;
 }
 
+/// 在暂停态向后逐帧，并同步门面缓存的位置。
 bool VideoPlayer::stepFrameBackward() {
     const bool ok = core_player_ ? core_player_->stepFrameBackward() : false;
     if (ok && core_player_) {
@@ -133,6 +141,7 @@ bool VideoPlayer::stepFrameBackward() {
     return ok;
 }
 
+/// 在暂停态向前逐帧，并同步门面缓存的位置。
 bool VideoPlayer::stepFrameForward() {
     const bool ok = core_player_ ? core_player_->stepFrameForward() : false;
     if (ok && core_player_) {
@@ -141,6 +150,7 @@ bool VideoPlayer::stepFrameForward() {
     return ok;
 }
 
+/// 驱动显示层事件泵，把热键和窗口控制请求下发到底层。
 void VideoPlayer::pumpEvents() {
     if (core_player_) {
         core_player_->pumpEvents();
@@ -183,6 +193,7 @@ core::DiagnosticsSnapshot VideoPlayer::getDiagnosticsSnapshot() const {
     return core_player_ ? core_player_->getDiagnosticsSnapshot() : core::DiagnosticsSnapshot{};
 }
 
+/// 缓存并下发音量；门面层先把范围裁剪到 `[0, 1]`。
 void VideoPlayer::setVolume(float volume) {
     volume_ = std::max(0.0f, std::min(1.0f, volume));
     if (core_player_) {
@@ -194,6 +205,7 @@ float VideoPlayer::getVolume() const {
     return volume_;
 }
 
+/// 缓存并下发倍速；门面层先把范围裁剪到 `[0.5, 2.0]`。
 void VideoPlayer::setPlaybackSpeed(double speed) {
     playback_speed_ = std::max(0.5, std::min(2.0, speed));
     if (core_player_) {
@@ -205,6 +217,7 @@ double VideoPlayer::getPlaybackSpeed() const {
     return playback_speed_;
 }
 
+/// 更新音频延迟配置，并立即同步到底层播放核心。
 void VideoPlayer::setAudioDelay(double delay_seconds) {
     if (core_player_) {
         core_player_->setAudioDelay(delay_seconds);
@@ -215,6 +228,7 @@ double VideoPlayer::getAudioDelay() const {
     return core_player_ ? core_player_->getAudioDelay() : 0.0;
 }
 
+/// 更新字幕延迟配置，并立即同步到底层字幕时间线。
 void VideoPlayer::setSubtitleDelay(double delay_seconds) {
     if (core_player_) {
         core_player_->setSubtitleDelay(delay_seconds);
@@ -225,6 +239,7 @@ double VideoPlayer::getSubtitleDelay() const {
     return core_player_ ? core_player_->getSubtitleDelay() : 0.0;
 }
 
+/// 记录硬解偏好，并影响后续打开媒体时的解码后端选择。
 void VideoPlayer::setPreferHardwareDecode(bool prefer_hardware_decode) {
     prefer_hardware_decode_ = prefer_hardware_decode;
     if (core_player_) {
@@ -258,6 +273,7 @@ const input::HotkeyManager& VideoPlayer::hotkeyManager() const {
     return core_player_ ? core_player_->hotkeyManager() : kFallbackHotkeys;
 }
 
+/// 校验并加载外挂字幕；成功后立即同步到 `PlayerCore`。
 bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
     clearExternalSubtitle();
     if (subtitle_file.empty()) {
@@ -305,6 +321,7 @@ bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
     return true;
 }
 
+/// 清除外挂字幕缓存，并通知底层移除当前字幕时间线。
 void VideoPlayer::clearExternalSubtitle() {
     if (core_player_) {
         core_player_->clearExternalSubtitles();
@@ -325,6 +342,7 @@ size_t VideoPlayer::externalSubtitleCount() const {
     return subtitle_items_.size();
 }
 
+/// 更新字幕总开关，并立即同步到底层渲染链路。
 void VideoPlayer::setSubtitleEnabled(bool enabled) {
     subtitle_enabled_ = enabled;
     if (core_player_) {
@@ -336,6 +354,7 @@ bool VideoPlayer::isSubtitleEnabled() const {
     return subtitle_enabled_;
 }
 
+/// 翻转字幕开关并返回新的启用状态。
 bool VideoPlayer::toggleSubtitleEnabled() {
     setSubtitleEnabled(!subtitle_enabled_);
     return subtitle_enabled_;

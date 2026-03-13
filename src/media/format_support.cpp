@@ -198,6 +198,7 @@ bool FormatSupport::supportsMp4MoovPreload() {
     return true;
 }
 
+/// 通过 FFmpeg 运行时枚举解复用器和解码器，生成能力快照。
 FormatCapabilityReport FormatSupport::queryRuntimeCapabilities() {
     FormatCapabilityReport report;
     std::set<std::string> containers;
@@ -273,6 +274,7 @@ FormatCapabilityReport FormatSupport::queryRuntimeCapabilities() {
     return report;
 }
 
+/// 基于分辨率、帧率、码率等指标评估实时播放压力。
 PlaybackCapabilityDecision FormatSupport::evaluatePlaybackTarget(const PlaybackCapabilityTarget& target) {
     return evaluateTargetHeuristics(target);
 }

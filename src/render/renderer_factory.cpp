@@ -7,6 +7,7 @@
 
 namespace vp::render {
 
+/// 按平台返回默认渲染后端；当前 Windows 优先 D3D11。
 VideoRendererType RendererFactory::detectBestRendererType() {
 #if defined(_WIN32)
     return VideoRendererType::D3D11;
@@ -15,6 +16,7 @@ VideoRendererType RendererFactory::detectBestRendererType() {
 #endif
 }
 
+/// 创建渲染器实例；`Auto` 会先解析为平台默认后端。
 VideoRendererPtr RendererFactory::create(VideoRendererType type) {
     VideoRendererType final_type = type;
     if (final_type == VideoRendererType::Auto) {

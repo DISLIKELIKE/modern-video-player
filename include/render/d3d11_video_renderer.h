@@ -7,6 +7,7 @@
 
 namespace vp::render {
 
+/// D3D11 渲染包装器；底层仍复用 `Display`，并校验 SDL 实际驱动是否为 D3D11。
 class D3D11VideoRenderer final : public IVideoRenderer {
 public:
     D3D11VideoRenderer();

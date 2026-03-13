@@ -12,6 +12,7 @@ Demuxer::~Demuxer() {
     close();
 }
 
+/// 打开媒体输入并探测流、章节、时长等元数据。
 bool Demuxer::open(const std::string& filename) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -56,6 +57,7 @@ bool Demuxer::open(const std::string& filename) {
     return true;
 }
 
+/// 关闭当前输入并重置媒体信息；后续读包会立即失败。
 void Demuxer::close() {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -68,6 +70,7 @@ void Demuxer::close() {
     eof_reached_.store(false);
 }
 
+/// 读取一个压缩包；返回 false 表示失败或已读到 EOF。
 bool Demuxer::readPacket(AVPacket* packet) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -84,6 +87,7 @@ bool Demuxer::readPacket(AVPacket* packet) {
     return true;
 }
 
+/// 以秒为单位执行 seek，并在成功后清除 EOF 状态。
 bool Demuxer::seek(double timestamp) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -103,6 +107,7 @@ bool Demuxer::seek(double timestamp) {
     return true;
 }
 
+/// 从 `AVFormatContext` 提取音视频流、章节和基础媒体信息。
 void Demuxer::detectStreams() {
     if (!format_ctx_) {
         return;
