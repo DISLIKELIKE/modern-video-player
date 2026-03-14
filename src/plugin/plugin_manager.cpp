@@ -20,6 +20,7 @@ namespace vp::plugin {
 
 namespace {
 
+/// 读取动态库装载器错误文本，供插件加载失败时输出诊断信息。
 std::string dynamicLibraryErrorString() {
 #if defined(_WIN32)
     const DWORD error = GetLastError();
@@ -50,6 +51,7 @@ std::string dynamicLibraryErrorString() {
 #endif
 }
 
+/// 打开动态库文件；失败时把平台相关错误写入输出参数。
 void* openDynamicLibrary(const std::filesystem::path& path, std::string* error_message) {
 #if defined(_WIN32)
     HMODULE handle = LoadLibraryW(path.wstring().c_str());
@@ -66,6 +68,7 @@ void* openDynamicLibrary(const std::filesystem::path& path, std::string* error_m
 #endif
 }
 
+/// 关闭动态库句柄；供卸载插件和失败回滚路径复用。
 void closeDynamicLibrary(void* handle) {
     if (!handle) {
         return;
@@ -77,6 +80,7 @@ void closeDynamicLibrary(void* handle) {
 #endif
 }
 
+/// 解析动态库导出符号地址；缺失时返回空指针。
 void* resolveDynamicSymbol(void* handle, const char* symbol_name) {
     if (!handle || !symbol_name) {
         return nullptr;
@@ -88,6 +92,7 @@ void* resolveDynamicSymbol(void* handle, const char* symbol_name) {
 #endif
 }
 
+/// 返回当前平台默认的插件动态库扩展名。
 std::string pluginExtension() {
 #if defined(_WIN32)
     return ".dll";
@@ -98,6 +103,7 @@ std::string pluginExtension() {
 #endif
 }
 
+/// 将路径标准化为便于日志输出和插件描述记录的字符串形式。
 std::string describePath(const std::filesystem::path& path) {
     return path.generic_string();
 }
@@ -108,6 +114,7 @@ PluginManager::~PluginManager() {
     unloadAll();
 }
 
+/// 在内存插件列表中注册一个描述对象；同 ID 时覆盖已有描述。
 void PluginManager::registerPlugin(PluginDescriptor descriptor) {
     auto it = findPlugin(descriptor.id);
     if (it != plugins_.end()) {
@@ -121,6 +128,7 @@ void PluginManager::registerPlugin(PluginDescriptor descriptor) {
     plugins_.push_back(std::move(record));
 }
 
+/// 注销指定插件，并在删除记录前执行停用与动态库关闭。
 bool PluginManager::unregisterPlugin(const std::string& id) {
     auto it = findPlugin(id);
     if (it == plugins_.end()) {
@@ -136,6 +144,7 @@ bool PluginManager::unregisterPlugin(const std::string& id) {
     return true;
 }
 
+/// 切换插件启用状态；启用时会执行激活，禁用时会执行停用。
 bool PluginManager::setEnabled(const std::string& id, bool enabled) {
     auto it = findPlugin(id);
     if (it == plugins_.end()) {
@@ -330,6 +339,7 @@ void PluginManager::unloadAll(std::vector<std::string>* errors) {
     plugins_.clear();
 }
 
+/// 返回当前插件描述快照，供 UI 或 CLI 展示插件状态。
 std::vector<PluginDescriptor> PluginManager::listPlugins() const {
     std::vector<PluginDescriptor> descriptors;
     descriptors.reserve(plugins_.size());
@@ -339,6 +349,7 @@ std::vector<PluginDescriptor> PluginManager::listPlugins() const {
     return descriptors;
 }
 
+/// 在插件激活期注册视频滤镜，并把资源归属记到当前插件名下。
 bool PluginManager::registerVideoFilter(const std::string& name, filters::VideoFilterFactory factory) {
     if (!active_plugin_ || name.empty() || !factory) {
         return false;
@@ -348,6 +359,7 @@ bool PluginManager::registerVideoFilter(const std::string& name, filters::VideoF
     return true;
 }
 
+/// 在插件激活期注册音频滤镜，并把资源归属记到当前插件名下。
 bool PluginManager::registerAudioFilter(const std::string& name, filters::AudioFilterFactory factory) {
     if (!active_plugin_ || name.empty() || !factory) {
         return false;
@@ -357,14 +369,17 @@ bool PluginManager::registerAudioFilter(const std::string& name, filters::AudioF
     return true;
 }
 
+/// 以统一前缀输出插件信息日志。
 void PluginManager::logInfo(const std::string& message) {
     Logger::info("[plugin] " + message);
 }
 
+/// 以统一前缀输出插件警告日志。
 void PluginManager::logWarning(const std::string& message) {
     Logger::warning("[plugin] " + message);
 }
 
+/// 以统一前缀输出插件错误日志。
 void PluginManager::logError(const std::string& message) {
     Logger::error("[plugin] " + message);
 }
@@ -464,12 +479,14 @@ void PluginManager::deactivatePlugin(PluginRecord& plugin) {
     plugin.descriptor.enabled = false;
 }
 
+/// 按插件 ID 在内部记录表中查找可修改记录。
 std::vector<PluginManager::PluginRecord>::iterator PluginManager::findPlugin(const std::string& id) {
     return std::find_if(plugins_.begin(), plugins_.end(), [&id](const PluginRecord& plugin) {
         return plugin.descriptor.id == id;
     });
 }
 
+/// 按插件 ID 在内部记录表中查找只读记录。
 std::vector<PluginManager::PluginRecord>::const_iterator PluginManager::findPlugin(const std::string& id) const {
     return std::find_if(plugins_.begin(), plugins_.end(), [&id](const PluginRecord& plugin) {
         return plugin.descriptor.id == id;

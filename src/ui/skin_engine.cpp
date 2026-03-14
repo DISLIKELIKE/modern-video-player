@@ -4,10 +4,12 @@
 
 namespace vp::ui {
 
+/// 替换当前主题对象；后续变量解析都基于新主题。
 void SkinEngine::setTheme(SkinTheme theme) {
     theme_ = std::move(theme);
 }
 
+/// 返回当前主题对象的只读视图。
 const SkinTheme& SkinEngine::theme() const {
     return theme_;
 }

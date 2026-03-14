@@ -38,6 +38,7 @@ void ContrastFilter::setParameter(const std::string& name, double value) {
     contrast_ = std::max(0.5, std::min(2.0, value));
 }
 
+/// 返回指定参数的当前值；未知参数统一回退为 0。
 double ContrastFilter::getParameter(const std::string& name) const {
     if (name == "contrast") {
         return contrast_;
@@ -45,6 +46,7 @@ double ContrastFilter::getParameter(const std::string& name) const {
     return 0.0;
 }
 
+/// 返回对比度滤镜支持的参数名集合。
 std::vector<std::string> ContrastFilter::getParameterNames() const {
     return {"contrast"};
 }

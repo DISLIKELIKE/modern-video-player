@@ -8,8 +8,10 @@ bool OpenGLVideoRenderer::init(const VideoRendererConfig& config) {
     return false;
 }
 
+/// 当前 OpenGL 路径未落地，关闭操作为 no-op。
 void OpenGLVideoRenderer::close() {}
 
+/// 当前 OpenGL 路径未落地，收到视频帧后直接忽略。
 void OpenGLVideoRenderer::renderFrame(const core::VideoFrame& frame) {
     (void)frame;
 }
@@ -18,6 +20,7 @@ void OpenGLVideoRenderer::present() {}
 
 void OpenGLVideoRenderer::clear() {}
 
+/// 当前 OpenGL 路径未落地，不维护独立事件处理逻辑。
 void OpenGLVideoRenderer::handleEvents() {}
 
 bool OpenGLVideoRenderer::shouldQuit() const {
@@ -106,6 +109,7 @@ bool OpenGLVideoRenderer::consumePreviousItemRequest() {
     return false;
 }
 
+/// 当前 OpenGL 路径未落地，OSD 状态仅作接口占位。
 void OpenGLVideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
     (void)position;
     (void)duration;

@@ -42,6 +42,7 @@ void SaturationFilter::setParameter(const std::string& name, double value) {
     saturation_ = std::max(0.0, std::min(2.0, value));
 }
 
+/// 返回指定参数的当前值；未知参数统一回退为 0。
 double SaturationFilter::getParameter(const std::string& name) const {
     if (name == "saturation") {
         return saturation_;
@@ -49,6 +50,7 @@ double SaturationFilter::getParameter(const std::string& name) const {
     return 0.0;
 }
 
+/// 返回饱和度滤镜支持的参数名集合。
 std::vector<std::string> SaturationFilter::getParameterNames() const {
     return {"saturation"};
 }

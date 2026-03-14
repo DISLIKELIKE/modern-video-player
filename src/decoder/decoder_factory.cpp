@@ -7,6 +7,7 @@ namespace vp::decoder {
 
 namespace {
 
+/// 判断某个后端能力声明中是否包含指定编解码器。
 bool supportsCodec(const DecoderCapability& capability, const std::string& codec_name) {
     return std::any_of(capability.supported_codecs.begin(),
                        capability.supported_codecs.end(),
@@ -88,6 +89,7 @@ DecoderBackend DecoderFactory::selectBestBackend(const std::string& codec_name, 
     return order.front();
 }
 
+/// 返回解码后端枚举对应的稳定名称，用于日志与状态展示。
 const char* DecoderFactory::backendName(DecoderBackend backend) {
     switch (backend) {
         case DecoderBackend::Software:

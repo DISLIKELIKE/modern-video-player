@@ -5,10 +5,12 @@
 
 namespace vp::playlist {
 
+/// 追加一个播放项到列表尾部。
 void PlaylistManager::addItem(PlaylistItem item) {
     items_.push_back(std::move(item));
 }
 
+/// 删除指定索引的播放项；越界时返回 false。
 bool PlaylistManager::removeItem(size_t index) {
     if (index >= items_.size()) {
         return false;
@@ -17,27 +19,33 @@ bool PlaylistManager::removeItem(size_t index) {
     return true;
 }
 
+/// 清空全部播放项。
 void PlaylistManager::clear() {
     items_.clear();
 }
 
+/// 判断播放列表当前是否为空。
 bool PlaylistManager::empty() const {
     return items_.empty();
 }
 
+/// 返回当前播放项数量。
 size_t PlaylistManager::size() const {
     return items_.size();
 }
 
+/// 返回播放项数组的只读视图。
 const std::vector<PlaylistItem>& PlaylistManager::items() const {
     return items_;
 }
 
+/// 按标题字典序排序播放列表。
 void PlaylistManager::sortByTitle() {
     std::sort(items_.begin(), items_.end(),
               [](const PlaylistItem& lhs, const PlaylistItem& rhs) { return lhs.title < rhs.title; });
 }
 
+/// 按时长升序排序播放列表。
 void PlaylistManager::sortByDuration() {
     std::sort(items_.begin(), items_.end(), [](const PlaylistItem& lhs, const PlaylistItem& rhs) {
         return lhs.duration_seconds < rhs.duration_seconds;

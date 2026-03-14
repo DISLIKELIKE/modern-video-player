@@ -7,6 +7,7 @@ namespace vp::streaming {
 
 namespace {
 
+/// 去掉 XML 片段首尾空白，减少正则匹配后的噪声。
 std::string trim(std::string value) {
     const size_t begin = value.find_first_not_of(" \t\r\n");
     if (begin == std::string::npos) {
@@ -16,6 +17,7 @@ std::string trim(std::string value) {
     return value.substr(begin, end - begin + 1);
 }
 
+/// 查找首个指定 XML 标签的文本内容。
 std::string findFirstTagValue(const std::string& text, const std::string& tag_name) {
     const std::regex tag_regex("<" + tag_name + R"(>([\s\S]*?)</)" + tag_name + ">", std::regex::icase);
     std::smatch match;
@@ -25,6 +27,7 @@ std::string findFirstTagValue(const std::string& text, const std::string& tag_na
     return trim(match[1].str());
 }
 
+/// 从 DASH 节点属性串中提取指定属性值。
 std::string extractAttribute(const std::string& text, const std::string& key) {
     const std::regex attribute_regex(key + "\\s*=\\s*\"([^\"]+)\"", std::regex::icase);
     std::smatch match;
@@ -34,6 +37,7 @@ std::string extractAttribute(const std::string& text, const std::string& key) {
     return match[1].str();
 }
 
+/// 解析非负整数属性；非法输入统一回退为 0。
 int parsePositiveInt(const std::string& value) {
     if (value.empty()) {
         return 0;

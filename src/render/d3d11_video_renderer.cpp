@@ -9,6 +9,7 @@
 namespace vp::render {
 
 namespace {
+/// 读取环境变量，用于覆盖 SDL 的 D3D11 驱动提示。
 std::string readEnvVar(const char* key) {
     if (!key || key[0] == '\0') {
         return {};
@@ -68,6 +69,7 @@ bool D3D11VideoRenderer::init(const VideoRendererConfig& config) {
     return true;
 }
 
+/// 关闭底层 `Display` 并释放 D3D11 偏好的 SDL 渲染路径资源。
 void D3D11VideoRenderer::close() {
     if (display_) {
         display_->close();
@@ -83,18 +85,21 @@ void D3D11VideoRenderer::renderFrame(const core::VideoFrame& frame) {
     display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
 }
 
+/// 将呈现请求转发给 `Display`；实际提交仍在其渲染线程完成。
 void D3D11VideoRenderer::present() {
     if (display_) {
         display_->present();
     }
 }
 
+/// 清空显示层缓存帧，避免后续继续显示过期视频内容。
 void D3D11VideoRenderer::clear() {
     if (display_) {
         display_->clear();
     }
 }
 
+/// 转发窗口事件处理，让显示层生成 seek、暂停等控制请求。
 void D3D11VideoRenderer::handleEvents() {
     if (display_) {
         display_->handleEvents();
@@ -181,18 +186,21 @@ bool D3D11VideoRenderer::consumePreviousItemRequest() {
     return display_ ? display_->consumePreviousItemRequest() : false;
 }
 
+/// 转发 OSD 状态到显示层，用于绘制进度条和暂停标记。
 void D3D11VideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
     if (display_) {
         display_->setOverlayState(position, duration, volume, paused);
     }
 }
 
+/// 转发字幕文本到显示层，供渲染线程叠加显示。
 void D3D11VideoRenderer::setSubtitleText(const std::string& text) {
     if (display_) {
         display_->setSubtitleText(text);
     }
 }
 
+/// 覆盖显示层热键配置，保证 D3D11 路径和 SDL 路径行为一致。
 void D3D11VideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
     if (display_) {
         display_->setHotkeyManager(hotkey_manager);

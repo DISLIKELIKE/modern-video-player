@@ -38,6 +38,7 @@ void BrightnessFilter::setParameter(const std::string& name, double value) {
     brightness_ = std::max(-100.0, std::min(100.0, value));
 }
 
+/// 返回指定参数的当前值；未知参数统一回退为 0。
 double BrightnessFilter::getParameter(const std::string& name) const {
     if (name == "brightness") {
         return brightness_;
@@ -45,6 +46,7 @@ double BrightnessFilter::getParameter(const std::string& name) const {
     return 0.0;
 }
 
+/// 返回亮度滤镜支持的参数名集合。
 std::vector<std::string> BrightnessFilter::getParameterNames() const {
     return {"brightness"};
 }

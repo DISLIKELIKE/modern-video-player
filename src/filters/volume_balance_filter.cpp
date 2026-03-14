@@ -57,6 +57,7 @@ void VolumeBalanceFilter::setParameter(const std::string& name, double value) {
     throw std::invalid_argument("unknown volume/balance parameter");
 }
 
+/// 返回指定参数的当前值；未知参数统一回退为 0。
 double VolumeBalanceFilter::getParameter(const std::string& name) const {
     if (name == "volume") {
         return volume_;
@@ -67,6 +68,7 @@ double VolumeBalanceFilter::getParameter(const std::string& name) const {
     return 0.0;
 }
 
+/// 返回音量/平衡滤镜支持的参数名集合。
 std::vector<std::string> VolumeBalanceFilter::getParameterNames() const {
     return {"volume", "balance"};
 }

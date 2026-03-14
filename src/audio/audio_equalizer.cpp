@@ -8,14 +8,17 @@ namespace vp::audio {
 
 namespace {
 
+/// 将频段增益限制在当前实现允许的 dB 范围内。
 float clampDb(float gain_db) {
     return std::max(-24.0f, std::min(24.0f, gain_db));
 }
 
+/// 将 dB 增益换算为线性幅度系数。
 float dbToLinear(float gain_db) {
     return std::pow(10.0f, gain_db / 20.0f);
 }
 
+/// 将浮点样本裁剪回 `int16_t` 可表示范围。
 int16_t clampSample(float sample) {
     const float min_sample = static_cast<float>(std::numeric_limits<int16_t>::min());
     const float max_sample = static_cast<float>(std::numeric_limits<int16_t>::max());
@@ -30,6 +33,7 @@ AudioEqualizer::AudioEqualizer() {
     band_gains_db_.fill(0.0f);
 }
 
+/// 设置指定频段增益；越界索引会被直接忽略。
 void AudioEqualizer::setBandGain(size_t index, float gain_db) {
     if (index >= kBandCount) {
         return;
@@ -37,6 +41,7 @@ void AudioEqualizer::setBandGain(size_t index, float gain_db) {
     band_gains_db_[index] = clampDb(gain_db);
 }
 
+/// 返回指定频段当前增益；越界索引返回 0dB。
 float AudioEqualizer::getBandGain(size_t index) const {
     if (index >= kBandCount) {
         return 0.0f;
@@ -44,10 +49,12 @@ float AudioEqualizer::getBandGain(size_t index) const {
     return band_gains_db_[index];
 }
 
+/// 设置总输出增益；当前范围限制在 `[0, 4]`。
 void AudioEqualizer::setMasterGain(float gain) {
     master_gain_ = std::max(0.0f, std::min(4.0f, gain));
 }
 
+/// 返回当前总输出增益。
 float AudioEqualizer::getMasterGain() const {
     return master_gain_;
 }

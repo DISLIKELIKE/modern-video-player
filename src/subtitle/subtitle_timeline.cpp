@@ -7,6 +7,7 @@ namespace vp::subtitle {
 
 namespace {
 
+/// 判断当前位置是否仍落在某条字幕的显示时间区间内。
 bool isWithinSubtitleRange(const SubtitleItem& item, double position_seconds) {
     return position_seconds >= item.start_seconds && position_seconds <= item.end_seconds;
 }

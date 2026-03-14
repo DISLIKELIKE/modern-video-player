@@ -46,14 +46,17 @@ VideoFrame& VideoFrame::operator=(VideoFrame&& other) noexcept {
     return *this;
 }
 
+/// 返回帧宽度；底层 `AVFrame` 为空时返回 0。
 int VideoFrame::getWidth() const {
     return frame ? frame->width : 0;
 }
 
+/// 返回帧高度；底层 `AVFrame` 为空时返回 0。
 int VideoFrame::getHeight() const {
     return frame ? frame->height : 0;
 }
 
+/// 返回像素格式；底层 `AVFrame` 为空时返回 `AV_PIX_FMT_NONE`。
 AVPixelFormat VideoFrame::getFormat() const {
     return frame ? static_cast<AVPixelFormat>(frame->format) : AV_PIX_FMT_NONE;
 }

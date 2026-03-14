@@ -7,6 +7,7 @@ namespace vp::config {
 
 namespace {
 
+/// 去掉配置键值两端空白，避免 INI 行中的多余空格影响解析。
 std::string trimCopy(const std::string& text) {
     size_t start = 0;
     size_t end = text.size();
@@ -72,22 +73,27 @@ bool SettingsManager::reload() {
     return loadIni(loaded_path_);
 }
 
+/// 设置字符串配置项；若键已存在则直接覆盖旧值。
 void SettingsManager::setString(const std::string& key, const std::string& value) {
     values_[key] = value;
 }
 
+/// 设置整数配置项，内部统一序列化为文本。
 void SettingsManager::setInt(const std::string& key, int value) {
     values_[key] = std::to_string(value);
 }
 
+/// 设置浮点配置项，内部统一序列化为文本。
 void SettingsManager::setDouble(const std::string& key, double value) {
     values_[key] = std::to_string(value);
 }
 
+/// 设置布尔配置项，内部以 `true/false` 文本保存。
 void SettingsManager::setBool(const std::string& key, bool value) {
     values_[key] = value ? "true" : "false";
 }
 
+/// 获取原始字符串配置；键不存在时返回空。
 std::optional<std::string> SettingsManager::getString(const std::string& key) const {
     auto it = values_.find(key);
     if (it == values_.end()) {
@@ -96,6 +102,7 @@ std::optional<std::string> SettingsManager::getString(const std::string& key) co
     return it->second;
 }
 
+/// 获取整数配置；解析失败或键不存在时返回空。
 std::optional<int> SettingsManager::getInt(const std::string& key) const {
     auto value = getString(key);
     if (!value) {
@@ -108,6 +115,7 @@ std::optional<int> SettingsManager::getInt(const std::string& key) const {
     }
 }
 
+/// 获取浮点配置；解析失败或键不存在时返回空。
 std::optional<double> SettingsManager::getDouble(const std::string& key) const {
     auto value = getString(key);
     if (!value) {
@@ -120,6 +128,7 @@ std::optional<double> SettingsManager::getDouble(const std::string& key) const {
     }
 }
 
+/// 获取布尔配置；支持 `1/0/true/false` 文本形式。
 std::optional<bool> SettingsManager::getBool(const std::string& key) const {
     auto value = getString(key);
     if (!value) {

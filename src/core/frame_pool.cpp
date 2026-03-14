@@ -45,6 +45,7 @@ void FramePool::release(AVFrame* frame) {
     idle_frames_.push_back(frame);
 }
 
+/// 释放池内全部空闲帧；常用于析构或显式重置对象池。
 void FramePool::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (AVFrame* frame : idle_frames_) {
@@ -55,10 +56,12 @@ void FramePool::clear() {
     idle_frames_.clear();
 }
 
+/// 返回对象池理论容量上限。
 size_t FramePool::capacity() const {
     return capacity_;
 }
 
+/// 返回当前池内可复用空闲帧数量。
 size_t FramePool::available() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return idle_frames_.size();

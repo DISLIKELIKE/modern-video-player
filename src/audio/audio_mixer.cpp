@@ -6,6 +6,7 @@
 namespace vp::audio {
 
 /// 对多路 PCM 输入做逐样本叠加，并对结果执行饱和裁剪。
+/// 混音前先为输出缓冲分配目标样本数，并默认清零。
 std::vector<int16_t> AudioMixer::mix(const std::vector<InputBuffer>& inputs, size_t output_samples) {
     std::vector<int16_t> output(output_samples, 0);
     if (inputs.empty() || output_samples == 0) {

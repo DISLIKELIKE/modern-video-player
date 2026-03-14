@@ -76,16 +76,19 @@ struct LoggerState {
 #endif
 };
 
+/// 返回全局日志状态单例，集中保存后端配置和运行时句柄。
 LoggerState& globalState() {
     static LoggerState state;
     return state;
 }
 
+/// 返回一次性初始化标记，保证日志系统只启动一次。
 std::once_flag& initFlag() {
     static std::once_flag flag;
     return flag;
 }
 
+/// 将日志级别映射为可比较的数值，用于级别过滤。
 int severityRank(LogSeverity severity) {
     switch (severity) {
         case LogSeverity::Trace: return 0;
@@ -97,10 +100,12 @@ int severityRank(LogSeverity severity) {
     return 2;
 }
 
+/// 判断当前日志级别是否达到最小输出阈值。
 bool shouldEmit(LogSeverity severity, LogSeverity threshold) {
     return severityRank(severity) >= severityRank(threshold);
 }
 
+/// 返回日志级别对应的短标签，用于 fallback 输出。
 const char* severityLabel(LogSeverity severity) {
     switch (severity) {
         case LogSeverity::Trace: return "TRACE";
@@ -112,6 +117,7 @@ const char* severityLabel(LogSeverity severity) {
     return "INFO";
 }
 
+/// 将日志直接写到标准输出/错误输出；作为未启用后端时的兜底路径。
 void writeToStdStreams(LogSeverity severity, std::string_view category, const std::string& message) {
     static std::mutex fallback_mutex;
     std::lock_guard<std::mutex> lock(fallback_mutex);
@@ -123,6 +129,7 @@ void writeToStdStreams(LogSeverity severity, std::string_view category, const st
     stream << ' ' << message << std::endl;
 }
 
+/// 去掉配置项或环境变量值首尾空白。
 std::string trimCopy(std::string_view view) {
     size_t start = 0;
     size_t end = view.size();
@@ -135,6 +142,7 @@ std::string trimCopy(std::string_view view) {
     return std::string(view.substr(start, end - start));
 }
 
+/// 将字符串转小写，便于做不区分大小写的配置解析。
 std::string toLower(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
@@ -142,6 +150,7 @@ std::string toLower(std::string value) {
     return value;
 }
 
+/// 解析无符号整数文本；非法输入返回空。
 std::optional<size_t> parseUnsigned(const std::string& text) {
     if (text.empty()) {
         return std::nullopt;
@@ -158,6 +167,7 @@ std::optional<size_t> parseUnsigned(const std::string& text) {
     }
 }
 
+/// 在记录告警的同时把配置值裁剪到允许范围内。
 size_t clampWithWarning(size_t value,
                         size_t min_value,
                         size_t max_value,
@@ -174,6 +184,7 @@ size_t clampWithWarning(size_t value,
     return value;
 }
 
+/// 按环境变量和默认候选路径查找日志配置文件。
 std::optional<std::filesystem::path> locateConfigFile() {
     auto resolveIfExists = [](const std::filesystem::path& candidate) -> std::optional<std::filesystem::path> {
         std::error_code ec;
@@ -209,6 +220,7 @@ std::optional<std::filesystem::path> locateConfigFile() {
     return std::nullopt;
 }
 
+/// 解析日志级别文本；未知值会回退到 `INFO` 并记告警。
 LogSeverity parseLogLevel(const std::string& raw, std::vector<ConfigNote>& notes) {
     static const std::unordered_map<std::string, LogSeverity> level_map = {
         {"trace", LogSeverity::Trace},
@@ -228,6 +240,7 @@ LogSeverity parseLogLevel(const std::string& raw, std::vector<ConfigNote>& notes
     return LogSeverity::Info;
 }
 
+/// 从环境变量覆盖日志配置，优先级高于文件配置。
 void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
     if (const char* log_dir = std::getenv("MVP_LOG_DIR")) {
         config.log_dir = trimCopy(log_dir);
@@ -261,6 +274,7 @@ void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
     }
 }
 
+/// 加载日志配置文件并应用环境变量覆盖，生成最终配置快照。
 ConfigResult loadLoggingConfig() {
     ConfigResult result;
 
@@ -336,6 +350,7 @@ ConfigResult loadLoggingConfig() {
 }
 
 #ifdef USE_QUILL_LOGGING
+/// 将项目日志级别映射到 Quill 的级别枚举。
 quill::LogLevel toQuillLevel(LogSeverity severity) {
     switch (severity) {
         case LogSeverity::Trace: return quill::LogLevel::TraceL1;
@@ -347,6 +362,7 @@ quill::LogLevel toQuillLevel(LogSeverity severity) {
     return quill::LogLevel::Info;
 }
 
+/// 启动 Quill 后端、创建 sink/logger，并写回运行时状态。
 bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
     std::error_code ec;
     if (!std::filesystem::exists(state.config.log_dir, ec)) {
@@ -399,6 +415,7 @@ bool startQuill(LoggerState& state, std::vector<ConfigNote>& notes) {
 }
 #endif
 
+/// 初始化日志配置与后端，并输出配置阶段产生的提示信息。
 void initializeLogger() {
     auto result = loadLoggingConfig();
     auto& state = globalState();
@@ -418,6 +435,7 @@ void initializeLogger() {
     }
 }
 
+/// 根据运行时状态把日志路由到 Quill 或标准输出后端。
 void dispatchLog(LogSeverity severity, std::string_view category, const std::string& message) {
     auto& state = globalState();
     if (state.shutdown_requested) {
@@ -442,6 +460,7 @@ void dispatchLog(LogSeverity severity, std::string_view category, const std::str
 
 } // namespace
 
+/// 确保日志系统完成一次性初始化。
 void Logger::ensureInitialized() {
     std::call_once(initFlag(), []() { initializeLogger(); });
 }
@@ -470,21 +489,25 @@ void Logger::shutdown() {
 #endif
 }
 
+/// 输出 INFO 日志。
 void Logger::info(const std::string& msg) {
     ensureInitialized();
     dispatchLog(LogSeverity::Info, "GENERAL", msg);
 }
 
+/// 输出 WARNING 日志。
 void Logger::warning(const std::string& msg) {
     ensureInitialized();
     dispatchLog(LogSeverity::Warning, "GENERAL", msg);
 }
 
+/// 输出 ERROR 日志。
 void Logger::error(const std::string& msg) {
     ensureInitialized();
     dispatchLog(LogSeverity::Error, "GENERAL", msg);
 }
 
+/// 在调试构建下输出 DEBUG 日志；非调试构建直接忽略。
 void Logger::debug(const std::string& msg) {
 #ifdef DEBUG_MODE
     ensureInitialized();

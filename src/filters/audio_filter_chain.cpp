@@ -6,6 +6,7 @@
 
 namespace vp::filters {
 
+/// 将音频滤镜追加到链尾；执行顺序与插入顺序一致。
 void AudioFilterChain::addFilter(std::unique_ptr<IAudioFilter> filter) {
     if (!filter) {
         return;
@@ -14,6 +15,7 @@ void AudioFilterChain::addFilter(std::unique_ptr<IAudioFilter> filter) {
     filters_.push_back(std::move(filter));
 }
 
+/// 删除全部同名音频滤镜，便于运行时替换滤镜配置。
 void AudioFilterChain::removeFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(mutex_);
     filters_.erase(std::remove_if(filters_.begin(), filters_.end(),

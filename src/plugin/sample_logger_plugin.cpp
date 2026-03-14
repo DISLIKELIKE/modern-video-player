@@ -8,6 +8,7 @@
 
 namespace {
 
+/// 示例插件内建的视频恒等滤镜；用于验证插件加载、注册与调用链路。
 class SampleIdentityFilter final : public vp::filters::IVideoFilter {
 public:
     std::string getName() const override {
@@ -34,16 +35,20 @@ public:
         return {{"video_out", "rgba"}};
     }
 
+    /// 该示例滤镜不修改视频帧，仅作为最小可运行占位实现。
     void process(vp::core::VideoFrame&) override {
     }
 
+    /// 示例滤镜不暴露可调参数，调用会被直接忽略。
     void setParameter(const std::string&, double) override {
     }
 
+    /// 示例滤镜没有可调参数，统一返回 0。
     double getParameter(const std::string&) const override {
         return 0.0;
     }
 
+    /// 示例滤镜没有可调参数，因此返回空参数列表。
     std::vector<std::string> getParameterNames() const override {
         return {};
     }

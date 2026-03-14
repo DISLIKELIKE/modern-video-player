@@ -13,6 +13,7 @@ namespace vp::streaming {
 
 namespace {
 
+/// 将 FFmpeg IO 错误码转换为可读文本，供上层诊断输出。
 std::string avErrorToString(int error_code) {
     char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
     if (av_strerror(error_code, buffer, sizeof(buffer)) == 0) {
@@ -54,6 +55,7 @@ bool HttpStreamDownloader::open(const std::string& url) {
     return open_;
 }
 
+/// 关闭远端 IO 上下文并重置 URL、缓冲和错误状态。
 void HttpStreamDownloader::close() {
     if (io_ctx_) {
         avio_closep(&io_ctx_);
@@ -90,6 +92,7 @@ const std::string& HttpStreamDownloader::lastError() const {
     return last_error_;
 }
 
+/// 读取一段数据；必要时先做预取，再从内部缓冲消费。
 std::vector<uint8_t> HttpStreamDownloader::readChunk(size_t max_bytes) {
     if (max_bytes == 0) {
         return {};

@@ -11,6 +11,7 @@ namespace vp::subtitle {
 
 namespace {
 
+/// 去掉字幕行两端空白，避免编号和时间码解析受空格影响。
 std::string trimCopy(const std::string& text) {
     size_t start = 0;
     size_t end = text.size();
@@ -83,6 +84,7 @@ bool SrtParser::parseFile(const std::string& file_path) {
     return !items_.empty();
 }
 
+/// 返回最近一次解析得到的字幕条目集合。
 const std::vector<SubtitleItem>& SrtParser::items() const {
     return items_;
 }

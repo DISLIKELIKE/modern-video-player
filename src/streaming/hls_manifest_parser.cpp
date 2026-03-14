@@ -7,6 +7,7 @@ namespace vp::streaming {
 
 namespace {
 
+/// 去掉清单行首尾空白，便于按标签和 URL 逐行解析。
 std::string trim(std::string value) {
     const size_t begin = value.find_first_not_of(" \t\r\n");
     if (begin == std::string::npos) {
@@ -16,6 +17,7 @@ std::string trim(std::string value) {
     return value.substr(begin, end - begin + 1);
 }
 
+/// 从 HLS 属性串中提取指定键的值，并去掉可选引号。
 std::string extractAttribute(const std::string& text, const std::string& key) {
     const std::regex attribute_regex(key + R"(=([^,]+|"[^"]+"))", std::regex::icase);
     std::smatch match;
@@ -29,6 +31,7 @@ std::string extractAttribute(const std::string& text, const std::string& key) {
     return value;
 }
 
+/// 解析非负整数属性；非法输入统一回退为 0。
 int parsePositiveInt(const std::string& value) {
     if (value.empty()) {
         return 0;

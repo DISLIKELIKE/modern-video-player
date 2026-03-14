@@ -55,6 +55,7 @@ constexpr std::array<ActionPair, 33> kActionKeyPairs{{
     {PlayerAction::Quit, "quit"},
 }};
 
+/// 将按键 token 统一转为大写，便于配置解析与序列化保持一致。
 std::string toUpperAscii(std::string value) {
     std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
         return static_cast<char>(std::toupper(ch));
@@ -62,6 +63,7 @@ std::string toUpperAscii(std::string value) {
     return value;
 }
 
+/// 解析内建命名按键 token，覆盖方向键、翻页键和常用符号键。
 std::optional<int> parseNamedKeyToken(const std::string& upper_token) {
     if (upper_token == "SPACE") {
         return SDLK_SPACE;
@@ -155,14 +157,17 @@ void HotkeyManager::resetToDefaults() {
     bind(PlayerAction::Quit, 'q');
 }
 
+/// 为指定动作绑定一个按键码；重复绑定会覆盖旧值。
 void HotkeyManager::bind(PlayerAction action, int key_code) {
     action_to_key_[action] = key_code;
 }
 
+/// 移除指定动作的按键绑定。
 void HotkeyManager::unbind(PlayerAction action) {
     action_to_key_.erase(action);
 }
 
+/// 按按键码查找对应动作；没有绑定时返回空。
 std::optional<PlayerAction> HotkeyManager::actionForKey(int key_code) const {
     for (const auto& [action, key] : action_to_key_) {
         if (key == key_code) {
@@ -172,6 +177,7 @@ std::optional<PlayerAction> HotkeyManager::actionForKey(int key_code) const {
     return std::nullopt;
 }
 
+/// 按动作查找绑定的按键码；未绑定时返回空。
 std::optional<int> HotkeyManager::keyForAction(PlayerAction action) const {
     auto it = action_to_key_.find(action);
     if (it == action_to_key_.end()) {
@@ -180,6 +186,7 @@ std::optional<int> HotkeyManager::keyForAction(PlayerAction action) const {
     return it->second;
 }
 
+/// 返回当前全部动作绑定表的只读视图。
 const std::unordered_map<PlayerAction, int>& HotkeyManager::bindings() const {
     return action_to_key_;
 }
@@ -203,10 +210,12 @@ std::vector<std::pair<PlayerAction, PlayerAction>> HotkeyManager::findConflicts(
     return conflicts;
 }
 
+/// 判断当前绑定表是否存在按键冲突。
 bool HotkeyManager::hasConflicts() const {
     return !findConflicts().empty();
 }
 
+/// 返回项目支持的全部动作枚举列表。
 const std::vector<PlayerAction>& HotkeyManager::allActions() {
     static const std::vector<PlayerAction> actions = []() {
         std::vector<PlayerAction> values;
@@ -219,6 +228,7 @@ const std::vector<PlayerAction>& HotkeyManager::allActions() {
     return actions;
 }
 
+/// 将动作枚举映射为配置文件中的稳定键名。
 std::string HotkeyManager::actionConfigKey(PlayerAction action) {
     for (const auto& pair : kActionKeyPairs) {
         if (pair.first == action) {
@@ -228,6 +238,7 @@ std::string HotkeyManager::actionConfigKey(PlayerAction action) {
     return "unknown";
 }
 
+/// 将配置键名反解为动作枚举；未知键名返回空。
 std::optional<PlayerAction> HotkeyManager::actionFromConfigKey(const std::string& key) {
     for (const auto& pair : kActionKeyPairs) {
         if (key == pair.second) {
@@ -286,6 +297,7 @@ std::string HotkeyManager::keyCodeToToken(int key_code) {
     return toUpperAscii(key_name);
 }
 
+/// 将配置 token 反解为 SDL 按键码。
 std::optional<int> HotkeyManager::keyCodeFromToken(const std::string& token) {
     if (token.empty()) {
         return std::nullopt;

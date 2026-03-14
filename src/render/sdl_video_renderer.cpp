@@ -15,6 +15,7 @@ bool SdlVideoRenderer::init(const VideoRendererConfig& config) {
     return display_->init(config.width, config.height, config.title);
 }
 
+/// 关闭底层 `Display` 并释放 SDL 渲染路径持有的窗口资源。
 void SdlVideoRenderer::close() {
     if (display_) {
         display_->close();
@@ -30,18 +31,21 @@ void SdlVideoRenderer::renderFrame(const core::VideoFrame& frame) {
     display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
 }
 
+/// 将呈现请求转发给 `Display`；真正显示仍由其内部渲染线程驱动。
 void SdlVideoRenderer::present() {
     if (display_) {
         display_->present();
     }
 }
 
+/// 清空显示层缓存帧，避免停止或 seek 后残留旧画面。
 void SdlVideoRenderer::clear() {
     if (display_) {
         display_->clear();
     }
 }
 
+/// 转发 SDL 事件轮询，让 `Display` 生成一次性播放控制请求。
 void SdlVideoRenderer::handleEvents() {
     if (display_) {
         display_->handleEvents();
@@ -128,18 +132,21 @@ bool SdlVideoRenderer::consumePreviousItemRequest() {
     return display_ ? display_->consumePreviousItemRequest() : false;
 }
 
+/// 转发 OSD 状态到显示层，用于绘制进度、音量和暂停标记。
 void SdlVideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
     if (display_) {
         display_->setOverlayState(position, duration, volume, paused);
     }
 }
 
+/// 转发当前字幕文本到显示层，供渲染线程叠加。
 void SdlVideoRenderer::setSubtitleText(const std::string& text) {
     if (display_) {
         display_->setSubtitleText(text);
     }
 }
 
+/// 覆盖显示层热键配置，使窗口事件解释与播放器设置保持一致。
 void SdlVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
     if (display_) {
         display_->setHotkeyManager(hotkey_manager);

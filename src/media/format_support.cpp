@@ -15,6 +15,7 @@ namespace vp::media {
 
 namespace {
 
+/// 统一规范化扩展名/编解码器 token，便于做不区分格式的匹配。
 std::string normalizeToken(const std::string& text) {
     std::string normalized;
     normalized.reserve(text.size());
@@ -27,6 +28,7 @@ std::string normalizeToken(const std::string& text) {
     return normalized;
 }
 
+/// 将逗号分隔的 FFmpeg 名称列表拆成 token，并归一化后加入集合。
 void addCsvTokensToSet(std::set<std::string>& output, const char* csv) {
     if (!csv || *csv == '\0') {
         return;
@@ -68,6 +70,7 @@ const std::vector<std::string>& audioCodecs() {
     return kAudioCodecs;
 }
 
+/// 判断候选 codec 名是否命中静态支持表，并处理少量别名映射。
 bool containsLikelyCodec(const std::vector<std::string>& codecs, const std::string& codec_name) {
     const std::string normalized = normalizeToken(codec_name);
     if (normalized.empty()) {
@@ -92,6 +95,7 @@ bool containsLikelyCodec(const std::vector<std::string>& codecs, const std::stri
     return false;
 }
 
+/// 通过 FFmpeg 运行时查询是否存在对应媒体类型的解码器实现。
 bool hasRuntimeDecoder(const std::string& codec_name, AVMediaType media_type) {
     const std::string normalized = normalizeToken(codec_name);
     if (normalized.empty()) {
@@ -110,6 +114,7 @@ bool hasRuntimeDecoder(const std::string& codec_name, AVMediaType media_type) {
     return false;
 }
 
+/// 基于分辨率、帧率、码率和声道数做实时播放压力启发式评估。
 PlaybackCapabilityDecision evaluateTargetHeuristics(const PlaybackCapabilityTarget& target) {
     PlaybackCapabilityDecision decision{};
 
@@ -157,6 +162,7 @@ PlaybackCapabilityDecision evaluateTargetHeuristics(const PlaybackCapabilityTarg
 
 }  // namespace
 
+/// 判断容器扩展名是否在当前静态支持列表中。
 bool FormatSupport::isContainerSupported(const std::string& extension) {
     std::string normalized = extension;
     if (!normalized.empty() && normalized.front() == '.') {
@@ -168,32 +174,39 @@ bool FormatSupport::isContainerSupported(const std::string& extension) {
     return std::find(ext.begin(), ext.end(), normalized) != ext.end();
 }
 
+/// 判断视频编解码器是否大概率可用；会结合静态表和 FFmpeg 运行时探测。
 bool FormatSupport::isVideoCodecLikelySupported(const std::string& codec_name) {
     return containsLikelyCodec(videoCodecs(), codec_name) ||
            hasRuntimeDecoder(codec_name, AVMEDIA_TYPE_VIDEO);
 }
 
+/// 判断音频编解码器是否大概率可用；会结合静态表和 FFmpeg 运行时探测。
 bool FormatSupport::isAudioCodecLikelySupported(const std::string& codec_name) {
     return containsLikelyCodec(audioCodecs(), codec_name) ||
            hasRuntimeDecoder(codec_name, AVMEDIA_TYPE_AUDIO);
 }
 
+/// 返回静态容器扩展名白名单。
 std::vector<std::string> FormatSupport::supportedContainers() {
     return extensions();
 }
 
+/// 返回静态视频编解码器白名单。
 std::vector<std::string> FormatSupport::supportedVideoCodecs() {
     return videoCodecs();
 }
 
+/// 返回静态音频编解码器白名单。
 std::vector<std::string> FormatSupport::supportedAudioCodecs() {
     return audioCodecs();
 }
 
+/// 当前实现默认认为 MKV 章节能力可用。
 bool FormatSupport::supportsMkvChapters() {
     return true;
 }
 
+/// 当前实现默认认为 MP4 `moov` 预加载路径可用。
 bool FormatSupport::supportsMp4MoovPreload() {
     return true;
 }
