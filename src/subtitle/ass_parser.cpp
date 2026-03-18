@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -49,14 +50,79 @@ std::string normalizeFieldName(const std::string& value) {
     return normalized;
 }
 
-size_t countUtf8CodePoints(const std::string& text) {
+size_t countUtf16CodeUnits(const std::string& text) {
     size_t count = 0;
-    for (unsigned char ch : text) {
-        if ((ch & 0xC0u) != 0x80u) {
-            ++count;
+    for (size_t i = 0; i < text.size();) {
+        const unsigned char ch = static_cast<unsigned char>(text[i]);
+        uint32_t codepoint = 0;
+        size_t sequence_length = 1;
+
+        if ((ch & 0x80u) == 0) {
+            codepoint = ch;
+        } else if ((ch & 0xE0u) == 0xC0u && i + 1 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x1Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu);
+            sequence_length = 2;
+        } else if ((ch & 0xF0u) == 0xE0u && i + 2 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x0Fu) << 12u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3Fu);
+            sequence_length = 3;
+        } else if ((ch & 0xF8u) == 0xF0u && i + 3 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x07u) << 18u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu) << 12u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 3]) & 0x3Fu);
+            sequence_length = 4;
+        } else {
+            codepoint = 0xFFFDu;
         }
+
+        count += codepoint > 0xFFFFu ? 2u : 1u;
+        i += sequence_length;
     }
     return count;
+}
+
+bool startsWithIgnoreCase(const std::string& text, size_t offset, const char* token) {
+    for (size_t i = 0; token[i] != '\0'; ++i) {
+        if (offset + i >= text.size()) {
+            return false;
+        }
+        if (std::tolower(static_cast<unsigned char>(text[offset + i])) !=
+            std::tolower(static_cast<unsigned char>(token[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string tryMatchSupportedTag(const std::string& block, size_t offset) {
+    static const char* kSupportedTags[] = {
+        "alpha",
+        "bord",
+        "shad",
+        "pos",
+        "fn",
+        "fs",
+        "an",
+        "1c",
+        "1a",
+        "c",
+        "a",
+        "b",
+        "i",
+        "u",
+        "s",
+        "r",
+    };
+
+    for (const char* tag : kSupportedTags) {
+        if (startsWithIgnoreCase(block, offset, tag)) {
+            return tag;
+        }
+    }
+    return {};
 }
 
 SubtitleStyle makeDefaultAssStyle() {
@@ -123,7 +189,7 @@ bool parseAssTimecode(const std::string& text, double& seconds) {
     int mm = 0;
     int ss = 0;
     int cs = 0;
-    if (std::sscanf(text.c_str(), "%d:%d:%d.%d", &hh, &mm, &ss, &cs) != 4) {
+    if (::sscanf_s(text.c_str(), "%d:%d:%d.%d", &hh, &mm, &ss, &cs) != 4) {
         return false;
     }
     if (hh < 0 || mm < 0 || mm >= 60 || ss < 0 || ss >= 60 || cs < 0) {
@@ -300,7 +366,7 @@ void appendStyledText(ParsedAssText& result,
     if (text.empty()) {
         return;
     }
-    const size_t length = countUtf8CodePoints(text);
+    const size_t length = countUtf16CodeUnits(text);
     if (length == 0) {
         return;
     }
@@ -475,14 +541,19 @@ void parseOverrideBlock(const std::string& block,
         }
         ++cursor;
 
-        const size_t name_start = cursor;
-        while (cursor < block.size() && std::isdigit(static_cast<unsigned char>(block[cursor])) != 0) {
-            ++cursor;
+        std::string name = tryMatchSupportedTag(block, cursor);
+        if (!name.empty()) {
+            cursor += name.size();
+        } else {
+            const size_t name_start = cursor;
+            while (cursor < block.size() && std::isdigit(static_cast<unsigned char>(block[cursor])) != 0) {
+                ++cursor;
+            }
+            while (cursor < block.size() && std::isalpha(static_cast<unsigned char>(block[cursor])) != 0) {
+                ++cursor;
+            }
+            name = toLowerAscii(block.substr(name_start, cursor - name_start));
         }
-        while (cursor < block.size() && std::isalpha(static_cast<unsigned char>(block[cursor])) != 0) {
-            ++cursor;
-        }
-        const std::string name = toLowerAscii(block.substr(name_start, cursor - name_start));
         std::string value;
         if (cursor < block.size() && block[cursor] == '(') {
             const size_t close = block.find(')', cursor + 1);
@@ -545,7 +616,7 @@ ParsedAssText parseAssText(const std::string& raw_text,
     }
 
     if (result.runs.empty() && !result.visible_text.empty()) {
-        result.runs.push_back(SubtitleTextRun{0, countUtf8CodePoints(result.visible_text), current_style});
+        result.runs.push_back(SubtitleTextRun{0, countUtf16CodeUnits(result.visible_text), current_style});
     }
     return result;
 }
@@ -656,8 +727,8 @@ bool AssParser::parseFile(const std::string& file_path) {
             }
             if (const auto it = field_values.find("outlinecolour"); it != field_values.end()) {
                 style.outline_color = parseAssColor(it->second, style.outline_color);
-            } else if (const auto it = field_values.find("tertiarycolour"); it != field_values.end()) {
-                style.outline_color = parseAssColor(it->second, style.outline_color);
+            } else if (const auto fallback_it = field_values.find("tertiarycolour"); fallback_it != field_values.end()) {
+                style.outline_color = parseAssColor(fallback_it->second, style.outline_color);
             }
             if (const auto it = field_values.find("backcolour"); it != field_values.end()) {
                 style.background_color = parseAssColor(it->second, style.background_color);
@@ -730,8 +801,8 @@ bool AssParser::parseFile(const std::string& file_path) {
 
         if (const auto it = field_values.find("layer"); it != field_values.end()) {
             parseInt(it->second, item.layer);
-        } else if (const auto it = field_values.find("marked"); it != field_values.end()) {
-            parseInt(it->second, item.layer);
+        } else if (const auto fallback_it = field_values.find("marked"); fallback_it != field_values.end()) {
+            parseInt(fallback_it->second, item.layer);
         }
         if (const auto it = field_values.find("start"); it == field_values.end() || !parseAssTimecode(it->second, item.start_seconds)) {
             continue;
@@ -804,4 +875,3 @@ SubtitleFormat AssParser::format() const {
 }
 
 }  // namespace vp::subtitle
-

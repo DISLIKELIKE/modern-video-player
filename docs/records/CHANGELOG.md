@@ -59,9 +59,35 @@
 | 56 | 2026-03-08 | M2 2.2.3：>80Mbps 高码率样本验收 | ✅ 已修复 |
 | 57 | 2026-03-18 | D3D11 原生 GPU 渲染链补齐 | ✅ 已修复 |
 | 66 | 2026-03-18 | 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链 | ✅ 已修复 |
+| 67 | 2026-03-18 | ASS 标签解析与 UTF-16 字幕范围修正 | ✅ 已修复 |
+
+## 问题 67: ASS 标签解析与 UTF-16 字幕范围修正
+
+**日期**: 2026-03-18
+
+### 问题描述
+- `ASS/SSA` override block 中的 `\fnArial`、`\rDefault` 之类紧凑写法会被错误识别成标签名 `fnArial`、`rDefault`，导致常见样式标签失效。
+- `SubtitleTextRun.start/length` 之前按 UTF-8 code point 计数，但 D3D11 字幕渲染最终直接把它们传给 DirectWrite 的 `DWRITE_TEXT_RANGE`，遇到 emoji 或非 BMP 字符时会产生范围错位。
+- 需要在前一轮 D3D11 原生字幕链提交后，再做一次整工程构建复核并把当前结果同步到记录文档。
+
+### 原因分析
+- 旧解析逻辑在读取 override 标签名时会把连续字母整体吞掉，缺少对常用 ASS 标签前缀的显式匹配。
+- 字幕解析阶段和渲染阶段使用了不同的文本长度语义：前者偏向 UTF-8 code point，后者实际需要 UTF-16 code unit。
+- 这类问题不会直接造成崩溃或泄漏，但会破坏 ASS/SSA 样式字幕在原生 D3D11 链中的语义正确性。
+
+### 解决方案
+- 在 `src/subtitle/ass_parser.cpp` 中加入常用 ASS 标签的显式前缀匹配，按最长标签优先识别 `alpha / bord / shad / pos / fn / fs / an / 1c / 1a / c / a / b / i / u / s / r`，未命中时再回退到旧的宽松解析逻辑。
+- 将 `ASS/SSA` 文本 run 长度和纯文本字幕 fallback 路径统一改为按 UTF-16 code unit 计数，使 `SubtitleTextRun` 与 DirectWrite `DWRITE_TEXT_RANGE` 语义一致。`ass_parser.cpp` 内顺手清掉了本地 `sscanf` / 局部变量遮蔽告警。
+- 重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `167 个警告 / 0 个错误`。
+
+### 修改文件
+- `src/subtitle/ass_parser.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
 
 ---
-
 ## 问题 66: 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链
 
 **日期**: 2026-03-18

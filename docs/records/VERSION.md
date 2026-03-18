@@ -23,6 +23,14 @@
 - **支持平台**: Windows, Linux, macOS
 
 
+### 2026-03-18 更新：ASS 标签解析与 UTF-16 范围修正
+
+- `ASS/SSA` override 解析已修复 `\fnArial`、`\rDefault` 等紧凑写法的标签识别错误，常见字体切换和样式重置现在会按预期进入原生 D3D11 字幕链。
+- `SubtitleTextRun.start/length` 与 `D3D11VideoRenderer` 的 DirectWrite `DWRITE_TEXT_RANGE` 已统一为 UTF-16 code unit 语义，emoji、扩展字符和其他非 BMP 文本的样式范围不再错位。
+- 已重新执行整工程验证命令
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
+  当前结果为 `167 个警告 / 0 个错误`；warning 主要来自第三方头文件（FFmpeg / Quill）、项目内多处源码的 C4819 编码告警，以及少量既有的 C4996 / C4100 提示。
+- 本轮剩余补丁不再扩展功能面，只收敛原生 D3D11 字幕链的语义正确性与交付记录。
 ### 2026-03-18 更新：D3D11 原生渲染链与 ASS/SSA 字幕链收口
 
 - Windows 默认 `D3D11` renderer 现在具备独立的 `window + device + swap chain + native video + native subtitle overlay` 主链。

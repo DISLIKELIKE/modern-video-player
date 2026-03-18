@@ -260,12 +260,36 @@ std::wstring decodeSubtitleText(const std::string& text) {
     return convert(CP_ACP, 0);
 }
 
-size_t countUtf8CodePoints(const std::string& text) {
+size_t countUtf16CodeUnits(const std::string& text) {
     size_t count = 0;
-    for (unsigned char ch : text) {
-        if ((ch & 0xC0u) != 0x80u) {
-            ++count;
+    for (size_t i = 0; i < text.size();) {
+        const unsigned char ch = static_cast<unsigned char>(text[i]);
+        uint32_t codepoint = 0;
+        size_t sequence_length = 1;
+
+        if ((ch & 0x80u) == 0) {
+            codepoint = ch;
+        } else if ((ch & 0xE0u) == 0xC0u && i + 1 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x1Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu);
+            sequence_length = 2;
+        } else if ((ch & 0xF0u) == 0xE0u && i + 2 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x0Fu) << 12u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3Fu);
+            sequence_length = 3;
+        } else if ((ch & 0xF8u) == 0xF0u && i + 3 < text.size()) {
+            codepoint = (static_cast<uint32_t>(ch & 0x07u) << 18u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 1]) & 0x3Fu) << 12u) |
+                        (static_cast<uint32_t>(static_cast<unsigned char>(text[i + 2]) & 0x3Fu) << 6u) |
+                        static_cast<uint32_t>(static_cast<unsigned char>(text[i + 3]) & 0x3Fu);
+            sequence_length = 4;
+        } else {
+            codepoint = 0xFFFDu;
         }
+
+        count += codepoint > 0xFFFFu ? 2u : 1u;
+        i += sequence_length;
     }
     return count;
 }
@@ -1739,7 +1763,7 @@ void D3D11VideoRenderer::Impl::setSubtitleText(const std::string& text) {
     item.text = text;
     item.raw_text = text;
     item.style = makePlainSubtitleStyle();
-    const size_t visible_length = countUtf8CodePoints(text);
+    const size_t visible_length = countUtf16CodeUnits(text);
     if (visible_length > 0) {
         item.runs.push_back(subtitle::SubtitleTextRun{0, visible_length, item.style});
     }
@@ -1795,10 +1819,3 @@ void* D3D11VideoRenderer::nativeDeviceHandle() const { return impl_->nativeDevic
 const char* D3D11VideoRenderer::rendererBackendName() const { return "D3D11"; }
 
 }  // namespace vp::render
-
-
-
-
-
-
-

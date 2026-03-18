@@ -1,5 +1,44 @@
 ﻿# 开发日志
 
+## 问题 67: ASS 标签解析与 UTF-16 字幕范围修正
+
+**日期**: 2026-03-18
+**状态**: 已解决
+
+### 问题描述
+- D3D11 原生字幕链已经接入 `ASS/SSA`，但 override 标签解析对 `\fnArial`、`\rDefault` 这类紧凑写法不正确，常见样式会被静默忽略。
+- `SubtitleTextRun` 的区间长度如果继续沿用 UTF-8 code point，而渲染端直接按 DirectWrite 的 UTF-16 range 使用，就会在 emoji、扩展 CJK 或其他非 BMP 字符上出现样式错位。
+- 用户要求在前一批提交后继续把剩余正确性问题清掉，并给出这轮剩余补丁的提交命令。
+
+### 日志输出
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m
+modern-video-player.vcxproj -> D:\VSProject\sssssssssssssss\modern-video-player\build\Debug\modern-video-player.exe
+已成功生成。
+167 个警告
+0 个错误
+```
+
+### 分析记录
+- 这轮复查没有发现新的高危内存泄漏点；问题集中在字幕语义正确性，而不是 COM/AVFrame 生命周期管理。
+- `ASS/SSA` override 解析器此前把标签名读取成“连续数字 + 连续字母”，因此 `fn/r` 这类允许直接跟值的标签会把值首段误吞进标签名。
+- `SubtitleTextRun.start/length` 目前的真正消费者是 Windows DirectWrite，而它要求的文本范围单位是 UTF-16 code unit，不是 UTF-8 code point。
+- 当前全量重建已重新通过；剩余 167 个 warning 主要来自第三方头文件（FFmpeg / Quill）、项目内多处源码的 C4819 编码告警、以及少量既有的 C4996/C4100 提示，本轮未扩散成新的构建阻塞。
+
+### 处理结果
+- `src/subtitle/ass_parser.cpp` 已补上常用 ASS 标签前缀匹配，修复 `\fnArial`、`\rDefault`、`\1c&H...&` 等标签的识别路径。
+- `src/subtitle/ass_parser.cpp` 与 `src/render/d3d11_video_renderer.cpp` 已统一使用 UTF-16 code unit 计算 run 长度，确保样式范围与 DirectWrite 一致；并顺手清理了 `ass_parser.cpp` 内本地 `sscanf` / 局部变量遮蔽告警。
+- 两个源码文件末尾的多余空行已清理，保持本轮 diff 只包含有效改动。
+- 这轮剩余补丁现在只包含“ASS 标签解析修正 + UTF-16 范围修正 + 文档同步”，可独立提交。
+
+### 修改文件
+- src/subtitle/ass_parser.cpp
+- src/render/d3d11_video_renderer.cpp
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+
+---
 ## 问题 66: 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链
 
 **日期**: 2026-03-18
