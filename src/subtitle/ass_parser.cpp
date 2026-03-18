@@ -189,7 +189,11 @@ bool parseAssTimecode(const std::string& text, double& seconds) {
     int mm = 0;
     int ss = 0;
     int cs = 0;
+#if defined(_WIN32)
     if (::sscanf_s(text.c_str(), "%d:%d:%d.%d", &hh, &mm, &ss, &cs) != 4) {
+#else
+    if (std::sscanf(text.c_str(), "%d:%d:%d.%d", &hh, &mm, &ss, &cs) != 4) {
+#endif
         return false;
     }
     if (hh < 0 || mm < 0 || mm >= 60 || ss < 0 || ss >= 60 || cs < 0) {

@@ -167,6 +167,29 @@ std::optional<size_t> parseUnsigned(const std::string& text) {
     }
 }
 
+/// Read an environment variable without deprecated CRT APIs on Windows.
+std::optional<std::string> readEnvVar(const char* key) {
+    if (!key || key[0] == '\0') {
+        return std::nullopt;
+    }
+#if defined(_WIN32)
+    char* value = nullptr;
+    size_t length = 0;
+    if (_dupenv_s(&value, &length, key) != 0 || !value) {
+        return std::nullopt;
+    }
+    std::string copy(value);
+    std::free(value);
+    return copy;
+#else
+    const char* value = std::getenv(key);
+    if (!value) {
+        return std::nullopt;
+    }
+    return std::string(value);
+#endif
+}
+
 /// 在记录告警的同时把配置值裁剪到允许范围内。
 size_t clampWithWarning(size_t value,
                         size_t min_value,
@@ -200,8 +223,8 @@ std::optional<std::filesystem::path> locateConfigFile() {
         return absolute_path;
     };
 
-    if (const char* env_path = std::getenv("MVP_LOG_CONFIG")) {
-        if (auto resolved = resolveIfExists(std::filesystem::path(env_path))) {
+    if (auto env_path = readEnvVar("MVP_LOG_CONFIG")) {
+        if (auto resolved = resolveIfExists(std::filesystem::path(*env_path))) {
             return resolved;
         }
     }
@@ -242,16 +265,16 @@ LogSeverity parseLogLevel(const std::string& raw, std::vector<ConfigNote>& notes
 
 /// 从环境变量覆盖日志配置，优先级高于文件配置。
 void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
-    if (const char* log_dir = std::getenv("MVP_LOG_DIR")) {
-        config.log_dir = trimCopy(log_dir);
+    if (auto log_dir = readEnvVar("MVP_LOG_DIR")) {
+        config.log_dir = trimCopy(*log_dir);
         notes.push_back({LogSeverity::Info, "MVP_LOG_DIR override applied"});
     }
-    if (const char* level = std::getenv("MVP_LOG_LEVEL")) {
-        config.min_severity = parseLogLevel(toLower(trimCopy(level)), notes);
+    if (auto level = readEnvVar("MVP_LOG_LEVEL")) {
+        config.min_severity = parseLogLevel(toLower(trimCopy(*level)), notes);
         notes.push_back({LogSeverity::Info, "MVP_LOG_LEVEL override applied"});
     }
-    if (const char* size_mb = std::getenv("MVP_LOG_MAX_FILE_MB")) {
-        auto parsed = parseUnsigned(trimCopy(size_mb));
+    if (auto size_mb = readEnvVar("MVP_LOG_MAX_FILE_MB")) {
+        auto parsed = parseUnsigned(trimCopy(*size_mb));
         if (parsed) {
             size_t clamped = clampWithWarning(*parsed, kMinFileSizeMb, kMaxFileSizeMb,
                                               "MVP_LOG_MAX_FILE_MB", notes);
@@ -261,8 +284,8 @@ void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
             notes.push_back({LogSeverity::Warning, "Invalid MVP_LOG_MAX_FILE_MB value"});
         }
     }
-    if (const char* files = std::getenv("MVP_LOG_MAX_FILES")) {
-        auto parsed = parseUnsigned(trimCopy(files));
+    if (auto files = readEnvVar("MVP_LOG_MAX_FILES")) {
+        auto parsed = parseUnsigned(trimCopy(*files));
         if (parsed) {
             size_t clamped = clampWithWarning(*parsed, kMinFileCount, kMaxFileCount,
                                               "MVP_LOG_MAX_FILES", notes);

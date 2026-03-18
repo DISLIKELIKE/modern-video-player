@@ -23,6 +23,14 @@
 - **支持平台**: Windows, Linux, macOS
 
 
+### 2026-03-18 更新：MSVC warning debt 分层清理
+
+- Windows MSVC 目标已启用 `/utf-8 /external:anglebrackets /external:W0`，本地 UTF-8 源文件不再触发 `C4819`，第三方 angle-bracket 头文件 warning 也被隔离到外部层。
+- 本地 `logger.cpp` 的 `getenv`、字幕解析器的 `sscanf`、`main.cpp` 的未使用参数，以及 `player_core.cpp` 的条件赋值 warning 均已清理。
+- 已重新执行整工程验证命令
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
+  当前结果为 `0 个警告 / 0 个错误`。
+- 这轮变更不扩展播放器功能面，目标仅为恢复 Windows CI 的低噪声构建基线。
 ### 2026-03-18 更新：ASS 标签解析与 UTF-16 范围修正
 
 - `ASS/SSA` override 解析已修复 `\fnArial`、`\rDefault` 等紧凑写法的标签识别错误，常见字体切换和样式重置现在会按预期进入原生 D3D11 字幕链。

@@ -142,7 +142,11 @@ bool SrtParser::parseTimecode(const std::string& text, double& seconds) {
     int ss = 0;
     int ms = 0;
 
+#if defined(_WIN32)
+    if (::sscanf_s(text.c_str(), "%d:%d:%d,%d", &hh, &mm, &ss, &ms) != 4) {
+#else
     if (std::sscanf(text.c_str(), "%d:%d:%d,%d", &hh, &mm, &ss, &ms) != 4) {
+#endif
         return false;
     }
     if (hh < 0 || mm < 0 || mm >= 60 || ss < 0 || ss >= 60 || ms < 0 || ms >= 1000) {

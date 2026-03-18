@@ -188,11 +188,17 @@ add_executable(${PROJECT_NAME}
     src/filters/builtin_filters.cpp
 )
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /utf-8 /external:anglebrackets /external:W0)
+endif()
 
 add_library(sample_logger_plugin SHARED
     src/plugin/sample_logger_plugin.cpp
 )
 target_compile_features(sample_logger_plugin PRIVATE cxx_std_17)
+if(MSVC)
+    target_compile_options(sample_logger_plugin PRIVATE /utf-8 /external:anglebrackets /external:W0)
+endif()
 target_include_directories(sample_logger_plugin PRIVATE
     ${CMAKE_SOURCE_DIR}/include
     ${SDL2_INCLUDE_DIRS}

@@ -1,5 +1,49 @@
 ﻿# 开发日志
 
+## 问题 68: MSVC warning debt 分层清理（C4819 / C4996 / C4706）
+
+**日期**: 2026-03-18
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续清理全局 warning debt，并优先处理 `C4819` 编码告警，以及第三方 / 本地 `C4996` 的分层治理。
+- 当前 Windows CI 已不再有编译 blocker，但 warning 总量过高，会掩盖真实回归信号。
+- 需要在不回退既有 D3D11/字幕改动的前提下，把本地可修 warning 和第三方 warning 隔离策略一起补齐。
+
+### 日志输出
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m
+modern-video-player.vcxproj -> D:\VSProject\sssssssssssssss\modern-video-player\build\Debug\modern-video-player.exe
+已成功生成。
+0 个警告
+0 个错误
+```
+
+### 分析记录
+- `C4819` 的核心不是单个源文件坏掉，而是 MSVC 仍按本地代码页读取 UTF-8 源文件；这类问题应优先通过编译选项统一治理。
+- 第三方 warning 不应靠修改 FFmpeg / Quill 源码解决，更稳妥的做法是把第三方头文件放到外部 warning 层，由 MSVC 的 `/external:*` 机制统一隔离。
+- 本地 `C4996` 和 `C4706` 仍然应该逐个修掉，因为这些 warning 直接反映项目自身代码质量。
+- 本轮落地后，全量 `Rebuild` 已达到 `0 warning / 0 error`，说明分层策略和本地修复都已生效。
+
+### 处理结果
+- `CMakeLists.txt` 已为 MSVC 目标启用 `/utf-8 /external:anglebrackets /external:W0`，本地编码告警与第三方头文件 warning 已显著收口。
+- `src/logger.cpp` 已改为安全环境变量读取 helper，清理本地 `getenv` 告警。
+- `src/subtitle/srt_parser.cpp` 与 `src/subtitle/ass_parser.cpp` 已补上 Windows / 非 Windows 的 `sscanf_s` / `std::sscanf` 分支。
+- `src/main.cpp` 的 `signalHandler` 参数和 `src/core/player_core.cpp` 的 demux push 循环已改写，清掉本地剩余的 `C4100 / C4706`。
+- 当前 Windows `Debug` 全量重建已经达到 `0 个警告 / 0 个错误`。
+
+### 修改文件
+- CMakeLists.txt
+- src/logger.cpp
+- src/main.cpp
+- src/subtitle/srt_parser.cpp
+- src/subtitle/ass_parser.cpp
+- src/core/player_core.cpp
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+
+---
 ## 问题 67: ASS 标签解析与 UTF-16 字幕范围修正
 
 **日期**: 2026-03-18

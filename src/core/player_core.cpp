@@ -1775,7 +1775,11 @@ void PlayerCore::startDemuxThread() {
             bool queued = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
                 // On successful push the queue owns the packet lifetime.
-                while (demux_running_.load() && !(queued = video_packet_queue_->push(packet, 20))) {
+                while (demux_running_.load() && !queued) {
+                    queued = video_packet_queue_->push(packet, 20);
+                    if (queued) {
+                        break;
+                    }
                     demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
@@ -1783,7 +1787,11 @@ void PlayerCore::startDemuxThread() {
                     demux_video_packets_.fetch_add(1);
                 }
             } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_) {
-                while (demux_running_.load() && !(queued = audio_packet_queue_->push(packet, 20))) {
+                while (demux_running_.load() && !queued) {
+                    queued = audio_packet_queue_->push(packet, 20);
+                    if (queued) {
+                        break;
+                    }
                     demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }

@@ -60,7 +60,41 @@
 | 57 | 2026-03-18 | D3D11 原生 GPU 渲染链补齐 | ✅ 已修复 |
 | 66 | 2026-03-18 | 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链 | ✅ 已修复 |
 | 67 | 2026-03-18 | ASS 标签解析与 UTF-16 字幕范围修正 | ✅ 已修复 |
+| 68 | 2026-03-18 | MSVC warning debt 分层清理（C4819 / C4996 / C4706） | ✅ 已修复 |
 
+## 问题 68: MSVC warning debt 分层清理（C4819 / C4996 / C4706）
+
+**日期**: 2026-03-18
+
+### 问题描述
+- GitHub Actions 的 Windows `Debug` 构建虽然已经能通过主流程编译，但长期残留大量 warning，影响 CI 可读性和后续回归定位。
+- `C4819` 主要来自 MSVC 以本地代码页读取 UTF-8 源文件；`C4996` 同时出现在第三方头文件和项目本地代码；另有少量本地 `C4100 / C4706` 提示。
+- 需要先按“编码告警、第三方 warning、本地 warning”三层拆开治理，避免简单全局静默把真实问题一起吞掉。
+
+### 原因分析
+- 本地源码中存在中文注释和 UTF-8 内容，但 MSVC 默认并不按 UTF-8 解释源文件，触发 `C4819`。
+- FFmpeg / Quill 头文件属于第三方依赖，不应该要求项目通过改第三方源码来消除 warning，更合适的办法是把它们隔离到外部头文件 warning 层。
+- 本地 `logger / subtitle / player_core / main` 中仍保留了若干可直接修掉的安全函数与表达式 warning。
+
+### 解决方案
+- 在 `CMakeLists.txt` 中为 MSVC 目标增加 `/utf-8 /external:anglebrackets /external:W0`，让本地源码按 UTF-8 编译，并把第三方 angle-bracket 头文件 warning 下降到外部层处理。
+- 在 `src/logger.cpp` 中新增安全环境变量读取 helper，用 `_dupenv_s` 替换 Windows 下的 `std::getenv` 用法。
+- 在 `src/subtitle/srt_parser.cpp` 和 `src/subtitle/ass_parser.cpp` 中采用“Windows 走 `sscanf_s`，其他平台保留 `std::sscanf`”的跨平台解析分支，清理本地 `C4996` 而不破坏可移植性。
+- 在 `src/main.cpp` 中把信号处理参数标记为 `[[maybe_unused]]`；在 `src/core/player_core.cpp` 中把 demux push 重试逻辑改写为显式赋值，去掉条件表达式内赋值导致的 `C4706`。
+- 重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `0 个警告 / 0 个错误`。
+
+### 修改文件
+- `CMakeLists.txt`
+- `src/logger.cpp`
+- `src/main.cpp`
+- `src/subtitle/srt_parser.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `src/core/player_core.cpp`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
 ## 问题 67: ASS 标签解析与 UTF-16 字幕范围修正
 
 **日期**: 2026-03-18

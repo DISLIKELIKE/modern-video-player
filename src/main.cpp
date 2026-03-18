@@ -3120,7 +3120,7 @@ bool runScreenshotCheck(const std::string& media_file) {
 }  // namespace
 
 /// 进程信号处理入口；优先停止播放并关闭日志系统。
-void signalHandler(int signal) {
+void signalHandler([[maybe_unused]] int signal) {
     if (g_player) {
         g_player->stop();
     }
