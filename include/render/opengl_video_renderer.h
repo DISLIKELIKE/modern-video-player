@@ -1,10 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "render/video_renderer.h"
 
 namespace vp::render {
 
-/// OpenGL 渲染占位实现；当前接口已预留，但后端尚未真正落地。
 class OpenGLVideoRenderer final : public IVideoRenderer {
 public:
     bool init(const VideoRendererConfig& config) override;

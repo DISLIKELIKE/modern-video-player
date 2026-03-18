@@ -1,4 +1,64 @@
-# 开发日志
+﻿# 开发日志
+
+## 问题 66: 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链
+
+**日期**: 2026-03-18
+**状态**: 已解决
+
+### 问题描述
+- 当前工作树虽然已经具备原生 D3D11 视频呈现能力，但全局 `Debug|x64` 构建仍被多处头文件/源文件的编码误读阻塞，导致无法用整工程结果验证交付状态。
+- D3D11 原生字幕链此前只覆盖纯文本叠加，`.ass/.ssa` 的样式、定位、层级和多 cue 同屏能力还没有进入 native renderer。
+- 外挂字幕自动探测与显式加载需要覆盖 `.ass`、`.ssa`、`.srt` 三种格式，而不是停留在仅面向 SRT 的状态。
+
+### 日志输出
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.sln /t:modern-video-player /p:Configuration=Debug /p:Platform=x64 /m
+modern-video-player.vcxproj -> D:\VSProject\sssssssssssssss\modern-video-player\build\Debug\modern-video-player.exe
+已成功生成。
+0 个警告
+0 个错误
+```
+
+### 分析记录
+- 构建阻塞的根因不在 D3D11 主链逻辑，而在多处带中文注释的头文件/源文件被当前 MSVC/代码页组合误读后触发全局语法错误。
+- 旧字幕模型只承载纯文本，`IVideoRenderer` 也只接收单字符串，因此 `PlayerCore` 无法把 ASS/SSA 的样式、层级和定位语义送入 D3D11 渲染器。
+- 时间线解析原本只面向单条活动字幕，不足以表达 ASS/SSA 常见的多 cue 同屏场景。
+- 最合适的修复路径不是把 ASS/SSA 再退回 SDL，而是扩展字幕对象模型后继续走同一条 DXGI swap chain backbuffer 原生叠加链。
+
+### 处理结果
+- 清理了全局构建阻塞文件中的编码误读问题，恢复完整解决方案构建基线。
+- 新增 `AssParser`，并扩展 `SubtitleStyle / SubtitleTextRun / SubtitleItem` 以承载 ASS/SSA 样式信息。
+- `PlayerCore` 现在会收集多条当前激活字幕，通过 `IVideoRenderer::setSubtitleItems()` 把结构化字幕对象送入渲染器。
+- `D3D11VideoRenderer` 已在原生 D3D11/D2D 路径中支持 ASS/SSA 常用样式字幕绘制：填充、描边、阴影、背景框、对齐、定位和 run 级字体样式。
+- `VideoPlayer` 与 `main.cpp` 已支持 `.ass/.ssa/.srt` 加载与自动探测；完整 `MSBuild` 验证通过。
+---
+## 问题 57: D3D11 原生 GPU 渲染链补齐
+
+**日期**: 2026-03-18
+**状态**: 已解决
+
+### 问题描述
+- 当前仓库已经具备原生 D3D11 视频面呈现与 D3D11VA 设备共享，但字幕在 D3D11 渲染器内只有状态写入，没有真正绘制到 backbuffer。
+- 文档仍保留“D3D11 只是 SDL 包装器”的旧结论，已经与当前代码事实不一致。
+- 用户目标是拿到一条完整的、独立的、原生 D3D11 GPU 渲染链，因此需要把字幕叠加与说明文档一起补齐。
+
+### 日志输出
+```
+Native D3D11 renderer initialized: window=...
+D3D11VA decoder bound to renderer-owned D3D11 device
+```
+
+### 分析记录
+- 视频主面已经可以直接消费 `AV_PIX_FMT_D3D11`，并覆盖 `NV12 / P010 / P016` 硬件面采样；真正缺口是字幕叠加仍未落到原生链内。
+- 最合适的补齐方式是在 renderer-owned DXGI swap chain backbuffer 上引入 D2D1 / DirectWrite 文本绘制，而不是退回 `Display` 或 SDL texture 叠加。
+- `PlayerCore` 的 copy-back 分支需要保留，作为“视频滤镜开启/格式不支持”时的明确回退边界。
+- 定向验证表明 `src/render/d3d11_video_renderer.cpp` 语法编译通过；整工程构建失败仍来自历史损坏头文件，而不是本次 D3D11 修改本身。
+
+### 处理结果
+- `D3D11VideoRenderer` 新增 D2D1 / DirectWrite 字幕绘制资源和暂停态即时重绘。
+- `CMakeLists.txt` 补齐 `d2d1`、`dwrite` 链接依赖。
+- 新增 `docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`，并给 `PLAYERCORE_DAY4_RENDERER_ANALYSIS.md` 加历史说明。
+---
 
 ## 问题 12: 企业级多线程架构重构
 
@@ -2262,4 +2322,5 @@ windows-backend-check.result=FAIL
 - docs/records/VERSION.md
 - docs/records/CHANGELOG.md
 - docs/records/DEVELOP_LOG.md
+
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+﻿cmake_minimum_required(VERSION 3.15)
 set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
 
@@ -163,7 +163,9 @@ add_executable(${PROJECT_NAME}
     src/audio/audio_equalizer.cpp
     src/audio/audio_mixer.cpp
     src/decoder/decoder_factory.cpp
+    src/subtitle/subtitle_parser.cpp
     src/subtitle/srt_parser.cpp
+    src/subtitle/ass_parser.cpp
     src/subtitle/subtitle_timeline.cpp
     src/playlist/playlist_manager.cpp
     src/config/settings_manager.cpp
@@ -210,6 +212,11 @@ if(WIN32)
         ${SDL2_LIBRARIES}
         ${FFMPEG_LIBRARIES}
         ${QUILL_LIBRARIES}
+        d3d11
+        d2d1
+        dwrite
+        dxgi
+        d3dcompiler
     )
 
     if(SDL2_EXTERNAL_DIR)
@@ -260,4 +267,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
+
+
+
 

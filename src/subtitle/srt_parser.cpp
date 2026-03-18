@@ -1,4 +1,4 @@
-#include "subtitle/srt_parser.h"
+﻿#include "subtitle/srt_parser.h"
 
 #include <algorithm>
 #include <cctype>
@@ -11,7 +11,6 @@ namespace vp::subtitle {
 
 namespace {
 
-/// 去掉字幕行两端空白，避免编号和时间码解析受空格影响。
 std::string trimCopy(const std::string& text) {
     size_t start = 0;
     size_t end = text.size();
@@ -24,19 +23,57 @@ std::string trimCopy(const std::string& text) {
     return text.substr(start, end - start);
 }
 
+size_t countUtf8CodePoints(const std::string& text) {
+    size_t count = 0;
+    for (unsigned char ch : text) {
+        if ((ch & 0xC0u) != 0x80u) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+SubtitleStyle makeDefaultSrtStyle() {
+    SubtitleStyle style;
+    style.style_name = "srt-default";
+    style.font_family = "Microsoft YaHei UI";
+    style.font_size = 36.0;
+    style.bold = true;
+    style.primary_color = SubtitleColor(255, 255, 255, 250);
+    style.outline_color = SubtitleColor(0, 0, 0, 255);
+    style.background_color = SubtitleColor(5, 5, 5, 148);
+    style.alignment = 2;
+    style.margin_l = 24;
+    style.margin_r = 24;
+    style.margin_v = 24;
+    style.border_style = 3;
+    style.outline = 0.0;
+    style.shadow = 2.0;
+    return style;
+}
+
 }  // namespace
 
-/// 逐块解析 SRT 文本，生成按出现顺序排列的字幕条目。
 bool SrtParser::parseFile(const std::string& file_path) {
     items_.clear();
 
-    std::ifstream input(file_path);
+    std::ifstream input(file_path, std::ios::binary);
     if (!input.good()) {
         return false;
     }
 
+    const SubtitleStyle default_style = makeDefaultSrtStyle();
     std::string line;
+    bool first_line = true;
     while (std::getline(input, line)) {
+        if (first_line && line.size() >= 3 &&
+            static_cast<unsigned char>(line[0]) == 0xEF &&
+            static_cast<unsigned char>(line[1]) == 0xBB &&
+            static_cast<unsigned char>(line[2]) == 0xBF) {
+            line.erase(0, 3);
+        }
+        first_line = false;
+
         const std::string index_line = trimCopy(line);
         if (index_line.empty()) {
             continue;
@@ -66,30 +103,39 @@ bool SrtParser::parseFile(const std::string& file_path) {
         }
 
         std::ostringstream content;
-        bool first_line = true;
+        bool first_content_line = true;
         while (std::getline(input, line)) {
             if (trimCopy(line).empty()) {
                 break;
             }
-            if (!first_line) {
+            if (!first_content_line) {
                 content << '\n';
             }
-            first_line = false;
+            first_content_line = false;
             content << line;
         }
+
         item.text = content.str();
+        item.raw_text = item.text;
+        item.style = default_style;
+        const size_t visible_length = countUtf8CodePoints(item.text);
+        if (visible_length > 0) {
+            item.runs.push_back(SubtitleTextRun{0, visible_length, item.style});
+        }
         items_.push_back(std::move(item));
     }
 
     return !items_.empty();
 }
 
-/// 返回最近一次解析得到的字幕条目集合。
 const std::vector<SubtitleItem>& SrtParser::items() const {
     return items_;
 }
 
-/// 解析单个 SRT 时间码文本并换算为秒。
+SubtitleFormat SrtParser::format() const {
+    return SubtitleFormat::Srt;
+}
+
 bool SrtParser::parseTimecode(const std::string& text, double& seconds) {
     int hh = 0;
     int mm = 0;

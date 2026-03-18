@@ -13,12 +13,9 @@ namespace vp::core {
 template <typename FrameType>
 class FrameQueue {
 public:
-    /// 创建定长生产者/消费者队列。
     explicit FrameQueue(size_t capacity = 8) : capacity_(capacity), flushed_(false) {}
-    /// 默认析构，不接管帧内外部资源。
     ~FrameQueue() = default;
 
-    /// 在超时时间内尝试入队；队列满或被 flush 唤醒时返回 false。
     bool push(FrameType&& frame, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
         std::unique_lock<std::mutex> lock(mutex_);
         const bool has_space = not_full_.wait_for(lock, timeout, [this] {
@@ -32,7 +29,6 @@ public:
         return true;
     }
 
-    /// 在超时时间内尝试出队；队列空或超时时返回 false。
     bool pop(FrameType& frame, std::chrono::milliseconds timeout = std::chrono::milliseconds(100)) {
         std::unique_lock<std::mutex> lock(mutex_);
         const bool has_item = not_empty_.wait_for(lock, timeout, [this] {
@@ -47,7 +43,6 @@ public:
         return true;
     }
 
-    /// 清空全部待处理帧，并唤醒当前阻塞的生产者/消费者。
     void flush() {
         std::lock_guard<std::mutex> lock(mutex_);
         while (!queue_.empty()) {
@@ -59,37 +54,31 @@ public:
         flushed_.store(false);
     }
 
-    /// 动态调整容量，并唤醒等待中的生产者。
     void setCapacity(size_t capacity) {
         std::lock_guard<std::mutex> lock(mutex_);
         capacity_ = capacity;
         not_full_.notify_all();
     }
 
-    /// 返回当前排队帧数。
     size_t size() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size();
     }
 
-    /// 返回当前配置容量。
     size_t capacity() const {
         return capacity_;
     }
 
-    /// 返回队列是否为空。
     bool empty() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.empty();
     }
 
-    /// 返回队列是否已满。
     bool full() const {
         std::lock_guard<std::mutex> lock(mutex_);
         return queue_.size() >= capacity_;
     }
 
-    /// 返回填充比例，范围通常为 [0, 1]。
     double getFillRatio() const {
         std::lock_guard<std::mutex> lock(mutex_);
         if (capacity_ == 0) {

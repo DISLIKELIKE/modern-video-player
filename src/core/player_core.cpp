@@ -1,4 +1,4 @@
-#include "core/player_core.h"
+﻿#include "core/player_core.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -14,11 +14,24 @@
 #include <sstream>
 #include <vector>
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 extern "C" {
 #include <libavutil/hwcontext.h>
+#include <libavutil/pixdesc.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
 }
+
+#if defined(_WIN32)
+#include <d3d11.h>
+#include <libavutil/hwcontext_d3d11va.h>
+#endif
 
 #include "audio_player.h"
 #include "decoder/decoder_factory.h"
@@ -90,6 +103,10 @@ const char* rendererTypeName(render::VideoRendererType type) {
     }
 }
 
+bool isHardwarePixelFormat(AVPixelFormat format) {
+    const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
+    return desc && (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) != 0;
+}
 std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& order) {
     if (order.empty()) {
         return "none";
@@ -106,7 +123,7 @@ std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& ord
 }
 }
 
-/// 构造播放核心并绑定调度器、队列、滤镜与默认回调。
+/// 鏋勯€犳挱鏀炬牳蹇冨苟缁戝畾璋冨害鍣ㄣ€侀槦鍒椼€佹护闀滀笌榛樿鍥炶皟銆?
 PlayerCore::PlayerCore() {
     filters::builtin::registerBuiltinFilters();
     scheduler_.setVideoQueue(&video_queue_);
@@ -124,7 +141,7 @@ PlayerCore::~PlayerCore() {
     close();
 }
 
-/// 打开媒体并串起渲染器、音频设备、解码器和内部队列资源。
+/// 鎵撳紑濯掍綋骞朵覆璧锋覆鏌撳櫒銆侀煶棰戣澶囥€佽В鐮佸櫒鍜屽唴閮ㄩ槦鍒楄祫婧愩€?
 bool PlayerCore::open(const std::string& filename) {
     close();
 
@@ -221,7 +238,7 @@ bool PlayerCore::open(const std::string& filename) {
     return true;
 }
 
-/// 停止全链路线程并释放解码、渲染、字幕和截图缓存资源。
+/// 鍋滄鍏ㄩ摼璺嚎绋嬪苟閲婃斁瑙ｇ爜銆佹覆鏌撱€佸瓧骞曞拰鎴浘缂撳瓨璧勬簮銆?
 void PlayerCore::close() {
     stop();
     releaseDecoders();
@@ -253,7 +270,7 @@ void PlayerCore::close() {
     opened_.store(false);
 }
 
-/// 从停止态启动线程，或从暂停态恢复调度、时钟和音频设备。
+/// 浠庡仠姝㈡€佸惎鍔ㄧ嚎绋嬶紝鎴栦粠鏆傚仠鎬佹仮澶嶈皟搴︺€佹椂閽熷拰闊抽璁惧銆?
 void PlayerCore::play() {
     if (!opened_.load()) {
         return;
@@ -281,7 +298,7 @@ void PlayerCore::play() {
     emitStateChanged(PlaybackState::Playing);
 }
 
-/// 暂停调度器与主时钟，但保留当前解码器和缓冲队列状态。
+/// 鏆傚仠璋冨害鍣ㄤ笌涓绘椂閽燂紝浣嗕繚鐣欏綋鍓嶈В鐮佸櫒鍜岀紦鍐查槦鍒楃姸鎬併€?
 void PlayerCore::pause() {
     if (state_.load() != PlaybackState::Playing) {
         return;
@@ -295,7 +312,7 @@ void PlayerCore::pause() {
     emitStateChanged(PlaybackState::Paused);
 }
 
-/// 停止生产/消费线程并清空管线，同时把媒体位置复位到开头。
+/// 鍋滄鐢熶骇/娑堣垂绾跨▼骞舵竻绌虹绾匡紝鍚屾椂鎶婂獟浣撲綅缃浣嶅埌寮€澶淬€?
 void PlayerCore::stop() {
     if (state_.load() == PlaybackState::Stopped && !demux_running_.load()) {
         return;
@@ -316,7 +333,7 @@ void PlayerCore::stop() {
     emitStateChanged(PlaybackState::Stopped);
 }
 
-/// 执行一次带 flush 的时间线切换，确保旧包、旧帧和旧音频缓冲全部失效。
+/// 鎵ц涓€娆″甫 flush 鐨勬椂闂寸嚎鍒囨崲锛岀‘淇濇棫鍖呫€佹棫甯у拰鏃ч煶棰戠紦鍐插叏閮ㄥけ鏁堛€?
 void PlayerCore::seek(double timestamp) {
     if (!opened_.load() || !demuxer_) {
         return;
@@ -330,7 +347,7 @@ void PlayerCore::seek(double timestamp) {
     LOG_INFO("Seek request: target=" << timestamp << "s");
     const bool was_playing = state_.load() == PlaybackState::Playing;
     const bool demux_was_running = demux_running_.load();
-    // Seek 的核心顺序：先暂停生产/消费，再清理旧数据，最后恢复线程，避免旧包与新时间点混播。
+    // Pause scheduling before flushing stale data.
     if (was_playing) {
         scheduler_.pause();
     }
@@ -342,7 +359,7 @@ void PlayerCore::seek(double timestamp) {
     flushPipelines();
     const bool seek_ok = demuxer_->seek(timestamp);
     {
-        // 解码器内部也会缓存参考帧，必须同步 flush；音频重采样器也要重建输入状态。
+        // Flush decoder state under both codec locks.
         std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
         if (video_codec_ctx_) {
             avcodec_flush_buffers(video_codec_ctx_);
@@ -378,7 +395,7 @@ void PlayerCore::seek(double timestamp) {
     }
 }
 
-/// 在暂停态按估算帧间隔执行单帧步进，并尝试命中目标时间附近的视频帧。
+/// 鍦ㄦ殏鍋滄€佹寜浼扮畻甯ч棿闅旀墽琛屽崟甯ф杩涳紝骞跺皾璇曞懡涓洰鏍囨椂闂撮檮杩戠殑瑙嗛甯с€?
 bool PlayerCore::stepFrame(int direction) {
     if (!opened_.load() || !demuxer_ || !video_renderer_ || state_.load() != PlaybackState::Paused) {
         return false;
@@ -404,7 +421,7 @@ bool PlayerCore::stepFrame(int direction) {
     return renderPausedFrameAtOrAfter(target);
 }
 
-/// 按最近渲染帧时长、编码器帧率和媒体帧率估算单帧时长。
+/// 鎸夋渶杩戞覆鏌撳抚鏃堕暱銆佺紪鐮佸櫒甯х巼鍜屽獟浣撳抚鐜囦及绠楀崟甯ф椂闀裤€?
 double PlayerCore::estimateFrameStepSeconds() const {
     const double cached_duration = last_video_frame_duration_.load();
     if (cached_duration > 0.0) {
@@ -422,7 +439,7 @@ double PlayerCore::estimateFrameStepSeconds() const {
     return 1.0 / 30.0;
 }
 
-/// 在暂停态消费或主动解码一帧，并渲染到不早于目标时间的位置。
+/// 鍦ㄦ殏鍋滄€佹秷璐规垨涓诲姩瑙ｇ爜涓€甯э紝骞舵覆鏌撳埌涓嶆棭浜庣洰鏍囨椂闂寸殑浣嶇疆銆?
 bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
     if (!opened_.load() || !video_renderer_) {
         return false;
@@ -430,7 +447,7 @@ bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
 
     constexpr int kMaxAttempts = 120;
     constexpr double kToleranceSeconds = 0.001;
-    // 单帧步进优先消费已解码队列，拿不到再主动解码，避免 pause 状态长时间阻塞。
+    // Prefer queued frames before forcing another decode while paused.
     for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
         VideoFrame frame;
         bool have_frame = video_queue_.pop(frame, std::chrono::milliseconds(0));
@@ -441,7 +458,7 @@ bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
             continue;
         }
-        // 跳过目标时间点之前的残留帧，直到命中或超过目标帧。
+        // Skip stale frames until we reach or pass the requested position.
         if (frame.pts + kToleranceSeconds < target_seconds) {
             continue;
         }
@@ -626,7 +643,7 @@ bool PlayerCore::stepFrameForward() {
     return stepFrame(1);
 }
 
-/// 拉取显示层一次性请求，并映射为 seek、音量、章节和字幕等播放控制。
+/// 鎷夊彇鏄剧ず灞備竴娆℃€ц姹傦紝骞舵槧灏勪负 seek銆侀煶閲忋€佺珷鑺傚拰瀛楀箷绛夋挱鏀炬帶鍒躲€?
 void PlayerCore::pumpEvents() {
     if (video_renderer_) {
         video_renderer_->handleEvents();
@@ -741,7 +758,7 @@ void PlayerCore::pumpEvents() {
     handleABRepeatLoop();
 }
 
-/// 从章节元数据重建有序跳转时间点，供上一章/下一章逻辑复用。
+/// 浠庣珷鑺傚厓鏁版嵁閲嶅缓鏈夊簭璺宠浆鏃堕棿鐐癸紝渚涗笂涓€绔?涓嬩竴绔犻€昏緫澶嶇敤銆?
 void PlayerCore::rebuildChapterPoints() {
     chapter_points_.clear();
     if (!demuxer_) {
@@ -766,7 +783,7 @@ void PlayerCore::rebuildChapterPoints() {
     }
 }
 
-/// 在播放位置触达 B 点附近时回跳到 A 点，形成闭环播放。
+/// 鍦ㄦ挱鏀句綅缃Е杈?B 鐐归檮杩戞椂鍥炶烦鍒?A 鐐癸紝褰㈡垚闂幆鎾斁銆?
 void PlayerCore::handleABRepeatLoop() {
     if (state_.load() != PlaybackState::Playing || !ab_repeat_enabled_.load()) {
         return;
@@ -805,7 +822,7 @@ bool PlayerCore::captureScreenshot(const VideoFrame& frame) {
     return captureScreenshotFrame(frame.frame);
 }
 
-/// 缓存最近一次成功渲染的帧，供暂停态截图和逐帧浏览复用。
+/// 缂撳瓨鏈€杩戜竴娆℃垚鍔熸覆鏌撶殑甯э紝渚涙殏鍋滄€佹埅鍥惧拰閫愬抚娴忚澶嶇敤銆?
 void PlayerCore::updateLastRenderedFrame(const VideoFrame& frame) {
     if (!frame.valid || !frame.frame) {
         return;
@@ -834,7 +851,7 @@ void PlayerCore::clearLastRenderedFrame() {
     }
 }
 
-/// 从缓存帧复制出一个快照，并复用统一的截图落盘逻辑。
+/// 浠庣紦瀛樺抚澶嶅埗鍑轰竴涓揩鐓э紝骞跺鐢ㄧ粺涓€鐨勬埅鍥捐惤鐩橀€昏緫銆?
 bool PlayerCore::captureScreenshotFromCachedFrame() {
     AVFrame* cached_frame = nullptr;
     {
@@ -869,34 +886,58 @@ bool PlayerCore::captureScreenshotFrame(const AVFrame* src) {
         return false;
     }
 
+    const AVFrame* screenshot_source = src;
+    AVFrame* transferred_frame = nullptr;
+    const AVPixelFormat src_format = static_cast<AVPixelFormat>(src->format);
+    if (isHardwarePixelFormat(src_format)) {
+        transferred_frame = av_frame_alloc();
+        if (!transferred_frame) {
+            LOG_WARNING("Failed to allocate software frame for screenshot transfer");
+            return false;
+        }
+        if (av_hwframe_transfer_data(transferred_frame, src, 0) < 0 ||
+            av_frame_copy_props(transferred_frame, src) < 0) {
+            av_frame_free(&transferred_frame);
+            LOG_WARNING("Failed to transfer hardware frame for screenshot");
+            return false;
+        }
+        screenshot_source = transferred_frame;
+    }
+
     SwsContext* screenshot_sws = sws_getContext(
-        src->width,
-        src->height,
-        static_cast<AVPixelFormat>(src->format),
-        src->width,
-        src->height,
+        screenshot_source->width,
+        screenshot_source->height,
+        static_cast<AVPixelFormat>(screenshot_source->format),
+        screenshot_source->width,
+        screenshot_source->height,
         AV_PIX_FMT_RGB24,
         SWS_BILINEAR,
         nullptr,
         nullptr,
         nullptr);
     if (!screenshot_sws) {
+        if (transferred_frame) {
+            av_frame_free(&transferred_frame);
+        }
         LOG_WARNING("Failed to initialize screenshot scaler");
         return false;
     }
 
-    std::vector<uint8_t> rgb(static_cast<size_t>(src->width) * static_cast<size_t>(src->height) * 3U);
+    std::vector<uint8_t> rgb(static_cast<size_t>(screenshot_source->width) * static_cast<size_t>(screenshot_source->height) * 3U);
     uint8_t* dst_data[4]{rgb.data(), nullptr, nullptr, nullptr};
-    int dst_linesize[4]{src->width * 3, 0, 0, 0};
+    int dst_linesize[4]{screenshot_source->width * 3, 0, 0, 0};
     const int converted_rows = sws_scale(
         screenshot_sws,
-        src->data,
-        src->linesize,
+        screenshot_source->data,
+        screenshot_source->linesize,
         0,
-        src->height,
+        screenshot_source->height,
         dst_data,
         dst_linesize);
     sws_freeContext(screenshot_sws);
+    if (transferred_frame) {
+        av_frame_free(&transferred_frame);
+    }
     if (converted_rows <= 0) {
         LOG_WARNING("Failed to convert frame for screenshot");
         return false;
@@ -917,41 +958,35 @@ bool PlayerCore::captureScreenshotFrame(const AVFrame* src) {
 #if defined(_WIN32)
     localtime_s(&local_tm, &now_tt);
 #else
-    localtime_r(&now_tt, &local_tm);
+    local_tm = *std::localtime(&now_tt);
 #endif
 
-    std::ostringstream name_builder;
-    name_builder << "screenshot_"
-                 << std::put_time(&local_tm, "%Y%m%d_%H%M%S")
-                 << "_"
-                 << std::setfill('0') << std::setw(3) << ms.count()
-                 << ".ppm";
-    const std::filesystem::path screenshot_path = screenshot_dir / name_builder.str();
+    std::ostringstream filename;
+    filename << "screenshot_"
+             << std::put_time(&local_tm, "%Y%m%d_%H%M%S")
+             << '_' << std::setw(3) << std::setfill('0') << ms.count()
+             << ".ppm";
+    const std::filesystem::path screenshot_path = screenshot_dir / filename.str();
 
     std::ofstream output(screenshot_path, std::ios::binary);
-    if (!output.is_open()) {
-        LOG_WARNING("Failed to open screenshot file: " << screenshot_path.string());
+    if (!output) {
+        LOG_WARNING("Failed to open screenshot file for writing: " << screenshot_path.string());
         return false;
     }
-    output << "P6\n" << src->width << " " << src->height << "\n255\n";
+
+    output << "P6\n" << screenshot_source->width << ' ' << screenshot_source->height << "\n255\n";
     output.write(reinterpret_cast<const char*>(rgb.data()), static_cast<std::streamsize>(rgb.size()));
-    output.flush();
     if (!output.good()) {
         LOG_WARNING("Failed to write screenshot file: " << screenshot_path.string());
         return false;
     }
 
-    std::string saved_path = screenshot_path.string();
-    const auto abs_path = std::filesystem::absolute(screenshot_path, ec);
-    if (!ec) {
-        saved_path = abs_path.string();
-    }
     {
         std::lock_guard<std::mutex> lock(screenshot_mutex_);
-        last_screenshot_path_ = saved_path;
+        last_screenshot_path_ = screenshot_path.string();
         screenshot_path_pending_ = true;
     }
-    LOG_INFO("Screenshot saved: " << saved_path);
+    LOG_INFO("Screenshot saved: " << screenshot_path.string());
     return true;
 }
 
@@ -1084,10 +1119,16 @@ std::string PlayerCore::videoRendererBackendName() const {
 
 void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
     std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
-        if (lhs.start_seconds == rhs.start_seconds) {
+        if (lhs.start_seconds != rhs.start_seconds) {
+            return lhs.start_seconds < rhs.start_seconds;
+        }
+        if (lhs.layer != rhs.layer) {
+            return lhs.layer < rhs.layer;
+        }
+        if (lhs.end_seconds != rhs.end_seconds) {
             return lhs.end_seconds < rhs.end_seconds;
         }
-        return lhs.start_seconds < rhs.start_seconds;
+        return lhs.index < rhs.index;
     });
 
     size_t subtitle_count = 0;
@@ -1096,14 +1137,13 @@ void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtit
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
         subtitle_items_ = std::move(subtitles);
         subtitle_source_path_ = source_path;
-        subtitle_active_text_.clear();
-        subtitle_active_index_ = -1;
+        subtitle_active_indices_.clear();
         subtitle_count = subtitle_items_.size();
         subtitle_path = subtitle_source_path_;
     }
 
     if (video_renderer_) {
-        video_renderer_->setSubtitleText("");
+        video_renderer_->setSubtitleItems({});
     }
     LOG_INFO("Subtitle track attached: path=" << subtitle_path << ", entries=" << subtitle_count);
 }
@@ -1113,12 +1153,11 @@ void PlayerCore::clearExternalSubtitles() {
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
         subtitle_items_.clear();
         subtitle_source_path_.clear();
-        subtitle_active_text_.clear();
-        subtitle_active_index_ = -1;
+        subtitle_active_indices_.clear();
     }
 
     if (video_renderer_) {
-        video_renderer_->setSubtitleText("");
+        video_renderer_->setSubtitleItems({});
     }
 }
 
@@ -1137,8 +1176,7 @@ void PlayerCore::setSubtitleEnabled(bool enabled) {
             return;
         }
         subtitle_enabled_ = enabled;
-        subtitle_active_index_ = -1;
-        subtitle_active_text_.clear();
+        subtitle_active_indices_.clear();
         changed = true;
     }
 
@@ -1148,7 +1186,7 @@ void PlayerCore::setSubtitleEnabled(bool enabled) {
 
     if (video_renderer_) {
         if (!enabled) {
-            video_renderer_->setSubtitleText("");
+            video_renderer_->setSubtitleItems({});
         } else {
             updateSubtitleOverlay(position_.load());
         }
@@ -1202,7 +1240,7 @@ void PlayerCore::onFrameRendered(FrameCallback callback) {
     frame_callbacks_.push_back(std::move(callback));
 }
 
-/// 初始化视频/音频解码器，并根据配置选择硬解或软解回退顺序。
+/// 鍒濆鍖栬棰?闊抽瑙ｇ爜鍣紝骞舵牴鎹厤缃€夋嫨纭В鎴栬蒋瑙ｅ洖閫€椤哄簭銆?
 bool PlayerCore::initDecoders() {
     if (!demuxer_) {
         return false;
@@ -1363,7 +1401,7 @@ bool PlayerCore::initDecoders() {
     return true;
 }
 
-/// 释放解码器、硬件设备上下文以及音视频格式转换器。
+/// 閲婃斁瑙ｇ爜鍣ㄣ€佺‖浠惰澶囦笂涓嬫枃浠ュ強闊宠棰戞牸寮忚浆鎹㈠櫒銆?
 void PlayerCore::releaseDecoders() {
     std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
     releaseVideoScaler();
@@ -1384,7 +1422,7 @@ void PlayerCore::releaseDecoders() {
     }
 }
 
-/// 在 Windows 上为视频解码器绑定 D3D11VA 设备；失败时回退软解。
+/// 鍦?Windows 涓婁负瑙嗛瑙ｇ爜鍣ㄧ粦瀹?D3D11VA 璁惧锛涘け璐ユ椂鍥為€€杞В銆?
 bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx) {
 #if defined(_WIN32)
     if (!codec || !codec_ctx) {
@@ -1411,8 +1449,28 @@ bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecCo
         return false;
     }
 
-    if (av_hwdevice_ctx_create(&video_hw_device_ctx_, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0) < 0 ||
-        !video_hw_device_ctx_) {
+    void* native_device_handle = video_renderer_ ? video_renderer_->nativeDeviceHandle() : nullptr;
+    if (native_device_handle) {
+        video_hw_device_ctx_ = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
+        if (!video_hw_device_ctx_) {
+            LOG_WARNING("Failed to allocate shared D3D11VA device context, fallback to software decode");
+            return false;
+        }
+
+        auto* device_ctx = reinterpret_cast<AVHWDeviceContext*>(video_hw_device_ctx_->data);
+        auto* d3d11_ctx = reinterpret_cast<AVD3D11VADeviceContext*>(device_ctx->hwctx);
+        auto* d3d11_device = static_cast<ID3D11Device*>(native_device_handle);
+        d3d11_device->AddRef();
+        d3d11_ctx->device = d3d11_device;
+        if (av_hwdevice_ctx_init(video_hw_device_ctx_) < 0) {
+            LOG_WARNING("Failed to initialize shared D3D11VA device context, fallback to software decode");
+            av_buffer_unref(&video_hw_device_ctx_);
+            video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+            return false;
+        }
+        LOG_INFO("D3D11VA decoder bound to renderer-owned D3D11 device");
+    } else if (av_hwdevice_ctx_create(&video_hw_device_ctx_, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0) < 0 ||
+               !video_hw_device_ctx_) {
         LOG_WARNING("Failed to create D3D11VA device context, fallback to software decode");
         return false;
     }
@@ -1458,10 +1516,19 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
     return pix_fmts[0];
 }
 
-/// 将解码帧整理为渲染路径可直接消费的 `YUV420P` 输出帧。
+/// 灏嗚В鐮佸抚鏁寸悊涓烘覆鏌撹矾寰勫彲鐩存帴娑堣垂鐨?`YUV420P` 杈撳嚭甯с€?
 bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out) {
     if (!decoded_frame || !out.frame) {
         return false;
+    }
+
+    const AVPixelFormat decoded_format = static_cast<AVPixelFormat>(decoded_frame->format);
+    const bool renderer_accepts_native =
+        video_renderer_ &&
+        video_renderer_->supportsNativeFrameFormat(decoded_format) &&
+        !filter_pipeline_.hasEnabledVideoFilters();
+    if (renderer_accepts_native) {
+        return true;
     }
 
     AVFrame* software_frame = nullptr;
@@ -1514,7 +1581,7 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
     return ok;
 }
 
-/// 按当前源帧尺寸和像素格式准备 `swscale` 上下文。
+/// 鎸夊綋鍓嶆簮甯у昂瀵稿拰鍍忕礌鏍煎紡鍑嗗 `swscale` 涓婁笅鏂囥€?
 bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     if (!src_frame || src_frame->width <= 0 || src_frame->height <= 0 || src_frame->format == AV_PIX_FMT_NONE) {
         return false;
@@ -1542,7 +1609,7 @@ bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     return true;
 }
 
-/// 把任意输入像素格式转换为渲染链路统一使用的 `YUV420P`。
+/// 鎶婁换鎰忚緭鍏ュ儚绱犳牸寮忚浆鎹负娓叉煋閾捐矾缁熶竴浣跨敤鐨?`YUV420P`銆?
 bool PlayerCore::convertVideoFrameToYuv420(const AVFrame* src_frame, AVFrame* dst_frame) {
     if (!src_frame || !dst_frame || !ensureVideoScaler(src_frame)) {
         return false;
@@ -1585,7 +1652,7 @@ void PlayerCore::releaseVideoScaler() {
     video_sws_src_fmt_ = AV_PIX_FMT_NONE;
 }
 
-/// 确保音频重采样器输出格式与当前 SDL 设备配置一致。
+/// 纭繚闊抽閲嶉噰鏍峰櫒杈撳嚭鏍煎紡涓庡綋鍓?SDL 璁惧閰嶇疆涓€鑷淬€?
 bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     if (!frame || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -1660,7 +1727,7 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     return true;
 }
 
-/// 释放音频重采样上下文，并清空输入输出布局缓存。
+/// 閲婃斁闊抽閲嶉噰鏍蜂笂涓嬫枃锛屽苟娓呯┖杈撳叆杈撳嚭甯冨眬缂撳瓨銆?
 void PlayerCore::releaseAudioResampler() {
     if (audio_swr_ctx_) {
         swr_free(&audio_swr_ctx_);
@@ -1674,13 +1741,13 @@ void PlayerCore::releaseAudioResampler() {
     swr_out_sample_rate_ = 0;
 }
 
-/// 启动解复用线程；负责读包、分发到音视频包队列并传播 EOF。
+/// 鍚姩瑙ｅ鐢ㄧ嚎绋嬶紱璐熻矗璇诲寘銆佸垎鍙戝埌闊宠棰戝寘闃熷垪骞朵紶鎾?EOF銆?
 void PlayerCore::startDemuxThread() {
     if (demux_running_.exchange(true)) {
         return;
     }
     demux_thread_ = std::thread([this] {
-        // 解复用线程只负责“读包 + 分发”，不做解码；读失败时向下游显式广播 EOF。
+        // Demux only reads and dispatches packets; EOF is propagated downstream explicitly.
         while (demux_running_.load() && demuxer_ && !demuxer_->isEof()) {
             if (!video_packet_queue_ && !audio_packet_queue_) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
@@ -1707,7 +1774,7 @@ void PlayerCore::startDemuxThread() {
             const MediaInfo& info = demuxer_->getMediaInfo();
             bool queued = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
-                // push 成功后队列接管 packet 生命周期；失败则由当前线程释放。
+                // On successful push the queue owns the packet lifetime.
                 while (demux_running_.load() && !(queued = video_packet_queue_->push(packet, 20))) {
                     demux_push_retries_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -1734,7 +1801,7 @@ void PlayerCore::startDemuxThread() {
     });
 }
 
-/// 停止解复用线程，并重置包队列的停止状态以便后续复用。
+/// 鍋滄瑙ｅ鐢ㄧ嚎绋嬶紝骞堕噸缃寘闃熷垪鐨勫仠姝㈢姸鎬佷互渚垮悗缁鐢ㄣ€?
 void PlayerCore::stopDemuxThread() {
     demux_running_.store(false);
     if (video_packet_queue_) {
@@ -1754,7 +1821,7 @@ void PlayerCore::stopDemuxThread() {
     }
 }
 
-/// 启动音频消费线程；把解码 PCM 提交给 `AudioPlayer` 并推进音频主时钟。
+/// 鍚姩闊抽娑堣垂绾跨▼锛涙妸瑙ｇ爜 PCM 鎻愪氦缁?`AudioPlayer` 骞舵帹杩涢煶棰戜富鏃堕挓銆?
 void PlayerCore::startAudioConsumer() {
     if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_running_.exchange(true)) {
         return;
@@ -1764,7 +1831,7 @@ void PlayerCore::startAudioConsumer() {
             AudioFrame frame;
             const double played_pts = audio_player_->getPlaybackPts();
             if (played_pts > 0.0 && state_.load() == PlaybackState::Playing) {
-                // 音频设备真实播放进度作为主时钟，UI 进度与同步都围绕它推进。
+                // Use device playback progress as the audio master clock.
                 const double audio_delay = audio_delay_seconds_.load();
                 const double content_pts = std::max(0.0, played_pts - audio_delay);
                 clock_.setAudioClock(content_pts);
@@ -1773,7 +1840,7 @@ void PlayerCore::startAudioConsumer() {
             }
 
             if (audio_player_->getBufferedSeconds() > kMaxAudioBufferedSeconds) {
-                // 缓冲过深会让 seek/暂停响应变慢，这里用背压控制音频前置时长。
+                // Apply backpressure when the audio device buffer gets too deep.
                 std::this_thread::sleep_for(std::chrono::milliseconds(2));
                 maybeLogDiagnostics("audio-backpressure");
                 continue;
@@ -1801,7 +1868,7 @@ void PlayerCore::startAudioConsumer() {
     });
 }
 
-/// 停止音频消费线程并等待退出。
+/// 鍋滄闊抽娑堣垂绾跨▼骞剁瓑寰呴€€鍑恒€?
 void PlayerCore::stopAudioConsumer() {
     audio_consumer_running_.store(false);
     if (audio_consumer_thread_.joinable()) {
@@ -1809,7 +1876,7 @@ void PlayerCore::stopAudioConsumer() {
     }
 }
 
-/// 清空调度帧队列和压缩包队列，丢弃当前时间线上的残留数据。
+/// 娓呯┖璋冨害甯ч槦鍒楀拰鍘嬬缉鍖呴槦鍒楋紝涓㈠純褰撳墠鏃堕棿绾夸笂鐨勬畫鐣欐暟鎹€?
 void PlayerCore::flushPipelines() {
     scheduler_.flush();
     if (video_packet_queue_) {
@@ -1820,7 +1887,7 @@ void PlayerCore::flushPipelines() {
     }
 }
 
-/// 重置链路诊断计数器，为新一轮播放或 seek 观察窗口做准备。
+/// 閲嶇疆閾捐矾璇婃柇璁℃暟鍣紝涓烘柊涓€杞挱鏀炬垨 seek 瑙傚療绐楀彛鍋氬噯澶囥€?
 void PlayerCore::resetDiagnostics() {
     demux_video_packets_.store(0);
     demux_audio_packets_.store(0);
@@ -1833,7 +1900,7 @@ void PlayerCore::resetDiagnostics() {
     last_diag_log_ms_.store(nowSteadyMs());
 }
 
-/// 节流输出链路诊断日志，便于观察 demux/decoder/render/audio 健康度。
+/// 鑺傛祦杈撳嚭閾捐矾璇婃柇鏃ュ織锛屼究浜庤瀵?demux/decoder/render/audio 鍋ュ悍搴︺€?
 void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     const int64_t now_ms = nowSteadyMs();
     int64_t last_ms = last_diag_log_ms_.load();
@@ -1867,7 +1934,7 @@ void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     }
 }
 
-/// 从视频包队列和解码器内部缓存提取一帧，并规范化到渲染输出格式。
+/// 浠庤棰戝寘闃熷垪鍜岃В鐮佸櫒鍐呴儴缂撳瓨鎻愬彇涓€甯э紝骞惰鑼冨寲鍒版覆鏌撹緭鍑烘牸寮忋€?
 bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     if (!video_codec_ctx_ || !video_packet_queue_) {
         return false;
@@ -1877,7 +1944,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     av_frame_unref(out.frame);
     int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
     if (ret >= 0) {
-        // 优先“先收后送”：尽可能先消费解码器内部已产出的帧，降低包队列压力。
+        // Drain already-produced decoder frames before asking for more input.
         if (!prepareVideoOutputFrame(out.frame, out)) {
             return false;
         }
@@ -1902,8 +1969,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     if (!video_packet_queue_->pop(packet, 20) || !packet) {
         return false;
     }
-
-    // 只有在 EAGAIN/EOF 需要新输入时才取包发送，保持 send/receive 配对关系稳定。
+    // Only send a new packet when receive needs more input.
     ret = avcodec_send_packet(video_codec_ctx_, packet);
     av_packet_free(&packet);
     if (ret < 0) {
@@ -1931,7 +1997,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     return true;
 }
 
-/// 从音频包队列解码一帧 PCM，并重采样到 SDL 输出格式。
+/// 浠庨煶棰戝寘闃熷垪瑙ｇ爜涓€甯?PCM锛屽苟閲嶉噰鏍峰埌 SDL 杈撳嚭鏍煎紡銆?
 bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     if (!audio_codec_ctx_ || !audio_packet_queue_ || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -1945,7 +2011,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
 
     int ret = avcodec_receive_frame(audio_codec_ctx_, frame);
     if (ret == AVERROR(EAGAIN)) {
-        // 音频路径与视频一致：先尝试 receive，缺输入再从包队列补充。
+        // Mirror the video path: receive first, then feed more compressed data if needed.
         AVPacket* packet = nullptr;
         if (!audio_packet_queue_->pop(packet, 20) || !packet) {
             av_frame_free(&frame);
@@ -1994,8 +2060,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         av_frame_free(&frame);
         return false;
     }
-
-    // 输出时长优先使用解码时间戳，缺失时再按采样数反推，避免 UI 进度抖动。
+    // Prefer decoder timing metadata, and fall back to sample math when needed.
     const int byte_count = av_samples_get_buffer_size(
         nullptr, channels, converted, swr_out_sample_fmt_, 1);
     if (byte_count <= 0) {
@@ -2032,16 +2097,18 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     return out.valid;
 }
 
-/// 提交一帧视频到渲染器，并同步字幕、OSD、截图和视频时钟。
+/// 鎻愪氦涓€甯ц棰戝埌娓叉煋鍣紝骞跺悓姝ュ瓧骞曘€丱SD銆佹埅鍥惧拰瑙嗛鏃堕挓銆?
 void PlayerCore::renderFrame(VideoFrame&& frame) {
     if (!video_renderer_ || !frame.valid || !frame.frame) {
         return;
     }
     const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
-    // 渲染顺序固定为：字幕状态 -> OSD 叠加态 -> 视频滤镜 -> 渲染提交 -> present。
+    // Maintain a fixed renderer order: subtitle state, overlay state, filters, submit, present.
     updateSubtitleOverlay(frame.pts);
     video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
-    filter_pipeline_.processVideo(frame);
+    if (!isHardwarePixelFormat(frame.getFormat())) {
+        filter_pipeline_.processVideo(frame);
+    }
     video_renderer_->renderFrame(frame);
     video_renderer_->present();
     updateLastRenderedFrame(frame);
@@ -2065,7 +2132,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     emitFrameRendered();
 }
 
-/// 在渲染空闲期检查 EOF 收尾条件，必要时自动切到停止态。
+/// 鍦ㄦ覆鏌撶┖闂叉湡妫€鏌?EOF 鏀跺熬鏉′欢锛屽繀瑕佹椂鑷姩鍒囧埌鍋滄鎬併€?
 void PlayerCore::onRenderIdle() {
     if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
         return;
@@ -2081,7 +2148,7 @@ void PlayerCore::onRenderIdle() {
     }
 }
 
-/// 根据当前位置和字幕延迟计算当前应显示的字幕文本。
+/// 鏍规嵁褰撳墠浣嶇疆鍜屽瓧骞曞欢杩熻绠楀綋鍓嶅簲鏄剧ず鐨勫瓧骞曟枃鏈€?
 void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     if (!video_renderer_) {
         return;
@@ -2089,37 +2156,37 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
 
     const double adjusted_position = std::max(0.0, position_seconds - subtitle_delay_seconds_.load());
 
-    std::string subtitle_text;
+    std::vector<subtitle::SubtitleItem> active_items;
     bool subtitle_changed = false;
     {
-        // 只在文本发生变化时更新渲染器，避免每帧重复提交同一字幕内容。
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
-        if (!subtitle_enabled_ || subtitle_items_.empty()) {
-            subtitle_active_index_ = -1;
-            if (!subtitle_active_text_.empty()) {
-                subtitle_active_text_.clear();
+        std::vector<int> next_active_indices;
+        if (subtitle_enabled_ && !subtitle_items_.empty()) {
+            next_active_indices = subtitle::collectActiveSubtitleIndices(subtitle_items_, adjusted_position);
+            if (next_active_indices != subtitle_active_indices_) {
+                subtitle_active_indices_ = next_active_indices;
                 subtitle_changed = true;
             }
-        } else {
-            const int resolved_index = subtitle::resolveActiveSubtitleIndex(
-                subtitle_items_,
-                adjusted_position,
-                subtitle_active_index_);
-            subtitle_active_index_ = resolved_index;
-            subtitle_text = (resolved_index >= 0) ? subtitle_items_[resolved_index].text : "";
-            if (subtitle_text != subtitle_active_text_) {
-                subtitle_active_text_ = subtitle_text;
-                subtitle_changed = true;
+            if (subtitle_changed) {
+                active_items.reserve(subtitle_active_indices_.size());
+                for (int index : subtitle_active_indices_) {
+                    if (index >= 0 && index < static_cast<int>(subtitle_items_.size())) {
+                        active_items.push_back(subtitle_items_[static_cast<size_t>(index)]);
+                    }
+                }
             }
+        } else if (!subtitle_active_indices_.empty()) {
+            subtitle_active_indices_.clear();
+            subtitle_changed = true;
         }
     }
 
     if (subtitle_changed) {
-        video_renderer_->setSubtitleText(subtitle_text);
+        video_renderer_->setSubtitleItems(active_items);
     }
 }
 
-/// 向外分发状态回调；先复制回调列表以降低持锁时间。
+/// 鍚戝鍒嗗彂鐘舵€佸洖璋冿紱鍏堝鍒跺洖璋冨垪琛ㄤ互闄嶄綆鎸侀攣鏃堕棿銆?
 void PlayerCore::emitStateChanged(PlaybackState state) {
     std::vector<StateCallback> callbacks;
     {
@@ -2131,10 +2198,10 @@ void PlayerCore::emitStateChanged(PlaybackState state) {
     }
 }
 
-/// 节流分发位置回调，避免高频渲染推进直接压垮 UI 层。
+/// 鑺傛祦鍒嗗彂浣嶇疆鍥炶皟锛岄伩鍏嶉珮棰戞覆鏌撴帹杩涚洿鎺ュ帇鍨?UI 灞傘€?
 void PlayerCore::emitPositionChanged(double position) {
     const auto now = std::chrono::steady_clock::now();
-    // 位置回调做节流，避免高频回调拖慢 UI 线程。
+    // Throttle position callbacks to avoid hammering the UI thread.
     if (now - last_position_emit_tp_ < std::chrono::milliseconds(100)) {
         return;
     }
@@ -2150,7 +2217,7 @@ void PlayerCore::emitPositionChanged(double position) {
     }
 }
 
-/// 广播一次帧渲染完成事件。
+/// 骞挎挱涓€娆″抚娓叉煋瀹屾垚浜嬩欢銆?
 void PlayerCore::emitFrameRendered() {
     std::vector<FrameCallback> callbacks;
     {
@@ -2162,7 +2229,7 @@ void PlayerCore::emitFrameRendered() {
     }
 }
 
-/// 记录错误日志并向外广播错误码与说明文本。
+/// 璁板綍閿欒鏃ュ織骞跺悜澶栧箍鎾敊璇爜涓庤鏄庢枃鏈€?
 void PlayerCore::emitError(ErrorCode code, const std::string& message) {
     LOG_ERROR("PlayerCore error: " << message);
     std::vector<ErrorCallback> callbacks;
@@ -2176,3 +2243,17 @@ void PlayerCore::emitError(ErrorCode code, const std::string& message) {
 }
 
 }  // namespace vp::core
+
+
+
+
+
+
+
+
+
+
+
+
+
+

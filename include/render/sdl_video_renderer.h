@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
 
@@ -7,7 +7,6 @@
 
 namespace vp::render {
 
-/// SDL 通用渲染后端；通过 `Display` 提供窗口、事件和软件纹理显示能力。
 class SdlVideoRenderer final : public IVideoRenderer {
 public:
     SdlVideoRenderer();
@@ -15,14 +14,11 @@ public:
 
     bool init(const VideoRendererConfig& config) override;
     void close() override;
-
     void renderFrame(const core::VideoFrame& frame) override;
     void present() override;
     void clear() override;
-
     void handleEvents() override;
     bool shouldQuit() const override;
-
     bool consumeTogglePauseRequest() override;
     bool consumeSeekRequest(double& normalized_position) override;
     bool consumeSeekDeltaRequest(double& delta_seconds) override;

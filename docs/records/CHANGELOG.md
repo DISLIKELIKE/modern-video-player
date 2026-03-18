@@ -1,4 +1,4 @@
-# 问题修复记录
+﻿# 问题修复记录
 
 本文档记录开发过程中遇到的问题及其解决方案。
 
@@ -57,7 +57,102 @@
 | 54 | 2026-03-08 | M2 2.2.1 / 2.3.2：1080p60 稳定播放验收 | ✅ 已修复 |
 | 55 | 2026-03-08 | M2 2.2.2 / 2.3.3：4K 播放与降级验收 | ✅ 已修复 |
 | 56 | 2026-03-08 | M2 2.2.3：>80Mbps 高码率样本验收 | ✅ 已修复 |
+| 57 | 2026-03-18 | D3D11 原生 GPU 渲染链补齐 | ✅ 已修复 |
+| 66 | 2026-03-18 | 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链 | ✅ 已修复 |
 
+---
+
+## 问题 66: 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链
+
+**日期**: 2026-03-18
+
+### 问题描述
+- 全局 `Debug|x64` 构建曾被多处头文件/源文件的编码误读阻塞，导致“D3D11 原生链代码已改好，但无法整体验证”。
+- D3D11 原生字幕链此前只覆盖纯文本叠加，`.ass/.ssa` 的样式、定位和多条同时激活字幕还没有进入 native renderer。
+- 外挂字幕自动探测与显式加载需要覆盖 `.ass`、`.ssa`、`.srt` 三种格式，而不是只面向 SRT。
+
+### 原因分析
+- 部分带中文注释的头文件和源文件在当前 MSVC/代码页组合下被误读，触发全局语法/标记化错误，构成与业务逻辑无关的构建阻塞。
+- 旧字幕模型只有纯文本语义，`IVideoRenderer` 接口也只接收单字符串，导致 `PlayerCore` 无法把 ASS/SSA 的样式、层级和定位信息传给 D3D11 渲染器。
+- 时间线上原本只解析单条活动字幕，不足以表达 ASS/SSA 常见的多 cue 同屏场景。
+
+### 解决方案
+- 将受影响的头文件和源文件改写为 ASCII-safe 形式，恢复 `MSBuild` 全量构建基线。
+- 扩展字幕数据模型，新增 `SubtitleStyle`、`SubtitleTextRun`、`SubtitleItem.layer/play_res/runs`，并让解析工厂支持 `.ass/.ssa/.srt`。
+- 新增 `AssParser`，解析 `Script Info / Styles / Events`，覆盖常用 `\b \i \u \s \fs \fn \an \a \pos \c/\1c \alpha/\1a \bord \shad \r` 标签。
+- 让 `PlayerCore` 计算多条当前激活字幕，并通过 `IVideoRenderer::setSubtitleItems()` 把结构化字幕对象直接送入 `D3D11VideoRenderer`。
+- 在 `D3D11VideoRenderer` 同一块 swap chain backbuffer 上完成 ASS/SSA 文本填充、描边、阴影、背景框、对齐和定位绘制；非 D3D11 渲染器默认退化为纯文本显示。
+- 更新 `main.cpp` 的自动外挂字幕探测顺序为 `.ass -> .ssa -> .srt`，并在整工程级别重新验证构建通过。
+
+### 修改文件
+- `CMakeLists.txt`
+- `include/subtitle/subtitle_parser.h`
+- `include/subtitle/ass_parser.h`
+- `include/subtitle/srt_parser.h`
+- `include/subtitle/subtitle_timeline.h`
+- `src/subtitle/subtitle_parser.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `src/subtitle/srt_parser.cpp`
+- `src/subtitle/subtitle_timeline.cpp`
+- `include/render/video_renderer.h`
+- `include/render/d3d11_video_renderer.h`
+- `src/render/d3d11_video_renderer.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/video_player.cpp`
+- `src/main.cpp`
+- `include/config/settings_manager.h`
+- `include/media/format_support.h`
+- `include/playlist/playlist_manager.h`
+- `include/plugin/plugin_api.h`
+- `include/plugin/plugin_manager.h`
+- `include/filters/filter_registry.h`
+- `include/filters/video_filter_chain.h`
+- `include/filters/audio_filter_chain.h`
+- `include/streaming/http_stream_downloader.h`
+- `include/streaming/hls_manifest_parser.h`
+- `include/streaming/dash_manifest_parser.h`
+- `include/streaming/adaptive_bitrate_selector.h`
+- `include/display.h`
+- `include/render/sdl_video_renderer.h`
+- `include/render/opengl_video_renderer.h`
+- `include/core/frame_queue.h`
+- `src/streaming/adaptive_bitrate_selector.cpp`
+- `src/render/renderer_factory.cpp`
+- `src/ui/skin_engine.cpp`
+- `src/core/scheduler.cpp`
+- `docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+---
+## 问题 57: D3D11 原生 GPU 渲染链补齐
+
+**日期**: 2026-03-18
+
+### 问题描述
+- `D3D11VideoRenderer` 已经具备独立的 D3D11 视频呈现能力，但字幕仍然只保存文本状态，没有真正绘制到同一块 swap chain backbuffer 上。
+- 旧分析文档仍把 D3D11 renderer 描述为 SDL 包装器，已经不符合当前仓库状态。
+
+### 原因分析
+- 原生视频主面与 D3D11VA device sharing 已经落地，剩余缺口集中在字幕叠加这一块最后的 UI/overlay 合成路径。
+- 如果字幕仍依赖 SDL `Display` 或软件纹理链，整条渲染链就不能称为“完整、独立、原生 D3D11 GPU 链路”。
+
+### 解决方案
+- 在 `D3D11VideoRenderer` 内新增 D2D1 / DirectWrite 资源，直接对 DXGI swap chain backbuffer 进行字幕文本绘制。
+- 保留现有 D3D11 视频面采样路径，并将字幕绘制串到同一帧 present 前。
+- 对暂停态字幕变化增加即时重绘，确保 seek / frame-step 后字幕与视频状态一致。
+- 同步更新设计文档和旧分析文档的历史说明，避免后续继续沿用过期结论。
+
+### 修改文件
+- `src/render/d3d11_video_renderer.cpp`
+- `src/render/renderer_factory.cpp`
+- `CMakeLists.txt`
+- `docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`
+- `docs/analysis/PLAYERCORE_DAY4_RENDERER_ANALYSIS.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
 ---
 
 ## 问题 12: 企业级多线程架构重构
@@ -2416,4 +2511,5 @@ void VideoPlayer::play() {
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
+
 

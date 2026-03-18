@@ -1,4 +1,4 @@
-#include "video_player.h"
+﻿#include "video_player.h"
 
 #include <algorithm>
 #include <cctype>
@@ -7,7 +7,7 @@
 
 #include "logger.h"
 #include "decoder/decoder_factory.h"
-#include "subtitle/srt_parser.h"
+#include "subtitle/subtitle_parser.h"
 
 namespace vp {
 
@@ -287,7 +287,7 @@ bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
         return static_cast<char>(std::tolower(ch));
     });
 
-    if (extension != ".srt") {
+    if (!subtitle::isSupportedSubtitleExtension(extension)) {
         LOG_WARNING("Unsupported subtitle extension: " << subtitle_file);
         return false;
     }
@@ -296,10 +296,15 @@ bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
         return false;
     }
 
-    subtitle::SrtParser parser;
+    auto parser = subtitle::createParserForPath(path.string());
+    if (!parser) {
+        LOG_WARNING("No subtitle parser available for: " << subtitle_file);
+        return false;
+    }
+
     bool parsed = false;
     try {
-        parsed = parser.parseFile(path.string());
+        parsed = parser->parseFile(path.string());
     } catch (const std::exception& ex) {
         LOG_WARNING("Subtitle parser raised exception: " << ex.what());
         return false;
@@ -313,7 +318,7 @@ bool VideoPlayer::loadExternalSubtitle(const std::string& subtitle_file) {
     }
 
     subtitle_path_ = path.string();
-    subtitle_items_ = parser.items();
+    subtitle_items_ = parser->items();
     if (core_player_) {
         core_player_->setExternalSubtitles(subtitle_items_, subtitle_path_);
     }
@@ -361,4 +366,5 @@ bool VideoPlayer::toggleSubtitleEnabled() {
 }
 
 }  // namespace vp
+
 

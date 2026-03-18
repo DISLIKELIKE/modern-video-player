@@ -1,4 +1,4 @@
-# 项目版本记录
+﻿# 项目版本记录
 
 本文档记录项目的版本变更历史和当前状态。
 
@@ -22,8 +22,18 @@
 - **构建类型**: Release / Debug
 - **支持平台**: Windows, Linux, macOS
 
----
 
+### 2026-03-18 更新：D3D11 原生渲染链与 ASS/SSA 字幕链收口
+
+- Windows 默认 `D3D11` renderer 现在具备独立的 `window + device + swap chain + native video + native subtitle overlay` 主链。
+- 在未启用视频滤镜且格式受支持时，`PlayerCore` 会保留 `AV_PIX_FMT_D3D11` 原生硬件帧直通到 renderer，并同时向渲染器推送多条当前激活字幕对象。
+- 外挂字幕链已从“仅 SRT / 纯文本”推进到“.ass/.ssa/.srt + 结构化字幕对象 + 原生 D3D11 样式绘制”；`main.cpp` 自动探测顺序为 `.ass -> .ssa -> .srt`。
+- `D3D11VideoRenderer` 现在在同一块 swap chain backbuffer 上完成 ASS/SSA 常用样式字幕绘制，覆盖填充、描边、阴影、背景框、对齐、定位和 run 级字体样式；非 D3D11 渲染器默认退化为纯文本显示。
+- 已清理全局构建阻塞文件中的编码误读问题，完整解决方案验证命令
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.sln /t:modern-video-player /p:Configuration=Debug /p:Platform=x64 /m`
+  当前结果为 `0 个警告 / 0 个错误`。
+- 当前限制仍然存在：这不是完整的 libass 等价实现，尚未补充真实 `.ass` 样本的运行时视觉验收；详见 `docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md` 与 `docs/records/CHANGELOG.md` 的问题 66。
+---
 ## 阶段一：基础播放器（历史起点）
 
 ### 开始日期
@@ -286,6 +296,7 @@ make -j$(nproc)
 | 2026-03-07 | 接入 GitHub Actions 自动格式回归与 CI 兼容改造 |
 | 2026-03-07 | 接入播放列表主链路、设置持久化与快捷键首版 |
 | 2026-03-08 | 清理历史章节中的旧路径描述，避免将已移除文件误写为当前仓库结构 |
+| 2026-03-18 | 同步 D3D11 原生渲染链最终状态，记录 ASS/SSA 原生字幕链收口与全局构建阻塞清理 |
 
 ---
 
@@ -1789,4 +1800,5 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/CHANGELOG.md
 - docs/records/DEVELOP_LOG.md
+
 

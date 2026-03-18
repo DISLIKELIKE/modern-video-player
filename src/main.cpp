@@ -1,4 +1,4 @@
-#include "video_player.h"
+﻿#include "video_player.h"
 #include "config/settings_manager.h"
 #include "demuxer.h"
 #include "filters/filter_registry.h"
@@ -10,7 +10,7 @@
 #include "streaming/dash_manifest_parser.h"
 #include "streaming/hls_manifest_parser.h"
 #include "streaming/http_stream_downloader.h"
-#include "subtitle/srt_parser.h"
+#include "subtitle/subtitle_parser.h"
 #include "subtitle/subtitle_timeline.h"
 
 extern "C" {
@@ -602,13 +602,13 @@ std::vector<double> buildSeekValidationTimeline(const std::vector<double>& order
 
 /// 验证字幕时间线解析是否稳定，覆盖顺序播放和跳转场景。
 bool runSubtitleSyncCheck(const std::string& subtitle_path) {
-    subtitle::SrtParser parser;
-    if (!parser.parseFile(subtitle_path)) {
+    auto parser = subtitle::createParserForPath(subtitle_path);
+    if (!parser || !parser->parseFile(subtitle_path)) {
         std::cerr << "subtitle-sync-check: failed to parse subtitle file: " << subtitle_path << std::endl;
         return false;
     }
 
-    std::vector<subtitle::SubtitleItem> items = sortSubtitleItems(parser.items());
+    std::vector<subtitle::SubtitleItem> items = sortSubtitleItems(parser->items());
     if (items.empty()) {
         std::cerr << "subtitle-sync-check: no subtitle entries found: " << subtitle_path << std::endl;
         return false;
@@ -825,9 +825,14 @@ std::string detectAutoSubtitlePath(const std::string& media_uri) {
 
     std::error_code ec;
     std::filesystem::path candidate(media_uri);
-    candidate.replace_extension(".srt");
-    if (std::filesystem::exists(candidate, ec) && !ec && std::filesystem::is_regular_file(candidate, ec) && !ec) {
-        return candidate.string();
+    for (const char* extension : {".ass", ".ssa", ".srt"}) {
+        std::filesystem::path subtitle_candidate = candidate;
+        subtitle_candidate.replace_extension(extension);
+        if (std::filesystem::exists(subtitle_candidate, ec) && !ec &&
+            std::filesystem::is_regular_file(subtitle_candidate, ec) && !ec) {
+            return subtitle_candidate.string();
+        }
+        ec.clear();
     }
     return {};
 }
@@ -1774,9 +1779,9 @@ bool runDelayAdjustCheck(const std::string& media_file, const std::string& subti
 
     constexpr double kDelayCheckStepSeconds = 0.1;
     constexpr double kProbeOffsetSeconds = 0.05;
-    subtitle::SrtParser parser;
-    const bool subtitle_parsed = parser.parseFile(subtitle_file);
-    const auto& items = parser.items();
+    auto parser = subtitle::createParserForPath(subtitle_file);
+    const bool subtitle_parsed = parser && parser->parseFile(subtitle_file);
+    std::vector<subtitle::SubtitleItem> items = subtitle_parsed ? parser->items() : std::vector<subtitle::SubtitleItem>{};
     bool probe_found = false;
     bool baseline_before_clear = false;
     bool baseline_inside_visible = false;
@@ -3126,11 +3131,11 @@ void signalHandler(int signal) {
 /// 打印 CLI 用法、验证命令和播放器交互快捷键说明。
 void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
-    std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.srt>" << std::endl;
+    std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.(srt|ass|ssa)>" << std::endl;
     std::cout << "       " << program_name << " <playlist.m3u8>" << std::endl;
     std::cout << "       " << program_name << " --capabilities" << std::endl;
     std::cout << "       " << program_name << " --probe-file <media_file> [--json]" << std::endl;
-    std::cout << "       " << program_name << " --subtitle-sync-check <subtitle.srt>" << std::endl;
+    std::cout << "       " << program_name << " --subtitle-sync-check <subtitle.(srt|ass|ssa)>" << std::endl;
     std::cout << "       " << program_name << " --playlist-flow-check <media1> <media2> <media3> <media4> <media5> [more...]" << std::endl;
     std::cout << "       " << program_name << " --settings-persistence-check [settings_file]" << std::endl;
     std::cout << "       " << program_name << " --renderer-fallback-check <media_file>" << std::endl;
@@ -3138,7 +3143,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --chapter-nav-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --ab-repeat-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --frame-step-check <media_file>" << std::endl;
-    std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.srt>" << std::endl;
+    std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.(srt|ass|ssa)>" << std::endl;
     std::cout << "       " << program_name << " --numeric-seek-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --1080p60-check <media_file> [sample_ms]" << std::endl;
@@ -3623,3 +3628,5 @@ int main(int argc, char* argv[]) {
     
     return 0;
 }
+
+

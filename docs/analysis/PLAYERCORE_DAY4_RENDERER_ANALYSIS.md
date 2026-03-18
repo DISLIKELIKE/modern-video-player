@@ -1,5 +1,6 @@
-﻿# Day4 结论：当前 D3D11 渲染器只是 SDL/D3D11 驱动偏好，不是解码面到显示面的零拷贝
+# Day4 结论：当前 D3D11 渲染器只是 SDL/D3D11 驱动偏好，不是解码面到显示面的零拷贝
 
+> 历史说明（2026-03-18）：本文结论对应 2026-03-14 的旧实现。当前仓库已经具备独立的原生 D3D11 device/swap chain/video present/subtitle overlay 主链，请以 [`docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`](../design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md) 为最新状态说明。
 日期：2026-03-14  
 范围：`src/render/renderer_factory.cpp`、`src/render/sdl_video_renderer.cpp`、`src/render/d3d11_video_renderer.cpp`、`src/render/opengl_video_renderer.cpp`、`src/display.cpp`、`src/core/player_core.cpp`
 

@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -7,6 +7,7 @@ extern "C" {
 
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -29,13 +30,12 @@ extern "C" {
 
 namespace vp {
 class AudioPlayer;
-}  // namespace vp
+}
 struct SwrContext;
 struct SwsContext;
 
 namespace vp::core {
 
-/// 播放状态枚举。
 enum class PlaybackState {
     Stopped,
     Playing,
@@ -53,21 +53,15 @@ enum class ErrorCode {
     FilterError
 };
 
-/// 播放信息快照。
 struct PlaybackInfo {
-    // 媒体总时长（秒），未知时为 0。
     double duration{0.0};
-    // 当前播放位置（秒）。
     double position{0.0};
-    // 当前视频分辨率，纯音频时为 0。
     int video_width{0};
     int video_height{0};
-    // 当前音频参数，纯视频时为 0。
     int audio_sample_rate{0};
     int audio_channels{0};
 };
 
-/// 播放链路诊断统计快照。
 struct DiagnosticsSnapshot {
     uint64_t demux_video_packets{0};
     uint64_t demux_audio_packets{0};
@@ -86,26 +80,17 @@ struct DiagnosticsSnapshot {
     size_t audio_frame_queue_size{0};
 };
 
-/// 播放核心；负责组织解复用、解码、调度、音频与渲染全链路。
 class PlayerCore {
 public:
     PlayerCore();
     ~PlayerCore();
 
-    /// 打开媒体并初始化渲染/解码/队列资源。
-    /// @param filename 媒体文件路径或输入 URI。
-    /// @return 全链路初始化成功时返回 true；失败时可结合错误回调定位原因。
     bool open(const std::string& filename);
-    // 停止播放并释放全部运行时资源。
     void close();
 
-    // 播放控制：play/pause/stop 支持在 UI 线程直接调用。
     void play();
     void pause();
     void stop();
-    /// 按秒 seek 到目标位置。
-    /// @param timestamp 目标时间点，单位秒。
-    /// @note 内部会执行队列清空、解码器 flush 和时钟重同步。
     void seek(double timestamp);
     bool seekToNextChapter();
     bool seekToPreviousChapter();
@@ -117,13 +102,9 @@ public:
     double abRepeatStart() const;
     double abRepeatEnd() const;
     bool requestScreenshot();
-    /// 取走最近一次截图路径。
-    /// @param path 成功时写出截图文件路径。
-    /// @return 有新的截图结果可消费时返回 true。
     bool consumeLastScreenshotPath(std::string& path);
     bool stepFrameBackward();
     bool stepFrameForward();
-    // 处理渲染器事件（热键、拖动进度、窗口关闭等）。
     void pumpEvents();
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
@@ -131,17 +112,13 @@ public:
 
     PlaybackState getState() const;
     PlaybackInfo getInfo() const;
-    // 读取关键诊断计数，便于定位“读包/解码/渲染”瓶颈。
     DiagnosticsSnapshot getDiagnosticsSnapshot() const;
 
-    // 音量范围 [0,1]。
     void setVolume(float volume);
     float getVolume() const;
 
-    // 倍速范围 [0.5,2.0]，具体能力受解码与音频链路约束。
     void setPlaybackSpeed(double speed);
     double getPlaybackSpeed() const;
-    // 音频/字幕延迟单位均为秒，正值表示“更晚播放/显示”。
     void setAudioDelay(double delay_seconds);
     double getAudioDelay() const;
     void setSubtitleDelay(double delay_seconds);
@@ -150,9 +127,6 @@ public:
     bool preferHardwareDecode() const;
     decoder::DecoderBackend videoDecoderBackend() const;
     std::string videoRendererBackendName() const;
-    /// 设置外挂字幕集合并记录来源路径。
-    /// @param subtitles 已解析的字幕条目；会移动到内部存储。
-    /// @param source_path 字幕来源路径，用于状态展示和诊断日志。
     void setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
     void clearExternalSubtitles();
     bool hasExternalSubtitles() const;
@@ -167,17 +141,9 @@ public:
     using ErrorCallback = std::function<void(ErrorCode, const std::string&)>;
     using FrameCallback = std::function<void()>;
 
-    /// 注册状态变更回调。
-    /// @param callback 回调在内部线程触发，实现方需避免长时间阻塞。
     void onStateChanged(StateCallback callback);
-    /// 注册位置变更回调。
-    /// @param callback 回调在内部线程触发，适合做轻量 UI 状态同步。
     void onPositionChanged(PositionCallback callback);
-    /// 注册错误回调。
-    /// @param callback 回调会带出错误码与说明文本。
     void onError(ErrorCallback callback);
-    /// 注册帧渲染完成回调。
-    /// @param callback 回调在渲染链路内触发，不能执行耗时操作。
     void onFrameRendered(FrameCallback callback);
 
 private:
@@ -282,7 +248,7 @@ private:
     std::vector<PositionCallback> position_callbacks_;
     std::vector<ErrorCallback> error_callbacks_;
     std::vector<FrameCallback> frame_callbacks_;
-    std::chrono::steady_clock::time_point last_position_emit_tp_;
+    std::chrono::steady_clock::time_point last_position_emit_tp_{};
     std::atomic<uint64_t> demux_video_packets_{0};
     std::atomic<uint64_t> demux_audio_packets_{0};
     std::atomic<uint64_t> demux_push_retries_{0};
@@ -298,8 +264,7 @@ private:
     mutable std::mutex subtitle_mutex_;
     std::vector<subtitle::SubtitleItem> subtitle_items_;
     std::string subtitle_source_path_;
-    std::string subtitle_active_text_;
-    int subtitle_active_index_{-1};
+    std::vector<int> subtitle_active_indices_;
     bool subtitle_enabled_{true};
     input::HotkeyManager hotkey_manager_{};
     mutable std::mutex screenshot_mutex_;
@@ -310,3 +275,5 @@ private:
 };
 
 }  // namespace vp::core
+
+

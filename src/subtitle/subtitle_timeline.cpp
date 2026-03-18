@@ -1,4 +1,4 @@
-#include "subtitle/subtitle_timeline.h"
+﻿#include "subtitle/subtitle_timeline.h"
 
 #include <algorithm>
 #include <iterator>
@@ -7,14 +7,12 @@ namespace vp::subtitle {
 
 namespace {
 
-/// 判断当前位置是否仍落在某条字幕的显示时间区间内。
 bool isWithinSubtitleRange(const SubtitleItem& item, double position_seconds) {
     return position_seconds >= item.start_seconds && position_seconds <= item.end_seconds;
 }
 
 }  // namespace
 
-/// 根据播放位置查找当前命中的字幕索引；优先复用上一次命中结果。
 int resolveActiveSubtitleIndex(const std::vector<SubtitleItem>& items,
                                double position_seconds,
                                int active_index_hint) {
@@ -51,6 +49,17 @@ int resolveActiveSubtitleIndex(const std::vector<SubtitleItem>& items,
     }
 
     return static_cast<int>(std::distance(items.begin(), it));
+}
+
+std::vector<int> collectActiveSubtitleIndices(const std::vector<SubtitleItem>& items,
+                                              double position_seconds) {
+    std::vector<int> active_indices;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (isWithinSubtitleRange(items[i], position_seconds)) {
+            active_indices.push_back(static_cast<int>(i));
+        }
+    }
+    return active_indices;
 }
 
 }  // namespace vp::subtitle

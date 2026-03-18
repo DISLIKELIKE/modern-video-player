@@ -1,13 +1,13 @@
-#pragma once
+﻿#pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
-#include "display.h"
 #include "render/video_renderer.h"
 
 namespace vp::render {
 
-/// D3D11 渲染包装器；底层仍复用 `Display`，并校验 SDL 实际驱动是否为 D3D11。
 class D3D11VideoRenderer final : public IVideoRenderer {
 public:
     D3D11VideoRenderer();
@@ -41,11 +41,15 @@ public:
     bool consumePreviousItemRequest() override;
     void setOverlayState(double position, double duration, float volume, bool paused) override;
     void setSubtitleText(const std::string& text) override;
+    void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
+    bool supportsNativeFrameFormat(AVPixelFormat format) const override;
+    void* nativeDeviceHandle() const override;
     const char* rendererBackendName() const override;
 
 private:
-    std::unique_ptr<Display> display_;
+    class Impl;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace vp::render
