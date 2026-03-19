@@ -77,6 +77,11 @@ public:
         return false;
     }
 
+    virtual bool supportsDirectFrameFormat(AVPixelFormat format) const {
+        (void)format;
+        return false;
+    }
+
     virtual void* nativeDeviceHandle() const {
         return nullptr;
     }

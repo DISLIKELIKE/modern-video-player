@@ -1,7 +1,8 @@
-﻿#pragma once
+#pragma once
 
 extern "C" {
 #include <libavutil/frame.h>
+#include <libavutil/pixfmt.h>
 }
 
 #if __has_include(<SDL2/SDL.h>)
@@ -15,6 +16,7 @@ extern "C" {
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -78,16 +80,35 @@ public:
     int getHeight() const { return height_.load(); }
 
 private:
+    struct AvFrameRefDeleter {
+        void operator()(AVFrame* frame) const {
+            if (frame) {
+                av_frame_free(&frame);
+            }
+        }
+    };
+
     struct PendingVideoFrame {
+        using FrameRefPtr = std::unique_ptr<AVFrame, AvFrameRefDeleter>;
+
         int width{0};
         int height{0};
+        AVPixelFormat format{AV_PIX_FMT_NONE};
         int y_pitch{0};
         int u_pitch{0};
         int v_pitch{0};
         std::vector<uint8_t> y_plane;
         std::vector<uint8_t> u_plane;
         std::vector<uint8_t> v_plane;
+        FrameRefPtr frame_ref{};
+        bool direct_reference{false};
         bool valid{false};
+
+        PendingVideoFrame() = default;
+        PendingVideoFrame(const PendingVideoFrame&) = delete;
+        PendingVideoFrame& operator=(const PendingVideoFrame&) = delete;
+        PendingVideoFrame(PendingVideoFrame&&) noexcept = default;
+        PendingVideoFrame& operator=(PendingVideoFrame&&) noexcept = default;
     };
 
     struct ControlLayout {
@@ -97,9 +118,9 @@ private:
     };
 
     bool createRenderer();
-    bool createTexture(int width, int height);
-    bool ensureTextureForFrame(int width, int height);
-    bool ensureRenderResources(int frame_width, int frame_height);
+    bool createTexture(int width, int height, AVPixelFormat format);
+    bool ensureTextureForFrame(int width, int height, AVPixelFormat format);
+    bool ensureRenderResources(const PendingVideoFrame& frame);
     bool updateTexture(const PendingVideoFrame& frame);
     bool copyFrameData(const AVFrame& frame, PendingVideoFrame& out);
     void renderLoop();
@@ -126,6 +147,7 @@ private:
     std::mutex sdl_mutex_;
     int texture_width_{0};
     int texture_height_{0};
+    Uint32 texture_format_{SDL_PIXELFORMAT_UNKNOWN};
     std::thread render_thread_;
     std::atomic<bool> render_running_{false};
     std::atomic<bool> render_initialized_{false};

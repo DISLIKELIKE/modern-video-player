@@ -1,4 +1,4 @@
-# 项目版本记录
+﻿# 项目版本记录
 
 本文档记录项目的版本变更历史和当前状态。
 
@@ -23,6 +23,74 @@
 - **支持平台**: Windows, Linux, macOS
 
 
+### 2026-03-19 更新：PlayerCore 运行态 software send probe 对照已把 software decode blocker 收敛到 runtime context 差异
+- `--software-video-send-probe` 现已补齐 `pre_send_receive_ret`、`packet queue round-trip` 与 `read-ahead` 对照；`juren-30s.mp4` 最新实测为 `packet_queue_push_ok=true / packet_queue_pop_ok=true / read_ahead_packets=512 / send_ret=0 / receive_got_frame=true / result=PASS`。
+- `--software-video-decode-check` 新增 `audio_probe_mode`，并支持 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 的 video-only 对照；最新实测显示即使 `clock_source=Video`，仍然是 `video_packet_dequeue_count=1 / video_send_packet_ok=0 / decode_video_ok=0 / render_frames=0 / result=FAIL`。
+- `PlayerCore::decodeVideoFrame()` 新增仅环境变量开启的 `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 诊断路径；在 `video-only` 下实测仍出现 `Offthread software video send_packet probe timed out after 500ms`。
+- 结论更新：当前 blocker 已排除 FFmpeg software decoder 本体、`receive->send` 顺序、packet queue 交接、demux read-ahead、音频链以及当前 decode 线程本身；后续应直接对比 `PlayerCore::initDecoders()` 产出的 software codec ctx 与独立 probe 的字段差异。
+### 2026-03-19 更新：已补 software decode 最小 send/dequeue 计数，blocker 收敛到“首个 packet send 未完成返回”
+
+- `PlayerCore` 新增三项最小诊断：
+  - `video_packet_dequeue_count`
+  - `video_send_packet_ok`
+  - `video_send_packet_last_ret`
+- 它们已经接入 `DiagnosticsSnapshot`、低频链路日志、`--performance-log-check` 与 `--software-video-decode-check`。
+- 正常主链对照样本 `juren-30s.mp4` 的最新结果为：
+  - `video_packet_dequeue_count=57`
+  - `video_send_packet_ok=57`
+  - `video_send_packet_last_ret=0`
+  - `result=PASS`
+- software decode 样本的最新低频诊断为：
+  - `v_pkt_deq=1`
+  - `v_send_ok=0`
+  - `v_send_ret=-2147483648`
+- 结论更新：software decode 线程已经取到首个视频包，但首个 `avcodec_send_packet()` 到诊断点仍未形成成功返回；当前 blocker 已进一步收敛到 decoder 首包送入阶段。
+
+
+### 2026-03-19 更新：software decode 保守线程配置复跑后仍卡在首个视频包，`SdlVideoRenderer` 注释乱码已清理
+
+- `Video decoder threading` 现已确认 software path 运行在 `thread_count=1 / thread_type=none`，说明这轮复核确实命中了“保守线程配置”目标状态。
+- 重新执行 `--software-video-decode-check` 后，结果仍然是：`renderer_backend=SoftwareSDL`、`decoder_backend=Software`、`decode_video_ok=0`、`scheduler_video_decoded_frames=0`、`render_frames=0`、`video_frame_queue_peak_size=0`、`result=FAIL`。
+- 结合控制台诊断日志里 `demux(v=163) / pkt_q(v=162)` 与仅出现 `Video decode first send_packet start` 的现象，可以推断 software decode 线程当前更像是在首个视频包提交阶段后停住，而不是卡在 copy-back / swscale / display copy。
+- `src/render/sdl_video_renderer.cpp` 已补修 9 处函数头注释乱码；本轮再次扫描 `src/`、`include/` 的 `///` 与 `//` 注释行，未再发现新的可疑乱码命中。
+
+
+### 2026-03-19 更新：新增 `--software-video-decode-check`，把 software video decode blocker 单独钉死
+
+- 新增 `--software-video-decode-check <media_file> [sample_ms]`，专门回答“software video decode 是否真的产帧”，不再继续复用只能证明“会话已启动”的 `session-check`。
+- 命令内部强制 `MVP_RENDERER_BACKEND=software`、`SDL_AUDIODRIVER=dummy` 和 `preferHardwareDecode=false`，保证验证链路稳定命中 `SoftwareSDL + Software decode`。
+- 命令通过条件被收紧为“真实产帧”而不是“只打开成功”：必须同时满足 `decode_video_ok > 0`、`scheduler_video_decoded_frames > 0`、`render_frames > 0`、`video_frame_queue_peak_size > 0`，并确认 `video_copy_back_frames == 0`。
+- 命令本身改成 probe 式硬退出，避免被当前 soft decode blocker 下的 `stop/close` 挂死。
+- 本机最新验证结果：
+  - `open_ok=true / entered_playback_loop=true / renderer_backend=SoftwareSDL / decoder_backend=Software`
+  - `demux_video_packets=163 / demux_queue_drop_packets=0`
+  - `decode_video_ok=0 / scheduler_video_decoded_frames=0 / render_frames=0 / video_frame_queue_peak_size=0`
+  - `video_copy_back_frames=0 / video_swscale_frames=0 / result=FAIL`
+- 结论更新：blocker 已从“fallback 是否还在 copy-back”进一步收敛为“当前工程的软件视频解码接入链根本没有形成视频帧产出”；在它修好之前，不应重新默认启用 `software-first`。
+
+
+### 2026-03-19 更新：撤回 `SoftwareSDL` automatic software-first，保留 copy-back fallback 并补软解阻塞诊断
+
+- 本轮验证确认：虽然“system-memory renderer 优先避免 copy-back”这个方向与成熟播放器思路一致，但当前工程的 FFmpeg 软件视频解码接入仍不稳定，不能直接把 `SoftwareSDL` 默认切到 `software-first`。
+- 已撤回自动 renderer-aware `software-first` decoder 重新排序，恢复 `D3D11VA -> Software` 默认顺序，避免把 fallback 主流程带进 0 帧输出回归。
+- 已补充软件视频解码低频诊断：首个 `send_packet` 探针、FFmpeg 错误码字符串、stall 上下文日志，后续可继续单独定位软件视频解码 blocker。
+- 当前重新验证结果：
+  - 默认 `D3D11 + D3D11VA` 主链仍保持 `video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+  - `SoftwareSDL` fallback 已恢复为 `D3D11VA copy-back` 路径，当前样本实测 `video_copy_back_ratio_percent=33.5958 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+  - 强制 `D3D11 + Software decode` 时仍可复现软件视频解码链阻塞，因此 `software-first` 暂不适合重新默认启用
+
+
+### 2026-03-19 更新：Audio-master lateness 收紧与 SoftwareSDL 减拷贝有限重构
+
+- `IVideoRenderer` 现已支持 `supportsDirectFrameFormat()`；`SdlVideoRenderer` 会直接声明支持 `YUV420P / NV12`。
+- `PlayerCore::prepareVideoOutputFrame()` 在无视频滤镜时允许 copy-back 后的软件帧直接交给 `SoftwareSDL`，不再强制 `swscale -> YUV420P`。
+- `Display` 现已支持 `SDL_PIXELFORMAT_NV12 + SDL_UpdateNVTexture()`，并优先持有 `AVFrame` 引用；正 stride 的 `YUV420P/NV12` 路径可避免显示层深拷贝。
+- `Scheduler::pumpRenderOnce()` 的 `Audio` master 逻辑已改成分段等待、动态 late-drop 阈值和最小 sleep 量子，避免“只睡一次就提前 render”以及伪忙等。
+- 本机验证结果：
+  - 默认 `D3D11 + D3D11VA` 主链仍为 `video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+  - 强制 `SoftwareSDL` 后，`video_swscale_ratio_percent=0`、`display_copy_ratio_percent=0`，热点已收敛到 `video_copy_back_ratio_percent=46.4067`
+  - `SDL_AUDIODRIVER=dummy` 下 `Audio` master 路径已跑通，`scheduler_wait_events=274`，不再出现异常高频忙等
+
 ### 2026-03-19 更新：SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
 
 - `Display::copyFrameData()` 现已具备 `frames / bytes / time_us_total / time_us_max` 统计，并通过 `RendererDiagnostics + DiagnosticsSnapshot + --performance-log-check` 输出软件显示链的真实成本。
@@ -30,6 +98,7 @@
 - `RendererFactory` 新增 `MVP_RENDERER_BACKEND` override，并在 Windows 下支持 `MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`，`--renderer-fallback-check` 当前已恢复通过。
 - 本机 4K60 强制 `SoftwareSDL` 采样显示：`video_copy_back_ratio_percent=30.1018`、`video_swscale_ratio_percent=18.6623`、`display_copy_ratio_percent=21.8407`；说明软件回退链已经是 copy-back、swscale、display memcpy 的叠加热点。
 - 默认 `D3D11 + D3D11VA` 主链重新验证后仍保持 `video_copy_back_ratio_percent=0`、`video_swscale_ratio_percent=0`、`display_copy_ratio_percent=0`，zero-copy 结论不变。
+
 ### 2026-03-19 更新：高码率/4K 队列容量、自适应节流与 copy-back 诊断增强
 
 - `FrameQueue` 已新增 `peak_size / push_timeout_count` 统计，`DiagnosticsSnapshot` 与 `--performance-log-check` 会同步输出 frame queue 的 `capacity / peak / timeout`。
@@ -37,11 +106,13 @@
 - `Scheduler` 已把 video/audio 背压改为迟滞阈值，并新增 `video/audio_backpressure_wait_ms` 统计；`pumpRenderOnce()` 同时修正了 `Video` master 的 wall-clock pacing 和 late-frame catch-up。
 - 最新 4K 性能采样显示：`renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`video_native_output_frames=101`、`video_copy_back_frames=0`、`video_swscale_frames=0`，说明当前主链仍以 native zero-copy 为主，不是 copy-back 热点。
 - 已重新验证：`MSBuild`、`--performance-log-check`、`--high-bitrate-check`、`--4k-playback-check`、`--long-playback-check` 当前均通过。
+
 ### 2026-03-19 更新：4K backend session 子进程退出路径修复
 
 - `--windows-backend-session-check` 已从“复用常规播放器退出收尾”改为“一次性 probe 子进程”路径：打印结构化结果后显式 flush，并在 Windows 下直接 `TerminateProcess(GetCurrentProcess(), code)` 退出。
 - 这次修复针对的是回归 harness，不是主播放链运行时逻辑；目标是消除 `hard` 模式打印 PASS 后超时、`soft` 模式打印 PASS 后异常退出的残留失败。
 - 已重新验证：`hard/soft --windows-backend-session-check` 退出码均为 `0`，`--windows-backend-check` 与 `--4k-playback-check` 当前均已恢复通过。
+
 ### 2026-03-19 更新：音频设备失败时的视频-only降级与回归门禁纠偏
 
 - `PlayerCore::open()` 现在把音频设备失败分成两类：视频文件会降级为 `video-only` 继续播放，音频-only 文件仍然直接失败，避免“打开成功但没有任何可播放输出”的伪成功。
@@ -52,11 +123,13 @@
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
   以及 `--1080p60-check`、`--high-bitrate-check`、`--long-playback-check`、`--performance-log-check`，当前均通过；`--4k-playback-check` 仍只剩 `fallback_ok` 子进程路径待继续排查。
 
+
 ### 2026-03-19 更新：播放链诊断分层与 decoder drain / scheduler 容错补强
 
 - `decodeVideoFrame()` / `decodeAudioFrame()` 已改为持续 `receive -> send -> receive` 状态机，并在 packet queue EOF 后对 codec 发送 `nullptr` drain，避免把“暂时无输出”和“真正失败”混在一起。
 - `DiagnosticsSnapshot` 现已区分 `demux_ignored_packets / demux_queue_drop_packets`，并新增 decoder `send_packet(EAGAIN)`、drain 次数、`native/copy-back/swscale/filter-blocked` 视频路径计数。
 - `Scheduler` 已新增 video/audio 背压事件与 video/audio/render restart 统计，render thread 也纳入受保护 worker；`--performance-log-check` 会同步输出这些新指标。
+
 
 ### 2026-03-19 更新：PlayerCore 停播收口与运行时设计债修复
 
@@ -1861,13 +1934,5 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/CHANGELOG.md
 - docs/records/DEVELOP_LOG.md
-
-
-
-
-
-
-
-
 
 

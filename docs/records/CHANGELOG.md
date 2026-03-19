@@ -1,4 +1,4 @@
-# 问题修复记录
+﻿# 问题修复记录
 
 本文档记录开发过程中遇到的问题及其解决方案。
 
@@ -63,11 +63,203 @@
 | 68 | 2026-03-18 | MSVC warning debt 分层清理（C4819 / C4996 / C4706） | ✅ 已修复 |
 | 69 | 2026-03-19 | PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复 | ✅ 已修复 |
 | 70 | 2026-03-19 | 音频设备失败时的视频-only降级与回归门禁纠偏 | ✅ 已修复 |
-
 | 71 | 2026-03-19 | 4K backend session 子进程退出路径修复 | ✅ 已修复 |
 | 72 | 2026-03-19 | 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强 | ✅ 已修复 |
 | 73 | 2026-03-19 | SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override | ✅ 已修复 |
+| 74 | 2026-03-19 | Audio-master lateness 收紧与 SoftwareSDL 减拷贝有限重构 | ✅ 已修复 |
+| 75 | 2026-03-19 | 撤回 SoftwareSDL automatic software-first 并补软解阻塞诊断 | ✅ 已修复 |
+| 76 | 2026-03-19 | Software video decode 真实产帧专项检查与 blocker 定位 | ✅ 已修复 |
+| 77 | 2026-03-19 | Software decode 首包停滞复核与 SDL renderer 注释乱码修复 | ✅ 已修复 |
+| 79 | 2026-03-19 | PlayerCore 运行态 software send probe 对照收敛 | 🔍 已定位 |
 
+## 问题 79: PlayerCore 运行态 software send probe 对照收敛
+**日期**: 2026-03-19
+
+### 问题描述
+- 在问题 78 已确认 software decode 线程能 dequeue 到首包、但首个 `avcodec_send_packet()` 没有完成返回后，本轮继续按 implementation planner 做“真实运行态专项对照”，目标是把 blocker 再定死一层。
+- 用户明确要求继续围绕 software decode blocker 推进，不要再先动 `SoftwareSDL` 渲染侧。
+
+### 原因分析
+- 独立 `--software-video-send-probe` 已证明 FFmpeg software H.264 decode 本体可用，但它还没有完全覆盖 `PlayerCore` 真实运行态的全部差异。
+- 因此需要继续逐项排除：`receive->send` 顺序、packet queue 交接、demux read-ahead、音频链、当前 video decode 线程上下文。
+
+### 解决方案
+- 扩展 `--software-video-send-probe`，补充：
+  - `pre_send_receive_ret`
+  - `packet_queue_push_ok / packet_queue_pop_ok`
+  - `read_ahead_packets / read_ahead_done`
+- 扩展 `--software-video-decode-check`：
+  - 新增 `audio_probe_mode`
+  - 支持 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 的 video-only 对照
+- 在 `PlayerCore::decodeVideoFrame()` 新增仅环境变量开启的 `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 诊断路径，用于确认 software `send_packet` 是否只会卡在当前 decode 线程。
+- 本轮关键结论：
+  - 独立 probe 在 `pre-receive + packet queue round-trip + read-ahead=512` 后仍 `send_ret=0 / result=PASS`
+  - video-only software decode 仍 `video_packet_dequeue_count=1 / video_send_packet_ok=0 / result=FAIL`
+  - `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD=1` 下仍出现 `Offthread software video send_packet probe timed out after 500ms`
+- 结论因此继续收敛为：blocker 不在 FFmpeg software decoder 本体、packet queue、demux read-ahead、音频链或当前 video decode 线程本身，而在 `PlayerCore` 运行态里的 software codec context / surrounding state 差异。
+
+### 修改文件
+- src/main.cpp
+- src/core/player_core.cpp
+- docs/analysis/PLAYERCORE_DAY15_PLAYERRUNTIME_SOFTWARE_SEND_PROBE.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+## 问题 78: software decode 最小 send/dequeue 计数接入与首包送包停滞钉死
+**日期**: 2026-03-19
+
+### 问题描述
+- 用户明确要求不要再先动 `SoftwareSDL` 渲染侧，而是直接沿 software decode 首包停滞方向补最小计数。
+- 当前已知 software path 会出现 `decode_video_ok=0 / render_frames=0`，但仅靠旧日志还不能把问题拆成“没 dequeue 到包”还是“`send_packet` 本身卡住”。
+
+### 原因分析
+- 旧诊断里只有 `decode_video_ok / decode_video_send_eagain / video_decoder_drain_signals`，缺少 packet dequeue 与 `send_packet` 成功返回层面的最小观测值。
+- 因此即使已经怀疑首包送入 decoder 阶段有问题，也无法用结构化数字直接证明。
+
+### 解决方案
+- 在 `PlayerCore` 补三项最小计数：
+  - `video_packet_dequeue_count`
+  - `video_send_packet_ok`
+  - `video_send_packet_last_ret`
+- 将它们透传到：
+  - `DiagnosticsSnapshot`
+  - 低频链路诊断日志
+  - `--performance-log-check`
+  - `--software-video-decode-check`
+- 本轮复跑 software decode 样本后，关键诊断已收敛到：
+  - `v_pkt_deq=1`
+  - `v_send_ok=0`
+  - `v_send_ret=-2147483648`
+  - `decode_video_ok=0`
+  - `render_frames=0`
+- 结论因此进一步收紧为：software decode 线程已经取到首个视频包，但首个 `avcodec_send_packet()` 没有形成成功返回。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/analysis/PLAYERCORE_DAY14_VIDEO_SEND_PACKET_MIN_COUNTERS.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+## 问题 77: Software decode 首包停滞复核与 SDL renderer 注释乱码修复
+**日期**: 2026-03-19
+
+### 问题描述
+- 在 Day12 已经把 `SoftwareSDL + Software decode` 的“0 帧输出”单独钉死后，本轮继续按 implementation planner 复跑并验证：保守 software decode 线程配置是否能解除 blocker。
+- 同时，代码文件里还残留一处真实注释乱码：`src/render/sdl_video_renderer.cpp` 的函数头注释存在明显 mojibake，影响后续阅读和 diff 审核。
+
+### 原因分析
+- 本轮复跑后，`Video decoder threading: backend=Software thread_count=1 thread_type=none` 已证明保守线程配置已经实际生效；但 `decode_video_ok=0 / scheduler_video_decoded_frames=0 / render_frames=0` 仍然全部为 0，说明 blocker 不是“激进线程配置导致的偶发交互问题”。
+- 结合运行期诊断日志 `demux(v=163) / pkt_q(v=162)` 与仅出现 `Video decode first send_packet start` 的事实，可以推断 software decode 线程更像是在首个视频包提交阶段后停住。
+- `src/render/sdl_video_renderer.cpp` 的乱码则是单纯编码遗留问题，不影响逻辑，但会持续污染代码阅读和审阅结果。
+
+### 解决方案
+- 保持当前 software decode 保守线程配置不回退，并重新执行 `--software-video-decode-check`，把 blocker 结论从“0 帧输出”进一步收敛到“首个视频包后停住”。
+- 修复 `src/render/sdl_video_renderer.cpp` 的 9 处函数头注释乱码，仅改中文注释，不改逻辑。
+- 再次扫描 `src/`、`include/` 的 `///` 与 `//` 注释行，确认本轮未再命中新的可疑乱码注释。
+
+### 修改文件
+- src/render/sdl_video_renderer.cpp
+- docs/analysis/PLAYERCORE_DAY13_SOFTWARE_DECODE_FIRST_PACKET_STALL_AND_COMMENT_FIX.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+## 问题 76: Software video decode 真实产帧专项检查与 blocker 定位
+**日期**: 2026-03-19
+
+### 问题描述
+- 上一轮已经确认“继续减少或规避 `av_hwframe_transfer_data()` copy-back”的下一步，不该直接把 fallback 默认切到 `software-first`，而应该先把当前工程的 software video decode blocker 定位清楚。
+- 旧的 `--windows-backend-session-check soft` 只能证明“能打开并进入播放循环”，不能证明“软件视频解码真的产出并渲染视频帧”；同时一旦 soft decode 卡死，直接 `stop/close` 还可能把专项命令本身拖挂。
+
+### 原因分析
+- 现有回归命令缺少对“真实产帧”的硬门槛，无法区分“audio clock 在推进”与“video frame 真出来了”。
+- 当前 blocker 下，`SoftwareSDL + Software decode` 不仅会表现为 `decode_video_ok=0 / render_frames=0 / video_frame_queue_peak_size=0`，还会让常规收尾路径变得不可靠；因此专项检查命令也必须像 probe 一样自带硬退出能力。
+
+### 解决方案
+- 新增 `--software-video-decode-check <media_file> [sample_ms]`。
+- 命令内部强制：
+  - `MVP_RENDERER_BACKEND=software`
+  - `SDL_AUDIODRIVER=dummy`
+  - `preferHardwareDecode=false`
+- 通过条件收紧为“真实产帧”而不是“只打开成功”：
+  - `renderer_backend=SoftwareSDL`
+  - `decoder_backend=Software`
+  - `decode_video_ok > 0`
+  - `scheduler_video_decoded_frames > 0`
+  - `render_frames > 0`
+  - `video_frame_queue_peak_size > 0`
+  - `video_copy_back_frames == 0`
+- 命令改成 probe 式硬退出，避免在 soft decode blocker 下被 `stop/close` 卡住。
+
+### 修改文件
+- src/main.cpp
+- docs/analysis/PLAYERCORE_DAY12_SOFTWARE_VIDEO_DECODE_REAL_FRAME_CHECK.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+## 问题 75: 撤回 SoftwareSDL automatic software-first 并补软解阻塞诊断
+**日期**: 2026-03-19
+
+### 问题描述
+- 当前目标原本想继续沿着“减少或规避 `av_hwframe_transfer_data()` copy-back”推进，于是临时尝试把 `SoftwareSDL` fallback 改成 renderer-aware `software-first`。
+- 但实际验证显示，一旦 `SoftwareSDL + Software decode` 自动启用，播放器会出现 `decode_video_ok=0 / render_frames=0`，`--performance-log-check` 无法正常收口。
+
+### 原因分析
+- 从播放器设计理念上看，system-memory renderer 优先避免 copy-back 的方向本身是成立的，也符合成熟播放器常见思路。
+- 但当前工程的 FFmpeg 软件视频解码接入路径本身存在阻塞：强制 `D3D11 + Software decode` 时也能复现软解链不形成有效视频产出，因此问题不在 `SoftwareSDL` renderer，而在软件视频解码接入。
+- 在这个前提下，继续默认启用 `software-first` 只会把当前稳定的 fallback 链带入回归。
+
+### 解决方案
+- 撤回自动 renderer-aware `software-first` decoder 顺序调整，恢复默认 `D3D11VA -> Software`。
+- 保留上一轮已经验证通过的 `NV12` 直传、`AVFrame` 引用复用和 `SoftwareSDL` 零 `swscale` / 零 `display_copy` 改造。
+- 为后续单独修软件视频解码接入补充低频诊断：
+  - FFmpeg 错误码字符串
+  - 首次 `send_packet` 探针
+  - stall 上下文日志
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- docs/analysis/PLAYERCORE_DAY11_SOFTWARE_DECODE_BLOCKER_AND_FALLBACK_DIRECTION.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+## 问题 74: Audio-master lateness 收紧与 SoftwareSDL 减拷贝有限重构
+**日期**: 2026-03-19
+
+### 问题描述
+- 用户已手动提交上一轮结果后，要求主链继续打磨 `audio-master lateness / catch-up`，同时在软件回退链上做“减少 copy-back + swscale + 深拷贝次数”的有限重构。
+- 旧的 `Scheduler::pumpRenderOnce()` 在 `Audio` master 下仍然是“最多睡 5ms，然后直接 render”，容易过早出帧。
+- `SoftwareSDL` 回退链虽然已经能量化热点，但路径仍是 `copy-back + swscale + display memcpy` 三段叠加，落到 4K60 时成本过高。
+
+### 原因分析
+- `Audio` master 正向 diff 只睡一次且不重读主时钟，会让 renderer 在音频时钟尚未追上时提前提交视频帧。
+- `-250ms` 固定 late-drop 阈值过粗，对 24fps/60fps 以及不同队列填充度都不够合理。
+- `SoftwareSDL` 之前只能吃 `IYUV` 深拷贝帧，导致 copy-back 之后还要额外 `swscale`、`Display::copyFrameData()` 深拷贝，再交给 SDL 上传。
+
+### 解决方案
+- `IVideoRenderer` 新增 `supportsDirectFrameFormat()`，`SdlVideoRenderer` 声明支持 `YUV420P/NV12`。
+- `PlayerCore::prepareVideoOutputFrame()` 在无视频滤镜时允许 copy-back 后的软件帧直接交给 `SoftwareSDL`，不再强制 `swscale -> YUV420P`。
+- `Display` 改成“优先保留 `AVFrame` 引用，负 stride/不适配时才深拷贝”，并补 `SDL_UpdateNVTexture()` 支持 `NV12` 直传。
+- `Scheduler::pumpRenderOnce()` 的 `Audio` master 逻辑改成分段等待并重读 clock，同时把 late-drop 阈值改成基于 `frame.duration + queue fill ratio` 的动态窗口，并补最小 sleep 量子避免伪忙等。
+- 已重新执行：默认 `D3D11 --performance-log-check`、强制 `SoftwareSDL --performance-log-check`、`SDL_AUDIODRIVER=dummy` 下的 `Audio` master `--performance-log-check`。
+
+### 修改文件
+- `include/render/video_renderer.h`
+- `include/render/sdl_video_renderer.h`
+- `src/render/sdl_video_renderer.cpp`
+- `include/display.h`
+- `src/display.cpp`
+- `src/core/player_core.cpp`
+- `src/core/scheduler.cpp`
+- `docs/analysis/PLAYERCORE_DAY10_AUDIOMASTER_AND_SOFTWARESDL_REFACTOR.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
 ## 问题 73: SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
 **日期**: 2026-03-19
 
@@ -2786,8 +2978,4 @@ void VideoPlayer::play() {
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
-
-
-
-
 

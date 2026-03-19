@@ -12,6 +12,7 @@ extern "C" {
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
@@ -74,6 +75,9 @@ struct DiagnosticsSnapshot {
     uint64_t demux_queue_drop_packets{0};
     uint64_t decode_video_ok{0};
     uint64_t decode_audio_ok{0};
+    uint64_t video_packet_dequeue_count{0};
+    uint64_t video_send_packet_ok{0};
+    int video_send_packet_last_ret{std::numeric_limits<int>::min()};
     uint64_t decode_video_send_eagain{0};
     uint64_t decode_audio_send_eagain{0};
     uint64_t video_decoder_drain_signals{0};
@@ -309,6 +313,9 @@ private:
     std::atomic<uint64_t> demux_queue_drop_packets_{0};
     std::atomic<uint64_t> decode_video_ok_{0};
     std::atomic<uint64_t> decode_audio_ok_{0};
+    std::atomic<uint64_t> video_packet_dequeue_count_{0};
+    std::atomic<uint64_t> video_send_packet_ok_{0};
+    std::atomic<int> video_send_packet_last_ret_{std::numeric_limits<int>::min()};
     std::atomic<uint64_t> decode_video_send_eagain_{0};
     std::atomic<uint64_t> decode_audio_send_eagain_{0};
     std::atomic<uint64_t> video_decoder_drain_signals_{0};
@@ -324,6 +331,9 @@ private:
     std::atomic<uint64_t> video_copy_back_time_us_max_{0};
     std::atomic<uint64_t> video_swscale_time_us_max_{0};
     std::atomic<int64_t> last_diag_log_ms_{0};
+    std::atomic<int64_t> last_video_decode_issue_log_ms_{0};
+    std::atomic<bool> first_video_send_started_logged_{false};
+    std::atomic<bool> first_video_send_completed_logged_{false};
     std::mutex video_codec_mutex_;
     std::mutex audio_codec_mutex_;
     bool video_decoder_draining_{false};

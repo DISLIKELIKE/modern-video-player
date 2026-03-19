@@ -393,8 +393,47 @@ std::vector<std::string> splitSubtitleLines(const std::string& text, size_t max_
     return lines;
 }
 
-} // namespace
+Uint32 sdlTextureFormatForFrame(AVPixelFormat format) {
+    switch (format) {
+    case AV_PIX_FMT_YUV420P:
+        return SDL_PIXELFORMAT_IYUV;
+    case AV_PIX_FMT_NV12:
+        return SDL_PIXELFORMAT_NV12;
+    default:
+        return SDL_PIXELFORMAT_UNKNOWN;
+    }
+}
 
+bool frameHasRequiredPlanes(const AVFrame& frame, AVPixelFormat format) {
+    switch (format) {
+    case AV_PIX_FMT_YUV420P:
+        return frame.data[0] && frame.data[1] && frame.data[2];
+    case AV_PIX_FMT_NV12:
+        return frame.data[0] && frame.data[1];
+    default:
+        return false;
+    }
+}
+
+bool frameHasPositiveStrides(const AVFrame& frame, AVPixelFormat format) {
+    switch (format) {
+    case AV_PIX_FMT_YUV420P:
+        return frame.linesize[0] > 0 && frame.linesize[1] > 0 && frame.linesize[2] > 0;
+    case AV_PIX_FMT_NV12:
+        return frame.linesize[0] > 0 && frame.linesize[1] > 0;
+    default:
+        return false;
+    }
+}
+
+bool canReferenceFrameDirectly(const AVFrame& frame, AVPixelFormat format) {
+    return frame.width > 0 && frame.height > 0 &&
+           sdlTextureFormatForFrame(format) != SDL_PIXELFORMAT_UNKNOWN &&
+           frameHasRequiredPlanes(frame, format) &&
+           frameHasPositiveStrides(frame, format);
+}
+
+} // namespace
 Display::Display()
     : window_(nullptr)
     , renderer_(nullptr)
@@ -577,6 +616,7 @@ void Display::close() {
     height_.store(0);
     texture_width_ = 0;
     texture_height_ = 0;
+    texture_format_ = SDL_PIXELFORMAT_UNKNOWN;
     minimized_.store(false);
     fullscreen_toggle_requested_.store(false);
     renderer_reset_requested_.store(false);
@@ -648,25 +688,33 @@ bool Display::createRenderer() {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     texture_width_ = 0;
     texture_height_ = 0;
+    texture_format_ = SDL_PIXELFORMAT_UNKNOWN;
     texture_reset_requested_.store(true);
     renderer_reset_requested_.store(false);
     return true;
 }
 
-bool Display::createTexture(int width, int height) {
+bool Display::createTexture(int width, int height, AVPixelFormat format) {
     if (texture_) {
         SDL_DestroyTexture(texture_);
         texture_ = nullptr;
     }
-    
+
+    const Uint32 texture_format = sdlTextureFormatForFrame(format);
+    if (texture_format == SDL_PIXELFORMAT_UNKNOWN) {
+        std::cerr << "Error: Unsupported SDL texture format for AVPixelFormat " << static_cast<int>(format)
+                  << std::endl;
+        return false;
+    }
+
     texture_ = SDL_CreateTexture(
         renderer_,
-        SDL_PIXELFORMAT_IYUV,
+        texture_format,
         SDL_TEXTUREACCESS_STREAMING,
         width,
         height
     );
-    
+
     if (!texture_) {
         std::cerr << "Error: Could not create SDL texture: " << SDL_GetError() << std::endl;
         return false;
@@ -674,24 +722,31 @@ bool Display::createTexture(int width, int height) {
 
     texture_width_ = std::max(1, width);
     texture_height_ = std::max(1, height);
+    texture_format_ = texture_format;
     return true;
 }
 
-bool Display::ensureTextureForFrame(int width, int height) {
+bool Display::ensureTextureForFrame(int width, int height, AVPixelFormat format) {
     const int safe_width = std::max(1, width);
     const int safe_height = std::max(1, height);
+    const Uint32 expected_format = sdlTextureFormatForFrame(format);
+
+    if (expected_format == SDL_PIXELFORMAT_UNKNOWN) {
+        return false;
+    }
 
     if (!texture_ ||
         texture_reset_requested_.exchange(false) ||
         texture_width_ != safe_width ||
-        texture_height_ != safe_height) {
-        return createTexture(safe_width, safe_height);
+        texture_height_ != safe_height ||
+        texture_format_ != expected_format) {
+        return createTexture(safe_width, safe_height, format);
     }
     return true;
 }
 
-/// 确保 renderer 与 texture 与当前帧尺寸匹配；必要时执行重建。
-bool Display::ensureRenderResources(int frame_width, int frame_height) {
+/// 确保 renderer 与 texture 与当前帧尺寸和格式匹配；必要时执行重建。
+bool Display::ensureRenderResources(const PendingVideoFrame& frame) {
     if (!window_) {
         return false;
     }
@@ -700,22 +755,75 @@ bool Display::ensureRenderResources(int frame_width, int frame_height) {
             return false;
         }
     }
-    return ensureTextureForFrame(frame_width, frame_height);
+    return ensureTextureForFrame(frame.width, frame.height, frame.format);
 }
 
-/// 把待渲染帧的 YUV 平面上传到 SDL texture。
+/// 把待渲染帧上传到 SDL texture；支持 `YUV420P` 与 `NV12` 直传。
 bool Display::updateTexture(const PendingVideoFrame& frame) {
     if (!texture_ || !frame.valid) {
         return false;
     }
 
-    const int ret = SDL_UpdateYUVTexture(
-        texture_,
-        nullptr,
-        frame.y_plane.data(), frame.y_pitch,
-        frame.u_plane.data(), frame.u_pitch,
-        frame.v_plane.data(), frame.v_pitch
-    );
+    int ret = -1;
+    switch (frame.format) {
+    case AV_PIX_FMT_YUV420P: {
+        const uint8_t* y_plane = nullptr;
+        const uint8_t* u_plane = nullptr;
+        const uint8_t* v_plane = nullptr;
+        int y_pitch = frame.y_pitch;
+        int u_pitch = frame.u_pitch;
+        int v_pitch = frame.v_pitch;
+
+        if (frame.direct_reference) {
+            if (!frame.frame_ref || !frame.frame_ref->data[0] || !frame.frame_ref->data[1] || !frame.frame_ref->data[2]) {
+                return false;
+            }
+            y_plane = frame.frame_ref->data[0];
+            u_plane = frame.frame_ref->data[1];
+            v_plane = frame.frame_ref->data[2];
+            y_pitch = frame.frame_ref->linesize[0];
+            u_pitch = frame.frame_ref->linesize[1];
+            v_pitch = frame.frame_ref->linesize[2];
+        } else {
+            if (frame.y_plane.empty() || frame.u_plane.empty() || frame.v_plane.empty()) {
+                return false;
+            }
+            y_plane = frame.y_plane.data();
+            u_plane = frame.u_plane.data();
+            v_plane = frame.v_plane.data();
+        }
+
+        ret = SDL_UpdateYUVTexture(texture_, nullptr, y_plane, y_pitch, u_plane, u_pitch, v_plane, v_pitch);
+        break;
+    }
+    case AV_PIX_FMT_NV12: {
+        const uint8_t* y_plane = nullptr;
+        const uint8_t* uv_plane = nullptr;
+        int y_pitch = frame.y_pitch;
+        int uv_pitch = frame.u_pitch;
+
+        if (frame.direct_reference) {
+            if (!frame.frame_ref || !frame.frame_ref->data[0] || !frame.frame_ref->data[1]) {
+                return false;
+            }
+            y_plane = frame.frame_ref->data[0];
+            uv_plane = frame.frame_ref->data[1];
+            y_pitch = frame.frame_ref->linesize[0];
+            uv_pitch = frame.frame_ref->linesize[1];
+        } else {
+            if (frame.y_plane.empty() || frame.u_plane.empty()) {
+                return false;
+            }
+            y_plane = frame.y_plane.data();
+            uv_plane = frame.u_plane.data();
+        }
+
+        ret = SDL_UpdateNVTexture(texture_, nullptr, y_plane, y_pitch, uv_plane, uv_pitch);
+        break;
+    }
+    default:
+        return false;
+    }
 
     if (ret < 0) {
         std::cerr << "Error: Could not update texture: " << SDL_GetError() << std::endl;
@@ -725,7 +833,7 @@ bool Display::updateTexture(const PendingVideoFrame& frame) {
     return true;
 }
 
-/// 把外部提交的 `AVFrame` 复制到待渲染缓冲，由渲染线程异步显示。
+/// 把外部提交的 `AVFrame` 变成待渲染缓存；优先持有引用，必要时再深拷贝。
 void Display::renderFrame(const uint8_t* data, int width, int height) {
     (void)width;
     (void)height;
@@ -782,9 +890,12 @@ void Display::resetFrameCopyStats() {
     frame_copy_time_us_max_.store(0);
 }
 
-/// 从 `AVFrame` 深拷贝 YUV 平面数据，切断与解码缓冲的生命周期耦合。
+/// 优先保留 `AVFrame` 引用；遇到负 stride 或不支持格式时再做深拷贝。
 bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
-    if (!frame.data[0] || !frame.data[1] || !frame.data[2] || frame.width <= 0 || frame.height <= 0) {
+    const AVPixelFormat format = static_cast<AVPixelFormat>(frame.format);
+    if (frame.width <= 0 || frame.height <= 0 ||
+        sdlTextureFormatForFrame(format) == SDL_PIXELFORMAT_UNKNOWN ||
+        !frameHasRequiredPlanes(frame, format)) {
         return false;
     }
 
@@ -793,60 +904,117 @@ bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     const int chroma_width = std::max(1, (width + 1) / 2);
     const int chroma_height = std::max(1, (height + 1) / 2);
 
-    const int src_y_stride = frame.linesize[0];
-    const int src_u_stride = frame.linesize[1];
-    const int src_v_stride = frame.linesize[2];
-    if (src_y_stride == 0 || src_u_stride == 0 || src_v_stride == 0) {
-        return false;
-    }
-
-    const int y_pitch = width;
-    const int u_pitch = chroma_width;
-    const int v_pitch = chroma_width;
-
-    const auto copy_start = std::chrono::steady_clock::now();
-
     out = PendingVideoFrame{};
     out.width = width;
     out.height = height;
-    out.y_pitch = y_pitch;
-    out.u_pitch = u_pitch;
-    out.v_pitch = v_pitch;
-    out.y_plane.resize(static_cast<size_t>(y_pitch) * static_cast<size_t>(height));
-    out.u_plane.resize(static_cast<size_t>(u_pitch) * static_cast<size_t>(chroma_height));
-    out.v_plane.resize(static_cast<size_t>(v_pitch) * static_cast<size_t>(chroma_height));
+    out.format = format;
 
-    const uint8_t* y_src = frame.data[0];
-    const uint8_t* u_src = frame.data[1];
-    const uint8_t* v_src = frame.data[2];
-    if (src_y_stride < 0) {
-        y_src += static_cast<ptrdiff_t>(src_y_stride) * (height - 1);
-    }
-    if (src_u_stride < 0) {
-        u_src += static_cast<ptrdiff_t>(src_u_stride) * (chroma_height - 1);
-    }
-    if (src_v_stride < 0) {
-        v_src += static_cast<ptrdiff_t>(src_v_stride) * (chroma_height - 1);
+    if (canReferenceFrameDirectly(frame, format)) {
+        AVFrame* frame_ref = av_frame_alloc();
+        if (!frame_ref) {
+            return false;
+        }
+        if (av_frame_ref(frame_ref, const_cast<AVFrame*>(&frame)) < 0) {
+            av_frame_free(&frame_ref);
+            return false;
+        }
+
+        out.frame_ref.reset(frame_ref);
+        out.y_pitch = frame_ref->linesize[0];
+        out.u_pitch = frame_ref->linesize[1];
+        out.v_pitch = (format == AV_PIX_FMT_YUV420P) ? frame_ref->linesize[2] : 0;
+        out.direct_reference = true;
+        out.valid = true;
+        return true;
     }
 
-    for (int row = 0; row < height; ++row) {
-        std::memcpy(out.y_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(y_pitch),
-                    y_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_y_stride),
-                    static_cast<size_t>(width));
-    }
-    for (int row = 0; row < chroma_height; ++row) {
-        std::memcpy(out.u_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(u_pitch),
-                    u_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_u_stride),
-                    static_cast<size_t>(chroma_width));
-        std::memcpy(out.v_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(v_pitch),
-                    v_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_v_stride),
-                    static_cast<size_t>(chroma_width));
+    const auto copy_start = std::chrono::steady_clock::now();
+    size_t bytes_copied = 0;
+
+    if (format == AV_PIX_FMT_YUV420P) {
+        const int src_y_stride = frame.linesize[0];
+        const int src_u_stride = frame.linesize[1];
+        const int src_v_stride = frame.linesize[2];
+        if (src_y_stride == 0 || src_u_stride == 0 || src_v_stride == 0) {
+            return false;
+        }
+
+        out.y_pitch = width;
+        out.u_pitch = chroma_width;
+        out.v_pitch = chroma_width;
+        out.y_plane.resize(static_cast<size_t>(out.y_pitch) * static_cast<size_t>(height));
+        out.u_plane.resize(static_cast<size_t>(out.u_pitch) * static_cast<size_t>(chroma_height));
+        out.v_plane.resize(static_cast<size_t>(out.v_pitch) * static_cast<size_t>(chroma_height));
+
+        const uint8_t* y_src = frame.data[0];
+        const uint8_t* u_src = frame.data[1];
+        const uint8_t* v_src = frame.data[2];
+        if (src_y_stride < 0) {
+            y_src += static_cast<ptrdiff_t>(src_y_stride) * (height - 1);
+        }
+        if (src_u_stride < 0) {
+            u_src += static_cast<ptrdiff_t>(src_u_stride) * (chroma_height - 1);
+        }
+        if (src_v_stride < 0) {
+            v_src += static_cast<ptrdiff_t>(src_v_stride) * (chroma_height - 1);
+        }
+
+        for (int row = 0; row < height; ++row) {
+            std::memcpy(out.y_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(out.y_pitch),
+                        y_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_y_stride),
+                        static_cast<size_t>(width));
+        }
+        for (int row = 0; row < chroma_height; ++row) {
+            std::memcpy(out.u_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(out.u_pitch),
+                        u_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_u_stride),
+                        static_cast<size_t>(chroma_width));
+            std::memcpy(out.v_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(out.v_pitch),
+                        v_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_v_stride),
+                        static_cast<size_t>(chroma_width));
+        }
+
+        bytes_copied = static_cast<size_t>(width) * static_cast<size_t>(height) +
+                       2U * static_cast<size_t>(chroma_width) * static_cast<size_t>(chroma_height);
+    } else if (format == AV_PIX_FMT_NV12) {
+        const int src_y_stride = frame.linesize[0];
+        const int src_uv_stride = frame.linesize[1];
+        if (src_y_stride == 0 || src_uv_stride == 0) {
+            return false;
+        }
+
+        out.y_pitch = width;
+        out.u_pitch = width;
+        out.v_pitch = 0;
+        out.y_plane.resize(static_cast<size_t>(out.y_pitch) * static_cast<size_t>(height));
+        out.u_plane.resize(static_cast<size_t>(out.u_pitch) * static_cast<size_t>(chroma_height));
+
+        const uint8_t* y_src = frame.data[0];
+        const uint8_t* uv_src = frame.data[1];
+        if (src_y_stride < 0) {
+            y_src += static_cast<ptrdiff_t>(src_y_stride) * (height - 1);
+        }
+        if (src_uv_stride < 0) {
+            uv_src += static_cast<ptrdiff_t>(src_uv_stride) * (chroma_height - 1);
+        }
+
+        for (int row = 0; row < height; ++row) {
+            std::memcpy(out.y_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(out.y_pitch),
+                        y_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_y_stride),
+                        static_cast<size_t>(width));
+        }
+        for (int row = 0; row < chroma_height; ++row) {
+            std::memcpy(out.u_plane.data() + static_cast<size_t>(row) * static_cast<size_t>(out.u_pitch),
+                        uv_src + static_cast<ptrdiff_t>(row) * static_cast<ptrdiff_t>(src_uv_stride),
+                        static_cast<size_t>(width));
+        }
+
+        bytes_copied = static_cast<size_t>(width) * static_cast<size_t>(height) +
+                       static_cast<size_t>(width) * static_cast<size_t>(chroma_height);
+    } else {
+        return false;
     }
 
     out.valid = true;
-    const size_t bytes_copied =
-        static_cast<size_t>(width) * static_cast<size_t>(height) +
-        2U * static_cast<size_t>(chroma_width) * static_cast<size_t>(chroma_height);
     const uint64_t copy_us = static_cast<uint64_t>(
         std::max<int64_t>(
             0,
@@ -877,8 +1045,8 @@ void Display::renderLoop() {
     bool has_last_frame = false;
 
     while (render_running_.load()) {
-        PendingVideoFrame frame_to_render;
-        bool have_frame = false;
+        PendingVideoFrame incoming_frame;
+        bool have_new_frame = false;
 
         {
             std::unique_lock<std::mutex> lock(render_queue_mutex_);
@@ -892,14 +1060,10 @@ void Display::renderLoop() {
                 break;
             }
             if (pending_frame_ready_) {
-                frame_to_render = std::move(pending_frame_);
+                incoming_frame = std::move(pending_frame_);
                 pending_frame_ = PendingVideoFrame{};
                 pending_frame_ready_ = false;
-                have_frame = frame_to_render.valid;
-                if (have_frame) {
-                    last_frame = frame_to_render;
-                    has_last_frame = true;
-                }
+                have_new_frame = incoming_frame.valid;
             }
         }
 
@@ -928,13 +1092,16 @@ void Display::renderLoop() {
 
         const bool redraw_requested =
             renderer_reset_requested_.load() || texture_reset_requested_.load();
-        if (!have_frame && redraw_requested && has_last_frame) {
-            frame_to_render = last_frame;
-            have_frame = true;
+
+        PendingVideoFrame* frame_to_render = nullptr;
+        if (have_new_frame) {
+            frame_to_render = &incoming_frame;
+        } else if (redraw_requested && has_last_frame) {
+            frame_to_render = &last_frame;
         }
 
-        if (have_frame) {
-            if (!ensureRenderResources(frame_to_render.width, frame_to_render.height)) {
+        if (frame_to_render) {
+            if (!ensureRenderResources(*frame_to_render)) {
                 continue;
             }
             int render_width = width_.load();
@@ -948,12 +1115,12 @@ void Display::renderLoop() {
             }
             SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
             SDL_RenderClear(renderer_);
-            if (!updateTexture(frame_to_render)) {
+            if (!updateTexture(*frame_to_render)) {
                 texture_reset_requested_.store(true);
                 continue;
             }
             const SDL_Rect dst_rect = computeRenderRect(render_width, render_height,
-                                                        frame_to_render.width, frame_to_render.height);
+                                                        frame_to_render->width, frame_to_render->height);
             if (SDL_RenderCopy(renderer_, texture_, nullptr, &dst_rect) < 0) {
                 renderer_reset_requested_.store(true);
                 continue;
@@ -961,6 +1128,11 @@ void Display::renderLoop() {
             drawSubtitleOverlay(render_width, render_height);
             drawControls(render_width, render_height);
             SDL_RenderPresent(renderer_);
+
+            if (have_new_frame) {
+                last_frame = std::move(incoming_frame);
+                has_last_frame = last_frame.valid;
+            }
         }
     }
 }

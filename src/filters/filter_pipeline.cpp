@@ -7,7 +7,7 @@
 
 namespace vp::filters {
 
-/// 灏嗚棰戞护闀滆拷鍔犲埌绠＄嚎灏鹃儴锛涘悗缁鐞嗘寜鍔犲叆椤哄簭鎵ц銆?
+/// 将视频滤镜追加到管线尾部；后续处理按加入顺序执行。
 void FilterPipeline::addVideoFilter(std::unique_ptr<IVideoFilter> filter) {
     if (!filter) {
         return;
@@ -16,7 +16,7 @@ void FilterPipeline::addVideoFilter(std::unique_ptr<IVideoFilter> filter) {
     video_filters_.push_back(std::move(filter));
 }
 
-/// 灏嗛煶棰戞护闀滆拷鍔犲埌绠＄嚎灏鹃儴锛涘悗缁鐞嗘寜鍔犲叆椤哄簭鎵ц銆?
+/// 将音频滤镜追加到管线尾部；后续处理按加入顺序执行。
 void FilterPipeline::addAudioFilter(std::unique_ptr<IAudioFilter> filter) {
     if (!filter) {
         return;
@@ -25,7 +25,7 @@ void FilterPipeline::addAudioFilter(std::unique_ptr<IAudioFilter> filter) {
     audio_filters_.push_back(std::move(filter));
 }
 
-/// 鎸夊悕绉扮Щ闄ゅ叏閮ㄥ悓鍚嶈棰戞护闀滃疄渚嬨€?
+/// 按名称移除全部同名视频滤镜实例。
 void FilterPipeline::removeVideoFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(video_mutex_);
     video_filters_.erase(
@@ -34,7 +34,7 @@ void FilterPipeline::removeVideoFilter(const std::string& name) {
         video_filters_.end());
 }
 
-/// 鎸夊悕绉扮Щ闄ゅ叏閮ㄥ悓鍚嶉煶棰戞护闀滃疄渚嬨€?
+/// 按名称移除全部同名音频滤镜实例。
 void FilterPipeline::removeAudioFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(audio_mutex_);
     audio_filters_.erase(
@@ -43,7 +43,7 @@ void FilterPipeline::removeAudioFilter(const std::string& name) {
         audio_filters_.end());
 }
 
-/// 鎵ц瑙嗛婊ら暅绠＄嚎锛涘紓甯镐細琚褰曚絾涓嶄細鍚戜笂浼犳挱銆?
+/// 执行视频滤镜管线；异常会被记录但不会向上抛出。
 void FilterPipeline::processVideo(core::VideoFrame& frame) {
     std::lock_guard<std::mutex> lock(video_mutex_);
     for (const auto& filter : video_filters_) {
@@ -69,7 +69,7 @@ bool FilterPipeline::hasEnabledVideoFilters() const {
     }
     return false;
 }
-/// 鎵ц闊抽婊ら暅绠＄嚎锛涘紓甯镐細琚褰曚絾涓嶄細鍚戜笂浼犳挱銆?
+/// 执行音频滤镜管线；异常会被记录但不会向上抛出。
 void FilterPipeline::processAudio(uint8_t* samples, size_t sample_count, int channels) {
     std::lock_guard<std::mutex> lock(audio_mutex_);
     for (const auto& filter : audio_filters_) {
@@ -86,7 +86,7 @@ void FilterPipeline::processAudio(uint8_t* samples, size_t sample_count, int cha
     }
 }
 
-/// 鎸夊悕绉版煡鎵惧凡鎸傝浇鐨勮棰戞护闀滐紝渚夸簬杩愯鏃惰皟鍙傘€?
+/// 按名称查找已挂载的视频滤镜，便于运行时调参。
 IVideoFilter* FilterPipeline::getVideoFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(video_mutex_);
     for (const auto& filter : video_filters_) {
@@ -97,7 +97,7 @@ IVideoFilter* FilterPipeline::getVideoFilter(const std::string& name) {
     return nullptr;
 }
 
-/// 鎸夊悕绉版煡鎵惧凡鎸傝浇鐨勯煶棰戞护闀滐紝渚夸簬杩愯鏃惰皟鍙傘€?
+/// 按名称查找已挂载的音频滤镜，便于运行时调参。
 IAudioFilter* FilterPipeline::getAudioFilter(const std::string& name) {
     std::lock_guard<std::mutex> lock(audio_mutex_);
     for (const auto& filter : audio_filters_) {

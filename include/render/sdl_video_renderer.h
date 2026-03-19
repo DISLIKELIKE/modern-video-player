@@ -43,6 +43,7 @@ public:
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
     RendererDiagnostics getDiagnostics() const override;
     void resetDiagnostics() override;
+    bool supportsDirectFrameFormat(AVPixelFormat format) const override;
     const char* rendererBackendName() const override;
 
 private:

@@ -1,9 +1,11 @@
 #include "core/player_core.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cerrno>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <ctime>
 #include <filesystem>
@@ -23,6 +25,7 @@
 
 extern "C" {
 #include <libavutil/hwcontext.h>
+#include <libavutil/error.h>
 #include <libavutil/pixdesc.h>
 #include <libswresample/swresample.h>
 #include <libswscale/swscale.h>
@@ -51,6 +54,7 @@ constexpr size_t kMaxVideoFrameQueueCapacitySoftware = 24;
 constexpr size_t kMaxVideoFrameQueueCapacityHardware = 24;
 constexpr size_t kMinAudioFrameQueueCapacity = 32;
 constexpr size_t kMaxAudioFrameQueueCapacity = 48;
+constexpr int kVideoSendPacketRetNotSet = std::numeric_limits<int>::min();
 
 int64_t nowSteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -67,6 +71,36 @@ void updateMaxAtomic(std::atomic<uint64_t>& target, uint64_t value) {
     uint64_t current = target.load();
     while (value > current && !target.compare_exchange_weak(current, value)) {
     }
+}
+
+bool envFlagEnabled(const char* key) {
+    if (!key || key[0] == '\0') {
+        return false;
+    }
+
+#if defined(_WIN32)
+    char* raw_value = nullptr;
+    size_t raw_len = 0;
+    if (_dupenv_s(&raw_value, &raw_len, key) != 0 || !raw_value) {
+        return false;
+    }
+    std::string normalized(raw_value);
+    std::free(raw_value);
+#else
+    const char* value = std::getenv(key);
+    if (!value) {
+        return false;
+    }
+    std::string normalized(value);
+#endif
+
+    std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    normalized.erase(
+        std::remove_if(normalized.begin(), normalized.end(), [](unsigned char ch) { return std::isspace(ch) != 0; }),
+        normalized.end());
+    return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
 }
 
 size_t selectVideoFrameQueueCapacity(const MediaInfo& info, decoder::DecoderBackend backend) {
@@ -105,6 +139,24 @@ size_t selectAudioFrameQueueCapacity(const MediaInfo& info) {
     const double estimated_frames_per_second = sample_rate / 1024.0;
     const size_t requested = static_cast<size_t>(std::ceil(estimated_frames_per_second * target_buffer_seconds));
     return clampValue<size_t>(requested, kMinAudioFrameQueueCapacity, kMaxAudioFrameQueueCapacity);
+}
+
+std::string codecThreadTypeToString(int thread_type) {
+    if (thread_type == 0) {
+        return "none";
+    }
+
+    std::string name;
+    if ((thread_type & FF_THREAD_SLICE) != 0) {
+        name += "slice";
+    }
+    if ((thread_type & FF_THREAD_FRAME) != 0) {
+        if (!name.empty()) {
+            name += "+";
+        }
+        name += "frame";
+    }
+    return name.empty() ? "unknown" : name;
 }
 
 AVSampleFormat toAvSampleFormat(SDL_AudioFormat fmt) {
@@ -174,6 +226,15 @@ bool isHardwarePixelFormat(AVPixelFormat format) {
     const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(format);
     return desc && (desc->flags & AV_PIX_FMT_FLAG_HWACCEL) != 0;
 }
+
+std::string avErrorToString(int error_code) {
+    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
+    if (av_strerror(error_code, buffer, sizeof(buffer)) == 0) {
+        return std::string(buffer);
+    }
+    return "unknown";
+}
+
 std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& order) {
     if (order.empty()) {
         return "none";
@@ -188,9 +249,10 @@ std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& ord
     }
     return result;
 }
+
 }
 
-/// 鏋勯€犳挱鏀炬牳蹇冨苟缁戝畾璋冨害鍣ㄣ€侀槦鍒椼€佹护闀滀笌榛樿鍥炶皟銆?
+/// 构造播放核心，并绑定调度器、队列、滤镜和默认回调。
 PlayerCore::PlayerCore() {
     filters::builtin::registerBuiltinFilters();
     scheduler_.setVideoQueue(&video_queue_);
@@ -208,7 +270,7 @@ PlayerCore::~PlayerCore() {
     close();
 }
 
-/// 鎵撳紑濯掍綋骞朵覆璧锋覆鏌撳櫒銆侀煶棰戣澶囥€佽В鐮佸櫒鍜屽唴閮ㄩ槦鍒楄祫婧愩€?
+/// 打开媒体，并串起渲染器、音频设备、解码器和内部队列资源。
 bool PlayerCore::open(const std::string& filename) {
     close();
 
@@ -259,9 +321,10 @@ bool PlayerCore::open(const std::string& filename) {
 
     const bool has_video_stream = info.video_stream_idx >= 0;
     const bool has_audio_stream = info.audio_stream_idx >= 0;
+    const bool disable_audio_output = envFlagEnabled("MVP_DISABLE_AUDIO_OUTPUT");
 
     // Audio output is optional when video playback can continue independently.
-    if (has_audio_stream) {
+    if (has_audio_stream && !disable_audio_output) {
         audio_player_ = std::make_unique<AudioPlayer>();
         if (!audio_player_->init(info.sample_rate, info.channels)) {
             if (!has_video_stream) {
@@ -272,6 +335,8 @@ bool PlayerCore::open(const std::string& filename) {
             LOG_WARNING("Audio output init failed, continuing with video-only playback");
             audio_player_.reset();
         }
+    } else if (has_audio_stream && disable_audio_output) {
+        LOG_INFO("Audio output disabled by MVP_DISABLE_AUDIO_OUTPUT, continuing with video-only playback");
     }
 
     // Decoder init is required for playback; fail fast if it cannot be set up.
@@ -322,7 +387,7 @@ bool PlayerCore::open(const std::string& filename) {
     return true;
 }
 
-/// 鍋滄鍏ㄩ摼璺嚎绋嬪苟閲婃斁瑙ｇ爜銆佹覆鏌撱€佸瓧骞曞拰鎴浘缂撳瓨璧勬簮銆?
+/// 停止全链路线程，并释放解码、渲染、字幕和截图缓存资源。
 void PlayerCore::close() {
     stop();
     releaseDecoders();
@@ -354,7 +419,7 @@ void PlayerCore::close() {
     opened_.store(false);
 }
 
-/// 浠庡仠姝㈡€佸惎鍔ㄧ嚎绋嬶紝鎴栦粠鏆傚仠鎬佹仮澶嶈皟搴︺€佹椂閽熷拰闊抽璁惧銆?
+/// 从停止态启动线程，或从暂停态恢复调度、时钟和音频设备。
 void PlayerCore::play() {
     if (!opened_.load()) {
         return;
@@ -383,7 +448,7 @@ void PlayerCore::play() {
     emitStateChanged(PlaybackState::Playing);
 }
 
-/// 鏆傚仠璋冨害鍣ㄤ笌涓绘椂閽燂紝浣嗕繚鐣欏綋鍓嶈В鐮佸櫒鍜岀紦鍐查槦鍒楃姸鎬併€?
+/// 暂停调度器与主时钟，但保留当前解码器和缓冲队列状态。
 void PlayerCore::pause() {
     if (state_.load() != PlaybackState::Playing) {
         return;
@@ -397,7 +462,7 @@ void PlayerCore::pause() {
     emitStateChanged(PlaybackState::Paused);
 }
 
-/// 鍋滄鐢熶骇/娑堣垂绾跨▼骞舵竻绌虹绾匡紝鍚屾椂鎶婂獟浣撲綅缃浣嶅埌寮€澶淬€?
+/// 停止生产/消费线程并清空管线，同时把媒体位置复位到开头。
 void PlayerCore::stop() {
     if (deferred_stop_pending_.load()) {
         serviceDeferredStop();
@@ -430,7 +495,7 @@ void PlayerCore::stop() {
     }
 }
 
-/// 鎵ц涓€娆″甫 flush 鐨勬椂闂寸嚎鍒囨崲锛岀‘淇濇棫鍖呫€佹棫甯у拰鏃ч煶棰戠紦鍐插叏閮ㄥけ鏁堛€?
+/// 执行一次带 flush 的时间线切换，确保旧包、旧帧和旧音频缓冲全部失效。
 void PlayerCore::seek(double timestamp) {
     if (!opened_.load() || !demuxer_) {
         return;
@@ -495,7 +560,7 @@ void PlayerCore::seek(double timestamp) {
     }
 }
 
-/// 鍦ㄦ殏鍋滄€佹寜浼扮畻甯ч棿闅旀墽琛屽崟甯ф杩涳紝骞跺皾璇曞懡涓洰鏍囨椂闂撮檮杩戠殑瑙嗛甯с€?
+/// 在暂停态按估算帧间隔执行单帧步进，并尝试命中目标时间附近的视频帧。
 bool PlayerCore::stepFrame(int direction) {
     if (!opened_.load() || !demuxer_ || !video_renderer_ || state_.load() != PlaybackState::Paused) {
         return false;
@@ -521,7 +586,7 @@ bool PlayerCore::stepFrame(int direction) {
     return renderPausedFrameAtOrAfter(target);
 }
 
-/// 鎸夋渶杩戞覆鏌撳抚鏃堕暱銆佺紪鐮佸櫒甯х巼鍜屽獟浣撳抚鐜囦及绠楀崟甯ф椂闀裤€?
+/// 按最近渲染帧时长、解码器帧率和媒体帧率估算单帧时长。
 double PlayerCore::estimateFrameStepSeconds() const {
     const double cached_duration = last_video_frame_duration_.load();
     if (cached_duration > 0.0) {
@@ -539,7 +604,7 @@ double PlayerCore::estimateFrameStepSeconds() const {
     return 1.0 / 30.0;
 }
 
-/// 鍦ㄦ殏鍋滄€佹秷璐规垨涓诲姩瑙ｇ爜涓€甯э紝骞舵覆鏌撳埌涓嶆棭浜庣洰鏍囨椂闂寸殑浣嶇疆銆?
+/// 在暂停态消费或主动解码一帧，并渲染到不早于目标时间的位置。
 bool PlayerCore::renderPausedFrameAtOrAfter(double target_seconds) {
     if (!opened_.load() || !video_renderer_) {
         return false;
@@ -743,7 +808,7 @@ bool PlayerCore::stepFrameForward() {
     return stepFrame(1);
 }
 
-/// 鎷夊彇鏄剧ず灞備竴娆℃€ц姹傦紝骞舵槧灏勪负 seek銆侀煶閲忋€佺珷鑺傚拰瀛楀箷绛夋挱鏀炬帶鍒躲€?
+/// 驱动显示层事件泵，把键鼠请求翻译为 seek、音量和播放控制。
 void PlayerCore::pumpEvents() {
     serviceDeferredStop();
     if (video_renderer_) {
@@ -853,7 +918,7 @@ void PlayerCore::pumpEvents() {
     handleABRepeatLoop();
 }
 
-/// 浠庣珷鑺傚厓鏁版嵁閲嶅缓鏈夊簭璺宠浆鏃堕棿鐐癸紝渚涗笂涓€绔?涓嬩竴绔犻€昏緫澶嶇敤銆?
+/// 从章节元数据重建有序跳转时间点，供上一章/下一章逻辑复用。
 void PlayerCore::rebuildChapterPoints() {
     chapter_points_.clear();
     if (!demuxer_) {
@@ -878,7 +943,7 @@ void PlayerCore::rebuildChapterPoints() {
     }
 }
 
-/// 鍦ㄦ挱鏀句綅缃Е杈?B 鐐归檮杩戞椂鍥炶烦鍒?A 鐐癸紝褰㈡垚闂幆鎾斁銆?
+/// 在播放位置触达 B 点附近时回跳到 A 点，形成闭环播放。
 void PlayerCore::handleABRepeatLoop() {
     if (state_.load() != PlaybackState::Playing || !ab_repeat_enabled_.load()) {
         return;
@@ -917,7 +982,7 @@ bool PlayerCore::captureScreenshot(const VideoFrame& frame) {
     return captureScreenshotFrame(frame.frame);
 }
 
-/// 缂撳瓨鏈€杩戜竴娆℃垚鍔熸覆鏌撶殑甯э紝渚涙殏鍋滄€佹埅鍥惧拰閫愬抚娴忚澶嶇敤銆?
+/// 缓存最近一次成功渲染的帧，供暂停态截图和逐帧浏览复用。
 void PlayerCore::updateLastRenderedFrame(const VideoFrame& frame) {
     if (!frame.valid || !frame.frame) {
         return;
@@ -946,7 +1011,7 @@ void PlayerCore::clearLastRenderedFrame() {
     }
 }
 
-/// 浠庣紦瀛樺抚澶嶅埗鍑轰竴涓揩鐓э紝骞跺鐢ㄧ粺涓€鐨勬埅鍥捐惤鐩橀€昏緫銆?
+/// 从缓存帧复制出一个快照，并复用统一的截图落盘逻辑。
 bool PlayerCore::captureScreenshotFromCachedFrame() {
     AVFrame* cached_frame = nullptr;
     {
@@ -1135,6 +1200,9 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.demux_queue_drop_packets = demux_queue_drop_packets_.load();
     snapshot.decode_video_ok = decode_video_ok_.load();
     snapshot.decode_audio_ok = decode_audio_ok_.load();
+    snapshot.video_packet_dequeue_count = video_packet_dequeue_count_.load();
+    snapshot.video_send_packet_ok = video_send_packet_ok_.load();
+    snapshot.video_send_packet_last_ret = video_send_packet_last_ret_.load();
     snapshot.decode_video_send_eagain = decode_video_send_eagain_.load();
     snapshot.decode_audio_send_eagain = decode_audio_send_eagain_.load();
     snapshot.video_decoder_drain_signals = video_decoder_drain_signals_.load();
@@ -1379,7 +1447,7 @@ void PlayerCore::onFrameRendered(FrameCallback callback) {
     frame_callbacks_.push_back(std::move(callback));
 }
 
-/// 鍒濆鍖栬棰?闊抽瑙ｇ爜鍣紝骞舵牴鎹厤缃€夋嫨纭В鎴栬蒋瑙ｅ洖閫€椤哄簭銆?
+/// 初始化音视频解码器，并按配置选择硬解或软解后端。
 bool PlayerCore::initDecoders() {
     if (!demuxer_) {
         return false;
@@ -1394,19 +1462,27 @@ bool PlayerCore::initDecoders() {
             return false;
         }
 
-        auto configure_video_codec_ctx = [&](AVCodecContext* ctx) -> bool {
+        auto configure_video_codec_ctx = [&](AVCodecContext* ctx, decoder::DecoderBackend backend) -> bool {
             if (!ctx || avcodec_parameters_to_context(ctx, vs->codecpar) < 0) {
                 return false;
             }
-            int thread_type = FF_THREAD_FRAME;
-            if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) {
-                thread_type |= FF_THREAD_SLICE;
+
+            if (backend == decoder::DecoderBackend::Software) {
+                // Keep software video decode conservative first; current scheduler model
+                // must prove it can stably produce frames before re-enabling aggressive threading.
+                ctx->thread_count = 1;
+                ctx->thread_type = 0;
+            } else {
+                int thread_type = 0;
+                if ((codec->capabilities & AV_CODEC_CAP_SLICE_THREADS) != 0) {
+                    thread_type |= FF_THREAD_SLICE;
+                }
+                if ((codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) != 0) {
+                    thread_type |= FF_THREAD_FRAME;
+                }
+                ctx->thread_count = 0;  // auto
+                ctx->thread_type = thread_type;
             }
-            if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS) {
-                thread_type |= FF_THREAD_FRAME;
-            }
-            ctx->thread_count = 0;  // auto
-            ctx->thread_type = thread_type;
             ctx->pkt_timebase = vs->time_base;
             ctx->flags2 |= AV_CODEC_FLAG2_FAST;
             return true;
@@ -1434,7 +1510,7 @@ bool PlayerCore::initDecoders() {
             }
 
             video_codec_ctx_ = avcodec_alloc_context3(codec);
-            if (!video_codec_ctx_ || !configure_video_codec_ctx(video_codec_ctx_)) {
+            if (!video_codec_ctx_ || !configure_video_codec_ctx(video_codec_ctx_, backend)) {
                 return false;
             }
 
@@ -1485,6 +1561,10 @@ bool PlayerCore::initDecoders() {
             }
 
             LOG_INFO("Video decoder backend: " << decoder::DecoderFactory::backendName(video_decoder_backend_));
+            LOG_INFO("Video decoder threading: backend="
+                     << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                     << " thread_count=" << video_codec_ctx_->thread_count
+                     << " thread_type=" << codecThreadTypeToString(video_codec_ctx_->thread_type));
             return true;
         };
 
@@ -1551,7 +1631,7 @@ bool PlayerCore::initDecoders() {
     return true;
 }
 
-/// 閲婃斁瑙ｇ爜鍣ㄣ€佺‖浠惰澶囦笂涓嬫枃浠ュ強闊宠棰戞牸寮忚浆鎹㈠櫒銆?
+/// 释放解码器、硬件设备上下文以及音视频格式转换资源。
 void PlayerCore::releaseDecoders() {
     std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
     releaseVideoScaler();
@@ -1574,7 +1654,7 @@ void PlayerCore::releaseDecoders() {
     }
 }
 
-/// 鍦?Windows 涓婁负瑙嗛瑙ｇ爜鍣ㄧ粦瀹?D3D11VA 璁惧锛涘け璐ユ椂鍥為€€杞В銆?
+/// 在 Windows 上为视频解码器绑定 D3D11VA 设备；失败时回退软解。
 bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx) {
 #if defined(_WIN32)
     if (!codec || !codec_ctx) {
@@ -1668,7 +1748,7 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
     return pix_fmts[0];
 }
 
-/// 灏嗚В鐮佸抚鏁寸悊涓烘覆鏌撹矾寰勫彲鐩存帴娑堣垂鐨?`YUV420P` 杈撳嚭甯с€?
+/// 把解码帧整理成渲染链可直接消费的输出帧。
 bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out) {
     if (!decoded_frame || !out.frame) {
         return false;
@@ -1711,8 +1791,17 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
         src_frame = software_frame;
     }
 
+    const AVPixelFormat output_format = static_cast<AVPixelFormat>(src_frame->format);
+    const bool renderer_supports_direct_frame =
+        video_renderer_ && video_renderer_->supportsDirectFrameFormat(output_format);
+
     bool ok = true;
-    if (src_frame->format != AV_PIX_FMT_YUV420P) {
+    if (renderer_supports_direct_frame && !video_filters_enabled) {
+        if (src_frame != out.frame) {
+            av_frame_unref(out.frame);
+            ok = av_frame_ref(out.frame, src_frame) >= 0;
+        }
+    } else if (src_frame->format != AV_PIX_FMT_YUV420P) {
         AVFrame* conversion_source = src_frame;
         AVFrame* source_ref = nullptr;
         if (conversion_source == out.frame) {
@@ -1753,7 +1842,7 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
     return ok;
 }
 
-/// 鎸夊綋鍓嶆簮甯у昂瀵稿拰鍍忕礌鏍煎紡鍑嗗 `swscale` 涓婁笅鏂囥€?
+/// 按当前源帧尺寸和像素格式准备 `swscale` 上下文。
 bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     if (!src_frame || src_frame->width <= 0 || src_frame->height <= 0 || src_frame->format == AV_PIX_FMT_NONE) {
         return false;
@@ -1781,7 +1870,7 @@ bool PlayerCore::ensureVideoScaler(const AVFrame* src_frame) {
     return true;
 }
 
-/// 鎶婁换鎰忚緭鍏ュ儚绱犳牸寮忚浆鎹负娓叉煋閾捐矾缁熶竴浣跨敤鐨?`YUV420P`銆?
+/// 把任意输入像素格式转换为渲染链统一使用的 `YUV420P`。
 bool PlayerCore::convertVideoFrameToYuv420(const AVFrame* src_frame, AVFrame* dst_frame) {
     if (!src_frame || !dst_frame || !ensureVideoScaler(src_frame)) {
         return false;
@@ -1824,7 +1913,7 @@ void PlayerCore::releaseVideoScaler() {
     video_sws_src_fmt_ = AV_PIX_FMT_NONE;
 }
 
-/// 纭繚闊抽閲嶉噰鏍峰櫒杈撳嚭鏍煎紡涓庡綋鍓?SDL 璁惧閰嶇疆涓€鑷淬€?
+/// 确保音频重采样器输出格式与当前 SDL 设备配置一致。
 bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     if (!frame || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -1899,7 +1988,7 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
     return true;
 }
 
-/// 閲婃斁闊抽閲嶉噰鏍蜂笂涓嬫枃锛屽苟娓呯┖杈撳叆杈撳嚭甯冨眬缂撳瓨銆?
+/// 释放音频重采样上下文，并清空输入输出布局缓存。
 void PlayerCore::releaseAudioResampler() {
     if (audio_swr_ctx_) {
         swr_free(&audio_swr_ctx_);
@@ -1935,7 +2024,7 @@ void PlayerCore::configureFrameQueues(const MediaInfo& info) {
              << " backend=" << decoder::DecoderFactory::backendName(video_decoder_backend_));
 }
 
-/// 鍚姩瑙ｅ鐢ㄧ嚎绋嬶紱璐熻矗璇诲寘銆佸垎鍙戝埌闊宠棰戝寘闃熷垪骞朵紶鎾?EOF銆?
+/// 启动解复用线程；负责读包、分发到音视频包队列并传播 EOF。
 void PlayerCore::startDemuxThread() {
     reapCompletedWorkers();
     if (demux_running_.exchange(true)) {
@@ -1948,6 +2037,24 @@ void PlayerCore::startDemuxThread() {
         audio_packet_queue_->start();
     }
     demux_thread_ = std::thread([this] {
+        auto ensureQueuedPacketOwnsData = [&](PacketPtr& packet, const char* stream_tag) -> bool {
+            if (!packet || packet->buf) {
+                return true;
+            }
+
+            const int ret = av_packet_make_refcounted(packet.get());
+            if (ret < 0) {
+                LOG_WARNING("Failed to make queued " << stream_tag
+                            << " packet refcounted before async handoff: "
+                            << avErrorToString(ret) << " (" << ret << ")"
+                            << " size=" << packet->size
+                            << " pts=" << packet->pts
+                            << " dts=" << packet->dts);
+                return false;
+            }
+            return true;
+        };
+
         // Demux only reads and dispatches packets; EOF is propagated downstream explicitly.
         while (demux_running_.load() && demuxer_ && !demuxer_->isEof()) {
             if (!video_packet_queue_ && !audio_packet_queue_) {
@@ -1976,27 +2083,31 @@ void PlayerCore::startDemuxThread() {
             bool targeted_stream = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
                 targeted_stream = true;
-                // On successful push the queue owns the packet lifetime.
-                while (demux_running_.load() && !queued) {
-                    queued = video_packet_queue_->push(std::move(packet), 20);
-                    if (queued) {
-                        break;
+                if (ensureQueuedPacketOwnsData(packet, "video")) {
+                    // On successful push the queue owns the packet lifetime.
+                    while (demux_running_.load() && !queued) {
+                        queued = video_packet_queue_->push(std::move(packet), 20);
+                        if (queued) {
+                            break;
+                        }
+                        demux_push_retries_.fetch_add(1);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
-                    demux_push_retries_.fetch_add(1);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
                 if (queued) {
                     demux_video_packets_.fetch_add(1);
                 }
             } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_) {
                 targeted_stream = true;
-                while (demux_running_.load() && !queued) {
-                    queued = audio_packet_queue_->push(std::move(packet), 20);
-                    if (queued) {
-                        break;
+                if (ensureQueuedPacketOwnsData(packet, "audio")) {
+                    while (demux_running_.load() && !queued) {
+                        queued = audio_packet_queue_->push(std::move(packet), 20);
+                        if (queued) {
+                            break;
+                        }
+                        demux_push_retries_.fetch_add(1);
+                        std::this_thread::sleep_for(std::chrono::milliseconds(1));
                     }
-                    demux_push_retries_.fetch_add(1);
-                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 }
                 if (queued) {
                     demux_audio_packets_.fetch_add(1);
@@ -2017,7 +2128,7 @@ void PlayerCore::startDemuxThread() {
     });
 }
 
-/// 鍋滄瑙ｅ鐢ㄧ嚎绋嬶紝骞堕噸缃寘闃熷垪鐨勫仠姝㈢姸鎬佷互渚垮悗缁鐢ㄣ€?
+/// 停止解复用线程，并重置包队列的停止状态以便后续复用。
 void PlayerCore::stopDemuxThread() {
     demux_running_.store(false);
     if (video_packet_queue_) {
@@ -2037,7 +2148,7 @@ void PlayerCore::stopDemuxThread() {
     }
 }
 
-/// 鍚姩闊抽娑堣垂绾跨▼锛涙妸瑙ｇ爜 PCM 鎻愪氦缁?`AudioPlayer` 骞舵帹杩涢煶棰戜富鏃堕挓銆?
+/// 启动音频消费线程；把解码 PCM 提交给 `AudioPlayer` 并推进音频主时钟。
 void PlayerCore::startAudioConsumer() {
     reapCompletedWorkers();
     if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_running_.exchange(true)) {
@@ -2086,7 +2197,7 @@ void PlayerCore::startAudioConsumer() {
     });
 }
 
-/// 鍋滄闊抽娑堣垂绾跨▼骞剁瓑寰呴€€鍑恒€?
+/// 停止音频消费线程并等待退出。
 void PlayerCore::stopAudioConsumer() {
     audio_consumer_running_.store(false);
     if (audio_consumer_thread_.joinable() && audio_consumer_thread_.get_id() != std::this_thread::get_id()) {
@@ -2094,7 +2205,7 @@ void PlayerCore::stopAudioConsumer() {
     }
 }
 
-/// 娓呯┖璋冨害甯ч槦鍒楀拰鍘嬬缉鍖呴槦鍒楋紝涓㈠純褰撳墠鏃堕棿绾夸笂鐨勬畫鐣欐暟鎹€?
+/// 清空调度帧队列和压缩包队列，丢弃当前时间线上的残留数据。
 void PlayerCore::flushPipelines() {
     scheduler_.flush();
     if (video_packet_queue_) {
@@ -2153,7 +2264,7 @@ void PlayerCore::reapCompletedWorkers() {
     }
 }
 
-/// 閲嶇疆閾捐矾璇婃柇璁℃暟鍣紝涓烘柊涓€杞挱鏀炬垨 seek 瑙傚療绐楀彛鍋氬噯澶囥€?
+/// 重置链路诊断计数器，为新一轮播放或 seek 观察窗口做准备。
 void PlayerCore::resetDiagnostics() {
     demux_video_packets_.store(0);
     demux_audio_packets_.store(0);
@@ -2163,6 +2274,9 @@ void PlayerCore::resetDiagnostics() {
     demux_queue_drop_packets_.store(0);
     decode_video_ok_.store(0);
     decode_audio_ok_.store(0);
+    video_packet_dequeue_count_.store(0);
+    video_send_packet_ok_.store(0);
+    video_send_packet_last_ret_.store(kVideoSendPacketRetNotSet);
     decode_video_send_eagain_.store(0);
     decode_audio_send_eagain_.store(0);
     video_decoder_drain_signals_.store(0);
@@ -2183,9 +2297,12 @@ void PlayerCore::resetDiagnostics() {
     video_queue_.resetStats();
     audio_queue_.resetStats();
     last_diag_log_ms_.store(nowSteadyMs());
+    last_video_decode_issue_log_ms_.store(0);
+    first_video_send_started_logged_.store(false);
+    first_video_send_completed_logged_.store(false);
 }
 
-/// 鑺傛祦杈撳嚭閾捐矾璇婃柇鏃ュ織锛屼究浜庤瀵?demux/decoder/render/audio 鍋ュ悍搴︺€?
+/// 节流输出链路诊断日志，便于观察 demux/decoder/render/audio 健康度。
 void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     const int64_t now_ms = nowSteadyMs();
     int64_t last_ms = last_diag_log_ms_.load();
@@ -2208,6 +2325,9 @@ void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
                      << " pkt_q(v=" << video_pkt_q << ",a=" << audio_pkt_q << ")"
                      << " dec(core v=" << decode_video_ok_.load()
                      << ",a=" << decode_audio_ok_.load()
+                     << ",v_pkt_deq=" << video_packet_dequeue_count_.load()
+                     << ",v_send_ok=" << video_send_packet_ok_.load()
+                     << ",v_send_ret=" << video_send_packet_last_ret_.load()
                      << ",v_send_eagain=" << decode_video_send_eagain_.load()
                      << ",a_send_eagain=" << decode_audio_send_eagain_.load()
                      << ",v_drain=" << video_decoder_drain_signals_.load()
@@ -2253,18 +2373,44 @@ void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
     }
 }
 
-/// 浠庤棰戝寘闃熷垪鍜岃В鐮佸櫒鍐呴儴缂撳瓨鎻愬彇涓€甯э紝骞惰鑼冨寲鍒版覆鏌撹緭鍑烘牸寮忋€?
+/// 从视频包队列和解码器内部缓存提取一帧，并规整为渲染输出格式。
 bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     if (!video_codec_ctx_ || !video_packet_queue_) {
         return false;
     }
 
     std::lock_guard<std::mutex> codec_lock(video_codec_mutex_);
+    const auto maybe_log_decode_issue = [&](const std::string& reason) {
+        const int64_t now_ms = nowSteadyMs();
+        int64_t last_ms = last_video_decode_issue_log_ms_.load();
+        while (last_ms == 0 || now_ms - last_ms >= 1000) {
+            if (last_video_decode_issue_log_ms_.compare_exchange_weak(last_ms, now_ms)) {
+                LOG_WARNING("Video decode stalled: " << reason
+                            << " backend=" << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                            << " pkt_q=" << video_packet_queue_->size()
+                            << " eof=" << (video_packet_queue_->isEof() ? "true" : "false")
+                            << " decode_ok=" << decode_video_ok_.load()
+                            << " pkt_deq=" << video_packet_dequeue_count_.load()
+                            << " send_ok=" << video_send_packet_ok_.load()
+                            << " last_send_ret=" << video_send_packet_last_ret_.load()
+                            << " send_eagain=" << decode_video_send_eagain_.load()
+                            << " draining=" << (video_decoder_draining_ ? "true" : "false"));
+                break;
+            }
+        }
+    };
+
     while (true) {
         av_frame_unref(out.frame);
         int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
         if (ret >= 0) {
             if (!prepareVideoOutputFrame(out.frame, out)) {
+                const AVPixelFormat format = static_cast<AVPixelFormat>(out.frame->format);
+                const char* format_name = av_get_pix_fmt_name(format);
+                LOG_WARNING("prepareVideoOutputFrame failed for decoded video frame: format="
+                            << (format_name ? format_name : "unknown")
+                            << " size=" << out.frame->width << "x" << out.frame->height
+                            << " backend=" << decoder::DecoderFactory::backendName(video_decoder_backend_));
                 return false;
             }
             out.valid = true;
@@ -2284,13 +2430,75 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
             return false;
         }
         if (ret != AVERROR(EAGAIN)) {
+            LOG_WARNING("avcodec_receive_frame failed for video decoder backend "
+                        << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                        << ": " << avErrorToString(ret) << " (" << ret << ")");
             return false;
         }
 
         PacketPtr packet;
         if (video_packet_queue_->pop(packet, 20) && packet) {
+            video_packet_dequeue_count_.fetch_add(1);
             video_decoder_draining_ = false;
-            ret = avcodec_send_packet(video_codec_ctx_, packet.get());
+            bool expected = false;
+            if (first_video_send_started_logged_.compare_exchange_strong(expected, true)) {
+                LOG_INFO("Video decode first send_packet start: backend="
+                         << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                         << " packet_size=" << packet->size
+                         << " pts=" << packet->pts
+                         << " dts=" << packet->dts);
+            }
+            const bool offthread_send_diag =
+                video_decoder_backend_ == decoder::DecoderBackend::Software &&
+                envFlagEnabled("MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD");
+            if (offthread_send_diag) {
+                AVPacket* offthread_packet = av_packet_alloc();
+                if (!offthread_packet || av_packet_ref(offthread_packet, packet.get()) < 0) {
+                    if (offthread_packet) {
+                        av_packet_free(&offthread_packet);
+                    }
+                    LOG_WARNING("Failed to clone software video packet for offthread send probe");
+                    return false;
+                }
+
+                std::atomic<bool> send_completed{false};
+                std::atomic<int> send_ret_atomic{kVideoSendPacketRetNotSet};
+                std::thread send_thread([this, offthread_packet, &send_completed, &send_ret_atomic] {
+                    const int thread_ret = avcodec_send_packet(video_codec_ctx_, offthread_packet);
+                    send_ret_atomic.store(thread_ret);
+                    send_completed.store(true);
+                    AVPacket* packet_to_free = offthread_packet;
+                    av_packet_free(&packet_to_free);
+                });
+
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+                while (std::chrono::steady_clock::now() < deadline && !send_completed.load()) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                }
+
+                if (send_completed.load()) {
+                    send_thread.join();
+                    ret = send_ret_atomic.load();
+                } else {
+                    LOG_WARNING("Offthread software video send_packet probe timed out after 500ms"
+                                << " pkt_q=" << video_packet_queue_->size()
+                                << " decode_ok=" << decode_video_ok_.load()
+                                << " pkt_deq=" << video_packet_dequeue_count_.load());
+                    send_thread.detach();
+                    requestDeferredStop();
+                    return false;
+                }
+            } else {
+                ret = avcodec_send_packet(video_codec_ctx_, packet.get());
+            }
+            video_send_packet_last_ret_.store(ret);
+            expected = false;
+            if (first_video_send_completed_logged_.compare_exchange_strong(expected, true)) {
+                LOG_INFO("Video decode first send_packet returned: backend="
+                         << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                         << " ret=" << ret
+                         << " message=" << avErrorToString(ret));
+            }
             if (ret == AVERROR(EAGAIN)) {
                 decode_video_send_eagain_.fetch_add(1);
                 continue;
@@ -2300,12 +2508,17 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
                 return false;
             }
             if (ret < 0) {
+                LOG_WARNING("avcodec_send_packet failed for video decoder backend "
+                            << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                            << ": " << avErrorToString(ret) << " (" << ret << ")");
                 return false;
             }
+            video_send_packet_ok_.fetch_add(1);
             continue;
         }
 
         if (!video_packet_queue_->isEof()) {
+            maybe_log_decode_issue("packet pop timed out without EOF");
             return false;
         }
         if (video_decoder_draining_) {
@@ -2322,6 +2535,9 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
             return false;
         }
         if (ret < 0) {
+            LOG_WARNING("avcodec_send_packet(nullptr) failed for video decoder backend "
+                        << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                        << ": " << avErrorToString(ret) << " (" << ret << ")");
             return false;
         }
         video_decoder_draining_ = true;
@@ -2329,7 +2545,7 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     }
 }
 
-/// 浠庨煶棰戝寘闃熷垪瑙ｇ爜涓€甯?PCM锛屽苟閲嶉噰鏍峰埌 SDL 杈撳嚭鏍煎紡銆?
+/// 从音频包队列解码一帧 PCM，并重采样到 SDL 输出格式。
 bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     if (!audio_codec_ctx_ || !audio_packet_queue_ || !audio_player_ || !audio_player_->isInitialized()) {
         return false;
@@ -2467,7 +2683,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     return out.valid;
 }
 
-/// 鎻愪氦涓€甯ц棰戝埌娓叉煋鍣紝骞跺悓姝ュ瓧骞曘€丱SD銆佹埅鍥惧拰瑙嗛鏃堕挓銆?
+/// 提交一帧视频到渲染器，并同步字幕、OSD、截图和视频时钟。
 void PlayerCore::renderFrame(VideoFrame&& frame) {
     if (!video_renderer_ || !frame.valid || !frame.frame) {
         return;
@@ -2502,7 +2718,7 @@ void PlayerCore::renderFrame(VideoFrame&& frame) {
     emitFrameRendered();
 }
 
-/// 鍦ㄦ覆鏌撶┖闂叉湡妫€鏌?EOF 鏀跺熬鏉′欢锛屽繀瑕佹椂鑷姩鍒囧埌鍋滄鎬併€?
+/// 在渲染空闲期检查 EOF 收尾条件，必要时自动切到停止态。
 void PlayerCore::onRenderIdle() {
     if (state_.load() != PlaybackState::Playing || !demuxer_ || !demuxer_->isEof()) {
         return;
@@ -2519,7 +2735,7 @@ void PlayerCore::onRenderIdle() {
     }
 }
 
-/// 鏍规嵁褰撳墠浣嶇疆鍜屽瓧骞曞欢杩熻绠楀綋鍓嶅簲鏄剧ず鐨勫瓧骞曟枃鏈€?
+/// 根据当前位置和字幕延迟，计算当前应显示的字幕条目。
 void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     if (!video_renderer_) {
         return;
@@ -2557,7 +2773,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
     }
 }
 
-/// 鍚戝鍒嗗彂鐘舵€佸洖璋冿紱鍏堝鍒跺洖璋冨垪琛ㄤ互闄嶄綆鎸侀攣鏃堕棿銆?
+/// 向外分发状态回调；先复制回调列表以缩短持锁时间。
 void PlayerCore::emitStateChanged(PlaybackState state) {
     std::vector<StateCallback> callbacks;
     {
@@ -2569,7 +2785,7 @@ void PlayerCore::emitStateChanged(PlaybackState state) {
     }
 }
 
-/// 鑺傛祦鍒嗗彂浣嶇疆鍥炶皟锛岄伩鍏嶉珮棰戞覆鏌撴帹杩涚洿鎺ュ帇鍨?UI 灞傘€?
+/// 节流分发位置回调，避免高频渲染推进直接压垮 UI 层。
 void PlayerCore::emitPositionChanged(double position) {
     const auto now = std::chrono::steady_clock::now();
     // Throttle position callbacks to avoid hammering the UI thread.
@@ -2588,7 +2804,7 @@ void PlayerCore::emitPositionChanged(double position) {
     }
 }
 
-/// 骞挎挱涓€娆″抚娓叉煋瀹屾垚浜嬩欢銆?
+/// 广播一次帧渲染完成事件。
 void PlayerCore::emitFrameRendered() {
     std::vector<FrameCallback> callbacks;
     {
@@ -2600,7 +2816,7 @@ void PlayerCore::emitFrameRendered() {
     }
 }
 
-/// 璁板綍閿欒鏃ュ織骞跺悜澶栧箍鎾敊璇爜涓庤鏄庢枃鏈€?
+/// 记录错误日志，并向外广播错误码与说明文本。
 void PlayerCore::emitError(ErrorCode code, const std::string& message) {
     LOG_ERROR("PlayerCore error: " << message);
     std::vector<ErrorCallback> callbacks;
@@ -2614,17 +2830,3 @@ void PlayerCore::emitError(ErrorCode code, const std::string& message) {
 }
 
 }  // namespace vp::core
-
-
-
-
-
-
-
-
-
-
-
-
-
-

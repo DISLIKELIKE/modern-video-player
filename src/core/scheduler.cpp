@@ -17,11 +17,37 @@ constexpr double kVideoBackpressureEnterRatio = 0.92;
 constexpr double kVideoBackpressureExitRatio = 0.65;
 constexpr double kAudioBackpressureEnterRatio = 0.94;
 constexpr double kAudioBackpressureExitRatio = 0.70;
+constexpr double kAudioMasterWaitChunkMaxSeconds = 0.004;
+constexpr double kAudioMasterWaitMinSeconds = 0.001;
+constexpr double kAudioMasterWaitSlackMinSeconds = 0.001;
+constexpr double kAudioMasterWaitSlackMaxSeconds = 0.003;
+constexpr double kFallbackFrameDurationSeconds = 1.0 / 60.0;
 
 int64_t steadyNowMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
+}
+
+double normalizedFrameDuration(double duration_seconds) {
+    if (duration_seconds > 0.0) {
+        return std::clamp(duration_seconds, 1.0 / 240.0, 0.100);
+    }
+    return kFallbackFrameDurationSeconds;
+}
+
+double audioMasterEarlySlackSeconds(const VideoFrame& frame) {
+    return std::clamp(normalizedFrameDuration(frame.duration) * 0.20,
+                      kAudioMasterWaitSlackMinSeconds,
+                      kAudioMasterWaitSlackMaxSeconds);
+}
+
+double audioMasterLateDropThresholdSeconds(const VideoFrame& frame,
+                                           const FrameQueue<VideoFrame>* video_queue) {
+    const double frame_duration = normalizedFrameDuration(frame.duration);
+    const double fill_ratio = video_queue ? std::clamp(video_queue->getFillRatio(), 0.0, 1.0) : 0.0;
+    const double threshold = frame_duration * (1.25 + (1.0 - fill_ratio));
+    return -std::clamp(threshold, 0.030, 0.120);
 }
 
 }  // namespace
@@ -277,31 +303,61 @@ void Scheduler::pumpRenderOnce() {
             continue;
         }
 
+        bool drop_frame = false;
         if (clock_) {
-            const double master = clock_->getTime();
-            const double diff = frame.pts - master;
-            if (diff > 0.0) {
-                const bool video_master = clock_->getSource() == ClockSource::Video;
+            const bool video_master = clock_->getSource() == ClockSource::Video;
+            while (running_.load() && !paused_.load()) {
+                const double master = clock_->getTime();
+                const double diff = frame.pts - master;
+
                 double wait_seconds = 0.0;
-                if (video_master && frame.duration > 0.0 &&
-                    last_render_wall_tp_ != std::chrono::steady_clock::time_point{}) {
-                    const auto target_tp =
-                        last_render_wall_tp_ + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                                                   std::chrono::duration<double>(frame.duration));
-                    const auto now = std::chrono::steady_clock::now();
-                    if (target_tp > now) {
-                        wait_seconds =
-                            std::chrono::duration_cast<std::chrono::duration<double>>(target_tp - now).count();
+                if (diff > 0.0) {
+                    if (video_master && frame.duration > 0.0 &&
+                        last_render_wall_tp_ != std::chrono::steady_clock::time_point{}) {
+                        const auto target_tp =
+                            last_render_wall_tp_ + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                                       std::chrono::duration<double>(frame.duration));
+                        const auto now = std::chrono::steady_clock::now();
+                        if (target_tp > now) {
+                            wait_seconds =
+                                std::chrono::duration_cast<std::chrono::duration<double>>(target_tp - now).count();
+                        }
+                    } else if (!video_master) {
+                        const double early_slack = audioMasterEarlySlackSeconds(frame);
+                        if (diff > early_slack) {
+                            const double requested_wait = std::min(diff - early_slack, kAudioMasterWaitChunkMaxSeconds);
+                            if (requested_wait >= kAudioMasterWaitMinSeconds) {
+                                wait_seconds = requested_wait;
+                            }
+                        }
                     }
-                } else if (!video_master) {
-                    wait_seconds = std::min(diff, 0.005);
                 }
+
                 if (wait_seconds > 0.0) {
                     wait_events_.fetch_add(1);
                     std::this_thread::sleep_for(std::chrono::duration<double>(wait_seconds));
+                    continue;
                 }
-            } else if (diff < -0.25) {
-                dropped_late_frames_.fetch_add(1);
+
+                const double late_drop_threshold =
+                    video_master ? -0.25 : audioMasterLateDropThresholdSeconds(frame, video_queue_);
+                if (diff < late_drop_threshold) {
+                    dropped_late_frames_.fetch_add(1);
+                    drop_frame = true;
+                }
+                break;
+            }
+
+            if (paused_.load()) {
+                if (idle_callback_) {
+                    idle_callback_();
+                }
+                return;
+            }
+            if (!running_.load()) {
+                return;
+            }
+            if (drop_frame) {
                 continue;
             }
         }

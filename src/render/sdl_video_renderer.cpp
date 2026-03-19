@@ -8,7 +8,7 @@ SdlVideoRenderer::~SdlVideoRenderer() {
     close();
 }
 
-/// 鍒涘缓 `Display` 骞朵娇鐢?SDL 閫氱敤娓叉煋璺緞鍒濆鍖栫獥鍙ｃ€?
+/// 创建 `Display` 并使用 SDL 通用渲染路径初始化窗口。
 bool SdlVideoRenderer::init(const VideoRendererConfig& config) {
     close();
     display_ = std::make_unique<Display>();
@@ -20,7 +20,7 @@ bool SdlVideoRenderer::init(const VideoRendererConfig& config) {
     return true;
 }
 
-/// 鍏抽棴搴曞眰 `Display` 骞堕噴鏀?SDL 娓叉煋璺緞鎸佹湁鐨勭獥鍙ｈ祫婧愩€?
+/// 关闭底层 `Display` 并释放 SDL 渲染路径持有的窗口资源。
 void SdlVideoRenderer::close() {
     if (display_) {
         display_->close();
@@ -28,7 +28,7 @@ void SdlVideoRenderer::close() {
     }
 }
 
-/// 鎶?`VideoFrame` 涓殑 `AVFrame` 浜ょ粰 `Display` 鍋氬紓姝ユ樉绀恒€?
+/// 把 `VideoFrame` 中的 `AVFrame` 交给 `Display` 做异步显示。
 void SdlVideoRenderer::renderFrame(const core::VideoFrame& frame) {
     if (!display_ || !frame.valid || !frame.frame) {
         return;
@@ -36,21 +36,21 @@ void SdlVideoRenderer::renderFrame(const core::VideoFrame& frame) {
     display_->renderFrame(reinterpret_cast<const uint8_t*>(frame.frame), frame.frame->width, frame.frame->height);
 }
 
-/// 灏嗗憟鐜拌姹傝浆鍙戠粰 `Display`锛涚湡姝ｆ樉绀轰粛鐢卞叾鍐呴儴娓叉煋绾跨▼椹卞姩銆?
+/// 将呈现请求转发给 `Display`；真正显示仍由其内部渲染线程驱动。
 void SdlVideoRenderer::present() {
     if (display_) {
         display_->present();
     }
 }
 
-/// 娓呯┖鏄剧ず灞傜紦瀛樺抚锛岄伩鍏嶅仠姝㈡垨 seek 鍚庢畫鐣欐棫鐢婚潰銆?
+/// 清空显示层缓存帧，避免停止或 seek 后残留旧画面。
 void SdlVideoRenderer::clear() {
     if (display_) {
         display_->clear();
     }
 }
 
-/// 杞彂 SDL 浜嬩欢杞锛岃 `Display` 鐢熸垚涓€娆℃€ф挱鏀炬帶鍒惰姹傘€?
+/// 转发 SDL 事件轮询，让 `Display` 生成一次性播放控制请求。
 void SdlVideoRenderer::handleEvents() {
     if (display_) {
         display_->handleEvents();
@@ -137,21 +137,21 @@ bool SdlVideoRenderer::consumePreviousItemRequest() {
     return display_ ? display_->consumePreviousItemRequest() : false;
 }
 
-/// 杞彂 OSD 鐘舵€佸埌鏄剧ず灞傦紝鐢ㄤ簬缁樺埗杩涘害銆侀煶閲忓拰鏆傚仠鏍囪銆?
+/// 转发 OSD 状态到显示层，用于绘制进度、音量和暂停标记。
 void SdlVideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) {
     if (display_) {
         display_->setOverlayState(position, duration, volume, paused);
     }
 }
 
-/// 杞彂褰撳墠瀛楀箷鏂囨湰鍒版樉绀哄眰锛屼緵娓叉煋绾跨▼鍙犲姞銆?
+/// 转发当前字幕文本到显示层，供渲染线程叠加。
 void SdlVideoRenderer::setSubtitleText(const std::string& text) {
     if (display_) {
         display_->setSubtitleText(text);
     }
 }
 
-/// 瑕嗙洊鏄剧ず灞傜儹閿厤缃紝浣跨獥鍙ｄ簨浠惰В閲婁笌鎾斁鍣ㄨ缃繚鎸佷竴鑷淬€?
+/// 覆盖显示层热键配置，使窗口事件解释与播放器设置保持一致。
 void SdlVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
     if (display_) {
         display_->setHotkeyManager(hotkey_manager);
@@ -176,6 +176,10 @@ void SdlVideoRenderer::resetDiagnostics() {
     if (display_) {
         display_->resetFrameCopyStats();
     }
+}
+
+bool SdlVideoRenderer::supportsDirectFrameFormat(AVPixelFormat format) const {
+    return format == AV_PIX_FMT_YUV420P || format == AV_PIX_FMT_NV12;
 }
 
 const char* SdlVideoRenderer::rendererBackendName() const {

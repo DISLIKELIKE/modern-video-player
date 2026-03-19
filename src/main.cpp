@@ -12,11 +12,14 @@
 #include "streaming/http_stream_downloader.h"
 #include "subtitle/subtitle_parser.h"
 #include "subtitle/subtitle_timeline.h"
+#include "thread_safe_queue.h"
 
 extern "C" {
+#include <libavutil/error.h>
 #include <libavutil/log.h>
 }
 
+#include <atomic>
 #include <algorithm>
 #include <chrono>
 #include <csignal>
@@ -90,6 +93,17 @@ std::string coverageLevel(size_t hit, size_t total) {
         return "PASS";
     }
     return "PARTIAL";
+}
+
+std::string avErrorToString(int error_code) {
+    if (error_code == std::numeric_limits<int>::min()) {
+        return "not-set";
+    }
+    char buffer[AV_ERROR_MAX_STRING_SIZE] = {};
+    if (av_strerror(error_code, buffer, sizeof(buffer)) == 0) {
+        return std::string(buffer);
+    }
+    return "unknown";
 }
 
 const char* clockSourceName(core::ClockSource source) {
@@ -2121,6 +2135,9 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     std::cout << "performance-log-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "performance-log-check.decode_video_ok=" << diag.decode_video_ok << std::endl;
     std::cout << "performance-log-check.decode_audio_ok=" << diag.decode_audio_ok << std::endl;
+    std::cout << "performance-log-check.video_packet_dequeue_count=" << diag.video_packet_dequeue_count << std::endl;
+    std::cout << "performance-log-check.video_send_packet_ok=" << diag.video_send_packet_ok << std::endl;
+    std::cout << "performance-log-check.video_send_packet_last_ret=" << diag.video_send_packet_last_ret << std::endl;
     std::cout << "performance-log-check.decode_video_send_eagain=" << diag.decode_video_send_eagain << std::endl;
     std::cout << "performance-log-check.decode_audio_send_eagain=" << diag.decode_audio_send_eagain << std::endl;
     std::cout << "performance-log-check.video_decoder_drain_signals=" << diag.video_decoder_drain_signals << std::endl;
@@ -2171,6 +2188,429 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     std::cout << "performance-log-check.audio_frame_queue_push_timeouts=" << diag.audio_frame_queue_push_timeouts << std::endl;
     std::cout << "performance-log-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
     return result;
+}
+
+/// 强制 `SoftwareSDL + Software decode` 并验证软解链是否真实产帧；命令本身以 probe 方式硬退出，避免被 blocker 卡死。
+[[noreturn]] void runSoftwareVideoDecodeCheckAndExit(const std::string& media_file, int sample_ms = 2000) {
+    auto flush_and_exit = [](int code) -> void {
+        std::cout.flush();
+        std::cerr.flush();
+        std::fflush(nullptr);
+#if defined(_WIN32)
+        TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
+#else
+        std::_Exit(code);
+#endif
+        std::abort();
+    };
+
+    const auto envFlagEnabled = [](const char* key) {
+        if (!key || key[0] == '\0') {
+            return false;
+        }
+#if defined(_WIN32)
+        char* raw_value = nullptr;
+        size_t raw_len = 0;
+        if (_dupenv_s(&raw_value, &raw_len, key) != 0 || !raw_value) {
+            return false;
+        }
+        std::string normalized(raw_value);
+        std::free(raw_value);
+#else
+        const char* value = std::getenv(key);
+        if (!value) {
+            return false;
+        }
+        std::string normalized(value);
+#endif
+        normalized = toLower(std::move(normalized));
+        normalized.erase(
+            std::remove_if(normalized.begin(), normalized.end(), [](unsigned char ch) { return std::isspace(ch) != 0; }),
+            normalized.end());
+        return normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on";
+    };
+
+    const bool disable_audio_output = envFlagEnabled("MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO");
+    const char* audio_probe_mode = disable_audio_output ? "disabled" : "dummy";
+    const ProbeReport probe = collectFileProbeReport(media_file);
+    if (sample_ms < 1000) {
+        std::cout << "software-video-decode-check.path=" << media_file << std::endl;
+        std::cout << "software-video-decode-check.sample_ms=" << sample_ms << std::endl;
+        std::cout << "software-video-decode-check.audio_probe_mode=" << audio_probe_mode << std::endl;
+        std::cout << "software-video-decode-check.result=FAIL" << std::endl;
+        flush_and_exit(2);
+    }
+
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered_playback_loop = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered_playback_loop = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered_playback_loop;
+    };
+
+    const double sample_seconds = static_cast<double>(sample_ms) / 1000.0;
+    const bool probe_ok = probe.overall == "PASS" && probe.width > 0 && probe.height > 0;
+    const bool duration_ok = probe.duration <= 0.0 || probe.duration >= sample_seconds + 1.0;
+
+    ScopedEnvOverride force_software_renderer("MVP_RENDERER_BACKEND", "software");
+    std::unique_ptr<ScopedEnvOverride> force_audio_driver;
+    std::unique_ptr<ScopedEnvOverride> force_disable_audio_output;
+    if (disable_audio_output) {
+        force_disable_audio_output = std::make_unique<ScopedEnvOverride>("MVP_DISABLE_AUDIO_OUTPUT", "1");
+    } else {
+        force_audio_driver = std::make_unique<ScopedEnvOverride>("SDL_AUDIODRIVER", "dummy");
+    }
+
+    VideoPlayer player;
+    player.setPreferHardwareDecode(false);
+    const bool open_ok = player.open(media_file);
+    bool entered_playback_loop = false;
+    bool still_playing_after_window = false;
+    double start_position = 0.0;
+    double end_position = 0.0;
+    double advanced_seconds = 0.0;
+    double advance_ratio = 0.0;
+    core::DiagnosticsSnapshot diag{};
+    std::string renderer_backend = "None";
+    std::string decoder_backend = "Unknown";
+
+    if (open_ok) {
+        player.play();
+        start_position = player.getCurrentTime();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(sample_ms));
+        end_position = player.getCurrentTime();
+        advanced_seconds = std::max(0.0, end_position - start_position);
+        advance_ratio = sample_seconds > 0.0 ? advanced_seconds / sample_seconds : 0.0;
+        still_playing_after_window = player.isPlaying();
+        diag = player.getDiagnosticsSnapshot();
+        renderer_backend = player.videoRendererBackendName();
+        decoder_backend = player.videoDecoderBackendName();
+    }
+
+    const bool renderer_ok = renderer_backend == "SoftwareSDL";
+    const bool decoder_ok = decoder_backend == "Software";
+    const bool decoded_frames_ok = diag.decode_video_ok > 0 && diag.scheduler_video_decoded_frames > 0;
+    const bool frame_queue_ok = diag.video_frame_queue_peak_size > 0;
+    const bool rendered_ok = diag.render_frames > 0;
+    const bool copy_back_free_ok = diag.video_copy_back_frames == 0;
+    const bool position_advanced = advanced_seconds > 0.1;
+    const bool real_frame_output_ok = decoded_frames_ok && frame_queue_ok && rendered_ok;
+    const bool result = probe_ok && duration_ok && open_ok && entered_playback_loop &&
+                        renderer_ok && decoder_ok && real_frame_output_ok && copy_back_free_ok;
+
+    std::cout << "software-video-decode-check.path=" << media_file << std::endl;
+    std::cout << "software-video-decode-check.sample_ms=" << sample_ms << std::endl;
+    std::cout << "software-video-decode-check.audio_probe_mode=" << audio_probe_mode << std::endl;
+    std::cout << "software-video-decode-check.probe_overall=" << probe.overall << std::endl;
+    std::cout << "software-video-decode-check.probe_width=" << probe.width << std::endl;
+    std::cout << "software-video-decode-check.probe_height=" << probe.height << std::endl;
+    std::cout << "software-video-decode-check.probe_fps=" << probe.fps << std::endl;
+    std::cout << "software-video-decode-check.probe_duration=" << probe.duration << std::endl;
+    std::cout << "software-video-decode-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.renderer_backend=" << renderer_backend << std::endl;
+    std::cout << "software-video-decode-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "software-video-decode-check.renderer_ok=" << (renderer_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.decoder_ok=" << (decoder_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
+    std::cout << "software-video-decode-check.start_position=" << start_position << std::endl;
+    std::cout << "software-video-decode-check.end_position=" << end_position << std::endl;
+    std::cout << "software-video-decode-check.advanced_seconds=" << advanced_seconds << std::endl;
+    std::cout << "software-video-decode-check.advance_ratio=" << advance_ratio << std::endl;
+    std::cout << "software-video-decode-check.position_advanced=" << (position_advanced ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.demux_video_packets=" << diag.demux_video_packets << std::endl;
+    std::cout << "software-video-decode-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "software-video-decode-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
+    std::cout << "software-video-decode-check.decode_video_ok=" << diag.decode_video_ok << std::endl;
+    std::cout << "software-video-decode-check.video_packet_dequeue_count=" << diag.video_packet_dequeue_count << std::endl;
+    std::cout << "software-video-decode-check.video_send_packet_ok=" << diag.video_send_packet_ok << std::endl;
+    std::cout << "software-video-decode-check.video_send_packet_last_ret=" << diag.video_send_packet_last_ret << std::endl;
+    std::cout << "software-video-decode-check.decode_video_send_eagain=" << diag.decode_video_send_eagain << std::endl;
+    std::cout << "software-video-decode-check.video_decoder_drain_signals=" << diag.video_decoder_drain_signals << std::endl;
+    std::cout << "software-video-decode-check.scheduler_video_decoded_frames=" << diag.scheduler_video_decoded_frames << std::endl;
+    std::cout << "software-video-decode-check.render_frames=" << diag.render_frames << std::endl;
+    std::cout << "software-video-decode-check.video_frame_queue_peak_size=" << diag.video_frame_queue_peak_size << std::endl;
+    std::cout << "software-video-decode-check.video_frame_queue_capacity=" << diag.video_frame_queue_capacity << std::endl;
+    std::cout << "software-video-decode-check.video_frame_queue_push_timeouts=" << diag.video_frame_queue_push_timeouts << std::endl;
+    std::cout << "software-video-decode-check.video_copy_back_frames=" << diag.video_copy_back_frames << std::endl;
+    std::cout << "software-video-decode-check.video_swscale_frames=" << diag.video_swscale_frames << std::endl;
+    std::cout << "software-video-decode-check.scheduler_late_drops=" << diag.scheduler_late_drops << std::endl;
+    std::cout << "software-video-decode-check.scheduler_wait_events=" << diag.scheduler_wait_events << std::endl;
+    std::cout << "software-video-decode-check.decoded_frames_ok=" << (decoded_frames_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.frame_queue_ok=" << (frame_queue_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.rendered_ok=" << (rendered_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.copy_back_free_ok=" << (copy_back_free_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.real_frame_output_ok=" << (real_frame_output_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.duration_ok=" << (duration_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-decode-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+
+    flush_and_exit(result ? 0 : 2);
+}
+
+/// 绕开 PlayerCore/Scheduler/Renderer，只验证 software video decode 首个 `send_packet` 是否能按时返回。
+[[noreturn]] void runSoftwareVideoSendProbeAndExit(const std::string& media_file, int send_timeout_ms = 1500) {
+    struct ProbeAvPacketDeleter {
+        void operator()(AVPacket* packet) const noexcept {
+            if (packet) {
+                av_packet_free(&packet);
+            }
+        }
+    };
+    using ProbePacketPtr = std::unique_ptr<AVPacket, ProbeAvPacketDeleter>;
+
+    auto flush_and_exit = [](int code) -> void {
+        std::cout.flush();
+        std::cerr.flush();
+        std::fflush(nullptr);
+#if defined(_WIN32)
+        TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
+#else
+        std::_Exit(code);
+#endif
+        std::abort();
+    };
+
+    const ProbeReport probe = collectFileProbeReport(media_file);
+    if (send_timeout_ms < 100) {
+        std::cout << "software-video-send-probe.path=" << media_file << std::endl;
+        std::cout << "software-video-send-probe.send_timeout_ms=" << send_timeout_ms << std::endl;
+        std::cout << "software-video-send-probe.result=FAIL" << std::endl;
+        flush_and_exit(2);
+    }
+
+    Demuxer demuxer;
+    const bool open_ok = demuxer.open(media_file);
+    const MediaInfo& info = demuxer.getMediaInfo();
+    const bool has_video_stream = open_ok && info.video_stream_idx >= 0;
+    AVFormatContext* fmt_ctx = open_ok ? demuxer.getFormatContext() : nullptr;
+    AVStream* video_stream = (has_video_stream && fmt_ctx) ? fmt_ctx->streams[info.video_stream_idx] : nullptr;
+    const AVCodec* codec =
+        (video_stream && video_stream->codecpar) ? avcodec_find_decoder(video_stream->codecpar->codec_id) : nullptr;
+
+    AVCodecContext* codec_ctx = nullptr;
+    bool codec_ctx_alloc_ok = false;
+    bool codec_ctx_config_ok = false;
+    bool codec_open_ok = false;
+    int open_ret = std::numeric_limits<int>::min();
+
+    if (codec) {
+        codec_ctx = avcodec_alloc_context3(codec);
+        codec_ctx_alloc_ok = codec_ctx != nullptr;
+        if (codec_ctx_alloc_ok &&
+            avcodec_parameters_to_context(codec_ctx, video_stream->codecpar) >= 0) {
+            codec_ctx->thread_count = 1;
+            codec_ctx->thread_type = 0;
+            codec_ctx->pkt_timebase = video_stream->time_base;
+            codec_ctx->flags2 |= AV_CODEC_FLAG2_FAST;
+            codec_ctx_config_ok = true;
+            open_ret = avcodec_open2(codec_ctx, codec, nullptr);
+            codec_open_ok = open_ret >= 0;
+        }
+    }
+
+    AVPacket* packet = av_packet_alloc();
+    bool packet_alloc_ok = packet != nullptr;
+    bool packet_found = false;
+    bool packet_queue_push_ok = false;
+    bool packet_queue_pop_ok = false;
+    uint64_t packets_read_total = 0;
+    uint64_t video_packets_seen = 0;
+
+    if (packet_alloc_ok && codec_open_ok) {
+        while (demuxer.readPacket(packet)) {
+            ++packets_read_total;
+            if (packet->stream_index != info.video_stream_idx) {
+                av_packet_unref(packet);
+                continue;
+            }
+            ++video_packets_seen;
+            packet_found = true;
+            break;
+        }
+    }
+
+    if (packet_found) {
+        ThreadSafeQueue<ProbePacketPtr> packet_queue(1);
+        ProbePacketPtr queued_packet(packet);
+        packet = nullptr;
+        packet_queue_push_ok = packet_queue.push(std::move(queued_packet), 20);
+        if (packet_queue_push_ok) {
+            ProbePacketPtr popped_packet;
+            packet_queue_pop_ok = packet_queue.pop(popped_packet, 20) && popped_packet != nullptr;
+            if (packet_queue_pop_ok) {
+                packet = popped_packet.release();
+            }
+        }
+        if (!packet_queue_pop_ok) {
+            packet_found = false;
+        }
+    }
+
+    int send_ret = std::numeric_limits<int>::min();
+    int receive_ret = std::numeric_limits<int>::min();
+    bool receive_got_frame = false;
+    int pre_send_receive_ret = std::numeric_limits<int>::min();
+    std::atomic<uint64_t> read_ahead_packets{0};
+    std::atomic<bool> read_ahead_done{false};
+    std::atomic<bool> send_started{false};
+    std::atomic<bool> send_completed{false};
+    std::atomic<int> send_ret_atomic{std::numeric_limits<int>::min()};
+    std::atomic<int64_t> send_enter_ms{0};
+    std::atomic<int64_t> send_exit_ms{0};
+    bool send_timed_out = false;
+
+    std::thread read_ahead_thread;
+    std::thread send_thread;
+    if (packet_found) {
+        read_ahead_thread = std::thread([&] {
+            AVPacket* read_ahead_packet = av_packet_alloc();
+            if (!read_ahead_packet) {
+                read_ahead_done.store(true);
+                return;
+            }
+
+            while (read_ahead_packets.load() < 512 && demuxer.readPacket(read_ahead_packet)) {
+                read_ahead_packets.fetch_add(1);
+                av_packet_unref(read_ahead_packet);
+            }
+
+            av_packet_free(&read_ahead_packet);
+            read_ahead_done.store(true);
+        });
+
+        const auto read_ahead_deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+        while (std::chrono::steady_clock::now() < read_ahead_deadline &&
+               read_ahead_packets.load() < 64 &&
+               !read_ahead_done.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+
+        AVFrame* pre_send_frame = av_frame_alloc();
+        if (pre_send_frame) {
+            pre_send_receive_ret = avcodec_receive_frame(codec_ctx, pre_send_frame);
+            av_frame_free(&pre_send_frame);
+        }
+
+        send_thread = std::thread([&] {
+            send_started.store(true);
+            send_enter_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::steady_clock::now().time_since_epoch())
+                                    .count());
+            const int ret = avcodec_send_packet(codec_ctx, packet);
+            send_ret_atomic.store(ret);
+            send_exit_ms.store(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now().time_since_epoch())
+                                   .count());
+            send_completed.store(true);
+        });
+
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(send_timeout_ms);
+        while (std::chrono::steady_clock::now() < deadline && !send_completed.load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+
+        if (send_completed.load()) {
+            send_thread.join();
+            send_ret = send_ret_atomic.load();
+
+            AVFrame* frame = av_frame_alloc();
+            if (frame) {
+                receive_ret = avcodec_receive_frame(codec_ctx, frame);
+                receive_got_frame = receive_ret >= 0;
+                av_frame_free(&frame);
+            }
+        } else {
+            send_timed_out = true;
+            send_thread.detach();
+        }
+    }
+
+    if (read_ahead_thread.joinable()) {
+        read_ahead_thread.join();
+    }
+
+    const int64_t send_elapsed_ms =
+        send_completed.load() && send_enter_ms.load() > 0 && send_exit_ms.load() >= send_enter_ms.load()
+            ? (send_exit_ms.load() - send_enter_ms.load())
+            : -1;
+    const bool result = probe.overall == "PASS" && open_ok && has_video_stream && codec && codec_open_ok &&
+                        packet_found && send_completed.load() && send_ret >= 0;
+
+    std::cout << "software-video-send-probe.path=" << media_file << std::endl;
+    std::cout << "software-video-send-probe.send_timeout_ms=" << send_timeout_ms << std::endl;
+    std::cout << "software-video-send-probe.probe_overall=" << probe.overall << std::endl;
+    std::cout << "software-video-send-probe.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-send-probe.has_video_stream=" << (has_video_stream ? "true" : "false") << std::endl;
+    std::cout << "software-video-send-probe.video_stream_index=" << info.video_stream_idx << std::endl;
+    std::cout << "software-video-send-probe.codec_name=" << (codec && codec->name ? codec->name : "none")
+              << std::endl;
+    std::cout << "software-video-send-probe.codec_ctx_alloc_ok=" << (codec_ctx_alloc_ok ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.codec_ctx_config_ok=" << (codec_ctx_config_ok ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.codec_open_ok=" << (codec_open_ok ? "true" : "false") << std::endl;
+    std::cout << "software-video-send-probe.codec_open_ret=" << open_ret << std::endl;
+    std::cout << "software-video-send-probe.codec_open_message=" << avErrorToString(open_ret) << std::endl;
+    std::cout << "software-video-send-probe.thread_count=" << (codec_ctx ? codec_ctx->thread_count : -1)
+              << std::endl;
+    std::cout << "software-video-send-probe.thread_type=" << (codec_ctx ? codec_ctx->thread_type : -1)
+              << std::endl;
+    std::cout << "software-video-send-probe.packets_read_total=" << packets_read_total << std::endl;
+    std::cout << "software-video-send-probe.video_packets_seen=" << video_packets_seen << std::endl;
+    std::cout << "software-video-send-probe.packet_found=" << (packet_found ? "true" : "false") << std::endl;
+    std::cout << "software-video-send-probe.packet_queue_push_ok=" << (packet_queue_push_ok ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.packet_queue_pop_ok=" << (packet_queue_pop_ok ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.read_ahead_packets=" << read_ahead_packets.load() << std::endl;
+    std::cout << "software-video-send-probe.read_ahead_done=" << (read_ahead_done.load() ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.packet_size=" << (packet_found ? packet->size : -1) << std::endl;
+    std::cout << "software-video-send-probe.packet_pts=" << (packet_found ? packet->pts : AV_NOPTS_VALUE)
+              << std::endl;
+    std::cout << "software-video-send-probe.packet_dts=" << (packet_found ? packet->dts : AV_NOPTS_VALUE)
+              << std::endl;
+    std::cout << "software-video-send-probe.pre_send_receive_ret=" << pre_send_receive_ret << std::endl;
+    std::cout << "software-video-send-probe.pre_send_receive_message="
+              << avErrorToString(pre_send_receive_ret) << std::endl;
+    std::cout << "software-video-send-probe.send_started=" << (send_started.load() ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.send_completed=" << (send_completed.load() ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.send_timed_out=" << (send_timed_out ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.send_elapsed_ms=" << send_elapsed_ms << std::endl;
+    std::cout << "software-video-send-probe.send_ret="
+              << (send_completed.load() ? send_ret_atomic.load() : std::numeric_limits<int>::min()) << std::endl;
+    std::cout << "software-video-send-probe.send_message="
+              << avErrorToString(send_completed.load() ? send_ret_atomic.load() : std::numeric_limits<int>::min())
+              << std::endl;
+    std::cout << "software-video-send-probe.receive_ret=" << receive_ret << std::endl;
+    std::cout << "software-video-send-probe.receive_message=" << avErrorToString(receive_ret) << std::endl;
+    std::cout << "software-video-send-probe.receive_got_frame=" << (receive_got_frame ? "true" : "false")
+              << std::endl;
+    std::cout << "software-video-send-probe.result=" << (result ? "PASS" : "FAIL") << std::endl;
+
+    if (!send_timed_out) {
+        if (packet) {
+            av_packet_free(&packet);
+        }
+        if (codec_ctx) {
+            avcodec_free_context(&codec_ctx);
+        }
+    }
+
+    flush_and_exit(result ? 0 : 2);
 }
 
 /// 面向 1080p60 场景的实时播放回归检查。
@@ -3262,6 +3702,8 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --delay-adjust-check <media_file> <subtitle.(srt|ass|ssa)>" << std::endl;
     std::cout << "       " << program_name << " --numeric-seek-check <media_file>" << std::endl;
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
+    std::cout << "       " << program_name << " --software-video-decode-check <media_file> [sample_ms]" << std::endl;
+    std::cout << "       " << program_name << " --software-video-send-probe <media_file> [send_timeout_ms]" << std::endl;
     std::cout << "       " << program_name << " --1080p60-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --4k-playback-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --high-bitrate-check <media_file> [sample_ms]" << std::endl;
@@ -3475,6 +3917,30 @@ int main(int argc, char* argv[]) {
         return runPerformanceLogCheck(argv[2], sample_ms) ? 0 : 2;
     }
 
+    if (argc >= 2 && std::string(argv[1]) == "--software-video-decode-check") {
+        if (argc != 3 && argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int sample_ms = 2000;
+        if (argc == 4 && !tryParseInt(argv[3], sample_ms)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        runSoftwareVideoDecodeCheckAndExit(argv[2], sample_ms);
+    }
+    if (argc >= 2 && std::string(argv[1]) == "--software-video-send-probe") {
+        if (argc != 3 && argc != 4) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        int send_timeout_ms = 1500;
+        if (argc == 4 && !tryParseInt(argv[3], send_timeout_ms)) {
+            printUsage(argv[0]);
+            return 1;
+        }
+        runSoftwareVideoSendProbeAndExit(argv[2], send_timeout_ms);
+    }
     if (argc >= 2 && std::string(argv[1]) == "--1080p60-check") {
         if (argc != 3 && argc != 4) {
             printUsage(argv[0]);
