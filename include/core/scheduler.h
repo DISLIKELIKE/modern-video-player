@@ -38,6 +38,7 @@ public:
     void pause();
     void resume();
     void stop();
+    void requestStopAsync();
     void flush();
     void pumpRenderOnce();
 

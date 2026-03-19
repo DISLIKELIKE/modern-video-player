@@ -23,6 +23,14 @@
 - **支持平台**: Windows, Linux, macOS
 
 
+### 2026-03-19 更新：PlayerCore 停播收口与运行时设计债修复
+
+- `PlayerCore` 已补上 deferred stop / worker reap 路径，EOF 自动停播、Next/Previous、Quit 等路径不再只改状态而遗留 demux/audio/scheduler 脏线程。
+- `PacketQueue` 已从原始 `AVPacket*` 切到 RAII `unique_ptr` 所有权模型，seek / stop / close 过程中的剩余压缩包会随队列清理自动释放。
+- `Scheduler` 已支持异步停机并在重启前回收已退出 worker；`Clock` 已修复 system-clock 的 pause/speed 时间基准连续性；`Demuxer::open()` 也已去掉锁内重入 `close()` 的死锁风险。
+- 已重新执行整工程验证命令
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
+  当前结果为 `0 个警告 / 0 个错误`。
 ### 2026-03-18 更新：MSVC warning debt 分层清理
 
 - Windows MSVC 目标已启用 `/utf-8 /external:anglebrackets /external:W0`，本地 UTF-8 源文件不再触发 `C4819`，第三方 angle-bracket 头文件 warning 也被隔离到外部层。

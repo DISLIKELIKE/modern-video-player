@@ -147,7 +147,16 @@ public:
     void onFrameRendered(FrameCallback callback);
 
 private:
-    using PacketQueue = ThreadSafeQueue<AVPacket*>;
+    struct AvPacketDeleter {
+        void operator()(AVPacket* packet) const noexcept {
+            if (packet) {
+                av_packet_free(&packet);
+            }
+        }
+    };
+
+    using PacketPtr = std::unique_ptr<AVPacket, AvPacketDeleter>;
+    using PacketQueue = ThreadSafeQueue<PacketPtr>;
 
     bool initDecoders();
     void releaseDecoders();
@@ -164,6 +173,9 @@ private:
     void startAudioConsumer();
     void stopAudioConsumer();
     void flushPipelines();
+    void requestDeferredStop();
+    void serviceDeferredStop();
+    void reapCompletedWorkers();
 
     bool decodeVideoFrame(VideoFrame& out);
     bool decodeAudioFrame(AudioFrame& out);
@@ -203,6 +215,7 @@ private:
     std::thread audio_consumer_thread_;
     std::atomic<bool> demux_running_{false};
     std::atomic<bool> audio_consumer_running_{false};
+    std::atomic<bool> deferred_stop_pending_{false};
 
     AVCodecContext* video_codec_ctx_{nullptr};
     AVCodecContext* audio_codec_ctx_{nullptr};

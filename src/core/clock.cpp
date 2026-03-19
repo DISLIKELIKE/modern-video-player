@@ -19,8 +19,8 @@ ClockSource Clock::getSource() const {
 
 /// 根据当前主时钟来源返回解析后的播放时间。
 double Clock::getTime() const {
+    std::lock_guard<std::mutex> lock(mutex_);
     if (paused_.load()) {
-        std::lock_guard<std::mutex> lock(mutex_);
         return base_time_;
     }
 
@@ -32,7 +32,6 @@ double Clock::getTime() const {
         return video_clock_.load();
     }
 
-    std::lock_guard<std::mutex> lock(mutex_);
     const auto now = std::chrono::steady_clock::now();
     const double elapsed = std::chrono::duration<double>(now - base_tp_).count();
     return base_time_ + elapsed * speed_.load();
@@ -65,7 +64,15 @@ double Clock::getVideoClock() const {
 
 /// 更新系统时钟倍速；仅在以系统时钟为主时直接影响 `getTime()`。
 void Clock::setSpeed(double speed) {
-    speed_.store(std::max(0.1, speed));
+    const double clamped = std::max(0.1, speed);
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!paused_.load() && source_.load() == ClockSource::System) {
+        const auto now = std::chrono::steady_clock::now();
+        const double elapsed = std::chrono::duration<double>(now - base_tp_).count();
+        base_time_ += elapsed * speed_.load();
+        base_tp_ = now;
+    }
+    speed_.store(clamped);
 }
 
 double Clock::getSpeed() const {
@@ -74,19 +81,33 @@ double Clock::getSpeed() const {
 
 /// 将当前解析时间冻结到 `base_time_`，供暂停态持续读取。
 void Clock::pause() {
-    if (paused_.exchange(true)) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (paused_.load()) {
         return;
     }
-    setTime(getTime());
+
+    const auto now = std::chrono::steady_clock::now();
+    const ClockSource src = source_.load();
+    if (src == ClockSource::Audio) {
+        base_time_ = std::max(0.0, audio_clock_.load());
+    } else if (src == ClockSource::Video) {
+        base_time_ = std::max(0.0, video_clock_.load());
+    } else {
+        const double elapsed = std::chrono::duration<double>(now - base_tp_).count();
+        base_time_ += elapsed * speed_.load();
+    }
+    base_tp_ = now;
+    paused_.store(true);
 }
 
 /// 从冻结时间继续推进系统时钟基准。
 void Clock::resume() {
-    if (!paused_.exchange(false)) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!paused_.load()) {
         return;
     }
-    std::lock_guard<std::mutex> lock(mutex_);
     base_tp_ = std::chrono::steady_clock::now();
+    paused_.store(false);
 }
 
 /// 清空音视频时钟与系统基准，恢复默认播放速度。

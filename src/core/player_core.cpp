@@ -234,6 +234,7 @@ bool PlayerCore::open(const std::string& filename) {
     clock_.reset();
     const bool has_audio_clock = audio_codec_ctx_ && audio_player_ && audio_player_->isInitialized();
     clock_.setSource(has_audio_clock ? ClockSource::Audio : ClockSource::System);
+    deferred_stop_pending_.store(false);
     resetDiagnostics();
     return true;
 }
@@ -275,6 +276,7 @@ void PlayerCore::play() {
     if (!opened_.load()) {
         return;
     }
+    serviceDeferredStop();
     if (state_.load() == PlaybackState::Paused) {
         state_.store(PlaybackState::Playing);
         scheduler_.resume();
@@ -314,9 +316,20 @@ void PlayerCore::pause() {
 
 /// 鍋滄鐢熶骇/娑堣垂绾跨▼骞舵竻绌虹绾匡紝鍚屾椂鎶婂獟浣撲綅缃浣嶅埌寮€澶淬€?
 void PlayerCore::stop() {
-    if (state_.load() == PlaybackState::Stopped && !demux_running_.load()) {
+    if (deferred_stop_pending_.load()) {
+        serviceDeferredStop();
         return;
     }
+
+    if (state_.load() == PlaybackState::Stopped &&
+        !demux_running_.load() &&
+        !audio_consumer_running_.load() &&
+        !demux_thread_.joinable() &&
+        !audio_consumer_thread_.joinable()) {
+        return;
+    }
+
+    deferred_stop_pending_.store(false);
     stopDemuxThread();
     scheduler_.stop();
     stopAudioConsumer();
@@ -329,8 +342,9 @@ void PlayerCore::stop() {
     }
     position_.store(0.0);
     clock_.reset();
-    state_.store(PlaybackState::Stopped);
-    emitStateChanged(PlaybackState::Stopped);
+    if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+        emitStateChanged(PlaybackState::Stopped);
+    }
 }
 
 /// 鎵ц涓€娆″甫 flush 鐨勬椂闂寸嚎鍒囨崲锛岀‘淇濇棫鍖呫€佹棫甯у拰鏃ч煶棰戠紦鍐插叏閮ㄥけ鏁堛€?
@@ -338,6 +352,7 @@ void PlayerCore::seek(double timestamp) {
     if (!opened_.load() || !demuxer_) {
         return;
     }
+    serviceDeferredStop();
     const double duration = demuxer_->getMediaInfo().duration;
     if (duration > 0.0) {
         timestamp = std::max(0.0, std::min(duration, timestamp));
@@ -645,6 +660,7 @@ bool PlayerCore::stepFrameForward() {
 
 /// 鎷夊彇鏄剧ず灞備竴娆℃€ц姹傦紝骞舵槧灏勪负 seek銆侀煶閲忋€佺珷鑺傚拰瀛楀箷绛夋挱鏀炬帶鍒躲€?
 void PlayerCore::pumpEvents() {
+    serviceDeferredStop();
     if (video_renderer_) {
         video_renderer_->handleEvents();
 
@@ -735,23 +751,17 @@ void PlayerCore::pumpEvents() {
 
         if (video_renderer_->consumeNextItemRequest()) {
             next_item_requested_.store(true);
-            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-                emitStateChanged(PlaybackState::Stopped);
-            }
+            stop();
         }
 
         if (video_renderer_->consumePreviousItemRequest()) {
             previous_item_requested_.store(true);
-            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-                emitStateChanged(PlaybackState::Stopped);
-            }
+            stop();
         }
 
         if (video_renderer_->shouldQuit()) {
             quit_requested_.store(true);
-            if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
-                emitStateChanged(PlaybackState::Stopped);
-            }
+            stop();
         }
     }
 
@@ -1743,8 +1753,15 @@ void PlayerCore::releaseAudioResampler() {
 
 /// 鍚姩瑙ｅ鐢ㄧ嚎绋嬶紱璐熻矗璇诲寘銆佸垎鍙戝埌闊宠棰戝寘闃熷垪骞朵紶鎾?EOF銆?
 void PlayerCore::startDemuxThread() {
+    reapCompletedWorkers();
     if (demux_running_.exchange(true)) {
         return;
+    }
+    if (video_packet_queue_) {
+        video_packet_queue_->start();
+    }
+    if (audio_packet_queue_) {
+        audio_packet_queue_->start();
     }
     demux_thread_ = std::thread([this] {
         // Demux only reads and dispatches packets; EOF is propagated downstream explicitly.
@@ -1754,14 +1771,13 @@ void PlayerCore::startDemuxThread() {
                 continue;
             }
 
-            AVPacket* packet = av_packet_alloc();
+            PacketPtr packet(av_packet_alloc());
             if (!packet) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
                 continue;
             }
 
-            if (!demuxer_->readPacket(packet)) {
-                av_packet_free(&packet);
+            if (!demuxer_->readPacket(packet.get())) {
                 if (video_packet_queue_) {
                     video_packet_queue_->setEof(true);
                 }
@@ -1776,7 +1792,7 @@ void PlayerCore::startDemuxThread() {
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
                 // On successful push the queue owns the packet lifetime.
                 while (demux_running_.load() && !queued) {
-                    queued = video_packet_queue_->push(packet, 20);
+                    queued = video_packet_queue_->push(std::move(packet), 20);
                     if (queued) {
                         break;
                     }
@@ -1788,7 +1804,7 @@ void PlayerCore::startDemuxThread() {
                 }
             } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_) {
                 while (demux_running_.load() && !queued) {
-                    queued = audio_packet_queue_->push(packet, 20);
+                    queued = audio_packet_queue_->push(std::move(packet), 20);
                     if (queued) {
                         break;
                     }
@@ -1802,10 +1818,10 @@ void PlayerCore::startDemuxThread() {
 
             if (!queued) {
                 demux_dropped_packets_.fetch_add(1);
-                av_packet_free(&packet);
             }
             maybeLogDiagnostics("demux");
         }
+        demux_running_.store(false);
     });
 }
 
@@ -1818,7 +1834,7 @@ void PlayerCore::stopDemuxThread() {
     if (audio_packet_queue_) {
         audio_packet_queue_->stop();
     }
-    if (demux_thread_.joinable()) {
+    if (demux_thread_.joinable() && demux_thread_.get_id() != std::this_thread::get_id()) {
         demux_thread_.join();
     }
     if (video_packet_queue_) {
@@ -1831,6 +1847,7 @@ void PlayerCore::stopDemuxThread() {
 
 /// 鍚姩闊抽娑堣垂绾跨▼锛涙妸瑙ｇ爜 PCM 鎻愪氦缁?`AudioPlayer` 骞舵帹杩涢煶棰戜富鏃堕挓銆?
 void PlayerCore::startAudioConsumer() {
+    reapCompletedWorkers();
     if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_running_.exchange(true)) {
         return;
     }
@@ -1873,13 +1890,14 @@ void PlayerCore::startAudioConsumer() {
             audio_submitted_frames_.fetch_add(1);
             maybeLogDiagnostics("audio-play");
         }
+        audio_consumer_running_.store(false);
     });
 }
 
 /// 鍋滄闊抽娑堣垂绾跨▼骞剁瓑寰呴€€鍑恒€?
 void PlayerCore::stopAudioConsumer() {
     audio_consumer_running_.store(false);
-    if (audio_consumer_thread_.joinable()) {
+    if (audio_consumer_thread_.joinable() && audio_consumer_thread_.get_id() != std::this_thread::get_id()) {
         audio_consumer_thread_.join();
     }
 }
@@ -1892,6 +1910,54 @@ void PlayerCore::flushPipelines() {
     }
     if (audio_packet_queue_) {
         audio_packet_queue_->clear();
+    }
+}
+
+void PlayerCore::requestDeferredStop() {
+    deferred_stop_pending_.store(true);
+    demux_running_.store(false);
+    audio_consumer_running_.store(false);
+    scheduler_.requestStopAsync();
+    if (video_packet_queue_) {
+        video_packet_queue_->stop();
+    }
+    if (audio_packet_queue_) {
+        audio_packet_queue_->stop();
+    }
+    if (audio_player_) {
+        audio_player_->pause();
+    }
+}
+
+void PlayerCore::serviceDeferredStop() {
+    reapCompletedWorkers();
+    if (!deferred_stop_pending_.exchange(false)) {
+        return;
+    }
+
+    stopDemuxThread();
+    scheduler_.stop();
+    stopAudioConsumer();
+    flushPipelines();
+    if (audio_player_) {
+        audio_player_->stop();
+    }
+    if (demuxer_ && demuxer_->isOpen()) {
+        demuxer_->seek(0.0);
+    }
+    position_.store(0.0);
+    clock_.reset();
+    state_.store(PlaybackState::Stopped);
+}
+
+void PlayerCore::reapCompletedWorkers() {
+    if (!demux_running_.load() && demux_thread_.joinable() && demux_thread_.get_id() != std::this_thread::get_id()) {
+        demux_thread_.join();
+    }
+    if (!audio_consumer_running_.load() &&
+        audio_consumer_thread_.joinable() &&
+        audio_consumer_thread_.get_id() != std::this_thread::get_id()) {
+        audio_consumer_thread_.join();
     }
 }
 
@@ -1973,13 +2039,12 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
         return false;
     }
 
-    AVPacket* packet = nullptr;
+    PacketPtr packet;
     if (!video_packet_queue_->pop(packet, 20) || !packet) {
         return false;
     }
     // Only send a new packet when receive needs more input.
-    ret = avcodec_send_packet(video_codec_ctx_, packet);
-    av_packet_free(&packet);
+    ret = avcodec_send_packet(video_codec_ctx_, packet.get());
     if (ret < 0) {
         return false;
     }
@@ -2020,13 +2085,12 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     int ret = avcodec_receive_frame(audio_codec_ctx_, frame);
     if (ret == AVERROR(EAGAIN)) {
         // Mirror the video path: receive first, then feed more compressed data if needed.
-        AVPacket* packet = nullptr;
+        PacketPtr packet;
         if (!audio_packet_queue_->pop(packet, 20) || !packet) {
             av_frame_free(&frame);
             return false;
         }
-        ret = avcodec_send_packet(audio_codec_ctx_, packet);
-        av_packet_free(&packet);
+        ret = avcodec_send_packet(audio_codec_ctx_, packet.get());
         if (ret < 0) {
             av_frame_free(&frame);
             return false;
@@ -2150,6 +2214,7 @@ void PlayerCore::onRenderIdle() {
     const bool audio_done = (!audio_packet_queue_ || audio_packet_queue_->empty()) && audio_queue_.empty();
     if (video_done && audio_done) {
         if (state_.exchange(PlaybackState::Stopped) != PlaybackState::Stopped) {
+            requestDeferredStop();
             LOG_INFO("Playback reached EOF, auto-stopping");
             emitStateChanged(PlaybackState::Stopped);
         }

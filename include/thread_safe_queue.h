@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <mutex>
 #include <queue>
+#include <utility>
 
 namespace vp {
 
@@ -19,7 +20,28 @@ public:
         stop();
     }
 
-    bool push(T item, int timeout_ms = 100) {
+    bool push(const T& item, int timeout_ms = 100) {
+        std::unique_lock<std::mutex> lock(mutex_);
+
+        if (stopped_.load()) {
+            return false;
+        }
+
+        if (cv_.wait_for(lock, std::chrono::milliseconds(timeout_ms),
+                         [this] { return queue_.size() < max_size_ || stopped_.load(); })) {
+            if (stopped_.load()) {
+                return false;
+            }
+            if (queue_.size() < max_size_) {
+                queue_.push(std::move(item));
+                cv_.notify_one();
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool push(T&& item, int timeout_ms = 100) {
         std::unique_lock<std::mutex> lock(mutex_);
 
         if (stopped_.load()) {

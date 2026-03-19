@@ -43,6 +43,18 @@ void Scheduler::setClock(Clock* clock) {
 }
 
 void Scheduler::start() {
+    if (!running_.load()) {
+        if (video_thread_.joinable()) {
+            video_thread_.join();
+        }
+        if (audio_thread_.joinable()) {
+            audio_thread_.join();
+        }
+        if (render_thread_.joinable()) {
+            render_thread_.join();
+        }
+    }
+
     if (running_.exchange(true)) {
         paused_.store(false);
         return;
@@ -75,8 +87,7 @@ void Scheduler::resume() {
 }
 
 void Scheduler::stop() {
-    running_.store(false);
-    paused_.store(false);
+    requestStopAsync();
 
     if (video_thread_.joinable()) {
         video_thread_.join();
@@ -87,6 +98,11 @@ void Scheduler::stop() {
     if (render_thread_.joinable()) {
         render_thread_.join();
     }
+}
+
+void Scheduler::requestStopAsync() {
+    running_.store(false);
+    paused_.store(false);
 }
 
 void Scheduler::flush() {

@@ -1,5 +1,49 @@
 ﻿# 开发日志
 
+## 问题 69: PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复
+
+**日期**: 2026-03-19
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续把上一轮审查发现的设计债直接落地修掉，重点包括：EOF/停播线程状态不完整、`PacketQueue` 原始指针所有权、`Clock` system-clock 时间跳变，以及 `Demuxer::open()` 的自锁风险。
+- 这类问题不一定会立即体现为编译失败，但会在 replay / seek / EOF / close 等长期运行路径上积累成稳定性和可维护性问题。
+
+### 日志输出
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m
+modern-video-player.vcxproj -> D:\VSProject\sssssssssssssss\modern-video-player\build\Debug\modern-video-player.exe
+已成功生成。
+0 个警告
+0 个错误
+```
+
+### 分析记录
+- EOF 自动停播发生在 scheduler render 线程内，不能直接同步 `stop()`；否则 render 线程会 join 自己。旧实现因此退化成“只改状态”的半停机路径。
+- `AVPacket*` 放进通用队列后，`clear()` / 队列析构不会帮项目释放 FFmpeg 包；seek、stop、close 都会命中这条泄漏路径。
+- `Clock` 的 system-clock pause/speed 没有先固化旧时间基准，纯视频播放时会出现暂停时间倒退或倍速切换跳时。
+- `Demuxer::open()` 持锁调用 `close()` 是接口级自锁，虽然主流程不常复用同一实例，但设计上必须收口。
+
+### 处理结果
+- `PlayerCore` 现在具备 deferred stop + worker reap 机制，EOF、Next/Previous、Quit 等路径不再留下脏线程状态，后续 replay / restart 可安全重启。
+- `PacketQueue` 已改为 `unique_ptr<AVPacket, AvPacketDeleter>`，`ThreadSafeQueue` 同步补上延迟 move push，压缩包生命周期回归 RAII。
+- `Scheduler` 已新增异步停机入口并在重启前回收旧 worker，`Clock` 已修复 system-clock pause/speed 基准更新。
+- `Demuxer::open()` 不再在锁内重入 `close()`；整工程 Windows `Debug` 全量重建仍保持 `0 个警告 / 0 个错误`。
+
+### 修改文件
+- include/core/player_core.h
+- include/core/scheduler.h
+- include/thread_safe_queue.h
+- src/core/player_core.cpp
+- src/core/scheduler.cpp
+- src/core/clock.cpp
+- src/demuxer.cpp
+- docs/records/DEVELOP_LOG.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+
+---
+
 ## 问题 68: MSVC warning debt 分层清理（C4819 / C4996 / C4706）
 
 **日期**: 2026-03-18

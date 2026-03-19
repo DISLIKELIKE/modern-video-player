@@ -17,7 +17,10 @@ bool Demuxer::open(const std::string& filename) {
     std::lock_guard<std::mutex> lock(mutex_);
 
     if (format_ctx_) {
-        close();
+        avformat_close_input(&format_ctx_);
+        format_ctx_ = nullptr;
+        media_info_ = MediaInfo();
+        eof_reached_.store(false);
     }
 
     AVDictionary* options = nullptr;

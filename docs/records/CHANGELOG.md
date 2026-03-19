@@ -61,7 +61,43 @@
 | 66 | 2026-03-18 | 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链 | ✅ 已修复 |
 | 67 | 2026-03-18 | ASS 标签解析与 UTF-16 字幕范围修正 | ✅ 已修复 |
 | 68 | 2026-03-18 | MSVC warning debt 分层清理（C4819 / C4996 / C4706） | ✅ 已修复 |
+| 69 | 2026-03-19 | PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复 | ✅ 已修复 |
 
+## 问题 69: PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复
+
+**日期**: 2026-03-19
+
+### 问题描述
+- 在上一轮审查中发现，`PlayerCore` 的 EOF 自动停播和部分 UI 停播路径只修改了播放状态，没有完整收口 demux/audio/scheduler 线程，存在“状态已停、线程未清”的可重启风险。
+- `PacketQueue` 仍以 `AVPacket*` 原始指针承载所有权，`flush/clear/reset` 路径会遗留未释放压缩包。
+- `Clock` 在系统时钟路径上的 `pause()` / `setSpeed()` 基准更新不正确，纯视频或 system-clock 路径会出现时间跳变；`Demuxer::open()` 持锁调用 `close()` 还存在自锁风险。
+
+### 原因分析
+- EOF 自动停播发生在 scheduler 的 render 线程内，不能直接走同步 `stop()`，否则会触发线程自 join；旧实现因此退化成“只改 `state_`”。
+- `ThreadSafeQueue<AVPacket*>` 只管理指针搬运，不管理 FFmpeg 包生命周期，导致 `clear()` 与队列析构不会释放队列中剩余包。
+- `Clock::pause()` 先写 `paused_` 再读当前时间，`Clock::setSpeed()` 也没有先固化旧基准，导致 system clock 连续性被破坏。
+- `Demuxer::open()` 在已持有 `mutex_` 时再次调用同样会上锁的 `close()`，接口复用时会卡死。
+
+### 解决方案
+- 为 `PlayerCore` 增加 deferred stop 收口路径：EOF 在 render 线程内只发出异步停机请求并标记待清理，后续由安全线程执行真实 `stop/join/flush`，同时修复 `next/previous/quit` 请求直接走完整 `stop()`。
+- 把 `PacketQueue` 改为 `ThreadSafeQueue<unique_ptr<AVPacket, AvPacketDeleter>>`，并让 `ThreadSafeQueue::push()` 支持延迟 move，彻底把 FFmpeg 包生命周期收回到 RAII。
+- 为 `Scheduler` 增加异步停机入口并在重新 `start()` 前回收已退出 worker，避免 EOF 后下一次启动触发 `std::terminate`。
+- 修正 `Clock` 的 pause/speed 基准更新逻辑，保证 system-clock 路径的暂停和变速时间连续；`Demuxer::open()` 改为在同一锁域内直接关闭旧输入，不再重入 `close()`。
+- 已重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `0 个警告 / 0 个错误`。
+
+### 修改文件
+- `include/core/player_core.h`
+- `include/core/scheduler.h`
+- `include/thread_safe_queue.h`
+- `src/core/player_core.cpp`
+- `src/core/scheduler.cpp`
+- `src/core/clock.cpp`
+- `src/demuxer.cpp`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
 ## 问题 68: MSVC warning debt 分层清理（C4819 / C4996 / C4706）
 
 **日期**: 2026-03-18
