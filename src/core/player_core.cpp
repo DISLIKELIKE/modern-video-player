@@ -1,4 +1,4 @@
-﻿#include "core/player_core.h"
+#include "core/player_core.h"
 
 #include <algorithm>
 #include <cerrno>
@@ -46,11 +46,65 @@ namespace {
 constexpr int kPacketQueueSize = 256;
 constexpr double kMaxAudioBufferedSeconds = 0.35;
 constexpr double kMaxMediaDelaySeconds = 5.0;
+constexpr size_t kMinVideoFrameQueueCapacity = 16;
+constexpr size_t kMaxVideoFrameQueueCapacitySoftware = 24;
+constexpr size_t kMaxVideoFrameQueueCapacityHardware = 24;
+constexpr size_t kMinAudioFrameQueueCapacity = 32;
+constexpr size_t kMaxAudioFrameQueueCapacity = 48;
 
 int64_t nowSteadyMs() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
                std::chrono::steady_clock::now().time_since_epoch())
         .count();
+}
+
+template <typename T>
+T clampValue(T value, T min_value, T max_value) {
+    return std::max(min_value, std::min(max_value, value));
+}
+
+void updateMaxAtomic(std::atomic<uint64_t>& target, uint64_t value) {
+    uint64_t current = target.load();
+    while (value > current && !target.compare_exchange_weak(current, value)) {
+    }
+}
+
+size_t selectVideoFrameQueueCapacity(const MediaInfo& info, decoder::DecoderBackend backend) {
+    const double fps = info.fps > 1.0 ? info.fps : 30.0;
+    const int64_t pixel_count = static_cast<int64_t>(std::max(0, info.width)) *
+                                static_cast<int64_t>(std::max(0, info.height));
+
+    double target_buffer_seconds = 0.28;
+    if (fps >= 50.0) {
+        target_buffer_seconds += 0.14;
+    }
+    if (pixel_count >= 1920LL * 1080LL) {
+        target_buffer_seconds += 0.10;
+    }
+    if (pixel_count >= 3840LL * 2160LL) {
+        target_buffer_seconds += 0.08;
+    }
+
+    const size_t requested = static_cast<size_t>(std::ceil(fps * target_buffer_seconds));
+    const size_t max_capacity =
+        backend == decoder::DecoderBackend::D3D11VA ? kMaxVideoFrameQueueCapacityHardware
+                                                    : kMaxVideoFrameQueueCapacitySoftware;
+    return clampValue<size_t>(requested, kMinVideoFrameQueueCapacity, max_capacity);
+}
+
+size_t selectAudioFrameQueueCapacity(const MediaInfo& info) {
+    const double sample_rate = info.sample_rate > 0 ? static_cast<double>(info.sample_rate) : 48000.0;
+    double target_buffer_seconds = 0.72;
+    if (info.channels >= 6) {
+        target_buffer_seconds += 0.10;
+    }
+    if (info.fps >= 50.0) {
+        target_buffer_seconds += 0.05;
+    }
+
+    const double estimated_frames_per_second = sample_rate / 1024.0;
+    const size_t requested = static_cast<size_t>(std::ceil(estimated_frames_per_second * target_buffer_seconds));
+    return clampValue<size_t>(requested, kMinAudioFrameQueueCapacity, kMaxAudioFrameQueueCapacity);
 }
 
 AVSampleFormat toAvSampleFormat(SDL_AudioFormat fmt) {
@@ -98,6 +152,19 @@ const char* rendererTypeName(render::VideoRendererType type) {
         return "D3D11";
     case render::VideoRendererType::OpenGL:
         return "OpenGL";
+    default:
+        return "Unknown";
+    }
+}
+
+const char* clockSourceName(ClockSource source) {
+    switch (source) {
+    case ClockSource::Audio:
+        return "Audio";
+    case ClockSource::Video:
+        return "Video";
+    case ClockSource::System:
+        return "System";
     default:
         return "Unknown";
     }
@@ -190,11 +257,19 @@ bool PlayerCore::open(const std::string& filename) {
         video_renderer_->setHotkeyManager(hotkey_manager_);
     }
 
-    // Audio output is optional; if initialization fails we allow video-only playback.
-    if (info.audio_stream_idx >= 0) {
+    const bool has_video_stream = info.video_stream_idx >= 0;
+    const bool has_audio_stream = info.audio_stream_idx >= 0;
+
+    // Audio output is optional when video playback can continue independently.
+    if (has_audio_stream) {
         audio_player_ = std::make_unique<AudioPlayer>();
         if (!audio_player_->init(info.sample_rate, info.channels)) {
-            emitError(ErrorCode::AudioInitFailed, "failed to initialize audio");
+            if (!has_video_stream) {
+                emitError(ErrorCode::AudioInitFailed, "failed to initialize audio");
+                audio_player_.reset();
+                return false;
+            }
+            LOG_WARNING("Audio output init failed, continuing with video-only playback");
             audio_player_.reset();
         }
     }
@@ -205,8 +280,10 @@ bool PlayerCore::open(const std::string& filename) {
         return false;
     }
 
+    configureFrameQueues(info);
+
     // Create packet queues only for streams we can actually decode/output.
-    if (info.video_stream_idx >= 0) {
+    if (has_video_stream) {
         video_packet_queue_ = std::make_unique<PacketQueue>(kPacketQueueSize);
     } else {
         video_packet_queue_.reset();
@@ -233,7 +310,13 @@ bool PlayerCore::open(const std::string& filename) {
     clearLastRenderedFrame();
     clock_.reset();
     const bool has_audio_clock = audio_codec_ctx_ && audio_player_ && audio_player_->isInitialized();
-    clock_.setSource(has_audio_clock ? ClockSource::Audio : ClockSource::System);
+    const ClockSource clock_source =
+        has_audio_clock ? ClockSource::Audio : (has_video_stream ? ClockSource::Video : ClockSource::System);
+    clock_.setSource(clock_source);
+    LOG_INFO("Playback opened with clock source " << clockSourceName(clock_source)
+             << " (video_stream=" << (has_video_stream ? "true" : "false")
+             << ", audio_stream=" << (has_audio_stream ? "true" : "false")
+             << ", audio_output=" << (has_audio_clock ? "true" : "false") << ")");
     deferred_stop_pending_.store(false);
     resetDiagnostics();
     return true;
@@ -382,6 +465,8 @@ void PlayerCore::seek(double timestamp) {
         if (audio_codec_ctx_) {
             avcodec_flush_buffers(audio_codec_ctx_);
         }
+        video_decoder_draining_ = false;
+        audio_decoder_draining_ = false;
         releaseAudioResampler();
     }
     if (!seek_ok) {
@@ -1037,12 +1122,27 @@ PlaybackInfo PlayerCore::getInfo() const {
 
 DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     DiagnosticsSnapshot snapshot;
+    const bool has_video_stream = demuxer_ && demuxer_->getMediaInfo().video_stream_idx >= 0;
+    const bool has_audio_stream = demuxer_ && demuxer_->getMediaInfo().audio_stream_idx >= 0;
+    snapshot.audio_output_initialized = audio_player_ && audio_player_->isInitialized();
+    snapshot.video_only_fallback = has_video_stream && has_audio_stream && !snapshot.audio_output_initialized;
+    snapshot.clock_source = clock_.getSource();
     snapshot.demux_video_packets = demux_video_packets_.load();
     snapshot.demux_audio_packets = demux_audio_packets_.load();
     snapshot.demux_push_retries = demux_push_retries_.load();
     snapshot.demux_dropped_packets = demux_dropped_packets_.load();
+    snapshot.demux_ignored_packets = demux_ignored_packets_.load();
+    snapshot.demux_queue_drop_packets = demux_queue_drop_packets_.load();
     snapshot.decode_video_ok = decode_video_ok_.load();
     snapshot.decode_audio_ok = decode_audio_ok_.load();
+    snapshot.decode_video_send_eagain = decode_video_send_eagain_.load();
+    snapshot.decode_audio_send_eagain = decode_audio_send_eagain_.load();
+    snapshot.video_decoder_drain_signals = video_decoder_drain_signals_.load();
+    snapshot.audio_decoder_drain_signals = audio_decoder_drain_signals_.load();
+    snapshot.video_native_output_frames = video_native_output_frames_.load();
+    snapshot.video_copy_back_frames = video_copy_back_frames_.load();
+    snapshot.video_swscale_frames = video_swscale_frames_.load();
+    snapshot.video_filter_blocked_native_frames = video_filter_blocked_native_frames_.load();
     snapshot.audio_submitted_frames = audio_submitted_frames_.load();
     snapshot.render_frames = render_frames_.load();
 
@@ -1050,10 +1150,39 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.scheduler_video_decoded_frames = scheduler_stats.video_decoded_frames;
     snapshot.scheduler_audio_decoded_frames = scheduler_stats.audio_decoded_frames;
     snapshot.scheduler_late_drops = scheduler_stats.dropped_late_frames;
+    snapshot.scheduler_wait_events = scheduler_stats.wait_events;
+    snapshot.scheduler_video_backpressure_events = scheduler_stats.video_backpressure_events;
+    snapshot.scheduler_audio_backpressure_events = scheduler_stats.audio_backpressure_events;
+    snapshot.scheduler_video_backpressure_wait_ms = scheduler_stats.video_backpressure_wait_ms;
+    snapshot.scheduler_audio_backpressure_wait_ms = scheduler_stats.audio_backpressure_wait_ms;
+    snapshot.scheduler_video_restart_attempts = scheduler_stats.video_restart_attempts;
+    snapshot.scheduler_audio_restart_attempts = scheduler_stats.audio_restart_attempts;
+    snapshot.scheduler_render_restart_attempts = scheduler_stats.render_restart_attempts;
+    snapshot.scheduler_video_restart_limit_hits = scheduler_stats.video_restart_limit_hits;
+    snapshot.scheduler_audio_restart_limit_hits = scheduler_stats.audio_restart_limit_hits;
+    snapshot.scheduler_render_restart_limit_hits = scheduler_stats.render_restart_limit_hits;
+    snapshot.video_copy_back_time_us_total = video_copy_back_time_us_total_.load();
+    snapshot.video_swscale_time_us_total = video_swscale_time_us_total_.load();
+    snapshot.video_copy_back_time_us_max = video_copy_back_time_us_max_.load();
+    snapshot.video_swscale_time_us_max = video_swscale_time_us_max_.load();
+    const render::RendererDiagnostics renderer_diagnostics =
+        video_renderer_ ? video_renderer_->getDiagnostics() : render::RendererDiagnostics{};
+    snapshot.display_copy_frames = renderer_diagnostics.display_copy_frames;
+    snapshot.display_copy_bytes = renderer_diagnostics.display_copy_bytes;
+    snapshot.display_copy_time_us_total = renderer_diagnostics.display_copy_time_us_total;
+    snapshot.display_copy_time_us_max = renderer_diagnostics.display_copy_time_us_max;
     snapshot.video_packet_queue_size = video_packet_queue_ ? video_packet_queue_->size() : 0;
     snapshot.audio_packet_queue_size = audio_packet_queue_ ? audio_packet_queue_->size() : 0;
-    snapshot.video_frame_queue_size = video_queue_.size();
-    snapshot.audio_frame_queue_size = audio_queue_.size();
+    const FrameQueueStats video_queue_stats = video_queue_.getStats();
+    const FrameQueueStats audio_queue_stats = audio_queue_.getStats();
+    snapshot.video_frame_queue_size = has_video_stream ? video_queue_stats.size : 0;
+    snapshot.audio_frame_queue_size = has_audio_stream ? audio_queue_stats.size : 0;
+    snapshot.video_frame_queue_capacity = has_video_stream ? video_queue_stats.capacity : 0;
+    snapshot.audio_frame_queue_capacity = has_audio_stream ? audio_queue_stats.capacity : 0;
+    snapshot.video_frame_queue_peak_size = has_video_stream ? video_queue_stats.peak_size : 0;
+    snapshot.audio_frame_queue_peak_size = has_audio_stream ? audio_queue_stats.peak_size : 0;
+    snapshot.video_frame_queue_push_timeouts = has_video_stream ? video_queue_stats.push_timeout_count : 0;
+    snapshot.audio_frame_queue_push_timeouts = has_audio_stream ? audio_queue_stats.push_timeout_count : 0;
     return snapshot;
 }
 
@@ -1331,6 +1460,17 @@ bool PlayerCore::initDecoders() {
                 return false;
             }
 
+            if (backend == decoder::DecoderBackend::D3D11VA) {
+                const size_t planned_queue_capacity = selectVideoFrameQueueCapacity(info, backend);
+                video_codec_ctx_->extra_hw_frames = static_cast<int>(clampValue<size_t>(
+                    planned_queue_capacity / 2,
+                    8,
+                    16));
+                LOG_INFO("Configuring D3D11VA decoder with extra_hw_frames="
+                         << video_codec_ctx_->extra_hw_frames
+                         << " for planned video queue capacity " << planned_queue_capacity);
+            }
+
             if (avcodec_open2(video_codec_ctx_, codec, nullptr) < 0) {
                 LOG_WARNING("avcodec_open2 failed for backend "
                             << decoder::DecoderFactory::backendName(backend)
@@ -1416,6 +1556,8 @@ void PlayerCore::releaseDecoders() {
     std::scoped_lock codec_lock(video_codec_mutex_, audio_codec_mutex_);
     releaseVideoScaler();
     releaseAudioResampler();
+    video_decoder_draining_ = false;
+    audio_decoder_draining_ = false;
     if (video_hw_device_ctx_) {
         av_buffer_unref(&video_hw_device_ctx_);
         video_hw_device_ctx_ = nullptr;
@@ -1533,11 +1675,15 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
     }
 
     const AVPixelFormat decoded_format = static_cast<AVPixelFormat>(decoded_frame->format);
-    const bool renderer_accepts_native =
-        video_renderer_ &&
-        video_renderer_->supportsNativeFrameFormat(decoded_format) &&
-        !filter_pipeline_.hasEnabledVideoFilters();
+    const bool renderer_supports_native =
+        video_renderer_ && video_renderer_->supportsNativeFrameFormat(decoded_format);
+    const bool video_filters_enabled = filter_pipeline_.hasEnabledVideoFilters();
+    const bool renderer_accepts_native = renderer_supports_native && !video_filters_enabled;
+    if (renderer_supports_native && video_filters_enabled) {
+        video_filter_blocked_native_frames_.fetch_add(1);
+    }
     if (renderer_accepts_native) {
+        video_native_output_frames_.fetch_add(1);
         return true;
     }
 
@@ -1550,11 +1696,18 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
             return false;
         }
 
+        const auto copy_back_start = std::chrono::steady_clock::now();
         if (av_hwframe_transfer_data(software_frame, decoded_frame, 0) < 0 ||
             av_frame_copy_props(software_frame, decoded_frame) < 0) {
             av_frame_free(&software_frame);
             return false;
         }
+        const uint64_t copy_back_us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                std::chrono::steady_clock::now() - copy_back_start)
+                                                                .count());
+        video_copy_back_frames_.fetch_add(1);
+        video_copy_back_time_us_total_.fetch_add(copy_back_us);
+        updateMaxAtomic(video_copy_back_time_us_max_, copy_back_us);
         src_frame = software_frame;
     }
 
@@ -1576,7 +1729,16 @@ bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out
             conversion_source = source_ref;
         }
 
+        const auto swscale_start = std::chrono::steady_clock::now();
         ok = convertVideoFrameToYuv420(conversion_source, out.frame);
+        if (ok) {
+            const uint64_t swscale_us = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+                                                                  std::chrono::steady_clock::now() - swscale_start)
+                                                                  .count());
+            video_swscale_frames_.fetch_add(1);
+            video_swscale_time_us_total_.fetch_add(swscale_us);
+            updateMaxAtomic(video_swscale_time_us_max_, swscale_us);
+        }
         if (source_ref) {
             av_frame_free(&source_ref);
         }
@@ -1751,6 +1913,28 @@ void PlayerCore::releaseAudioResampler() {
     swr_out_sample_rate_ = 0;
 }
 
+void PlayerCore::configureFrameQueues(const MediaInfo& info) {
+    const size_t video_capacity =
+        info.video_stream_idx >= 0 ? selectVideoFrameQueueCapacity(info, video_decoder_backend_) : 0;
+    const size_t audio_capacity = (info.audio_stream_idx >= 0 && audio_codec_ctx_)
+                                      ? selectAudioFrameQueueCapacity(info)
+                                      : 0;
+
+    if (video_capacity > 0) {
+        video_queue_.setCapacity(video_capacity);
+    }
+    if (audio_capacity > 0) {
+        audio_queue_.setCapacity(audio_capacity);
+    }
+
+    LOG_INFO("Frame queues configured:"
+             << " video=" << (video_capacity > 0 ? std::to_string(video_capacity) : std::string("disabled"))
+             << " audio=" << (audio_capacity > 0 ? std::to_string(audio_capacity) : std::string("disabled"))
+             << " fps=" << info.fps
+             << " size=" << info.width << "x" << info.height
+             << " backend=" << decoder::DecoderFactory::backendName(video_decoder_backend_));
+}
+
 /// 鍚姩瑙ｅ鐢ㄧ嚎绋嬶紱璐熻矗璇诲寘銆佸垎鍙戝埌闊宠棰戝寘闃熷垪骞朵紶鎾?EOF銆?
 void PlayerCore::startDemuxThread() {
     reapCompletedWorkers();
@@ -1789,7 +1973,9 @@ void PlayerCore::startDemuxThread() {
 
             const MediaInfo& info = demuxer_->getMediaInfo();
             bool queued = false;
+            bool targeted_stream = false;
             if (packet->stream_index == info.video_stream_idx && video_packet_queue_) {
+                targeted_stream = true;
                 // On successful push the queue owns the packet lifetime.
                 while (demux_running_.load() && !queued) {
                     queued = video_packet_queue_->push(std::move(packet), 20);
@@ -1803,6 +1989,7 @@ void PlayerCore::startDemuxThread() {
                     demux_video_packets_.fetch_add(1);
                 }
             } else if (packet->stream_index == info.audio_stream_idx && audio_packet_queue_) {
+                targeted_stream = true;
                 while (demux_running_.load() && !queued) {
                     queued = audio_packet_queue_->push(std::move(packet), 20);
                     if (queued) {
@@ -1818,6 +2005,11 @@ void PlayerCore::startDemuxThread() {
 
             if (!queued) {
                 demux_dropped_packets_.fetch_add(1);
+                if (targeted_stream) {
+                    demux_queue_drop_packets_.fetch_add(1);
+                } else {
+                    demux_ignored_packets_.fetch_add(1);
+                }
             }
             maybeLogDiagnostics("demux");
         }
@@ -1967,10 +2159,29 @@ void PlayerCore::resetDiagnostics() {
     demux_audio_packets_.store(0);
     demux_push_retries_.store(0);
     demux_dropped_packets_.store(0);
+    demux_ignored_packets_.store(0);
+    demux_queue_drop_packets_.store(0);
     decode_video_ok_.store(0);
     decode_audio_ok_.store(0);
+    decode_video_send_eagain_.store(0);
+    decode_audio_send_eagain_.store(0);
+    video_decoder_drain_signals_.store(0);
+    audio_decoder_drain_signals_.store(0);
+    video_native_output_frames_.store(0);
+    video_copy_back_frames_.store(0);
+    video_swscale_frames_.store(0);
+    video_filter_blocked_native_frames_.store(0);
     audio_submitted_frames_.store(0);
     render_frames_.store(0);
+    video_copy_back_time_us_total_.store(0);
+    video_swscale_time_us_total_.store(0);
+    video_copy_back_time_us_max_.store(0);
+    video_swscale_time_us_max_.store(0);
+    if (video_renderer_) {
+        video_renderer_->resetDiagnostics();
+    }
+    video_queue_.resetStats();
+    audio_queue_.resetStats();
     last_diag_log_ms_.store(nowSteadyMs());
 }
 
@@ -1983,21 +2194,55 @@ void PlayerCore::maybeLogDiagnostics(const char* source_tag) {
             const SchedulerStats scheduler_stats = scheduler_.getStats();
             const size_t video_pkt_q = video_packet_queue_ ? video_packet_queue_->size() : 0;
             const size_t audio_pkt_q = audio_packet_queue_ ? audio_packet_queue_->size() : 0;
+            const FrameQueueStats video_frame_queue_stats = video_queue_.getStats();
+            const FrameQueueStats audio_frame_queue_stats = audio_queue_.getStats();
+            const render::RendererDiagnostics renderer_diagnostics =
+                video_renderer_ ? video_renderer_->getDiagnostics() : render::RendererDiagnostics{};
             LOG_INFO("[diag:" << source_tag << "]"
                      << " demux(v=" << demux_video_packets_.load()
                      << ",a=" << demux_audio_packets_.load()
                      << ",retry=" << demux_push_retries_.load()
-                     << ",drop=" << demux_dropped_packets_.load() << ")"
+                     << ",drop=" << demux_dropped_packets_.load()
+                     << ",ignore=" << demux_ignored_packets_.load()
+                     << ",qdrop=" << demux_queue_drop_packets_.load() << ")"
                      << " pkt_q(v=" << video_pkt_q << ",a=" << audio_pkt_q << ")"
                      << " dec(core v=" << decode_video_ok_.load()
-                     << ",a=" << decode_audio_ok_.load() << ")"
+                     << ",a=" << decode_audio_ok_.load()
+                     << ",v_send_eagain=" << decode_video_send_eagain_.load()
+                     << ",a_send_eagain=" << decode_audio_send_eagain_.load()
+                     << ",v_drain=" << video_decoder_drain_signals_.load()
+                     << ",a_drain=" << audio_decoder_drain_signals_.load() << ")"
                      << " dec(sched v=" << scheduler_stats.video_decoded_frames
                      << ",a=" << scheduler_stats.audio_decoded_frames << ")"
-                     << " frame_q(v=" << video_queue_.size() << ",a=" << audio_queue_.size() << ")"
+                     << " frame_q(v=" << video_frame_queue_stats.size << "/" << video_frame_queue_stats.capacity
+                     << ",peak=" << video_frame_queue_stats.peak_size
+                     << ",tmo=" << video_frame_queue_stats.push_timeout_count
+                     << ";a=" << audio_frame_queue_stats.size << "/" << audio_frame_queue_stats.capacity
+                     << ",peak=" << audio_frame_queue_stats.peak_size
+                     << ",tmo=" << audio_frame_queue_stats.push_timeout_count << ")"
                      << " render(out=" << scheduler_stats.rendered_frames
                      << ",late_drop=" << scheduler_stats.dropped_late_frames
                      << ",wait=" << scheduler_stats.wait_events
                      << ",cb=" << render_frames_.load() << ")"
+                     << " sched(bp_v=" << scheduler_stats.video_backpressure_events
+                     << ",bp_a=" << scheduler_stats.audio_backpressure_events
+                     << ",bp_v_ms=" << scheduler_stats.video_backpressure_wait_ms
+                     << ",bp_a_ms=" << scheduler_stats.audio_backpressure_wait_ms
+                     << ",restart_v=" << scheduler_stats.video_restart_attempts
+                     << ",restart_a=" << scheduler_stats.audio_restart_attempts
+                     << ",restart_r=" << scheduler_stats.render_restart_attempts
+                     << ",limit_v=" << scheduler_stats.video_restart_limit_hits
+                     << ",limit_a=" << scheduler_stats.audio_restart_limit_hits
+                     << ",limit_r=" << scheduler_stats.render_restart_limit_hits << ")"
+                     << " video(path_native=" << video_native_output_frames_.load()
+                     << ",copyback=" << video_copy_back_frames_.load()
+                     << ",copyback_us=" << video_copy_back_time_us_total_.load()
+                     << ",swscale=" << video_swscale_frames_.load()
+                     << ",swscale_us=" << video_swscale_time_us_total_.load()
+                     << ",filter_block=" << video_filter_blocked_native_frames_.load() << ")"
+                     << " display(copy=" << renderer_diagnostics.display_copy_frames
+                     << ",copy_us=" << renderer_diagnostics.display_copy_time_us_total
+                     << ",copy_bytes=" << renderer_diagnostics.display_copy_bytes << ")"
                      << " audio(submit=" << audio_submitted_frames_.load()
                      << ",play_pts=" << (audio_player_ ? audio_player_->getPlaybackPts() : 0.0) << ")"
                      << " clock(a=" << clock_.getAudioClock()
@@ -2015,59 +2260,73 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
     }
 
     std::lock_guard<std::mutex> codec_lock(video_codec_mutex_);
-    av_frame_unref(out.frame);
-    int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
-    if (ret >= 0) {
-        // Drain already-produced decoder frames before asking for more input.
-        if (!prepareVideoOutputFrame(out.frame, out)) {
+    while (true) {
+        av_frame_unref(out.frame);
+        int ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
+        if (ret >= 0) {
+            if (!prepareVideoOutputFrame(out.frame, out)) {
+                return false;
+            }
+            out.valid = true;
+            out.pts = framePtsSeconds(out.frame, video_time_base_);
+            if (out.frame->duration > 0) {
+                out.duration = out.frame->duration * av_q2d(video_time_base_);
+            } else if (video_codec_ctx_->framerate.num > 0 && video_codec_ctx_->framerate.den > 0) {
+                out.duration = 1.0 / av_q2d(video_codec_ctx_->framerate);
+            } else {
+                out.duration = 0.0;
+            }
+            decode_video_ok_.fetch_add(1);
+            maybeLogDiagnostics(video_decoder_draining_ ? "vdec-drain" : "vdec-recv");
+            return true;
+        }
+        if (ret == AVERROR_EOF) {
             return false;
         }
-        out.valid = true;
-        out.pts = framePtsSeconds(out.frame, video_time_base_);
-        if (out.frame->duration > 0) {
-            out.duration = out.frame->duration * av_q2d(video_time_base_);
-        } else if (video_codec_ctx_->framerate.num > 0 && video_codec_ctx_->framerate.den > 0) {
-            out.duration = 1.0 / av_q2d(video_codec_ctx_->framerate);
-        } else {
-            out.duration = 0.0;
+        if (ret != AVERROR(EAGAIN)) {
+            return false;
         }
-        decode_video_ok_.fetch_add(1);
-        maybeLogDiagnostics("vdec-recv");
-        return true;
-    }
-    if (ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
-        return false;
-    }
 
-    PacketPtr packet;
-    if (!video_packet_queue_->pop(packet, 20) || !packet) {
-        return false;
-    }
-    // Only send a new packet when receive needs more input.
-    ret = avcodec_send_packet(video_codec_ctx_, packet.get());
-    if (ret < 0) {
-        return false;
-    }
+        PacketPtr packet;
+        if (video_packet_queue_->pop(packet, 20) && packet) {
+            video_decoder_draining_ = false;
+            ret = avcodec_send_packet(video_codec_ctx_, packet.get());
+            if (ret == AVERROR(EAGAIN)) {
+                decode_video_send_eagain_.fetch_add(1);
+                continue;
+            }
+            if (ret == AVERROR_EOF) {
+                video_decoder_draining_ = true;
+                return false;
+            }
+            if (ret < 0) {
+                return false;
+            }
+            continue;
+        }
 
-    ret = avcodec_receive_frame(video_codec_ctx_, out.frame);
-    if (ret < 0) {
-        return false;
+        if (!video_packet_queue_->isEof()) {
+            return false;
+        }
+        if (video_decoder_draining_) {
+            return false;
+        }
+
+        ret = avcodec_send_packet(video_codec_ctx_, nullptr);
+        if (ret == AVERROR(EAGAIN)) {
+            decode_video_send_eagain_.fetch_add(1);
+            continue;
+        }
+        if (ret == AVERROR_EOF) {
+            video_decoder_draining_ = true;
+            return false;
+        }
+        if (ret < 0) {
+            return false;
+        }
+        video_decoder_draining_ = true;
+        video_decoder_drain_signals_.fetch_add(1);
     }
-    if (!prepareVideoOutputFrame(out.frame, out)) {
-        return false;
-    }
-    out.valid = true;
-    out.pts = framePtsSeconds(out.frame, video_time_base_);
-    if (out.frame->duration > 0) {
-        out.duration = out.frame->duration * av_q2d(video_time_base_);
-    } else if (video_codec_ctx_->framerate.num > 0 && video_codec_ctx_->framerate.den > 0) {
-        out.duration = 1.0 / av_q2d(video_codec_ctx_->framerate);
-    } else {
-        out.duration = 0.0;
-    }
-    decode_video_ok_.fetch_add(1);
-    maybeLogDiagnostics("vdec-send");
-    return true;
 }
 
 /// 浠庨煶棰戝寘闃熷垪瑙ｇ爜涓€甯?PCM锛屽苟閲嶉噰鏍峰埌 SDL 杈撳嚭鏍煎紡銆?
@@ -2082,27 +2341,66 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
         return false;
     }
 
-    int ret = avcodec_receive_frame(audio_codec_ctx_, frame);
-    if (ret == AVERROR(EAGAIN)) {
-        // Mirror the video path: receive first, then feed more compressed data if needed.
+    while (true) {
+        av_frame_unref(frame);
+        int ret = avcodec_receive_frame(audio_codec_ctx_, frame);
+        if (ret >= 0) {
+            break;
+        }
+        if (ret == AVERROR_EOF) {
+            av_frame_free(&frame);
+            return false;
+        }
+        if (ret != AVERROR(EAGAIN)) {
+            av_frame_free(&frame);
+            return false;
+        }
+
         PacketPtr packet;
-        if (!audio_packet_queue_->pop(packet, 20) || !packet) {
+        if (audio_packet_queue_->pop(packet, 20) && packet) {
+            audio_decoder_draining_ = false;
+            ret = avcodec_send_packet(audio_codec_ctx_, packet.get());
+            if (ret == AVERROR(EAGAIN)) {
+                decode_audio_send_eagain_.fetch_add(1);
+                continue;
+            }
+            if (ret == AVERROR_EOF) {
+                audio_decoder_draining_ = true;
+                av_frame_free(&frame);
+                return false;
+            }
+            if (ret < 0) {
+                av_frame_free(&frame);
+                return false;
+            }
+            continue;
+        }
+
+        if (!audio_packet_queue_->isEof()) {
             av_frame_free(&frame);
             return false;
         }
-        ret = avcodec_send_packet(audio_codec_ctx_, packet.get());
+        if (audio_decoder_draining_) {
+            av_frame_free(&frame);
+            return false;
+        }
+
+        ret = avcodec_send_packet(audio_codec_ctx_, nullptr);
+        if (ret == AVERROR(EAGAIN)) {
+            decode_audio_send_eagain_.fetch_add(1);
+            continue;
+        }
+        if (ret == AVERROR_EOF) {
+            audio_decoder_draining_ = true;
+            av_frame_free(&frame);
+            return false;
+        }
         if (ret < 0) {
             av_frame_free(&frame);
             return false;
         }
-        ret = avcodec_receive_frame(audio_codec_ctx_, frame);
-        if (ret < 0) {
-            av_frame_free(&frame);
-            return false;
-        }
-    } else if (ret < 0) {
-        av_frame_free(&frame);
-        return false;
+        audio_decoder_draining_ = true;
+        audio_decoder_drain_signals_.fetch_add(1);
     }
 
     // Resample/convert to the SDL output format expected by AudioPlayer.
@@ -2161,7 +2459,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
     }
     if (out.valid) {
         decode_audio_ok_.fetch_add(1);
-        maybeLogDiagnostics("adec");
+        maybeLogDiagnostics(audio_decoder_draining_ ? "adec-drain" : "adec");
     }
 
     av_freep(&dst_data);

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -63,21 +63,59 @@ struct PlaybackInfo {
 };
 
 struct DiagnosticsSnapshot {
+    bool audio_output_initialized{false};
+    bool video_only_fallback{false};
+    ClockSource clock_source{ClockSource::Audio};
     uint64_t demux_video_packets{0};
     uint64_t demux_audio_packets{0};
     uint64_t demux_push_retries{0};
     uint64_t demux_dropped_packets{0};
+    uint64_t demux_ignored_packets{0};
+    uint64_t demux_queue_drop_packets{0};
     uint64_t decode_video_ok{0};
     uint64_t decode_audio_ok{0};
+    uint64_t decode_video_send_eagain{0};
+    uint64_t decode_audio_send_eagain{0};
+    uint64_t video_decoder_drain_signals{0};
+    uint64_t audio_decoder_drain_signals{0};
+    uint64_t video_native_output_frames{0};
+    uint64_t video_copy_back_frames{0};
+    uint64_t video_swscale_frames{0};
+    uint64_t video_filter_blocked_native_frames{0};
     uint64_t audio_submitted_frames{0};
     uint64_t render_frames{0};
     uint64_t scheduler_video_decoded_frames{0};
     uint64_t scheduler_audio_decoded_frames{0};
     uint64_t scheduler_late_drops{0};
+    uint64_t scheduler_wait_events{0};
+    uint64_t scheduler_video_backpressure_events{0};
+    uint64_t scheduler_audio_backpressure_events{0};
+    uint64_t scheduler_video_backpressure_wait_ms{0};
+    uint64_t scheduler_audio_backpressure_wait_ms{0};
+    uint64_t scheduler_video_restart_attempts{0};
+    uint64_t scheduler_audio_restart_attempts{0};
+    uint64_t scheduler_render_restart_attempts{0};
+    uint64_t scheduler_video_restart_limit_hits{0};
+    uint64_t scheduler_audio_restart_limit_hits{0};
+    uint64_t scheduler_render_restart_limit_hits{0};
+    uint64_t video_copy_back_time_us_total{0};
+    uint64_t video_swscale_time_us_total{0};
+    uint64_t video_copy_back_time_us_max{0};
+    uint64_t video_swscale_time_us_max{0};
+    uint64_t display_copy_frames{0};
+    uint64_t display_copy_bytes{0};
+    uint64_t display_copy_time_us_total{0};
+    uint64_t display_copy_time_us_max{0};
     size_t video_packet_queue_size{0};
     size_t audio_packet_queue_size{0};
     size_t video_frame_queue_size{0};
     size_t audio_frame_queue_size{0};
+    size_t video_frame_queue_capacity{0};
+    size_t audio_frame_queue_capacity{0};
+    size_t video_frame_queue_peak_size{0};
+    size_t audio_frame_queue_peak_size{0};
+    uint64_t video_frame_queue_push_timeouts{0};
+    uint64_t audio_frame_queue_push_timeouts{0};
 };
 
 class PlayerCore {
@@ -168,6 +206,7 @@ private:
     void releaseVideoScaler();
     bool ensureAudioResampler(const AVFrame* frame);
     void releaseAudioResampler();
+    void configureFrameQueues(const MediaInfo& info);
     void startDemuxThread();
     void stopDemuxThread();
     void startAudioConsumer();
@@ -266,13 +305,29 @@ private:
     std::atomic<uint64_t> demux_audio_packets_{0};
     std::atomic<uint64_t> demux_push_retries_{0};
     std::atomic<uint64_t> demux_dropped_packets_{0};
+    std::atomic<uint64_t> demux_ignored_packets_{0};
+    std::atomic<uint64_t> demux_queue_drop_packets_{0};
     std::atomic<uint64_t> decode_video_ok_{0};
     std::atomic<uint64_t> decode_audio_ok_{0};
+    std::atomic<uint64_t> decode_video_send_eagain_{0};
+    std::atomic<uint64_t> decode_audio_send_eagain_{0};
+    std::atomic<uint64_t> video_decoder_drain_signals_{0};
+    std::atomic<uint64_t> audio_decoder_drain_signals_{0};
+    std::atomic<uint64_t> video_native_output_frames_{0};
+    std::atomic<uint64_t> video_copy_back_frames_{0};
+    std::atomic<uint64_t> video_swscale_frames_{0};
+    std::atomic<uint64_t> video_filter_blocked_native_frames_{0};
     std::atomic<uint64_t> audio_submitted_frames_{0};
     std::atomic<uint64_t> render_frames_{0};
+    std::atomic<uint64_t> video_copy_back_time_us_total_{0};
+    std::atomic<uint64_t> video_swscale_time_us_total_{0};
+    std::atomic<uint64_t> video_copy_back_time_us_max_{0};
+    std::atomic<uint64_t> video_swscale_time_us_max_{0};
     std::atomic<int64_t> last_diag_log_ms_{0};
     std::mutex video_codec_mutex_;
     std::mutex audio_codec_mutex_;
+    bool video_decoder_draining_{false};
+    bool audio_decoder_draining_{false};
 
     mutable std::mutex subtitle_mutex_;
     std::vector<subtitle::SubtitleItem> subtitle_items_;

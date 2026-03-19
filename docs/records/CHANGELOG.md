@@ -1,4 +1,4 @@
-﻿# 问题修复记录
+# 问题修复记录
 
 本文档记录开发过程中遇到的问题及其解决方案。
 
@@ -62,6 +62,152 @@
 | 67 | 2026-03-18 | ASS 标签解析与 UTF-16 字幕范围修正 | ✅ 已修复 |
 | 68 | 2026-03-18 | MSVC warning debt 分层清理（C4819 / C4996 / C4706） | ✅ 已修复 |
 | 69 | 2026-03-19 | PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复 | ✅ 已修复 |
+| 70 | 2026-03-19 | 音频设备失败时的视频-only降级与回归门禁纠偏 | ✅ 已修复 |
+
+| 71 | 2026-03-19 | 4K backend session 子进程退出路径修复 | ✅ 已修复 |
+| 72 | 2026-03-19 | 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强 | ✅ 已修复 |
+| 73 | 2026-03-19 | SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override | ✅ 已修复 |
+
+## 问题 73: SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
+**日期**: 2026-03-19
+
+### 问题描述
+- 在上一轮确认 D3D11 主链仍是 zero-copy 之后，用户继续要求判断 `Display::copyFrameData()` 与 `Scheduler` 重启策略是否是高码率/4K 不稳定的真实原因。
+- 旧实现无法量化 `SoftwareSDL` 路径每帧 memcpy 的实际成本，`Scheduler` 也仍然使用固定次数重启策略，且 renderer 选择链没有真正支持强制 `SoftwareSDL` 采样。
+- 这导致第 8、10 点仍然只能半定性判断，无法像主链 zero-copy 那样给出硬数据。
+
+### 原因分析
+- `Display::copyFrameData()` 的统计没有透传到 `PlayerCore` 和 CLI，自然也就无法算出 4K60 下的占比。
+- `Scheduler` 固定重启次数过于生硬，短时异常和持续抖动无法区分。
+- `RendererFactory` 之前完全无视 `MVP_D3D11_DRIVER_HINT` / renderer override，导致 `--renderer-fallback-check` 和 `SoftwareSDL` 性能采样都不可靠。
+
+### 解决方案
+- 为 `Display` 增加 `FrameCopyStats`，并经由 `SdlVideoRenderer -> RendererDiagnostics -> PlayerCore::DiagnosticsSnapshot` 透传到 `--performance-log-check`。
+- `Scheduler` 重启策略改成“30s 窗口内最多 4 次 + 100ms 冷却”，并新增 `scheduler_*_restart_limit_hits`。
+- `RendererFactory::detectBestRendererType()` 新增 `MVP_RENDERER_BACKEND` override，并在 Windows 下支持 `MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`。
+- 已重新执行：`MSBuild`、`--renderer-fallback-check`、默认 `D3D11 --performance-log-check`、强制 `SoftwareSDL --performance-log-check`。
+- 关键结果：`SoftwareSDL` 4K60 采样里 `display_copy_ratio_percent=21.8407`、`video_copy_back_ratio_percent=30.1018`、`video_swscale_ratio_percent=18.6623`；默认 `D3D11` 主链则三者都为 `0`。
+
+### 修改文件
+- `include/display.h`
+- `src/display.cpp`
+- `include/render/video_renderer.h`
+- `include/render/sdl_video_renderer.h`
+- `src/render/sdl_video_renderer.cpp`
+- `src/render/renderer_factory.cpp`
+- `include/core/scheduler.h`
+- `src/core/scheduler.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY9_SOFTWARE_COPY_AND_RESTART_BUDGET_ANALYSIS.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+## 问题 72: 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强
+**日期**: 2026-03-19
+
+### 问题描述
+- 用户要求继续围绕高码率视频不稳定输出帧的问题，重点判断 `FrameQueue` 容量、`Scheduler` 背压/节流、`Display::copyFrameData()`、`av_hwframe_transfer_data()` 与 `Scheduler` 线程策略是否是真正瓶颈。
+- 现有主链已经具备 D3D11 native zero-copy，但缺少 queue 峰值、背压等待时长、copy-back/swscale 时间统计，导致队列是否过小、copy-back 是否热点都只能靠猜。
+- 同时，`Video` master 路径的等待策略过于粗糙，render loop 落后时一次只丢一帧，也会放大高分辨率样本下的时序抖动。
+
+### 原因分析
+- `FrameQueue` 之前只有当前 size/capacity，没有 peak 与 push timeout，无法确认是否真的被 frame queue 顶满。
+- `Scheduler` 的单点背压阈值和固定小步等待会在高码率/4K 下形成“要么过早限流、要么追帧太慢”的两种极端。
+- 直接放大 4K `D3D11VA` 视频队列又会打到 FFmpeg 的固定硬件帧池，因此 frame queue 和 `extra_hw_frames` 必须联动。
+- 采样验证表明当前 4K 主链命中的仍然是 `D3D11VA -> D3D11` native path，而不是 copy-back / swscale；因此 `av_hwframe_transfer_data()` 并不是当前这台机器上的主瓶颈。
+
+### 解决方案
+- 为 `FrameQueue` 增加 `peak_size / push_timeout_count / getStats / resetStats`。
+- `PlayerCore::open()` 现在会按媒体属性配置视频/音频 frame queue 容量，并在 `D3D11VA` 打开前设置 `extra_hw_frames`，避免 4K native path 打爆 surface pool。
+- `Scheduler` 背压改成 enter/exit hysteresis，并新增 `video/audio_backpressure_wait_ms` 统计。
+- `Scheduler::pumpRenderOnce()` 现在会：
+  - 在 `Video` master 下按真实 wall-clock 做 frame pacing
+  - 在一次 pump 内连续丢弃过期帧，直到拿到可显示帧
+- `--performance-log-check` 扩展输出 copy-back/swscale 时间、queue capacity/peak/timeout 与背压等待时长。
+- 已重新执行：
+  - `--performance-log-check ...4k... 1500`
+  - `--high-bitrate-check ... 3000`
+  - `--4k-playback-check ... 2000`
+  - `--long-playback-check .\juren-30s.mp4 6000`
+  当前均通过。
+
+### 修改文件
+- `include/core/frame_queue.h`
+- `include/core/player_core.h`
+- `include/core/scheduler.h`
+- `src/core/player_core.cpp`
+- `src/core/scheduler.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY8_QUEUE_PACING_AND_COPYBACK_ANALYSIS.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+## 问题 71: 4K backend session 子进程退出路径修复
+**日期**: 2026-03-19
+
+### 问题描述
+- 在上一轮修复 video-only 降级和 demux 门禁后，`--4k-playback-check` 仍然失败，但失败点已收敛到 `fallback_ok=false`。
+- 进一步复跑发现：`--windows-backend-session-check hard` 会在打印 `PASS` 后卡到父进程超时，`soft` 会在打印 `PASS` 后以异常退出码结束。
+- 这使得 4K 回归仍然被 backend probe 子进程误判拖成 FAIL。
+
+### 原因分析
+- `runWindowsBackendSessionCheck()` 本质是专供父进程消费的 probe 子进程，不是用户态长期运行播放器会话。
+- 旧实现错误地复用了常规退出假设，导致这条 probe 路径在不同 backend 组合下出现“结果已打印、进程未正常结束”的问题。
+- 因为 `runBackendSessionSubprocess()` 同时要求 `mode_ok=true` 且 `exit_code==0`，所以这种超时/异常退出会直接把 `fallback_ok` 拉成 false。
+
+### 解决方案
+- 将 `runWindowsBackendSessionCheck` 改为专用的 `runWindowsBackendSessionCheckAndExit()`。
+- 该命令在打印结构化结果后会显式 flush `stdout/stderr`，并在 Windows 下直接调用 `TerminateProcess(GetCurrentProcess(), code)` 退出子进程。
+- `main()` 的 `--windows-backend-session-check` 分支已切到这条专用退出路径。
+- 已重新执行：
+  - `--windows-backend-session-check ... hard`
+  - `--windows-backend-session-check ... soft`
+  - `--windows-backend-check ...`
+  - `--4k-playback-check ... 2000`
+  当前均通过。
+
+### 修改文件
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY7_BACKEND_SESSION_EXIT_FIX.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+## 问题 70: 音频设备失败时的视频-only降级与回归门禁纠偏
+**日期**: 2026-03-19
+
+### 问题描述
+- 当前机器上 `WASAPI` 音频设备初始化失败时，`PlayerCore::open()` 虽然会继续走下去，但仍然会发出 `AudioInitFailed` 错误，导致“非致命能力降级”和“真正打开失败”语义混在一起。
+- 高码率场景的回归检查仍然把 `demux_dropped_packets` 当成统一失败门禁；在 video-only 降级时，被禁用音频流的包会累计进 `demux_ignored_packets`，从而把“预期忽略”误判成“队列背压丢包”。
+- 无音频输出时，旧逻辑把主时钟退回 `System`，这对纯视频推进不够稳定，也不利于诊断 video-only 场景。
+
+### 原因分析
+- `initDecoders()` 已经用 `audio_player_->isInitialized()` 控制音频解码是否启用，但 `open()` 层缺少显式的“视频可继续播 / 音频-only 必须失败”分支，所以行为依赖副作用而不是策略。
+- `demux_dropped_packets` 同时混合了 ignored 和 queue-drop 两类语义，适合做总量观测，不适合直接当高码率稳定性门禁。
+- 没有把当前播放模式直接暴露到 diagnostics，导致每次都要回看日志才能确认是否发生了 video-only 降级。
+
+### 解决方案
+- 调整 `PlayerCore::open()`：
+  - 有视频流时，音频设备初始化失败只记 warning，并继续以 video-only 模式打开
+  - 没有视频流时，音频设备初始化失败仍直接返回失败
+- 调整主时钟选择：
+  - 有音频输出时使用 `Audio`
+  - 无音频输出但有视频流时使用 `Video`
+  - 只有都不可用时才回退 `System`
+- 扩展 `DiagnosticsSnapshot` 与 CLI 输出，新增 `audio_output_initialized / video_only_fallback / clock_source`。
+- 将 `1080p60-check`、`high-bitrate-check`、`long-playback-check` 的 demux 门禁改为 `demux_queue_drop_packets == 0`，并补充打印 `demux_ignored_packets / demux_queue_drop_packets`。
+- 已重新执行 `MSBuild`、`--1080p60-check`、`--high-bitrate-check`、`--long-playback-check`、`--performance-log-check`；当前通过。`--4k-playback-check` 仍剩 `fallback_ok` 子进程路径待后续处理。
+
+### 修改文件
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY7_AUDIO_FALLBACK_AND_REGRESSION_GATES.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- docs/records/VERSION.md
 
 ## 问题 69: PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复
 
@@ -2607,5 +2753,41 @@ void VideoPlayer::play() {
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
+
+
+
+---
+
+## 问题 69: 播放链诊断分层与 decoder drain / scheduler 容错补强
+
+**日期**: 2026-03-19
+
+### 问题描述
+- 高码率播放稳定性排查需要明确区分“真正的背压/入队失败”和“非目标流包被忽略”，并补齐 decoder drain、native path 命中率与 scheduler 容错边界的可观测性。
+- 旧实现中 packet queue EOF 后没有向 codec 发送 `nullptr` drain，且 send 后只做一次 receive，容易把“暂时无输出”和“真正失败”混在一起。
+
+### 原因分析
+- 诊断快照此前只有 `demux_dropped_packets` 总量，没有细分 drop 原因。
+- scheduler 只保护了解码线程，render thread 没有同样的异常保护；restart 次数和背压频率也没有结构化导出。
+- 即使主链已具备条件式 D3D11 native path，运行时也缺少 `native / copy-back / swscale` 路径计数，难以直接验证当前热点。
+
+### 解决方案
+- 重写 video/audio decoder 的 drain/feed 循环，并在 packet EOF 后对 codec 发送 `nullptr` 触发 drain。
+- 在 `PlayerCore` 中增加 demux drop 分类、decoder `send_packet(EAGAIN)`、drain 次数和视频输出路径计数。
+- 在 `Scheduler` 中增加背压与 restart 统计，并把 render thread 纳入 `runProtectedLoop()`；restart 上限放宽为有限的多次尝试。
+- 扩展 `--performance-log-check` 输出，导出新的结构化诊断字段。
+
+### 修改文件
+- include/core/scheduler.h
+- src/core/scheduler.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+
+
 
 

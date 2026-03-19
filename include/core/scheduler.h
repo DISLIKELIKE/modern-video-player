@@ -1,6 +1,7 @@
-﻿#pragma once
+#pragma once
 
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -19,6 +20,16 @@ struct SchedulerStats {
     uint64_t rendered_frames{0};
     uint64_t dropped_late_frames{0};
     uint64_t wait_events{0};
+    uint64_t video_backpressure_events{0};
+    uint64_t audio_backpressure_events{0};
+    uint64_t video_backpressure_wait_ms{0};
+    uint64_t audio_backpressure_wait_ms{0};
+    uint64_t video_restart_attempts{0};
+    uint64_t audio_restart_attempts{0};
+    uint64_t render_restart_attempts{0};
+    uint64_t video_restart_limit_hits{0};
+    uint64_t audio_restart_limit_hits{0};
+    uint64_t render_restart_limit_hits{0};
 };
 
 class Scheduler {
@@ -47,12 +58,19 @@ public:
     SchedulerStats getStats() const;
 
 private:
+    struct WorkerRestartBudget {
+        std::atomic<int> total_restarts{0};
+        std::atomic<int> window_restarts{0};
+        std::atomic<int64_t> window_start_ms{0};
+        std::atomic<uint64_t> limit_hits{0};
+    };
+
     void videoDecoderLoop();
     void audioDecoderLoop();
     void renderLoop();
 
     template <typename Func>
-    void runProtectedLoop(Func&& fn, std::atomic<int>& restart_counter);
+    void runProtectedLoop(const char* worker_name, Func&& fn, WorkerRestartBudget& restart_budget);
 
     std::atomic<bool> running_{false};
     std::atomic<bool> paused_{false};
@@ -70,13 +88,19 @@ private:
     FrameQueue<AudioFrame>* audio_queue_{nullptr};
 
     Clock* clock_{nullptr};
-    std::atomic<int> video_restart_count_{0};
-    std::atomic<int> audio_restart_count_{0};
+    WorkerRestartBudget video_restart_budget_{};
+    WorkerRestartBudget audio_restart_budget_{};
+    WorkerRestartBudget render_restart_budget_{};
     std::atomic<uint64_t> video_decoded_frames_{0};
     std::atomic<uint64_t> audio_decoded_frames_{0};
     std::atomic<uint64_t> rendered_frames_{0};
     std::atomic<uint64_t> dropped_late_frames_{0};
     std::atomic<uint64_t> wait_events_{0};
+    std::atomic<uint64_t> video_backpressure_events_{0};
+    std::atomic<uint64_t> audio_backpressure_events_{0};
+    std::atomic<uint64_t> video_backpressure_wait_ms_{0};
+    std::atomic<uint64_t> audio_backpressure_wait_ms_{0};
+    std::chrono::steady_clock::time_point last_render_wall_tp_{};
 };
 
 }  // namespace vp::core

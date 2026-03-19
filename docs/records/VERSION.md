@@ -1,4 +1,4 @@
-﻿# 项目版本记录
+# 项目版本记录
 
 本文档记录项目的版本变更历史和当前状态。
 
@@ -23,6 +23,41 @@
 - **支持平台**: Windows, Linux, macOS
 
 
+### 2026-03-19 更新：SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
+
+- `Display::copyFrameData()` 现已具备 `frames / bytes / time_us_total / time_us_max` 统计，并通过 `RendererDiagnostics + DiagnosticsSnapshot + --performance-log-check` 输出软件显示链的真实成本。
+- `Scheduler` worker 重启策略已从固定次数改成“30s 窗口内最多 4 次 + 100ms 冷却”，并新增 `scheduler_*_restart_limit_hits` 诊断。
+- `RendererFactory` 新增 `MVP_RENDERER_BACKEND` override，并在 Windows 下支持 `MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`，`--renderer-fallback-check` 当前已恢复通过。
+- 本机 4K60 强制 `SoftwareSDL` 采样显示：`video_copy_back_ratio_percent=30.1018`、`video_swscale_ratio_percent=18.6623`、`display_copy_ratio_percent=21.8407`；说明软件回退链已经是 copy-back、swscale、display memcpy 的叠加热点。
+- 默认 `D3D11 + D3D11VA` 主链重新验证后仍保持 `video_copy_back_ratio_percent=0`、`video_swscale_ratio_percent=0`、`display_copy_ratio_percent=0`，zero-copy 结论不变。
+### 2026-03-19 更新：高码率/4K 队列容量、自适应节流与 copy-back 诊断增强
+
+- `FrameQueue` 已新增 `peak_size / push_timeout_count` 统计，`DiagnosticsSnapshot` 与 `--performance-log-check` 会同步输出 frame queue 的 `capacity / peak / timeout`。
+- `PlayerCore::open()` 现在按媒体属性配置视频/音频 frame queue 容量，并在 `D3D11VA` 打开前设置 `extra_hw_frames`，避免 4K native path 打爆 FFmpeg 的硬件帧池。
+- `Scheduler` 已把 video/audio 背压改为迟滞阈值，并新增 `video/audio_backpressure_wait_ms` 统计；`pumpRenderOnce()` 同时修正了 `Video` master 的 wall-clock pacing 和 late-frame catch-up。
+- 最新 4K 性能采样显示：`renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`video_native_output_frames=101`、`video_copy_back_frames=0`、`video_swscale_frames=0`，说明当前主链仍以 native zero-copy 为主，不是 copy-back 热点。
+- 已重新验证：`MSBuild`、`--performance-log-check`、`--high-bitrate-check`、`--4k-playback-check`、`--long-playback-check` 当前均通过。
+### 2026-03-19 更新：4K backend session 子进程退出路径修复
+
+- `--windows-backend-session-check` 已从“复用常规播放器退出收尾”改为“一次性 probe 子进程”路径：打印结构化结果后显式 flush，并在 Windows 下直接 `TerminateProcess(GetCurrentProcess(), code)` 退出。
+- 这次修复针对的是回归 harness，不是主播放链运行时逻辑；目标是消除 `hard` 模式打印 PASS 后超时、`soft` 模式打印 PASS 后异常退出的残留失败。
+- 已重新验证：`hard/soft --windows-backend-session-check` 退出码均为 `0`，`--windows-backend-check` 与 `--4k-playback-check` 当前均已恢复通过。
+### 2026-03-19 更新：音频设备失败时的视频-only降级与回归门禁纠偏
+
+- `PlayerCore::open()` 现在把音频设备失败分成两类：视频文件会降级为 `video-only` 继续播放，音频-only 文件仍然直接失败，避免“打开成功但没有任何可播放输出”的伪成功。
+- 无音频输出但有视频流时，主时钟从 `System` 改为 `Video`，让位置推进跟随实际渲染 PTS，而不是系统时钟估算。
+- `DiagnosticsSnapshot` 新增 `audio_output_initialized / video_only_fallback / clock_source`，`--performance-log-check`、`--1080p60-check`、`--4k-playback-check`、`--high-bitrate-check`、`--long-playback-check` 会同步输出这些状态。
+- `1080p60/high-bitrate/long-playback` 三个回归门禁现已改为只看 `demux_queue_drop_packets`，不再把音频禁用场景下的 `demux_ignored_packets` 误判成高码率回压失败。
+- 已重新执行：
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
+  以及 `--1080p60-check`、`--high-bitrate-check`、`--long-playback-check`、`--performance-log-check`，当前均通过；`--4k-playback-check` 仍只剩 `fallback_ok` 子进程路径待继续排查。
+
+### 2026-03-19 更新：播放链诊断分层与 decoder drain / scheduler 容错补强
+
+- `decodeVideoFrame()` / `decodeAudioFrame()` 已改为持续 `receive -> send -> receive` 状态机，并在 packet queue EOF 后对 codec 发送 `nullptr` drain，避免把“暂时无输出”和“真正失败”混在一起。
+- `DiagnosticsSnapshot` 现已区分 `demux_ignored_packets / demux_queue_drop_packets`，并新增 decoder `send_packet(EAGAIN)`、drain 次数、`native/copy-back/swscale/filter-blocked` 视频路径计数。
+- `Scheduler` 已新增 video/audio 背压事件与 video/audio/render restart 统计，render thread 也纳入受保护 worker；`--performance-log-check` 会同步输出这些新指标。
+
 ### 2026-03-19 更新：PlayerCore 停播收口与运行时设计债修复
 
 - `PlayerCore` 已补上 deferred stop / worker reap 路径，EOF 自动停播、Next/Previous、Quit 等路径不再只改状态而遗留 demux/audio/scheduler 脏线程。
@@ -30,7 +65,8 @@
 - `Scheduler` 已支持异步停机并在重启前回收已退出 worker；`Clock` 已修复 system-clock 的 pause/speed 时间基准连续性；`Demuxer::open()` 也已去掉锁内重入 `close()` 的死锁风险。
 - 已重新执行整工程验证命令
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
-  当前结果为 `0 个警告 / 0 个错误`。
+  当前结果为 0 个警告 / 0 个错误。
+
 ### 2026-03-18 更新：MSVC warning debt 分层清理
 
 - Windows MSVC 目标已启用 `/utf-8 /external:anglebrackets /external:W0`，本地 UTF-8 源文件不再触发 `C4819`，第三方 angle-bracket 头文件 warning 也被隔离到外部层。
@@ -39,6 +75,7 @@
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
   当前结果为 `0 个警告 / 0 个错误`。
 - 这轮变更不扩展播放器功能面，目标仅为恢复 Windows CI 的低噪声构建基线。
+
 ### 2026-03-18 更新：ASS 标签解析与 UTF-16 范围修正
 
 - `ASS/SSA` override 解析已修复 `\fnArial`、`\rDefault` 等紧凑写法的标签识别错误，常见字体切换和样式重置现在会按预期进入原生 D3D11 字幕链。
@@ -1824,5 +1861,13 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/CHANGELOG.md
 - docs/records/DEVELOP_LOG.md
+
+
+
+
+
+
+
+
 
 

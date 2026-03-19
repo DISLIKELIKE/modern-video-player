@@ -1,4 +1,4 @@
-﻿#include "video_player.h"
+#include "video_player.h"
 #include "config/settings_manager.h"
 #include "demuxer.h"
 #include "filters/filter_registry.h"
@@ -22,6 +22,7 @@ extern "C" {
 #include <csignal>
 #include <cctype>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <ctime>
 #include <filesystem>
@@ -89,6 +90,19 @@ std::string coverageLevel(size_t hit, size_t total) {
         return "PASS";
     }
     return "PARTIAL";
+}
+
+const char* clockSourceName(core::ClockSource source) {
+    switch (source) {
+    case core::ClockSource::Audio:
+        return "Audio";
+    case core::ClockSource::Video:
+        return "Video";
+    case core::ClockSource::System:
+        return "System";
+    default:
+        return "Unknown";
+    }
 }
 
 bool startsWithInsensitive(const std::string& value, const std::string& prefix) {
@@ -1396,14 +1410,26 @@ BackendSessionResult runBackendSessionSubprocess(const std::string& program_path
     return result;
 }
 
-/// 在 Windows 上验证指定渲染后端模式能否稳定启动会话。
-bool runWindowsBackendSessionCheck(const std::string& media_file, const std::string& mode) {
+/// 在 Windows 上验证指定渲染后端模式能否稳定启动会话，并直接以结果码退出子进程。
+[[noreturn]] void runWindowsBackendSessionCheckAndExit(const std::string& media_file, const std::string& mode) {
+    auto flush_and_exit = [](int code) -> void {
+        std::cout.flush();
+        std::cerr.flush();
+        std::fflush(nullptr);
+#if defined(_WIN32)
+        TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
+#else
+        std::_Exit(code);
+#endif
+        std::abort();
+    };
+
     const bool hard_mode = mode == "hard";
     const bool soft_mode = mode == "soft";
     if (!hard_mode && !soft_mode) {
         std::cout << "windows-backend-session-check.mode=" << mode << std::endl;
         std::cout << "windows-backend-session-check.result=FAIL" << std::endl;
-        return false;
+        flush_and_exit(2);
     }
 
     std::error_code ec;
@@ -1413,29 +1439,27 @@ bool runWindowsBackendSessionCheck(const std::string& media_file, const std::str
         std::cout << "windows-backend-session-check.path=" << media_file << std::endl;
         std::cout << "windows-backend-session-check.mode=" << mode << std::endl;
         std::cout << "windows-backend-session-check.result=FAIL" << std::endl;
-        return false;
+        flush_and_exit(2);
     }
 
     const bool prefer_hardware_decode = hard_mode;
     const std::string expected_decoder = prefer_hardware_decode ? "D3D11VA" : "Software";
     ScopedEnvOverride force_d3d11_driver_hint("MVP_D3D11_DRIVER_HINT", "direct3d11");
 
-    // Keep this session self-contained and avoid stop/close teardown deadlocks by
-    // leaving cleanup to process exit in the parent command path.
-    auto* player = new VideoPlayer();
     BackendSessionResult session{};
-    player->setPreferHardwareDecode(prefer_hardware_decode);
-    session.open_ok = player->open(media_file);
-    session.renderer_backend = player->videoRendererBackendName();
-    session.decoder_backend = player->videoDecoderBackendName();
+    VideoPlayer player;
+    player.setPreferHardwareDecode(prefer_hardware_decode);
+    session.open_ok = player.open(media_file);
+    session.renderer_backend = player.videoRendererBackendName();
+    session.decoder_backend = player.videoDecoderBackendName();
 
     if (session.open_ok) {
-        player->play();
+        player.play();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(600);
         while (std::chrono::steady_clock::now() < deadline &&
-               (player->isPlaying() || player->isPaused())) {
+               (player.isPlaying() || player.isPaused())) {
             session.entered_playback_loop = true;
-            player->pumpEvents();
+            player.pumpEvents();
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
@@ -1457,7 +1481,7 @@ bool runWindowsBackendSessionCheck(const std::string& media_file, const std::str
               << ".mode_ok=" << (session.mode_ok ? "true" : "false") << std::endl;
     std::cout << "windows-backend-session-check.result=" << (session.mode_ok ? "PASS" : "FAIL") << std::endl;
 
-    return session.mode_ok;
+    flush_and_exit(session.mode_ok ? 0 : 2);
 }
 
 /// Windows 播放回归入口；串联多种后端模式检查。
@@ -2025,6 +2049,7 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     const bool open_ok = player.open(media_file);
     bool entered_playback_loop = false;
     double cpu_avg_percent = 0.0;
+    double wall_seconds = 0.0;
     unsigned int logical_cores = std::max(1u, std::thread::hardware_concurrency());
     core::PlaybackInfo info{};
     core::DiagnosticsSnapshot diag{};
@@ -2039,7 +2064,7 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
         const auto wall_end = std::chrono::steady_clock::now();
         const std::clock_t cpu_end = std::clock();
 
-        const double wall_seconds = std::max(0.001,
+        wall_seconds = std::max(0.001,
             std::chrono::duration_cast<std::chrono::duration<double>>(wall_end - wall_start).count());
         const double cpu_seconds = static_cast<double>(cpu_end - cpu_start) / static_cast<double>(CLOCKS_PER_SEC);
         cpu_avg_percent = (cpu_seconds / wall_seconds) * 100.0;
@@ -2053,6 +2078,23 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     }
 
     const bool result = open_ok && entered_playback_loop && diag.render_frames > 0;
+    const double copy_back_time_ms = static_cast<double>(diag.video_copy_back_time_us_total) / 1000.0;
+    const double swscale_time_ms = static_cast<double>(diag.video_swscale_time_us_total) / 1000.0;
+    const double copy_back_ratio_percent =
+        wall_seconds > 0.0 ? (static_cast<double>(diag.video_copy_back_time_us_total) / (wall_seconds * 1000000.0)) * 100.0
+                           : 0.0;
+    const double swscale_ratio_percent =
+        wall_seconds > 0.0 ? (static_cast<double>(diag.video_swscale_time_us_total) / (wall_seconds * 1000000.0)) * 100.0
+                           : 0.0;
+    const double copy_back_avg_ms =
+        diag.video_copy_back_frames > 0 ? copy_back_time_ms / static_cast<double>(diag.video_copy_back_frames) : 0.0;
+    const double swscale_avg_ms =
+        diag.video_swscale_frames > 0 ? swscale_time_ms / static_cast<double>(diag.video_swscale_frames) : 0.0;
+    const double display_copy_time_ms = static_cast<double>(diag.display_copy_time_us_total) / 1000.0;
+    const double display_copy_ratio_percent =
+        sample_ms > 0 ? (display_copy_time_ms * 100.0 / static_cast<double>(sample_ms)) : 0.0;
+    const double display_copy_avg_ms =
+        diag.display_copy_frames > 0 ? display_copy_time_ms / static_cast<double>(diag.display_copy_frames) : 0.0;
 
     std::cout << "performance-log-check.path=" << media_file << std::endl;
     std::cout << "performance-log-check.sample_ms=" << sample_ms << std::endl;
@@ -2064,23 +2106,69 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
     std::cout << "performance-log-check.audio_sample_rate=" << info.audio_sample_rate << std::endl;
     std::cout << "performance-log-check.renderer_backend=" << renderer_backend << std::endl;
     std::cout << "performance-log-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "performance-log-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
     std::cout << "performance-log-check.cpu_avg_percent=" << cpu_avg_percent << std::endl;
     std::cout << "performance-log-check.cpu_logical_cores=" << logical_cores << std::endl;
     std::cout << "performance-log-check.demux_video_packets=" << diag.demux_video_packets << std::endl;
     std::cout << "performance-log-check.demux_audio_packets=" << diag.demux_audio_packets << std::endl;
     std::cout << "performance-log-check.demux_push_retries=" << diag.demux_push_retries << std::endl;
     std::cout << "performance-log-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "performance-log-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "performance-log-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "performance-log-check.decode_video_ok=" << diag.decode_video_ok << std::endl;
     std::cout << "performance-log-check.decode_audio_ok=" << diag.decode_audio_ok << std::endl;
+    std::cout << "performance-log-check.decode_video_send_eagain=" << diag.decode_video_send_eagain << std::endl;
+    std::cout << "performance-log-check.decode_audio_send_eagain=" << diag.decode_audio_send_eagain << std::endl;
+    std::cout << "performance-log-check.video_decoder_drain_signals=" << diag.video_decoder_drain_signals << std::endl;
+    std::cout << "performance-log-check.audio_decoder_drain_signals=" << diag.audio_decoder_drain_signals << std::endl;
+    std::cout << "performance-log-check.video_native_output_frames=" << diag.video_native_output_frames << std::endl;
+    std::cout << "performance-log-check.video_copy_back_frames=" << diag.video_copy_back_frames << std::endl;
+    std::cout << "performance-log-check.video_copy_back_time_ms=" << copy_back_time_ms << std::endl;
+    std::cout << "performance-log-check.video_copy_back_ratio_percent=" << copy_back_ratio_percent << std::endl;
+    std::cout << "performance-log-check.video_copy_back_avg_ms=" << copy_back_avg_ms << std::endl;
+    std::cout << "performance-log-check.video_copy_back_max_us=" << diag.video_copy_back_time_us_max << std::endl;
+    std::cout << "performance-log-check.video_swscale_frames=" << diag.video_swscale_frames << std::endl;
+    std::cout << "performance-log-check.video_swscale_time_ms=" << swscale_time_ms << std::endl;
+    std::cout << "performance-log-check.video_swscale_ratio_percent=" << swscale_ratio_percent << std::endl;
+    std::cout << "performance-log-check.video_swscale_avg_ms=" << swscale_avg_ms << std::endl;
+    std::cout << "performance-log-check.video_swscale_max_us=" << diag.video_swscale_time_us_max << std::endl;
+    std::cout << "performance-log-check.display_copy_frames=" << diag.display_copy_frames << std::endl;
+    std::cout << "performance-log-check.display_copy_bytes=" << diag.display_copy_bytes << std::endl;
+    std::cout << "performance-log-check.display_copy_time_ms=" << display_copy_time_ms << std::endl;
+    std::cout << "performance-log-check.display_copy_ratio_percent=" << display_copy_ratio_percent << std::endl;
+    std::cout << "performance-log-check.display_copy_avg_ms=" << display_copy_avg_ms << std::endl;
+    std::cout << "performance-log-check.display_copy_max_us=" << diag.display_copy_time_us_max << std::endl;
+    std::cout << "performance-log-check.video_filter_blocked_native_frames=" << diag.video_filter_blocked_native_frames << std::endl;
     std::cout << "performance-log-check.audio_submitted_frames=" << diag.audio_submitted_frames << std::endl;
     std::cout << "performance-log-check.render_frames=" << diag.render_frames << std::endl;
     std::cout << "performance-log-check.scheduler_video_decoded_frames=" << diag.scheduler_video_decoded_frames << std::endl;
     std::cout << "performance-log-check.scheduler_audio_decoded_frames=" << diag.scheduler_audio_decoded_frames << std::endl;
     std::cout << "performance-log-check.scheduler_late_drops=" << diag.scheduler_late_drops << std::endl;
+    std::cout << "performance-log-check.scheduler_wait_events=" << diag.scheduler_wait_events << std::endl;
+    std::cout << "performance-log-check.scheduler_video_backpressure_events=" << diag.scheduler_video_backpressure_events << std::endl;
+    std::cout << "performance-log-check.scheduler_audio_backpressure_events=" << diag.scheduler_audio_backpressure_events << std::endl;
+    std::cout << "performance-log-check.scheduler_video_backpressure_wait_ms=" << diag.scheduler_video_backpressure_wait_ms << std::endl;
+    std::cout << "performance-log-check.scheduler_audio_backpressure_wait_ms=" << diag.scheduler_audio_backpressure_wait_ms << std::endl;
+    std::cout << "performance-log-check.scheduler_video_restart_attempts=" << diag.scheduler_video_restart_attempts << std::endl;
+    std::cout << "performance-log-check.scheduler_audio_restart_attempts=" << diag.scheduler_audio_restart_attempts << std::endl;
+    std::cout << "performance-log-check.scheduler_render_restart_attempts=" << diag.scheduler_render_restart_attempts << std::endl;
+    std::cout << "performance-log-check.scheduler_video_restart_limit_hits=" << diag.scheduler_video_restart_limit_hits << std::endl;
+    std::cout << "performance-log-check.scheduler_audio_restart_limit_hits=" << diag.scheduler_audio_restart_limit_hits << std::endl;
+    std::cout << "performance-log-check.scheduler_render_restart_limit_hits=" << diag.scheduler_render_restart_limit_hits << std::endl;
     std::cout << "performance-log-check.video_packet_queue_size=" << diag.video_packet_queue_size << std::endl;
     std::cout << "performance-log-check.audio_packet_queue_size=" << diag.audio_packet_queue_size << std::endl;
     std::cout << "performance-log-check.video_frame_queue_size=" << diag.video_frame_queue_size << std::endl;
     std::cout << "performance-log-check.audio_frame_queue_size=" << diag.audio_frame_queue_size << std::endl;
+    std::cout << "performance-log-check.video_frame_queue_capacity=" << diag.video_frame_queue_capacity << std::endl;
+    std::cout << "performance-log-check.audio_frame_queue_capacity=" << diag.audio_frame_queue_capacity << std::endl;
+    std::cout << "performance-log-check.video_frame_queue_peak_size=" << diag.video_frame_queue_peak_size << std::endl;
+    std::cout << "performance-log-check.audio_frame_queue_peak_size=" << diag.audio_frame_queue_peak_size << std::endl;
+    std::cout << "performance-log-check.video_frame_queue_push_timeouts=" << diag.video_frame_queue_push_timeouts << std::endl;
+    std::cout << "performance-log-check.audio_frame_queue_push_timeouts=" << diag.audio_frame_queue_push_timeouts << std::endl;
     std::cout << "performance-log-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
     return result;
 }
@@ -2141,7 +2229,7 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     const double min_advance_seconds = std::max(1.0, sample_seconds * 0.8);
     const bool progress_ok = advanced_seconds >= min_advance_seconds;
     const bool late_drops_ok = diag.scheduler_late_drops == 0;
-    const bool demux_drops_ok = diag.demux_dropped_packets == 0;
+    const bool demux_drops_ok = diag.demux_queue_drop_packets == 0;
     const bool result = probe_ok && duration_ok && open_ok && entered_playback_loop && still_playing_after_window &&
                         progress_ok && late_drops_ok && demux_drops_ok;
 
@@ -2159,6 +2247,11 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     std::cout << "1080p60-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
     std::cout << "1080p60-check.renderer_backend=" << renderer_backend << std::endl;
     std::cout << "1080p60-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "1080p60-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "1080p60-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "1080p60-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
     std::cout << "1080p60-check.start_position=" << start_position << std::endl;
     std::cout << "1080p60-check.end_position=" << end_position << std::endl;
     std::cout << "1080p60-check.advanced_seconds=" << advanced_seconds << std::endl;
@@ -2168,6 +2261,8 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
     std::cout << "1080p60-check.late_drops=" << diag.scheduler_late_drops << std::endl;
     std::cout << "1080p60-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
     std::cout << "1080p60-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "1080p60-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "1080p60-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "1080p60-check.demux_drops_ok=" << (demux_drops_ok ? "true" : "false") << std::endl;
     std::cout << "1080p60-check.decode_video_ok=" << diag.decode_video_ok << std::endl;
     std::cout << "1080p60-check.render_frames=" << diag.render_frames << std::endl;
@@ -2252,6 +2347,11 @@ bool run4kPlaybackCheck(const std::string& program_path, const std::string& medi
     std::cout << "4k-playback-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
     std::cout << "4k-playback-check.renderer_backend=" << renderer_backend << std::endl;
     std::cout << "4k-playback-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "4k-playback-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "4k-playback-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
     std::cout << "4k-playback-check.start_position=" << start_position << std::endl;
     std::cout << "4k-playback-check.end_position=" << end_position << std::endl;
     std::cout << "4k-playback-check.advanced_seconds=" << advanced_seconds << std::endl;
@@ -2261,6 +2361,8 @@ bool run4kPlaybackCheck(const std::string& program_path, const std::string& medi
     std::cout << "4k-playback-check.late_drops=" << diag.scheduler_late_drops << std::endl;
     std::cout << "4k-playback-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
     std::cout << "4k-playback-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "4k-playback-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "4k-playback-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "4k-playback-check.hard.mode_ok=" << (hard_session.mode_ok ? "true" : "false") << std::endl;
     std::cout << "4k-playback-check.hard.renderer_backend=" << hard_session.renderer_backend << std::endl;
     std::cout << "4k-playback-check.hard.decoder_backend=" << hard_session.decoder_backend << std::endl;
@@ -2332,7 +2434,7 @@ bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
     const double min_advance_seconds = std::max(1.0, sample_seconds * 0.8);
     const bool progress_ok = advanced_seconds >= min_advance_seconds;
     const bool late_drops_ok = diag.scheduler_late_drops == 0;
-    const bool demux_drops_ok = diag.demux_dropped_packets == 0;
+    const bool demux_drops_ok = diag.demux_queue_drop_packets == 0;
     const bool result = probe_ok && bitrate_ok && duration_ok && open_ok && entered_playback_loop &&
                         still_playing_after_window && progress_ok && late_drops_ok && demux_drops_ok;
 
@@ -2350,6 +2452,11 @@ bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
     std::cout << "high-bitrate-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
     std::cout << "high-bitrate-check.renderer_backend=" << renderer_backend << std::endl;
     std::cout << "high-bitrate-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "high-bitrate-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "high-bitrate-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
     std::cout << "high-bitrate-check.start_position=" << start_position << std::endl;
     std::cout << "high-bitrate-check.end_position=" << end_position << std::endl;
     std::cout << "high-bitrate-check.advanced_seconds=" << advanced_seconds << std::endl;
@@ -2359,6 +2466,8 @@ bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
     std::cout << "high-bitrate-check.late_drops=" << diag.scheduler_late_drops << std::endl;
     std::cout << "high-bitrate-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
     std::cout << "high-bitrate-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "high-bitrate-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "high-bitrate-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "high-bitrate-check.demux_drops_ok=" << (demux_drops_ok ? "true" : "false") << std::endl;
     std::cout << "high-bitrate-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
     return result;
@@ -2420,7 +2529,7 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
     const double min_advance_seconds = std::max(2.0, sample_seconds * 0.85);
     const bool progress_ok = advanced_seconds >= min_advance_seconds;
     const bool late_drops_ok = diag.scheduler_late_drops == 0;
-    const bool demux_drops_ok = diag.demux_dropped_packets == 0;
+    const bool demux_drops_ok = diag.demux_queue_drop_packets == 0;
     const bool result = probe_ok && duration_ok && open_ok && entered_playback_loop && still_playing_after_window &&
                         progress_ok && late_drops_ok && demux_drops_ok;
 
@@ -2433,6 +2542,11 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
     std::cout << "long-playback-check.still_playing_after_window=" << (still_playing_after_window ? "true" : "false") << std::endl;
     std::cout << "long-playback-check.renderer_backend=" << renderer_backend << std::endl;
     std::cout << "long-playback-check.decoder_backend=" << decoder_backend << std::endl;
+    std::cout << "long-playback-check.audio_output_initialized="
+              << (diag.audio_output_initialized ? "true" : "false") << std::endl;
+    std::cout << "long-playback-check.video_only_fallback="
+              << (diag.video_only_fallback ? "true" : "false") << std::endl;
+    std::cout << "long-playback-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
     std::cout << "long-playback-check.start_position=" << start_position << std::endl;
     std::cout << "long-playback-check.end_position=" << end_position << std::endl;
     std::cout << "long-playback-check.advanced_seconds=" << advanced_seconds << std::endl;
@@ -2442,6 +2556,8 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
     std::cout << "long-playback-check.late_drops=" << diag.scheduler_late_drops << std::endl;
     std::cout << "long-playback-check.late_drops_ok=" << (late_drops_ok ? "true" : "false") << std::endl;
     std::cout << "long-playback-check.demux_dropped_packets=" << diag.demux_dropped_packets << std::endl;
+    std::cout << "long-playback-check.demux_ignored_packets=" << diag.demux_ignored_packets << std::endl;
+    std::cout << "long-playback-check.demux_queue_drop_packets=" << diag.demux_queue_drop_packets << std::endl;
     std::cout << "long-playback-check.demux_drops_ok=" << (demux_drops_ok ? "true" : "false") << std::endl;
     std::cout << "long-playback-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
     return result;
@@ -3295,7 +3411,7 @@ int main(int argc, char* argv[]) {
             printUsage(argv[0]);
             return 1;
         }
-        return runWindowsBackendSessionCheck(argv[2], argv[3]) ? 0 : 2;
+        runWindowsBackendSessionCheckAndExit(argv[2], argv[3]);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--windows-backend-check") {

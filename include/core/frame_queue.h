@@ -1,14 +1,23 @@
 ﻿#pragma once
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <queue>
 
 #include "core/frame.h"
 
 namespace vp::core {
+
+struct FrameQueueStats {
+    size_t size{0};
+    size_t capacity{0};
+    size_t peak_size{0};
+    uint64_t push_timeout_count{0};
+};
 
 template <typename FrameType>
 class FrameQueue {
@@ -22,9 +31,13 @@ public:
             return queue_.size() < capacity_ || flushed_.load();
         });
         if (!has_space || flushed_.load()) {
+            if (!has_space) {
+                ++push_timeout_count_;
+            }
             return false;
         }
         queue_.push(std::move(frame));
+        peak_size_ = std::max(peak_size_, queue_.size());
         not_empty_.notify_one();
         return true;
     }
@@ -57,6 +70,7 @@ public:
     void setCapacity(size_t capacity) {
         std::lock_guard<std::mutex> lock(mutex_);
         capacity_ = capacity;
+        peak_size_ = std::max(peak_size_, queue_.size());
         not_full_.notify_all();
     }
 
@@ -66,6 +80,7 @@ public:
     }
 
     size_t capacity() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         return capacity_;
     }
 
@@ -87,12 +102,30 @@ public:
         return static_cast<double>(queue_.size()) / static_cast<double>(capacity_);
     }
 
+    FrameQueueStats getStats() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        FrameQueueStats stats;
+        stats.size = queue_.size();
+        stats.capacity = capacity_;
+        stats.peak_size = peak_size_;
+        stats.push_timeout_count = push_timeout_count_;
+        return stats;
+    }
+
+    void resetStats() {
+        std::lock_guard<std::mutex> lock(mutex_);
+        peak_size_ = queue_.size();
+        push_timeout_count_ = 0;
+    }
+
 private:
     std::queue<FrameType> queue_;
     mutable std::mutex mutex_;
     std::condition_variable not_empty_;
     std::condition_variable not_full_;
     size_t capacity_;
+    size_t peak_size_{0};
+    uint64_t push_timeout_count_{0};
     std::atomic<bool> flushed_;
 };
 

@@ -33,6 +33,12 @@ constexpr double kSeekStepSeconds = 5.0;
 constexpr double kSeekStepSecondsCtrl = 30.0;
 constexpr double kSpeedStep = 0.1;
 
+void updateMaxAtomic(std::atomic<uint64_t>& target, uint64_t value) {
+    uint64_t current = target.load();
+    while (value > current && !target.compare_exchange_weak(current, value)) {
+    }
+}
+
 struct WindowSize {
     int width;
     int height;
@@ -517,6 +523,7 @@ bool Display::init(int width, int height, const std::string& title) {
         seek_preview_active_ = false;
         seek_preview_ratio_ = 0.0;
     }
+    resetFrameCopyStats();
 
     render_running_.store(true);
     render_thread_ = std::thread(&Display::renderLoop, this);
@@ -759,6 +766,22 @@ void Display::clear() {
     render_queue_cv_.notify_one();
 }
 
+Display::FrameCopyStats Display::getFrameCopyStats() const {
+    FrameCopyStats stats;
+    stats.frames = frame_copy_frames_.load();
+    stats.bytes = frame_copy_bytes_.load();
+    stats.time_us_total = frame_copy_time_us_total_.load();
+    stats.time_us_max = frame_copy_time_us_max_.load();
+    return stats;
+}
+
+void Display::resetFrameCopyStats() {
+    frame_copy_frames_.store(0);
+    frame_copy_bytes_.store(0);
+    frame_copy_time_us_total_.store(0);
+    frame_copy_time_us_max_.store(0);
+}
+
 /// 从 `AVFrame` 深拷贝 YUV 平面数据，切断与解码缓冲的生命周期耦合。
 bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     if (!frame.data[0] || !frame.data[1] || !frame.data[2] || frame.width <= 0 || frame.height <= 0) {
@@ -780,6 +803,8 @@ bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     const int y_pitch = width;
     const int u_pitch = chroma_width;
     const int v_pitch = chroma_width;
+
+    const auto copy_start = std::chrono::steady_clock::now();
 
     out = PendingVideoFrame{};
     out.width = width;
@@ -819,6 +844,19 @@ bool Display::copyFrameData(const AVFrame& frame, PendingVideoFrame& out) {
     }
 
     out.valid = true;
+    const size_t bytes_copied =
+        static_cast<size_t>(width) * static_cast<size_t>(height) +
+        2U * static_cast<size_t>(chroma_width) * static_cast<size_t>(chroma_height);
+    const uint64_t copy_us = static_cast<uint64_t>(
+        std::max<int64_t>(
+            0,
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - copy_start)
+                .count()));
+    frame_copy_frames_.fetch_add(1);
+    frame_copy_bytes_.fetch_add(static_cast<uint64_t>(bytes_copied));
+    frame_copy_time_us_total_.fetch_add(copy_us);
+    updateMaxAtomic(frame_copy_time_us_max_, copy_us);
     return true;
 }
 

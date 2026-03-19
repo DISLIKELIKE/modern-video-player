@@ -1,5 +1,236 @@
-﻿# 开发日志
+# 开发日志
 
+## 问题 73: SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
+**日期**: 2026-03-19
+**状态**: 已解决
+### 问题描述
+- 用户继续追问 `Display::copyFrameData()` 和 `Scheduler` 固定重启次数是否会导致高码率/4K 输出帧不稳定。
+- 当前主链已经确认是 `D3D11 + D3D11VA` zero-copy，但软件回退链没有真实统计，renderer override 也没有真正接入选择链。
+- 这让第 8、10 点只能靠推断，无法在本机给出软件路径实测占比。
+### 日志输出
+```text
+.\build\Debug\modern-video-player.exe --renderer-fallback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv
+renderer-fallback-check.renderer_backend=SoftwareSDL
+renderer-fallback-check.decoder_backend=D3D11VA
+renderer-fallback-check.fallback_to_sdl=true
+renderer-fallback-check.result=PASS
+
+$env:MVP_RENDERER_BACKEND='software'
+.\build\Debug\modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200
+performance-log-check.renderer_backend=SoftwareSDL
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_copy_back_ratio_percent=30.1018
+performance-log-check.video_swscale_ratio_percent=18.6623
+performance-log-check.display_copy_ratio_percent=21.8407
+performance-log-check.display_copy_avg_ms=5.69759
+performance-log-check.scheduler_video_restart_limit_hits=0
+performance-log-check.result=PASS
+
+.\build\Debug\modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1500
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_copy_back_ratio_percent=0
+performance-log-check.video_swscale_ratio_percent=0
+performance-log-check.display_copy_ratio_percent=0
+performance-log-check.result=PASS
+```
+
+### 分析记录
+- 默认 `D3D11` 主链下，`Display::copyFrameData()` 根本不在热路径，当前机器上的主链瓶颈依旧不是软件拷贝。
+- 一旦切到 `SoftwareSDL`，链路会变成 `copy-back + swscale + display memcpy` 三段叠加，其中 `Display::copyFrameData()` 本机实测已占采样窗口约 `21.84%`。
+- `Scheduler` 新策略下 `restart_limit_hits=0`，说明它不是这批样本的主因，但窗口预算比固定次数更安全。
+- 旧的 fallback 检查之所以测不准，不是因为结论错了，而是因为 renderer 选择链之前根本没有消费 override。
+
+### 处理结果
+- `Display` / `SdlVideoRenderer` / `PlayerCore` / CLI 现在已经能完整输出软件显示链的拷贝统计。
+- `Scheduler` 现已改成窗口预算制重启，并新增 limit hit 诊断。
+- `RendererFactory` 现已支持 `MVP_RENDERER_BACKEND` 和 `MVP_D3D11_DRIVER_HINT=software`，`--renderer-fallback-check` 当前已恢复 PASS。
+- 当前可以明确区分两条结论：
+  - 默认 `D3D11` 主链：继续保留 zero-copy，不做大重构
+  - `SoftwareSDL` 回退链：`Display::copyFrameData()` 已是明确热点，但还不是唯一热点
+
+### 修改文件
+- `include/display.h`
+- `src/display.cpp`
+- `include/render/video_renderer.h`
+- `include/render/sdl_video_renderer.h`
+- `src/render/sdl_video_renderer.cpp`
+- `src/render/renderer_factory.cpp`
+- `include/core/scheduler.h`
+- `src/core/scheduler.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY9_SOFTWARE_COPY_AND_RESTART_BUDGET_ANALYSIS.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
+## 问题 72: 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强
+**日期**: 2026-03-19
+**状态**: 已解决
+### 问题描述
+- 用户要求继续围绕“高码率视频输出帧不稳定”做优化，不直接做大重构，而是先判断 `FrameQueue` 容量、背压、copy-back 和 scheduler 时序这些更接近真实瓶颈的点。
+- 当前项目已经具备 D3D11 native zero-copy，但高码率/4K 相关诊断还缺 queue 峰值、push timeout、背压等待时长、copy-back/swscale 时间这些关键指标。
+- 同时，无音频输出时走 `Video` master，render 等待逻辑太粗；落后时一次只丢一帧，也会放大追帧抖动。
+### 日志输出
+```text
+.\build\Debug\modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1500
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=101
+performance-log-check.video_copy_back_frames=0
+performance-log-check.video_swscale_frames=0
+performance-log-check.video_frame_queue_capacity=24
+performance-log-check.video_frame_queue_peak_size=23
+performance-log-check.video_frame_queue_push_timeouts=0
+performance-log-check.scheduler_video_backpressure_wait_ms=1252
+performance-log-check.result=PASS
+
+.\build\Debug\modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000
+high-bitrate-check.advance_ratio=0.866667
+high-bitrate-check.demux_queue_drop_packets=0
+high-bitrate-check.result=PASS
+
+.\build\Debug\modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000
+4k-playback-check.advance_ratio=0.85
+4k-playback-check.late_drops=0
+4k-playback-check.demux_queue_drop_packets=0
+4k-playback-check.result=PASS
+
+.\build\Debug\modern-video-player.exe --long-playback-check .\juren-30s.mp4 6000
+long-playback-check.advance_ratio=0.938438
+long-playback-check.demux_queue_drop_packets=0
+long-playback-check.result=PASS
+```
+
+### 分析记录
+- 当前 4K 主链采样里 `video_copy_back_frames=0`、`video_swscale_frames=0`，说明现在真正跑的是 native zero-copy，不是 copy-back 热点。
+- 单纯把 4K `FrameQueue` 放大，会触发 FFmpeg `Static surface pool size exceeded`；因此视频队列大小必须和 `D3D11VA extra_hw_frames` 联动。
+- `scheduler_video_backpressure_wait_ms` 很高并不等于“播放失败”，它更多说明 decoder 跑得比 render 快；真正要看的是 `push_timeout_count` 和 `demux_queue_drop_packets`，这轮两者都保持为 0。
+- `Video` master 之前会让 24fps 样本明显超速；`pumpRenderOnce()` 一次只丢一帧也会让 4K 追帧过慢。两者都比“线程重启次数限制”更接近当前真实症状。
+
+### 处理结果
+- `FrameQueue` 现已具备 `peak_size / push_timeout_count` 统计，`PlayerCore` 会导出 frame queue capacity/peak/timeout。
+- `PlayerCore::open()` 会根据媒体属性设置 frame queue 容量，并在 `D3D11VA` 打开前显式配置 `extra_hw_frames`。
+- `Scheduler` 现已支持背压迟滞与 `video/audio_backpressure_wait_ms` 统计。
+- `Scheduler::pumpRenderOnce()` 已改成：
+  - `Video` master 下用 wall-clock pacing
+  - 单次 pump 内连续丢弃过期帧直到拿到可显示帧
+- 当前 4K / 高码率 / 长时回归都已恢复通过；这轮剩余工作重点不再是“有没有 zero-copy”，而是后续是否继续补 audio-master 下更细的 lateness 策略。
+
+### 修改文件
+- `include/core/frame_queue.h`
+- `include/core/player_core.h`
+- `include/core/scheduler.h`
+- `src/core/player_core.cpp`
+- `src/core/scheduler.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY8_QUEUE_PACING_AND_COPYBACK_ANALYSIS.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
+
+
+## 问题 71: 4K backend session 子进程退出路径修复
+**日期**: 2026-03-19
+**状态**: 已解决
+### 问题描述
+- 在 video-only 降级和 demux 门禁纠偏之后，`4k-playback-check` 仍然失败，失败点集中在 `fallback_ok=false`。
+- 继续拆开验证后发现：backend session 子进程本身已经打印 PASS，但 `hard` 会超时不退出，`soft` 会异常退出。
+- 这说明残留问题已经不在播放主链，而在测试 probe 子进程的退出策略。
+### 日志输出
+```text
+.\build\Debug\modern-video-player.exe --windows-backend-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv
+windows-backend-check.hard.mode_ok=true
+windows-backend-check.hard.exit_code=0
+windows-backend-check.soft.mode_ok=true
+windows-backend-check.soft.exit_code=0
+windows-backend-check.result=PASS
+
+.\build\Debug\modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000
+4k-playback-check.fallback_ok=true
+4k-playback-check.result=PASS
+```
+
+### 分析记录
+- `runWindowsBackendSessionCheck()` 的职责只是向父进程报告“这个 backend 能否启动并进入播放窗口”，并不需要沿用正常播放器会话的完整生命周期回收语义。
+- 旧实现的问题是：probe 结果已经打印出来了，但子进程本身没有用稳定的方式结束，导致父进程看到的是 timeout 或异常退出码，而不是 probe 结果。
+- 因为 `4k-playback-check` 把 `mode_ok` 和 `exit_code==0` 一起纳入 `fallback_ok`，所以这类退出策略错误会直接表现成 4K 回归失败。
+
+### 处理结果
+- `src/main.cpp` 中的 `--windows-backend-session-check` 已改成专用退出路径：打印结果后 flush，并在 Windows 下用 `TerminateProcess(GetCurrentProcess(), code)` 立即结束 probe 子进程。
+- `hard/soft` backend session 当前都能稳定返回 `exit_code=0`。
+- `--windows-backend-check` 与 `--4k-playback-check` 当前已恢复 PASS，说明这轮残留失败已经收口。
+
+### 修改文件
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY7_BACKEND_SESSION_EXIT_FIX.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
+## 问题 70: 音频设备失败时的视频-only降级与回归门禁纠偏
+**日期**: 2026-03-19
+**状态**: 已解决
+### 问题描述
+- 用户确认先不做大重构，优先参考 ffmpeg/mpv/MPC-HC 的思路，把“音频设备失败时的视频-only降级”和“高码率回归误判”这一层收口。
+- 当前机器上 `WASAPI` 音频设备不可用，视频文件实际上已经能靠现有主链继续播，但 `open()` 语义、clock source 和回归门禁都没有把这个状态显式表达出来。
+- 这导致高码率素材检查里 `demux_dropped_packets` 主要由 ignored audio packets 组成，却仍然被当成背压失败。
+### 日志输出
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m
+modern-video-player.vcxproj -> D:\VSProject\sssssssssssssss\modern-video-player\build\Debug\modern-video-player.exe
+已成功生成。0 个警告，0 个错误
+
+.\build\Debug\modern-video-player.exe --1080p60-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000
+1080p60-check.result=PASS
+1080p60-check.audio_output_initialized=false
+1080p60-check.video_only_fallback=true
+1080p60-check.clock_source=Video
+1080p60-check.demux_queue_drop_packets=0
+
+.\build\Debug\modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000
+high-bitrate-check.result=PASS
+high-bitrate-check.demux_queue_drop_packets=0
+
+.\build\Debug\modern-video-player.exe --long-playback-check .\juren-30s.mp4 6000
+long-playback-check.result=PASS
+long-playback-check.demux_queue_drop_packets=0
+
+.\build\Debug\modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000
+4k-playback-check.result=FAIL
+4k-playback-check.fallback_ok=false
+```
+
+### 分析记录
+- `initDecoders()` 本身已经按 `audio_player_->isInitialized()` 控制音频解码是否启用，所以这轮不需要先做大规模重构；真正缺的是 `open()` 层面的显式策略。
+- 高码率检查失败的旧根因不是视频队列真的被压爆，而是 disabled audio path 产生了大量 `demux_ignored_packets`，又被旧门禁误当成统一的 demux drop。
+- video-only 场景下继续使用 `System` clock 会让播放推进和真实渲染 PTS 脱节，因此需要把无音频输出时的主时钟切到 `Video`。
+- `4k-playback-check` 当前剩余失败点已经缩小到 `runBackendSessionSubprocess()` 相关的 `fallback_ok` 子进程路径，不再是这轮修复范围里的误判问题。
+
+### 处理结果
+- `PlayerCore::open()` 现已区分：
+  - 视频文件音频设备失败：warning + video-only 继续播放
+  - 音频-only 文件音频设备失败：直接失败
+- `DiagnosticsSnapshot` 现已新增 `audio_output_initialized / video_only_fallback / clock_source`，播放类检查会直接打印当前降级模式。
+- `1080p60-check`、`high-bitrate-check`、`long-playback-check` 已改为只看 `demux_queue_drop_packets`，并保留 `demux_dropped_packets` 作为总量观测值。
+- 当前验证结果表明：这轮修复已经把“音频设备缺失导致的假失败”从高码率回归里剥离出去；后续如果继续优化，应优先排查 4K fallback 子进程路径和更长期的 queue serial 设计。
+
+### 修改文件
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY7_AUDIO_FALLBACK_AND_REGRESSION_GATES.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+
+---
 ## 问题 69: PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复
 
 **日期**: 2026-03-19
@@ -2449,5 +2680,44 @@ windows-backend-check.result=FAIL
 - docs/records/VERSION.md
 - docs/records/CHANGELOG.md
 - docs/records/DEVELOP_LOG.md
+
+
+
+## 问题 69: 播放链诊断分层与 decoder drain / scheduler 容错补强
+
+**日期**: 2026-03-19
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续围绕高码率播放稳定性，评估 `FrameQueue` 背压、decoder `receive/send` 时序、`Display::copyFrameData()`、`av_hwframe_transfer_data()` 与 `Scheduler` 一次重启限制等潜在问题，并在确认后落地优化。
+
+### 分析记录
+1. 当前源码已具备条件成立时的 `D3D11` native render path，因此旧分析文档里“主链一定经过 copy-back + SDL upload”的结论已经过时，运行时更需要知道“当前到底命中了 native / copy-back / swscale 哪条路径”。
+2. `decodeVideoFrame()` / `decodeAudioFrame()` 采用 receive-first 思路本身没问题，但此前 packet queue EOF 后没有给 codec 发送 `nullptr` drain，而且 send 后只尝试一次 receive，不够接近成熟播放器常见的 drain/feed 语义。
+3. `demux_dropped_packets_` 之前没有细分“非目标流被忽略”与“目标流入队失败”，会误导对背压和吞吐瓶颈的判断。
+4. `Scheduler` 之前只保护了解码线程，render thread 没有同样的异常保护；同时没有结构化导出背压与 restart 指标。
+5. 本轮设计参考了 `ffplay` 常见的 decoder drain 模式，以及 `mpv / MPC-HC` 常见的“先把路径与原因量出来，再调参数”的诊断思路。
+
+### 解决方案
+- 重写 `decodeVideoFrame()` / `decodeAudioFrame()`：改成持续 `receive -> send -> receive` 状态机，并在 packet EOF 后向 codec 发送 `nullptr` 完成 drain。
+- 为 `DiagnosticsSnapshot` 增加 demux drop 分类、decoder `send_packet(EAGAIN)`、drain 次数，以及 `native/copy-back/swscale/filter-blocked` 视频路径计数。
+- 为 `SchedulerStats` 增加 video/audio 背压事件与 video/audio/render restart 统计，并把 render thread 纳入 `runProtectedLoop()`。
+- 扩展 `--performance-log-check` 输出，让后续 4K/高码率分析能直接看见当前是否命中 native path、是否真的出现 queue drop、是否频繁背压。
+
+### 本地验收结果
+- `MSBuild build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`：通过。
+- `build\Debug\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200`：通过；当前环境音频初始化失败，但新诊断字段已成功导出，且可见 `demux_dropped_packets` 在本次样本中全部属于 `demux_ignored_packets`，不是 `queue drop`。
+
+### 修改文件
+- include/core/scheduler.h
+- src/core/scheduler.cpp
+- include/core/player_core.h
+- src/core/player_core.cpp
+- src/main.cpp
+- docs/records/VERSION.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+
+
 
 

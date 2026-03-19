@@ -14,6 +14,7 @@ extern "C" {
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -25,6 +26,13 @@ namespace vp {
 
 class Display {
 public:
+    struct FrameCopyStats {
+        uint64_t frames{0};
+        uint64_t bytes{0};
+        uint64_t time_us_total{0};
+        uint64_t time_us_max{0};
+    };
+
     Display();
     ~Display();
 
@@ -62,6 +70,8 @@ public:
     void setPreferredRendererDriver(const std::string& driver_name);
     std::string currentRendererDriver() const;
     bool isUsingRendererDriver(const std::string& driver_name) const;
+    FrameCopyStats getFrameCopyStats() const;
+    void resetFrameCopyStats();
 
     void toggleFullscreen();
     int getWidth() const { return width_.load(); }
@@ -166,6 +176,10 @@ private:
     std::string preferred_renderer_driver_;
     mutable std::mutex renderer_info_mutex_;
     std::string active_renderer_driver_;
+    std::atomic<uint64_t> frame_copy_frames_{0};
+    std::atomic<uint64_t> frame_copy_bytes_{0};
+    std::atomic<uint64_t> frame_copy_time_us_total_{0};
+    std::atomic<uint64_t> frame_copy_time_us_max_{0};
 };
 
 }  // namespace vp

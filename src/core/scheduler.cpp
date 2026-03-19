@@ -1,4 +1,4 @@
-﻿#include "core/scheduler.h"
+#include "core/scheduler.h"
 
 #include <algorithm>
 #include <chrono>
@@ -7,6 +7,24 @@
 #include "logger.h"
 
 namespace vp::core {
+
+namespace {
+
+constexpr int kMaxSchedulerWorkerRestartsPerWindow = 4;
+constexpr int64_t kSchedulerWorkerRestartWindowMs = 30000;
+constexpr int kSchedulerWorkerRestartCooldownMs = 100;
+constexpr double kVideoBackpressureEnterRatio = 0.92;
+constexpr double kVideoBackpressureExitRatio = 0.65;
+constexpr double kAudioBackpressureEnterRatio = 0.94;
+constexpr double kAudioBackpressureExitRatio = 0.70;
+
+int64_t steadyNowMs() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
+}  // namespace
 
 Scheduler::Scheduler() = default;
 
@@ -61,21 +79,38 @@ void Scheduler::start() {
     }
 
     paused_.store(false);
-    video_restart_count_.store(0);
-    audio_restart_count_.store(0);
+    video_restart_budget_.total_restarts.store(0);
+    video_restart_budget_.window_restarts.store(0);
+    video_restart_budget_.window_start_ms.store(0);
+    video_restart_budget_.limit_hits.store(0);
+    audio_restart_budget_.total_restarts.store(0);
+    audio_restart_budget_.window_restarts.store(0);
+    audio_restart_budget_.window_start_ms.store(0);
+    audio_restart_budget_.limit_hits.store(0);
+    render_restart_budget_.total_restarts.store(0);
+    render_restart_budget_.window_restarts.store(0);
+    render_restart_budget_.window_start_ms.store(0);
+    render_restart_budget_.limit_hits.store(0);
     video_decoded_frames_.store(0);
     audio_decoded_frames_.store(0);
     rendered_frames_.store(0);
     dropped_late_frames_.store(0);
     wait_events_.store(0);
+    video_backpressure_events_.store(0);
+    audio_backpressure_events_.store(0);
+    video_backpressure_wait_ms_.store(0);
+    audio_backpressure_wait_ms_.store(0);
+    last_render_wall_tp_ = std::chrono::steady_clock::time_point{};
 
     video_thread_ = std::thread([this] {
-        runProtectedLoop([this] { videoDecoderLoop(); }, video_restart_count_);
+        runProtectedLoop("video-decode", [this] { videoDecoderLoop(); }, video_restart_budget_);
     });
     audio_thread_ = std::thread([this] {
-        runProtectedLoop([this] { audioDecoderLoop(); }, audio_restart_count_);
+        runProtectedLoop("audio-decode", [this] { audioDecoderLoop(); }, audio_restart_budget_);
     });
-    render_thread_ = std::thread(&Scheduler::renderLoop, this);
+    render_thread_ = std::thread([this] {
+        runProtectedLoop("render", [this] { renderLoop(); }, render_restart_budget_);
+    });
 }
 
 void Scheduler::pause() {
@@ -129,6 +164,16 @@ SchedulerStats Scheduler::getStats() const {
     stats.rendered_frames = rendered_frames_.load();
     stats.dropped_late_frames = dropped_late_frames_.load();
     stats.wait_events = wait_events_.load();
+    stats.video_backpressure_events = video_backpressure_events_.load();
+    stats.audio_backpressure_events = audio_backpressure_events_.load();
+    stats.video_backpressure_wait_ms = video_backpressure_wait_ms_.load();
+    stats.audio_backpressure_wait_ms = audio_backpressure_wait_ms_.load();
+    stats.video_restart_attempts = static_cast<uint64_t>(std::max(0, video_restart_budget_.total_restarts.load()));
+    stats.audio_restart_attempts = static_cast<uint64_t>(std::max(0, audio_restart_budget_.total_restarts.load()));
+    stats.render_restart_attempts = static_cast<uint64_t>(std::max(0, render_restart_budget_.total_restarts.load()));
+    stats.video_restart_limit_hits = video_restart_budget_.limit_hits.load();
+    stats.audio_restart_limit_hits = audio_restart_budget_.limit_hits.load();
+    stats.render_restart_limit_hits = render_restart_budget_.limit_hits.load();
     return stats;
 }
 
@@ -143,10 +188,18 @@ void Scheduler::videoDecoderLoop() {
             continue;
         }
 
-        while (running_.load() && video_queue_->getFillRatio() >= 0.8) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-            if (video_queue_->getFillRatio() < 0.5) {
-                break;
+        if (video_queue_->getFillRatio() >= kVideoBackpressureEnterRatio) {
+            video_backpressure_events_.fetch_add(1);
+            const auto wait_start = std::chrono::steady_clock::now();
+            while (running_.load() && video_queue_->getFillRatio() > kVideoBackpressureExitRatio) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - wait_start)
+                                       .count();
+            video_backpressure_wait_ms_.fetch_add(static_cast<uint64_t>(std::max<int64_t>(0, waited_ms)));
+            if (!running_.load()) {
+                return;
             }
         }
 
@@ -172,10 +225,18 @@ void Scheduler::audioDecoderLoop() {
             continue;
         }
 
-        while (running_.load() && audio_queue_->getFillRatio() >= 0.8) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(2));
-            if (audio_queue_->getFillRatio() < 0.5) {
-                break;
+        if (audio_queue_->getFillRatio() >= kAudioBackpressureEnterRatio) {
+            audio_backpressure_events_.fetch_add(1);
+            const auto wait_start = std::chrono::steady_clock::now();
+            while (running_.load() && audio_queue_->getFillRatio() > kAudioBackpressureExitRatio) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            }
+            const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::steady_clock::now() - wait_start)
+                                       .count();
+            audio_backpressure_wait_ms_.fetch_add(static_cast<uint64_t>(std::max<int64_t>(0, waited_ms)));
+            if (!running_.load()) {
+                return;
             }
         }
 
@@ -204,35 +265,52 @@ void Scheduler::pumpRenderOnce() {
         return;
     }
 
-    VideoFrame frame;
-    if (!video_queue_->pop(frame, std::chrono::milliseconds(0))) {
-        if (idle_callback_) {
-            idle_callback_();
-        }
-        return;
-    }
-    if (!frame.valid) {
-        return;
-    }
-
-    if (clock_) {
-        const double master = clock_->getTime();
-        const double diff = frame.pts - master;
-        if (diff > 0.0) {
-            wait_events_.fetch_add(1);
-            const double wait_seconds = std::min(diff, 0.005);
-            std::this_thread::sleep_for(std::chrono::duration<double>(wait_seconds));
-        } else if (diff < -0.25) {
-            dropped_late_frames_.fetch_add(1);
+    while (true) {
+        VideoFrame frame;
+        if (!video_queue_->pop(frame, std::chrono::milliseconds(0))) {
             if (idle_callback_) {
                 idle_callback_();
             }
             return;
         }
-    }
+        if (!frame.valid) {
+            continue;
+        }
 
-    render_callback_(std::move(frame));
-    rendered_frames_.fetch_add(1);
+        if (clock_) {
+            const double master = clock_->getTime();
+            const double diff = frame.pts - master;
+            if (diff > 0.0) {
+                const bool video_master = clock_->getSource() == ClockSource::Video;
+                double wait_seconds = 0.0;
+                if (video_master && frame.duration > 0.0 &&
+                    last_render_wall_tp_ != std::chrono::steady_clock::time_point{}) {
+                    const auto target_tp =
+                        last_render_wall_tp_ + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                                                   std::chrono::duration<double>(frame.duration));
+                    const auto now = std::chrono::steady_clock::now();
+                    if (target_tp > now) {
+                        wait_seconds =
+                            std::chrono::duration_cast<std::chrono::duration<double>>(target_tp - now).count();
+                    }
+                } else if (!video_master) {
+                    wait_seconds = std::min(diff, 0.005);
+                }
+                if (wait_seconds > 0.0) {
+                    wait_events_.fetch_add(1);
+                    std::this_thread::sleep_for(std::chrono::duration<double>(wait_seconds));
+                }
+            } else if (diff < -0.25) {
+                dropped_late_frames_.fetch_add(1);
+                continue;
+            }
+        }
+
+        render_callback_(std::move(frame));
+        rendered_frames_.fetch_add(1);
+        last_render_wall_tp_ = std::chrono::steady_clock::now();
+        return;
+    }
 }
 
 void Scheduler::renderLoop() {
@@ -243,26 +321,47 @@ void Scheduler::renderLoop() {
 }
 
 template <typename Func>
-void Scheduler::runProtectedLoop(Func&& fn, std::atomic<int>& restart_counter) {
+void Scheduler::runProtectedLoop(const char* worker_name, Func&& fn, WorkerRestartBudget& restart_budget) {
     while (running_.load()) {
         try {
             fn();
-            return;
+            if (!running_.load()) {
+                return;
+            }
+            LOG_ERROR("Scheduler worker exited unexpectedly [" << worker_name << "]");
         } catch (const std::exception& ex) {
-            LOG_ERROR("Scheduler thread crashed: " << ex.what());
+            LOG_ERROR("Scheduler thread crashed [" << worker_name << "]: " << ex.what());
         } catch (...) {
-            LOG_ERROR("Scheduler thread crashed with unknown exception");
+            LOG_ERROR("Scheduler thread crashed with unknown exception [" << worker_name << "]");
         }
 
-        const int count = ++restart_counter;
-        if (count > 1) {
-            LOG_ERROR("Scheduler thread restart limit reached");
+        if (!running_.load()) {
+            return;
+        }
+
+        const int64_t now_ms = steadyNowMs();
+        const int64_t window_start_ms = restart_budget.window_start_ms.load();
+        if (window_start_ms == 0 || (now_ms - window_start_ms) > kSchedulerWorkerRestartWindowMs) {
+            restart_budget.window_start_ms.store(now_ms);
+            restart_budget.window_restarts.store(0);
+        }
+
+        const int total_count = restart_budget.total_restarts.fetch_add(1) + 1;
+        const int window_count = restart_budget.window_restarts.fetch_add(1) + 1;
+        if (window_count > kMaxSchedulerWorkerRestartsPerWindow) {
+            restart_budget.limit_hits.fetch_add(1);
+            LOG_ERROR("Scheduler thread restart budget exhausted [" << worker_name
+                      << "] window=" << window_count << "/" << kMaxSchedulerWorkerRestartsPerWindow
+                      << " in " << kSchedulerWorkerRestartWindowMs << "ms"
+                      << " total=" << total_count);
             running_.store(false);
             return;
         }
 
-        LOG_WARNING("Restarting scheduler worker thread");
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        LOG_WARNING("Restarting scheduler worker thread [" << worker_name << "]"
+                    << " total=" << total_count
+                    << " window=" << window_count << "/" << kMaxSchedulerWorkerRestartsPerWindow);
+        std::this_thread::sleep_for(std::chrono::milliseconds(kSchedulerWorkerRestartCooldownMs));
     }
 }
 

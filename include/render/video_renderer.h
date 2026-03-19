@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -21,6 +22,13 @@ struct VideoRendererConfig {
     int width{0};
     int height{0};
     std::string title{"Video Player"};
+};
+
+struct RendererDiagnostics {
+    uint64_t display_copy_frames{0};
+    uint64_t display_copy_bytes{0};
+    uint64_t display_copy_time_us_total{0};
+    uint64_t display_copy_time_us_max{0};
 };
 
 class IVideoRenderer {
@@ -72,6 +80,12 @@ public:
     virtual void* nativeDeviceHandle() const {
         return nullptr;
     }
+
+    virtual RendererDiagnostics getDiagnostics() const {
+        return {};
+    }
+
+    virtual void resetDiagnostics() {}
 
     virtual const char* rendererBackendName() const = 0;
 };

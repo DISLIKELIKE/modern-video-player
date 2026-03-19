@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <memory>
 
@@ -41,6 +41,8 @@ public:
     void setOverlayState(double position, double duration, float volume, bool paused) override;
     void setSubtitleText(const std::string& text) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
+    RendererDiagnostics getDiagnostics() const override;
+    void resetDiagnostics() override;
     const char* rendererBackendName() const override;
 
 private:
