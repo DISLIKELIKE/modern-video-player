@@ -1,6 +1,8 @@
 param(
     [string]$ExecutablePath = "build/Debug/modern-video-player.exe",
     [string]$ProbeFile = "juren-30s.mp4",
+    [string]$ForcedFailSessionFile = "",
+    [int]$ForcedFailSessionSampleMs = 2200,
     [string]$SamplesFile = "tools/format_regression/format_samples.csv",
     [string]$RegressionOutputFile = ""
 )
@@ -35,6 +37,16 @@ if (-not (Test-Path $probePath)) {
     throw "Probe file not found: $probePath"
 }
 
+$forcedFailSessionFileToUse = $ForcedFailSessionFile
+if ([string]::IsNullOrWhiteSpace($forcedFailSessionFileToUse)) {
+    $forcedFailSessionFileToUse = $ProbeFile
+}
+
+$forcedFailSessionPath = Resolve-ProjectPath -Root $repoRoot -PathValue $forcedFailSessionFileToUse
+if (-not (Test-Path $forcedFailSessionPath)) {
+    throw "Forced FailSession file not found: $forcedFailSessionPath"
+}
+
 $samplesPath = Resolve-ProjectPath -Root $repoRoot -PathValue $SamplesFile
 if (-not (Test-Path $samplesPath)) {
     throw "Samples file not found: $samplesPath"
@@ -45,7 +57,7 @@ if (-not (Test-Path $regressionScriptPath)) {
     throw "Regression script not found: $regressionScriptPath"
 }
 
-Write-Output "[1/2] Probing single file (JSON mode): $ProbeFile"
+Write-Output "[1/3] Probing single file (JSON mode): $ProbeFile"
 
 $probeStdout = [System.IO.Path]::GetTempFileName()
 $probeStderr = [System.IO.Path]::GetTempFileName()
@@ -106,11 +118,27 @@ try {
 
 Write-Output ("Probe exit code: " + $probeExitCode)
 if ($probeExitCode -ne 0) {
-    Write-Output "Probe step failed; skipping regression."
+    Write-Output "Probe step failed; skipping forced FailSession gate and regression."
     exit $probeExitCode
 }
 
-Write-Output "[2/2] Running format regression"
+Write-Output ("[2/3] Running forced FailSession gate: " + $forcedFailSessionFileToUse +
+              " (sample_ms=" + $ForcedFailSessionSampleMs + ")")
+
+$forcedFailSessionProcess = Start-Process -FilePath $exePath `
+    -ArgumentList @("--forced-failsession-check", $forcedFailSessionPath, [string]$ForcedFailSessionSampleMs) `
+    -NoNewWindow `
+    -Wait `
+    -PassThru
+
+$forcedFailSessionExitCode = $forcedFailSessionProcess.ExitCode
+Write-Output ("Forced FailSession exit code: " + $forcedFailSessionExitCode)
+if ($forcedFailSessionExitCode -ne 0) {
+    Write-Output "Forced FailSession gate failed; skipping regression."
+    exit $forcedFailSessionExitCode
+}
+
+Write-Output "[3/3] Running format regression"
 
 $regressionArgs = @(
     "-ExecutionPolicy", "Bypass",
