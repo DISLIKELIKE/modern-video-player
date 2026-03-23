@@ -1,5 +1,6 @@
-﻿#pragma once
+#pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -8,10 +9,67 @@
 
 namespace vp::render {
 
+struct D3D11FormatSupportSnapshot {
+    bool check_succeeded{false};
+    long check_hr{0};
+    uint32_t raw_support{0};
+    bool texture2d{false};
+    bool shader_sample{false};
+    bool shader_load{false};
+    bool decoder_output{false};
+};
+
+struct D3D11DecoderProfileSupport {
+    bool enumeration_succeeded{false};
+    uint32_t enumerated_profile_count{0};
+    bool h264_vld_nofgt{false};
+    bool h264_vld_fgt{false};
+    bool hevc_main{false};
+    bool hevc_main10{false};
+    bool vp9_profile0{false};
+    bool vp9_profile2_10bit{false};
+    bool av1_profile0{false};
+    bool av1_profile1{false};
+    bool av1_profile2{false};
+    bool av1_profile2_12bit{false};
+    bool av1_profile2_12bit_420{false};
+};
+
+struct D3D11DiagnosticsSnapshot {
+    bool probe_succeeded{false};
+    long create_device_hr{0};
+    std::string adapter_name{"unknown"};
+    uint32_t vendor_id{0};
+    uint32_t device_id{0};
+    uint32_t subsystem_id{0};
+    uint32_t revision{0};
+    std::string driver_version{"unknown"};
+    bool software_adapter{false};
+    uint64_t dedicated_video_mib{0};
+    uint64_t dedicated_system_mib{0};
+    uint64_t shared_system_mib{0};
+    std::string feature_level{"unknown"};
+    bool debug_layer_enabled{false};
+    bool multithread_protected{false};
+    bool has_device3{false};
+    bool has_video_device{false};
+    bool has_video_context{false};
+    D3D11FormatSupportSnapshot nv12_support{};
+    D3D11FormatSupportSnapshot p010_support{};
+    D3D11FormatSupportSnapshot p016_support{};
+    D3D11DecoderProfileSupport decoder_profiles{};
+    bool native_direct_allowed{false};
+    bool native_direct_startup_disabled{false};
+    std::string native_direct_disable_rule{"none"};
+    std::string native_direct_disable_reason{};
+};
+
 class D3D11VideoRenderer final : public IVideoRenderer {
 public:
     D3D11VideoRenderer();
     ~D3D11VideoRenderer() override;
+
+    static D3D11DiagnosticsSnapshot probeSystemDiagnostics();
 
     bool init(const VideoRendererConfig& config) override;
     void close() override;

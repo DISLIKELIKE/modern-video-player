@@ -1,4 +1,4 @@
-#include "core/player_core.h"
+﻿#include "core/player_core.h"
 
 
 
@@ -4509,6 +4509,118 @@ void PlayerCore::releaseDecoders() {
 
 /// 在 Windows 上为视频解码器绑定 D3D11VA 设备；失败时回退软解。
 
+/// 在 get_format() 阶段为 D3D11VA decoder 配置可直接做 shader sampling 的 frames ctx。
+bool PlayerCore::configureD3D11HardwareFramesContext(AVCodecContext* codec_ctx) {
+
+#if defined(_WIN32)
+
+    if (!codec_ctx || !video_hw_device_ctx_ || video_hw_pixel_fmt_ == AV_PIX_FMT_NONE) {
+
+        return false;
+
+    }
+
+
+
+    AVBufferRef* frames_ref = nullptr;
+
+    const int params_ret = avcodec_get_hw_frames_parameters(codec_ctx, video_hw_device_ctx_, video_hw_pixel_fmt_, &frames_ref);
+
+    if (params_ret < 0 || !frames_ref) {
+
+        LOG_WARNING("Failed to query D3D11VA frames parameters for shader-resource pool: "
+
+                    << avErrorToString(params_ret) << " (" << params_ret << ")");
+
+        return false;
+
+    }
+
+
+
+    auto* frames_ctx = reinterpret_cast<AVHWFramesContext*>(frames_ref->data);
+
+    auto* d3d11_frames_ctx = frames_ctx ? reinterpret_cast<AVD3D11VAFramesContext*>(frames_ctx->hwctx) : nullptr;
+
+    if (!frames_ctx || !d3d11_frames_ctx) {
+
+        LOG_WARNING("D3D11VA frames parameters returned empty hw frames context, fallback to decoder-owned surfaces");
+
+        av_buffer_unref(&frames_ref);
+
+        return false;
+
+    }
+
+
+
+    const UINT original_bind_flags = d3d11_frames_ctx->BindFlags;
+
+    d3d11_frames_ctx->BindFlags |= D3D11_BIND_SHADER_RESOURCE;
+
+    if (frames_ctx->initial_pool_size > 0 && codec_ctx->extra_hw_frames > 0) {
+
+        frames_ctx->initial_pool_size += codec_ctx->extra_hw_frames;
+
+    }
+
+
+
+    const UINT requested_bind_flags = d3d11_frames_ctx->BindFlags;
+
+    const int initial_pool_size = frames_ctx->initial_pool_size;
+
+    const AVPixelFormat sw_format = frames_ctx->sw_format;
+
+    const int width = frames_ctx->width;
+
+    const int height = frames_ctx->height;
+
+    const int init_ret = av_hwframe_ctx_init(frames_ref);
+
+    if (init_ret < 0) {
+
+        LOG_WARNING("Failed to initialize D3D11VA shader-resource frames context, fallback to decoder-owned surfaces: "
+
+                    << avErrorToString(init_ret) << " (" << init_ret << ")"
+
+                    << " original_bind_flags=" << original_bind_flags
+
+                    << " requested_bind_flags=" << requested_bind_flags
+
+                    << " initial_pool_size=" << initial_pool_size);
+
+        av_buffer_unref(&frames_ref);
+
+        return false;
+
+    }
+
+
+
+    codec_ctx->hw_frames_ctx = frames_ref;
+
+    LOG_INFO("Configured D3D11VA frames context for direct shader sampling: bind_flags="
+
+             << requested_bind_flags
+
+             << " initial_pool_size=" << initial_pool_size
+
+             << " sw_format=" << (av_get_pix_fmt_name(sw_format) ? av_get_pix_fmt_name(sw_format) : "unknown")
+
+             << " size=" << width << "x" << height);
+
+    return true;
+
+#else
+
+    (void)codec_ctx;
+
+    return false;
+
+#endif
+
+}
 bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx) {
 
 #if defined(_WIN32)
@@ -4671,6 +4783,24 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
 
                 if (*p == self->video_hw_pixel_fmt_) {
 
+                    if (!self->video_hw_device_ctx_) {
+
+                        LOG_WARNING("D3D11VA device context is missing during get_format, fallback to software decode backend");
+
+                        self->video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+
+                        self->video_decoder_backend_ = decoder::DecoderBackend::Software;
+
+                        return selectSoftwarePixelFormat(pix_fmts);
+
+                    }
+
+                    if (!self->configureD3D11HardwareFramesContext(ctx)) {
+
+                        LOG_WARNING("Continuing with decoder-owned D3D11VA surfaces because shader-resource pool setup failed");
+
+                    }
+
                     return *p;
 
                 }
@@ -4683,6 +4813,34 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
 
             self->video_decoder_backend_ = decoder::DecoderBackend::Software;
 
+            return selectSoftwarePixelFormat(pix_fmts);
+
+        }
+
+    }
+
+
+
+    return selectSoftwarePixelFormat(pix_fmts);
+
+}
+
+AVPixelFormat PlayerCore::selectSoftwarePixelFormat(const AVPixelFormat* pix_fmts) {
+
+    if (!pix_fmts) {
+
+        return AV_PIX_FMT_NONE;
+
+    }
+
+
+
+    for (const AVPixelFormat* p = pix_fmts; *p != AV_PIX_FMT_NONE; ++p) {
+
+        if (!isHardwarePixelFormat(*p)) {
+
+            return *p;
+
         }
 
     }
@@ -4692,11 +4850,6 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
     return pix_fmts[0];
 
 }
-
-
-
-/// 把解码帧整理成渲染链可直接消费的输出帧。
-
 bool PlayerCore::prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out) {
 
     if (!decoded_frame || !out.frame) {

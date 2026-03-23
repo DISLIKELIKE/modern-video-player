@@ -303,6 +303,14 @@
 | 83 | 2026-03-20 | PlayerCore queue generation 与 Scheduler 控制快照收口 | ✅ 已修复 |
 | 84 | 2026-03-20 | PlayerCore 副作用集中化与 runtime failure/recovery policy 收口 | ✅ 已修复 |
 | 85 | 2026-03-20 | PlayerCore 剩余风险收敛：Scheduler 终版策略、FailSession 实化与 serial/generation 观测强化 | ✅ 已修复 |
+| 86 | 2026-03-20 | 增补 serial/failsession 回归探针（连续 seek、暂停态 seek、close/reopen） | ✅ 已修复 |
+| 87 | 2026-03-20 | serial/failsession 回归增加一键聚合 gate（降低漏跑风险） | ✅ 已修复 |
+| 88 | 2026-03-20 | 强制 FailSession 回归探针与 codec 锁重入崩溃修复 | ✅ 已修复 |
+| 89 | 2026-03-20 | run_all_checks 接入 forced-failsession 一键 gate | ✅ 已修复 |
+| 90 | 2026-03-23 | D3D11 原生直采样黑屏：运行时禁用 native direct 并回退 copy-back | ✅ 已修复 |
+| 91 | 2026-03-23 | D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样 | ✅ 已修复 |
+| 92 | 2026-03-23 | D3D11 启动期能力探测与 adapter/driver 诊断日志补齐 | ✅ 已修复 |
+| 93 | 2026-03-23 | D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI | ✅ 已修复 |
 
 
 
@@ -310,6 +318,164 @@
 
 
 
+## 问题 93: D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 在问题 92 已补齐 D3D11 启动期 adapter/driver/format 日志后，当前项目仍缺少成熟播放器常见的三项基础设施：
+  - 视频解码 profile 级别的能力探测，无法直接回答当前机器对 `H.264 / HEVC / VP9 / AV1` 到底支持哪些 decoder profile
+  - 启动期 quirk / blacklist 策略，无法在已知不稳定设备上提前禁用 native direct
+  - 独立、机器可读的 D3D11 诊断 CLI，自动化和问题复现场景仍只能依赖播放期日志
+
+### 原因分析
+
+- 旧实现只有 format-level 能力探测，没有枚举 `ID3D11VideoDevice::GetVideoDecoderProfile*`，因此“格式能建纹理”和“该编码 profile 能否硬解”之间仍存在盲区。
+
+- native direct 的启停此前主要依赖运行时熔断，缺少像 `mpv / MPC-HC` 那样的启动期保守策略，遇到 software adapter、缺失关键接口或明确黑名单驱动时，不能在播放前直接降级。
+
+- 项目现有检查命令以播放链路为中心，缺少一个不依赖实际播放、可一次性输出完整 D3D11 能力快照的独立入口。
+
+### 解决方案
+
+- 在 `D3D11VideoRenderer` 中新增结构化 `D3D11DiagnosticsSnapshot`，统一汇总：
+  - adapter / driver / feature level / interface availability
+  - `NV12 / P010 / P016` 格式支持位
+  - `H.264 / HEVC / VP9 / AV1` decoder profile 支持情况
+  - native direct 启动期 allow / disable policy、命中规则和原因
+
+- 新增 decoder profile 探测逻辑，直接枚举 `ID3D11VideoDevice` 暴露的 decoder profiles，并输出：
+  - `h264_vld_nofgt / h264_vld_fgt`
+  - `hevc_main / hevc_main10`
+  - `vp9_profile0 / vp9_profile2_10bit`
+  - `av1_profile0 / av1_profile1 / av1_profile2 / av1_profile2_12bit / av1_profile2_12bit_420`
+
+- 新增启动期 native direct 策略判断；若探测失败、software adapter、缺失 `ID3D11Device3 / ID3D11VideoDevice / ID3D11VideoContext`、`NV12` 不满足 `texture2d + shader_sample + decoder_output`，或命中 blacklist，则在 renderer 初始化阶段直接关闭 native direct。
+
+- 首版 quirk / blacklist 规则显式落地：
+  - `microsoft-basic-render-driver`
+
+- `main` 新增 `--d3d11-diagnostics`，以 `key=value` 形式机器可读输出整个 D3D11 能力快照，并给出 `result=PASS/FAIL`。
+
+### 修改文件
+
+- include/render/d3d11_video_renderer.h
+
+- src/render/d3d11_video_renderer.cpp
+
+- src/main.cpp
+
+- docs/records/CHANGELOG.md
+
+- docs/records/VERSION.md
+
+- docs/records/DEVELOP_LOG.md
+## 问题 92: D3D11 启动期能力探测与 adapter/driver 诊断日志补齐
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 在问题 90 和问题 91 已先后解决“黑屏兜底”和“D3D11VA 可采样帧池”后，D3D11 仍缺少成熟播放器常见的启动期能力探测与 adapter/driver 诊断日志。
+
+- 当前如果后续再遇到某台机器的格式兼容、驱动差异、swap chain 或 feature level 问题，日志无法在初始化阶段直接给出足够上下文。
+
+### 原因分析
+
+- 旧实现只在初始化成功后输出 `Native D3D11 renderer initialized`，没有记录 adapter 名称、vendor/device id、driver version、feature level、核心接口可用性、格式支持位与 swap chain 参数。
+
+- 这导致排查时只能从播放期症状反推，而不能像成熟播放器那样在启动期就判断“当前设备支持什么、不支持什么”。
+
+### 解决方案
+
+- 在 `D3D11VideoRenderer` 启动时新增结构化诊断日志，输出：
+  - adapter 描述、vendor/device/subsystem/revision、driver version、显存/共享内存、是否 software adapter
+  - feature level、debug layer、multithread protection、`ID3D11Device3` / `ID3D11VideoDevice` / `ID3D11VideoContext` 可用性
+  - `NV12 / P010 / P016` 的 `CheckFormatSupport` 结果
+  - swap chain 宽高、格式、buffer count、swap effect、alpha mode、usage
+
+- `MakeWindowAssociation` 改为显式检查失败并输出警告，避免静默丢失窗口关联错误。
+
+### 修改文件
+
+- src/render/d3d11_video_renderer.cpp
+
+- docs/records/CHANGELOG.md
+
+- docs/records/VERSION.md
+
+- docs/records/DEVELOP_LOG.md
+## 问题 91: D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 虽然问题 90 已用运行时 fallback 兜住了黑屏，但根因仍在：当前 `PlayerCore` 只绑定了 `D3D11VA` 设备，没有自己接管 `hw_frames_ctx`，导致 FFmpeg/驱动默认分配出来的是 decoder-only surface。
+
+- 这会让 D3D11 renderer 即使支持原生 `AV_PIX_FMT_D3D11`，也拿不到可直接创建 shader resource view 的解码表面，零拷贝直采样无法稳定成立。
+
+### 原因分析
+
+- FFmpeg 的 `AVD3D11VAFramesContext` 提供了 `BindFlags`，允许调用方在 `get_format()` 阶段指定解码帧池的纹理绑定方式；当前项目此前没有走这条路径，只设置了 `hw_device_ctx`。
+
+- 实测在当前机器上，只要把 frames context 申请为 `D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE`，D3D11 原生直采样即可恢复，说明之前的核心缺口是“帧池分配策略不完整”，不是硬件绝对不支持 D3D11 直采样。
+
+### 解决方案
+
+- 在 `PlayerCore::selectVideoPixelFormat()` 中改为显式调用 `avcodec_get_hw_frames_parameters()`，创建并初始化自定义 `hw_frames_ctx`。
+
+- 在 `AVD3D11VAFramesContext::BindFlags` 上追加 `D3D11_BIND_SHADER_RESOURCE`，并把 `extra_hw_frames` 预算叠加到 `initial_pool_size`，让解码帧池既能给 decoder 使用，也能被 D3D11 renderer 直接采样。
+
+- 如果自定义 frames ctx 初始化失败，则仅回退到 decoder-owned D3D11VA surface，不中断硬解；同时问题 90 已有的运行时 fallback 继续作为最后兜底。
+
+### 修改文件
+
+- include/core/player_core.h
+
+- src/core/player_core.cpp
+
+- docs/records/CHANGELOG.md
+
+- docs/records/VERSION.md
+
+- docs/records/DEVELOP_LOG.md
+## 问题 90: D3D11 原生直采样黑屏：运行时禁用 native direct 并回退 copy-back
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 使用 `Release` 构建程序播放 `juren-30s.mp4` 时，出现“有声音、无画面”。
+
+- `--performance-log-check` 已显示 `renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`render_frames > 0`，说明播放主链路仍在运行，黑屏集中在 D3D11 原生直采样显示阶段。
+
+### 原因分析
+
+- 旧逻辑只要渲染器声明支持 `AV_PIX_FMT_D3D11`，就持续把硬解帧按 native direct 路径送入像素着色器，默认假设解码表面总能在运行时成功创建 Y/UV plane 的 shader resource view。
+
+- 实测当前设备/驱动组合上，`CreateShaderResourceView1` 对 `NV12` 解码表面返回失败，日志为 `y_plane_hr=-2147024809`，导致像素着色器拿不到平面资源，但 swap chain 仍继续 present，于是用户看到“只有声音，没有画面”。
+
+- 这是运行时设备兼容性问题，不是媒体文件损坏，也不是 D3D11VA 解码本身失败。
+
+### 解决方案
+
+- 在 `D3D11VideoRenderer` 中新增运行时熔断：若 Y/UV plane 的 `CreateShaderResourceView1` 失败，或解码表面格式不支持直接采样，则立即关闭当前会话的 native direct rendering。
+
+- native direct 被关闭后，`supportsNativeFrameFormat()` 返回 `false`，`PlayerCore::prepareVideoOutputFrame()` 会把后续硬解帧走 `av_hwframe_transfer_data()` copy-back 到软件帧，再复用现有软件纹理上传路径继续显示。
+
+- 同时补充明确告警日志，输出失败原因、纹理格式、数组大小、纹理索引、HRESULT，并标记 `fallback=copyback-to-software`，便于后续继续做驱动差异排查。
+
+### 修改文件
+
+- src/render/d3d11_video_renderer.cpp
+
+- docs/records/CHANGELOG.md
+
+- docs/records/VERSION.md
+
+- docs/records/DEVELOP_LOG.md
 ## 问题 80: 文档一致性补齐：CHANGELOG 索引修复与问题 69 analysis 回填
 
 

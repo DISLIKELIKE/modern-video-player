@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 
 
@@ -558,7 +558,11 @@ private:
 
     bool tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx);
 
+    bool configureD3D11HardwareFramesContext(AVCodecContext* codec_ctx);
+
     static AVPixelFormat selectVideoPixelFormat(AVCodecContext* ctx, const AVPixelFormat* pix_fmts);
+
+    static AVPixelFormat selectSoftwarePixelFormat(const AVPixelFormat* pix_fmts);
 
     bool prepareVideoOutputFrame(AVFrame* decoded_frame, VideoFrame& out);
 

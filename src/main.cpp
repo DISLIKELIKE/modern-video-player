@@ -28,6 +28,10 @@
 
 #include "thread_safe_queue.h"
 
+#if defined(_WIN32)
+#include "render/d3d11_video_renderer.h"
+#endif
+
 
 
 extern "C" {
@@ -8387,6 +8391,106 @@ bool runScreenshotCheck(const std::string& media_file) {
 }
 
 
+#if defined(_WIN32)
+std::string formatHexUint32(uint32_t value) {
+    std::ostringstream oss;
+    oss << "0x" << std::hex << std::uppercase << value;
+    return oss.str();
+}
+
+void printD3D11FormatSupport(const std::string& prefix, const render::D3D11FormatSupportSnapshot& support) {
+    std::cout << prefix << ".check_succeeded=" << (support.check_succeeded ? "true" : "false") << std::endl;
+    std::cout << prefix << ".check_hr=" << support.check_hr << std::endl;
+    std::cout << prefix << ".raw_support=" << formatHexUint32(support.raw_support) << std::endl;
+    std::cout << prefix << ".texture2d=" << (support.texture2d ? "true" : "false") << std::endl;
+    std::cout << prefix << ".shader_sample=" << (support.shader_sample ? "true" : "false") << std::endl;
+    std::cout << prefix << ".shader_load=" << (support.shader_load ? "true" : "false") << std::endl;
+    std::cout << prefix << ".decoder_output=" << (support.decoder_output ? "true" : "false") << std::endl;
+}
+#endif
+
+bool runD3D11Diagnostics() {
+#if defined(_WIN32)
+    const render::D3D11DiagnosticsSnapshot diag = render::D3D11VideoRenderer::probeSystemDiagnostics();
+    const bool h264_any = diag.decoder_profiles.h264_vld_nofgt || diag.decoder_profiles.h264_vld_fgt;
+    const bool hevc_any = diag.decoder_profiles.hevc_main || diag.decoder_profiles.hevc_main10;
+    const bool vp9_any = diag.decoder_profiles.vp9_profile0 || diag.decoder_profiles.vp9_profile2_10bit;
+    const bool av1_any = diag.decoder_profiles.av1_profile0 ||
+                         diag.decoder_profiles.av1_profile1 ||
+                         diag.decoder_profiles.av1_profile2 ||
+                         diag.decoder_profiles.av1_profile2_12bit ||
+                         diag.decoder_profiles.av1_profile2_12bit_420;
+
+    std::cout << "d3d11-diagnostics.supported_platform=true" << std::endl;
+    std::cout << "d3d11-diagnostics.probe_succeeded=" << (diag.probe_succeeded ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.create_device_hr=" << diag.create_device_hr << std::endl;
+    std::cout << "d3d11-diagnostics.adapter_name=" << diag.adapter_name << std::endl;
+    std::cout << "d3d11-diagnostics.vendor_id=" << formatHexUint32(diag.vendor_id) << std::endl;
+    std::cout << "d3d11-diagnostics.device_id=" << formatHexUint32(diag.device_id) << std::endl;
+    std::cout << "d3d11-diagnostics.subsystem_id=" << formatHexUint32(diag.subsystem_id) << std::endl;
+    std::cout << "d3d11-diagnostics.revision=" << diag.revision << std::endl;
+    std::cout << "d3d11-diagnostics.driver_version=" << diag.driver_version << std::endl;
+    std::cout << "d3d11-diagnostics.software_adapter=" << (diag.software_adapter ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.dedicated_video_mib=" << diag.dedicated_video_mib << std::endl;
+    std::cout << "d3d11-diagnostics.dedicated_system_mib=" << diag.dedicated_system_mib << std::endl;
+    std::cout << "d3d11-diagnostics.shared_system_mib=" << diag.shared_system_mib << std::endl;
+    std::cout << "d3d11-diagnostics.feature_level=" << diag.feature_level << std::endl;
+    std::cout << "d3d11-diagnostics.debug_layer_enabled=" << (diag.debug_layer_enabled ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.multithread_protected=" << (diag.multithread_protected ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.has_device3=" << (diag.has_device3 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.has_video_device=" << (diag.has_video_device ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.has_video_context=" << (diag.has_video_context ? "true" : "false") << std::endl;
+
+    printD3D11FormatSupport("d3d11-diagnostics.format.nv12", diag.nv12_support);
+    printD3D11FormatSupport("d3d11-diagnostics.format.p010", diag.p010_support);
+    printD3D11FormatSupport("d3d11-diagnostics.format.p016", diag.p016_support);
+
+    std::cout << "d3d11-diagnostics.decoder_profiles.enumeration_succeeded="
+              << (diag.decoder_profiles.enumeration_succeeded ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.enumerated_profile_count="
+              << diag.decoder_profiles.enumerated_profile_count << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.h264_any=" << (h264_any ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.h264_vld_nofgt="
+              << (diag.decoder_profiles.h264_vld_nofgt ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.h264_vld_fgt="
+              << (diag.decoder_profiles.h264_vld_fgt ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.hevc_any=" << (hevc_any ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.hevc_main="
+              << (diag.decoder_profiles.hevc_main ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.hevc_main10="
+              << (diag.decoder_profiles.hevc_main10 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.vp9_any=" << (vp9_any ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.vp9_profile0="
+              << (diag.decoder_profiles.vp9_profile0 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.vp9_profile2_10bit="
+              << (diag.decoder_profiles.vp9_profile2_10bit ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_any=" << (av1_any ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_profile0="
+              << (diag.decoder_profiles.av1_profile0 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_profile1="
+              << (diag.decoder_profiles.av1_profile1 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_profile2="
+              << (diag.decoder_profiles.av1_profile2 ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_profile2_12bit="
+              << (diag.decoder_profiles.av1_profile2_12bit ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.decoder_profiles.av1_profile2_12bit_420="
+              << (diag.decoder_profiles.av1_profile2_12bit_420 ? "true" : "false") << std::endl;
+
+    std::cout << "d3d11-diagnostics.native_direct.allowed=" << (diag.native_direct_allowed ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.native_direct.startup_disabled="
+              << (diag.native_direct_startup_disabled ? "true" : "false") << std::endl;
+    std::cout << "d3d11-diagnostics.native_direct.disable_rule=" << diag.native_direct_disable_rule << std::endl;
+    std::cout << "d3d11-diagnostics.native_direct.disable_reason=" << diag.native_direct_disable_reason << std::endl;
+    std::cout << "d3d11-diagnostics.result=" << (diag.probe_succeeded ? "PASS" : "FAIL") << std::endl;
+    return diag.probe_succeeded;
+#else
+    std::cout << "d3d11-diagnostics.supported_platform=false" << std::endl;
+    std::cout << "d3d11-diagnostics.probe_succeeded=false" << std::endl;
+    std::cout << "d3d11-diagnostics.native_direct.allowed=false" << std::endl;
+    std::cout << "d3d11-diagnostics.result=FAIL" << std::endl;
+    return false;
+#endif
+}
 
 }  // namespace
 
@@ -8455,6 +8559,8 @@ void printUsage(const char* program_name) {
               << std::endl;
 
     std::cout << "       " << program_name << " --forced-failsession-check <media_file> [sample_ms]" << std::endl;
+
+    std::cout << "       " << program_name << " --d3d11-diagnostics" << std::endl;
 
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
 
@@ -9007,6 +9113,19 @@ int main(int argc, char* argv[]) {
     }
 
 
+    if (argc >= 2 && std::string(argv[1]) == "--d3d11-diagnostics") {
+
+        if (argc != 2) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runD3D11Diagnostics() ? 0 : 2;
+
+    }
     if (argc >= 2 && std::string(argv[1]) == "--performance-log-check") {
 
         if (argc != 3 && argc != 4) {

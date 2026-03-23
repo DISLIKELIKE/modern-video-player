@@ -46,6 +46,42 @@
 
 
 
+### 2026-03-23 更新：D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
+
+- `D3D11VideoRenderer` 现已输出结构化 `D3D11DiagnosticsSnapshot`，统一包含 adapter/driver、feature level、`NV12/P010/P016` 格式支持、decoder profiles 与 native direct 启动期策略。
+
+- 新增 decoder profile 探测，当前机器最新实测结果为：
+  - `H.264`：支持
+  - `HEVC`：支持 `Main / Main10`
+  - `VP9`：支持 `Profile0`，不支持 `Profile2 10bit`
+  - `AV1`：当前适配器未暴露支持 profile
+
+- 新增 startup-time quirk / blacklist 决策；若命中 software adapter、缺少关键 D3D11 video 接口、`NV12` 不满足直采样要求或命中规则表，则会在播放前直接关闭 native direct。
+
+- 首版 blacklist 已显式覆盖 `Microsoft Basic Render Driver`；当前机器诊断结果为 `native_direct.allowed=true`、`disable_rule=none`。
+
+- `main` 新增 `--d3d11-diagnostics`，可一次性输出机器可读 `key=value` 结果，用于自动化、现场排障和后续驱动兼容性归档。
+### 2026-03-23 更新：D3D11 启动期能力探测与 adapter/driver 诊断日志
+
+- `D3D11VideoRenderer` 初始化阶段新增 `[diag:d3d11-init]` 日志，直接输出 adapter、driver version、feature level、关键 D3D11/DXGI 接口可用性、格式支持位与 swap chain 参数。
+
+- 当前机器最新实测已能在启动时直接看到：`adapter="NVIDIA GeForce GTX 1080"`、`driver_version=32.0.15.6094`、`feature_level=11_1`、`device3=true`、`video_device=true`、`NV12/P010` 支持情况，以及 `P016{check_failed_hr=-2147467259}` 这类格式能力差异。
+
+- 这轮不改变现有播放路径，只补成熟播放器需要的启动期诊断上下文；问题 90/91 的 native direct 与 fallback 链路保持不变。
+### 2026-03-23 更新：D3D11VA 自定义 hw_frames_ctx 接入可采样解码表面
+
+- `PlayerCore` 不再只把 `D3D11VA` 设备挂给 decoder，而是在 `get_format()` 阶段显式创建 `hw_frames_ctx`，并为 `AVD3D11VAFramesContext::BindFlags` 追加 `D3D11_BIND_SHADER_RESOURCE`。
+
+- 当前机器复测结果表明，这一步已经让 D3D11 原生直采样真正恢复：`Configured D3D11VA frames context for direct shader sampling: bind_flags=520`，同时 `video_native_output_frames=62`、`video_copy_back_frames=0`。
+
+- 问题 90 的运行时 fallback 仍然保留，作为其他驱动/设备组合上 native direct 失败时的最后兜底。
+### 2026-03-23 更新：D3D11 原生直采样运行时失败改为自动回退 copy-back
+
+- `D3D11VideoRenderer` 新增运行时 native direct 熔断：如果 `CreateShaderResourceView1` 无法为 D3D11VA 解码表面创建 Y/UV plane SRV，或解码表面格式不支持直接采样，则关闭本次会话的 native direct rendering。
+
+- native direct 被关闭后，`PlayerCore` 会继续把后续硬解帧走 copy-back 到软件帧，再复用现有软件纹理上传链路显示，避免继续出现“音频正常、视频黑屏”。
+
+- `Release / Debug` 对 `juren-30s.mp4` 的 `--performance-log-check 2000` 已复测通过；两者都实际命中 `fallback=copyback-to-software` 告警，并保持 `render_frames > 0`。
 ### 2026-03-20 更新：PlayerCore 剩余风险收敛（Scheduler 终版策略、FailSession 实化、serial/generation 观测强化）
 
 - `SchedulerControlSnapshot` 新增结构化策略字段：`clock_policy`、`audio_master_policy`、`audio_buffered_seconds`，并将 `ended_policy` 扩展到 `HoldLastFrameNoClockSync`。

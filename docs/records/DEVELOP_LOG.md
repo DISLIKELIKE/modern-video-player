@@ -2,6 +2,268 @@
 
 
 
+## 问题 93: D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户要求把 D3D11 后续成熟化项一次补齐：decoder profile 探测、driver quirk/blacklist 启动期降级策略，以及单独的 `--d3d11-diagnostics` CLI。
+- 目标不是继续补一组临时日志，而是把 D3D11 能力快照做成可机器读取、可启动期决策、可脱离播放单独执行的基础设施。
+
+### 日志输出
+```text
+Release diagnostics:
+build\Release\modern-video-player.exe --d3d11-diagnostics
+d3d11-diagnostics.supported_platform=true
+d3d11-diagnostics.probe_succeeded=true
+d3d11-diagnostics.adapter_name=NVIDIA GeForce GTX 1080
+d3d11-diagnostics.driver_version=32.0.15.6094
+d3d11-diagnostics.format.nv12.shader_sample=true
+d3d11-diagnostics.decoder_profiles.h264_any=true
+d3d11-diagnostics.decoder_profiles.hevc_any=true
+d3d11-diagnostics.decoder_profiles.vp9_any=true
+d3d11-diagnostics.decoder_profiles.av1_any=false
+d3d11-diagnostics.native_direct.allowed=true
+d3d11-diagnostics.native_direct.disable_rule=none
+d3d11-diagnostics.result=PASS
+
+Release playback regression:
+build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+[diag:d3d11-init] decoder_profiles enumeration_succeeded=true enumerated_profile_count=20 h264_vld_nofgt=true h264_vld_fgt=false hevc_main=true hevc_main10=true vp9_profile0=true vp9_profile2_10bit=false av1_profile0=false av1_profile1=false av1_profile2=false av1_profile2_12bit=false av1_profile2_12bit_420=false
+[diag:d3d11-init] native_direct startup_allowed=true startup_disabled=false rule=none
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=62
+performance-log-check.video_copy_back_frames=0
+performance-log-check.result=PASS
+```
+
+### 分析记录
+1. 这轮关键变化是把 D3D11 探测从“日志打印”升级成“结构化快照”，这样 renderer 启动期策略和独立 CLI 可以共用同一份事实源。
+2. 当前机器的实测结果已经能直接回答用户最关心的问题：`H.264 / HEVC / VP9` 有硬解 profile，`AV1` 没有；`NV12` 支持 shader sampling；native direct 启动期允许开启。
+3. `P016` 的 `CheckFormatSupport` 仍失败，`VP9 profile2 10bit` 与所有 `AV1` profile 也都不支持，这说明“有 D3D11”不等于“所有 10bit / 新编码 profile 都可用”，独立 diagnostics CLI 的价值就是把这些边界显式化。
+4. quirk / blacklist 机制当前先保守落一个最明确规则：`Microsoft Basic Render Driver` 直接禁用 native direct；后续若积累到更多驱动坑位，可继续沿同一策略表扩充。
+
+### 处理结果
+- `include/render/d3d11_video_renderer.h`：
+  - 新增 `D3D11FormatSupportSnapshot`
+  - 新增 `D3D11DecoderProfileSupport`
+  - 新增 `D3D11DiagnosticsSnapshot`
+  - 新增 `D3D11VideoRenderer::probeSystemDiagnostics()`
+- `src/render/d3d11_video_renderer.cpp`：
+  - 新增 D3D11 probe context、格式支持查询、decoder profile 枚举、startup policy 评估和启动日志输出
+  - 新增本地 GUID 常量，避免直接依赖某些 Windows SDK 环境下的 decoder profile 外部符号
+  - renderer 初始化阶段接入 startup policy，必要时在播放前就禁用 native direct
+- `src/main.cpp`：
+  - 新增 `runD3D11Diagnostics()`
+  - 新增 `--d3d11-diagnostics`
+  - 输出统一 `key=value` 机器可读结果
+- `CHANGELOG / VERSION / DEVELOP_LOG` 已同步记录本次 D3D11 成熟化增强。
+
+### 本地验收结果
+- `build\Release\modern-video-player.exe --d3d11-diagnostics`：通过，`result=PASS`。
+- 当前机器的最新诊断结果：
+  - `adapter_name=NVIDIA GeForce GTX 1080`
+  - `driver_version=32.0.15.6094`
+  - `decoder_profiles.h264_any=true`
+  - `decoder_profiles.hevc_any=true`
+  - `decoder_profiles.vp9_any=true`
+  - `decoder_profiles.av1_any=false`
+  - `native_direct.allowed=true`
+  - `native_direct.disable_rule=none`
+- `build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000`：通过，`renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`video_native_output_frames=62`、`video_copy_back_frames=0`、`result=PASS`。
+
+### 修改文件
+- include/render/d3d11_video_renderer.h
+- src/render/d3d11_video_renderer.cpp
+- src/main.cpp
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+## 问题 92: D3D11 启动期能力探测与 adapter/driver 诊断日志补齐
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户要求继续按成熟播放器方向推进，下一步补齐 D3D11 启动期能力探测与 adapter/driver 诊断日志。
+- 目标是在初始化阶段直接看到“当前适配器是谁、驱动版本是多少、feature level 到哪、关键格式是否支持”，而不是只在黑屏后被动追日志。
+
+### 日志输出
+```text
+Release build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.sln /t:modern-video-player /p:Configuration=Release /p:Platform=x64 /m
+0 warnings / 0 errors
+
+Release check:
+build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+[diag:d3d11-init] adapter="NVIDIA GeForce GTX 1080" vendor_id=0x10DE device_id=0x1B80 subsystem_id=0x145119DA revision=161 driver_version=32.0.15.6094 software_adapter=false dedicated_video_mib=8059 dedicated_system_mib=0 shared_system_mib=16313
+[diag:d3d11-init] device feature_level=11_1 debug_layer=true multithread_protected=true device3=true video_device=true video_context=true
+[diag:d3d11-init] format_support NV12{raw=0xFA82C320 texture2d=true shader_sample=true shader_load=true decoder_output=true} P010{raw=0x3A82C320 texture2d=true shader_sample=true shader_load=true decoder_output=true} P016{check_failed_hr=-2147467259}
+[diag:d3d11-init] swap_chain width=1318 height=742 format=B8G8R8A8_UNORM buffer_count=2 sample_count=1 swap_effect=FLIP_DISCARD alpha_mode=IGNORE usage=0x20
+Configured D3D11VA frames context for direct shader sampling: bind_flags=520 initial_pool_size=49 sw_format=nv12 size=1920x1088
+performance-log-check.video_native_output_frames=62
+performance-log-check.video_copy_back_frames=0
+performance-log-check.result=PASS
+```
+
+### 分析记录
+1. 启动期日志已经能直接暴露 adapter/driver/feature level 上下文，后续再遇到机器差异问题时，不需要先等到播放失败再反推设备信息。
+2. 格式支持探测显示当前机器的 `NV12`、`P010` 具备 `shader_sample + decoder_output`，而 `P016` 的 `CheckFormatSupport` 直接失败，这类细节此前完全不可见。
+3. 这类日志是成熟播放器的重要基础设施，因为它把“设备能力”与“运行期表现”连接起来了。
+
+### 处理结果
+- `src/render/d3d11_video_renderer.cpp`：
+  - 新增 adapter/driver version/显存信息日志
+  - 新增 feature level、debug layer、multithread、`device3/video_device/video_context` 日志
+  - 新增 `NV12/P010/P016` 的格式支持摘要日志
+  - 新增 swap chain 参数日志
+  - `MakeWindowAssociation` 改为显式检查失败并告警
+- `CHANGELOG / VERSION / DEVELOP_LOG` 已同步记录本次诊断增强。
+
+### 本地验收结果
+- `Release` 构建通过，`0 warnings / 0 errors`。
+- `build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000` 通过。
+- 新增的 `[diag:d3d11-init]` 四组日志稳定打印，且未影响当前已经恢复的零拷贝直采样链路：`video_native_output_frames=62`、`video_copy_back_frames=0`、`result=PASS`。
+
+### 修改文件
+- src/render/d3d11_video_renderer.cpp
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+## 问题 91: D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户进一步要求把 D3D11 路径做成像成熟播放器那样的真实可用实现，而不是仅依赖问题 90 的运行时 copy-back fallback。
+- 需要验证当前项目是不是因为没有自定义 `hw_frames_ctx`，才导致 D3D11VA 解码面默认不可直接采样。
+
+### 日志输出
+```text
+Release build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.sln /t:modern-video-player /p:Configuration=Release /p:Platform=x64 /m
+0 warnings / 0 errors
+
+Release check:
+build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+Configured D3D11VA frames context for direct shader sampling: bind_flags=520 initial_pool_size=49 sw_format=nv12 size=1920x1088
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=62
+performance-log-check.video_copy_back_frames=0
+performance-log-check.result=PASS
+
+Debug build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.sln /t:modern-video-player /p:Configuration=Debug /p:Platform=x64 /m
+0 warnings / 0 errors
+
+Debug check:
+build\Debug\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+Configured D3D11VA frames context for direct shader sampling: bind_flags=520 initial_pool_size=49 sw_format=nv12 size=1920x1088
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=62
+performance-log-check.video_copy_back_frames=0
+performance-log-check.result=PASS
+```
+
+### 分析记录
+1. 当前项目此前只设置了 `hw_device_ctx`，没有在 `get_format()` 中接管 `hw_frames_ctx`，这与 FFmpeg 头文件提供的 D3D11 frames 分配接口不匹配。
+2. 一旦在 `AVD3D11VAFramesContext::BindFlags` 上追加 `D3D11_BIND_SHADER_RESOURCE`，同一台机器上立刻恢复了 `video_copy_back_frames=0` 的 native direct 路径，说明根因是帧池绑定方式，而不是硬件绝对不支持。
+3. 因此成熟播放器和当前旧实现的差距，主要不在“有没有 D3D11”，而在“有没有完整接管 D3D11VA frames allocation policy 和多级 fallback”。
+
+### 处理结果
+- `include/core/player_core.h`：
+  - 新增 `configureD3D11HardwareFramesContext(...)`
+  - 新增 `selectSoftwarePixelFormat(...)`
+- `src/core/player_core.cpp`：
+  - 在 `get_format()` 阶段通过 `avcodec_get_hw_frames_parameters()` 创建自定义 `hw_frames_ctx`
+  - 为 `AVD3D11VAFramesContext::BindFlags` 追加 `D3D11_BIND_SHADER_RESOURCE`
+  - 把 `extra_hw_frames` 预算叠加到 `initial_pool_size`
+  - 若自定义 frames ctx 失败，则退回 decoder-owned D3D11VA surface；若运行时再失败，则继续由问题 90 的 renderer fallback 兜底
+- `CHANGELOG / VERSION / DEVELOP_LOG` 已同步记录本次实现升级。
+
+### 本地验收结果
+- `Release` / `Debug` 构建均通过，`0 warnings / 0 errors`。
+- `juren-30s.mp4` 的 `--performance-log-check 2000` 在 `Release` / `Debug` 下均输出：
+  - `Configured D3D11VA frames context for direct shader sampling: bind_flags=520`
+  - `video_native_output_frames=62`
+  - `video_copy_back_frames=0`
+  - `result=PASS`
+- 说明当前机器上已不再依赖 copy-back，真正恢复到 D3D11VA -> D3D11 native direct 的零拷贝直采样链路。
+
+### 修改文件
+- include/core/player_core.h
+- src/core/player_core.cpp
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+## 问题 90: D3D11 原生直采样黑屏：运行时禁用 native direct 并回退 copy-back
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户反馈：`Release` 构建程序播放 `juren-30s.mp4` 时只有声音，没有画面，并明确要求排查 `D3D11` 路径黑屏。
+- 需要确认问题属于解码失败、渲染失败，还是 D3D11VA 与 D3D11 renderer 的联动兼容性问题。
+
+### 日志输出
+```text
+Release build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.sln /t:modern-video-player /p:Configuration=Release /p:Platform=x64 /m
+0 warnings / 0 errors
+
+Debug build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.sln /t:modern-video-player /p:Configuration=Debug /p:Platform=x64 /m
+0 warnings / 0 errors
+
+Release check:
+build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+[WARNING] D3D11 native direct rendering disabled for current session: CreateShaderResourceView1 for Y plane failed texture_format=NV12 texture_format_id=103 array_size=44 bind_flags=512 misc_flags=0 texture_index=43 y_plane_hr=-2147024809 uv_plane_hr=0 fallback=copyback-to-software
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=3
+performance-log-check.video_copy_back_frames=59
+performance-log-check.render_frames=47
+performance-log-check.result=PASS
+
+Debug check:
+build\Debug\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+[WARNING] D3D11 native direct rendering disabled for current session: CreateShaderResourceView1 for Y plane failed texture_format=NV12 texture_format_id=103 array_size=44 bind_flags=512 misc_flags=0 texture_index=43 y_plane_hr=-2147024809 uv_plane_hr=0 fallback=copyback-to-software
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=1
+performance-log-check.video_copy_back_frames=62
+performance-log-check.render_frames=48
+performance-log-check.result=PASS
+```
+
+### 分析记录
+1. `renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`render_frames > 0` 说明播放主链路未断，问题不在文件探测、解复用或音频链。
+2. 告警稳定命中 `CreateShaderResourceView1 for Y plane failed`，表明黑屏根因在 D3D11 原生直采样阶段对硬解表面创建 SRV 失败，而旧逻辑此前没有把这类运行时失败转成明确降级。
+3. `video_copy_back_frames > 0` 且 `result=PASS` 说明一旦停止 native direct，现有 copy-back + 软件纹理上传链路能够继续稳定出图。
+
+### 处理结果
+- `src/render/d3d11_video_renderer.cpp`：
+  - 新增 `disableNativeDirectRendering(...)`，统一回收 native SRV 状态并记录一次性告警。
+  - `ensureNativeShaderResourcesLocked(...)` 在 Y/UV plane `CreateShaderResourceView1` 失败时禁用当前会话 native direct，并返回 `false`。
+  - `bindNativeFrameLocked(...)` 在解码表面格式不支持直接采样时同样禁用 native direct。
+  - `supportsNativeFrameFormat()` 接入 `native_direct_rendering_disabled_` 状态，确保后续帧改走 `PlayerCore` 现有 copy-back 路径。
+- `CHANGELOG / VERSION / DEVELOP_LOG` 已同步记录本次修复。
+
+### 本地验收结果
+- `Release` / `Debug` 构建均通过，`0 warnings / 0 errors`。
+- `juren-30s.mp4` 的 `--performance-log-check 2000` 在 `Release` / `Debug` 下均通过。
+- 两个构建均能稳定打印 `fallback=copyback-to-software`，并保持非零 `video_copy_back_frames`、`render_frames`，说明黑屏路径已被运行时降级接管。
+
+### 修改文件
+- src/render/d3d11_video_renderer.cpp
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
 ## 问题 80: 文档一致性补齐：CHANGELOG 索引修复与问题 69 analysis 回填
 
 **日期**: 2026-03-19

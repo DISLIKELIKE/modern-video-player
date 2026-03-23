@@ -1,12 +1,14 @@
-﻿#include "render/d3d11_video_renderer.h"
+#include "render/d3d11_video_renderer.h"
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iomanip>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -66,6 +68,549 @@ constexpr float kSubtitleFontScale = 0.055f;
 constexpr float kSubtitleHorizontalPadding = 18.0f;
 constexpr float kSubtitleVerticalPadding = 10.0f;
 constexpr float kSubtitleShadowOffset = 2.0f;
+
+const char* dxgiFormatName(DXGI_FORMAT format) {
+    switch (format) {
+    case DXGI_FORMAT_NV12:
+        return "NV12";
+    case DXGI_FORMAT_P010:
+        return "P010";
+    case DXGI_FORMAT_P016:
+        return "P016";
+    case DXGI_FORMAT_B8G8R8A8_UNORM:
+        return "B8G8R8A8_UNORM";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const char* boolName(bool value) { return value ? "true" : "false"; }
+
+const char* featureLevelName(D3D_FEATURE_LEVEL level) {
+    switch (level) {
+    case D3D_FEATURE_LEVEL_11_1:
+        return "11_1";
+    case D3D_FEATURE_LEVEL_11_0:
+        return "11_0";
+    case D3D_FEATURE_LEVEL_10_1:
+        return "10_1";
+    case D3D_FEATURE_LEVEL_10_0:
+        return "10_0";
+    default:
+        return "unknown";
+    }
+}
+
+const char* swapEffectName(DXGI_SWAP_EFFECT effect) {
+    switch (effect) {
+    case DXGI_SWAP_EFFECT_DISCARD:
+        return "DISCARD";
+    case DXGI_SWAP_EFFECT_SEQUENTIAL:
+        return "SEQUENTIAL";
+    case DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL:
+        return "FLIP_SEQUENTIAL";
+    case DXGI_SWAP_EFFECT_FLIP_DISCARD:
+        return "FLIP_DISCARD";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const char* alphaModeName(DXGI_ALPHA_MODE mode) {
+    switch (mode) {
+    case DXGI_ALPHA_MODE_UNSPECIFIED:
+        return "UNSPECIFIED";
+    case DXGI_ALPHA_MODE_PREMULTIPLIED:
+        return "PREMULTIPLIED";
+    case DXGI_ALPHA_MODE_STRAIGHT:
+        return "STRAIGHT";
+    case DXGI_ALPHA_MODE_IGNORE:
+        return "IGNORE";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+std::string utf8FromWide(const wchar_t* text) {
+    if (!text || text[0] == L'\0') {
+        return std::string();
+    }
+
+    const int required = WideCharToMultiByte(CP_UTF8, 0, text, -1, nullptr, 0, nullptr, nullptr);
+    if (required <= 1) {
+        return std::string();
+    }
+
+    std::string result(static_cast<size_t>(required - 1), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), required, nullptr, nullptr);
+    return result;
+}
+
+uint64_t bytesToMiB(SIZE_T bytes) {
+    return static_cast<uint64_t>(bytes / (1024ull * 1024ull));
+}
+
+std::string adapterDriverVersionString(IDXGIAdapter* adapter) {
+    if (!adapter) {
+        return "unknown";
+    }
+
+    LARGE_INTEGER version{};
+    if (FAILED(adapter->CheckInterfaceSupport(__uuidof(IDXGIDevice), &version))) {
+        return "unknown";
+    }
+
+    std::ostringstream oss;
+    oss << HIWORD(version.HighPart) << '.'
+        << LOWORD(version.HighPart) << '.'
+        << HIWORD(version.LowPart) << '.'
+        << LOWORD(version.LowPart);
+    return oss.str();
+}
+
+bool guidEquals(const GUID& lhs, const GUID& rhs) {
+    return std::memcmp(&lhs, &rhs, sizeof(GUID)) == 0;
+}
+
+struct D3D11DeviceProbeContext {
+    ComPtr<ID3D11Device> device;
+    ComPtr<ID3D11DeviceContext> context;
+    ComPtr<ID3D11Device3> device3;
+    D3D_FEATURE_LEVEL feature_level{D3D_FEATURE_LEVEL_11_0};
+    bool debug_layer_enabled{false};
+    bool multithread_protected{false};
+    HRESULT create_device_hr{E_FAIL};
+};
+
+struct NativeDirectBlacklistRule {
+    const char* rule_name;
+    std::optional<UINT> vendor_id;
+    std::optional<UINT> device_id;
+    const char* adapter_name_substring;
+    const char* driver_version_prefix;
+    const char* reason;
+};
+
+constexpr NativeDirectBlacklistRule kNativeDirectBlacklistRules[] = {
+    {"microsoft-basic-render-driver",
+     0x1414u,
+     std::nullopt,
+     "Microsoft Basic Render Driver",
+     nullptr,
+     "software/basic adapters are excluded from D3D11 native direct video surfaces"},
+};
+
+const GUID kDecoderProfileH264VldNoFgt =
+    {0x1b81be68, 0xa0c7, 0x11d3, {0xb9, 0x84, 0x00, 0xc0, 0x4f, 0x2e, 0x73, 0xc5}};
+const GUID kDecoderProfileH264VldFgt =
+    {0x1b81be69, 0xa0c7, 0x11d3, {0xb9, 0x84, 0x00, 0xc0, 0x4f, 0x2e, 0x73, 0xc5}};
+const GUID kDecoderProfileHevcMain =
+    {0x5b11d51b, 0x2f4c, 0x4452, {0xbc, 0xc3, 0x09, 0xf2, 0xa1, 0x16, 0x0c, 0xc0}};
+const GUID kDecoderProfileHevcMain10 =
+    {0x107af0e0, 0xef1a, 0x4d19, {0xab, 0xa8, 0x67, 0xa1, 0x63, 0x07, 0x3d, 0x13}};
+const GUID kDecoderProfileVp9Profile0 =
+    {0x463707f8, 0xa1d0, 0x4585, {0x87, 0x6d, 0x83, 0xaa, 0x6d, 0x60, 0xb8, 0x9e}};
+const GUID kDecoderProfileVp9Profile2_10Bit =
+    {0xa4c749ef, 0x6ecf, 0x48aa, {0x84, 0x48, 0x50, 0xa7, 0xa1, 0x16, 0x5f, 0xf7}};
+const GUID kDecoderProfileAv1Profile0 =
+    {0xb8be4ccb, 0xcf53, 0x46ba, {0x8d, 0x59, 0xd6, 0xb8, 0xa6, 0xda, 0x5d, 0x2a}};
+const GUID kDecoderProfileAv1Profile1 =
+    {0x6936ff0f, 0x45b1, 0x4163, {0x9c, 0xc1, 0x64, 0x6e, 0xf6, 0x94, 0x61, 0x08}};
+const GUID kDecoderProfileAv1Profile2 =
+    {0x0c5f2aa1, 0xe541, 0x4089, {0xbb, 0x7b, 0x98, 0x11, 0x0a, 0x19, 0xd7, 0xc8}};
+const GUID kDecoderProfileAv1Profile2_12Bit =
+    {0x17127009, 0xa00f, 0x4ce1, {0x99, 0x4e, 0xbf, 0x40, 0x81, 0xf6, 0xf3, 0xf0}};
+const GUID kDecoderProfileAv1Profile2_12Bit420 =
+    {0x2d80bed6, 0x9cac, 0x4835, {0x9e, 0x91, 0x32, 0x7b, 0xbc, 0x4f, 0x9e, 0xe8}};
+
+D3D11FormatSupportSnapshot queryFormatSupport(ID3D11Device* device, DXGI_FORMAT format) {
+    D3D11FormatSupportSnapshot snapshot;
+    if (!device) {
+        snapshot.check_hr = static_cast<long>(E_POINTER);
+        return snapshot;
+    }
+
+    UINT support = 0;
+    const HRESULT hr = device->CheckFormatSupport(format, &support);
+    snapshot.check_hr = static_cast<long>(hr);
+    if (FAILED(hr)) {
+        return snapshot;
+    }
+
+    snapshot.check_succeeded = true;
+    snapshot.raw_support = support;
+    snapshot.texture2d = (support & D3D11_FORMAT_SUPPORT_TEXTURE2D) != 0;
+    snapshot.shader_sample = (support & D3D11_FORMAT_SUPPORT_SHADER_SAMPLE) != 0;
+    snapshot.shader_load = (support & D3D11_FORMAT_SUPPORT_SHADER_LOAD) != 0;
+    snapshot.decoder_output = (support & D3D11_FORMAT_SUPPORT_DECODER_OUTPUT) != 0;
+    return snapshot;
+}
+
+std::string formatSupportSummary(DXGI_FORMAT format, const D3D11FormatSupportSnapshot& snapshot) {
+    std::ostringstream oss;
+    oss << dxgiFormatName(format);
+    if (!snapshot.check_succeeded) {
+        oss << "{check_failed_hr=" << snapshot.check_hr << '}';
+        return oss.str();
+    }
+
+    oss << "{raw=0x" << std::hex << std::uppercase << snapshot.raw_support << std::dec
+        << " texture2d=" << boolName(snapshot.texture2d)
+        << " shader_sample=" << boolName(snapshot.shader_sample)
+        << " shader_load=" << boolName(snapshot.shader_load)
+        << " decoder_output=" << boolName(snapshot.decoder_output)
+        << '}';
+    return oss.str();
+}
+
+D3D11DecoderProfileSupport probeDecoderProfiles(ID3D11VideoDevice* video_device) {
+    D3D11DecoderProfileSupport snapshot;
+    if (!video_device) {
+        return snapshot;
+    }
+
+    snapshot.enumeration_succeeded = true;
+    snapshot.enumerated_profile_count = video_device->GetVideoDecoderProfileCount();
+    for (UINT i = 0; i < snapshot.enumerated_profile_count; ++i) {
+        GUID profile{};
+        if (FAILED(video_device->GetVideoDecoderProfile(i, &profile))) {
+            continue;
+        }
+
+        if (guidEquals(profile, kDecoderProfileH264VldNoFgt)) {
+            snapshot.h264_vld_nofgt = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileH264VldFgt)) {
+            snapshot.h264_vld_fgt = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileHevcMain)) {
+            snapshot.hevc_main = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileHevcMain10)) {
+            snapshot.hevc_main10 = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileVp9Profile0)) {
+            snapshot.vp9_profile0 = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileVp9Profile2_10Bit)) {
+            snapshot.vp9_profile2_10bit = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileAv1Profile0)) {
+            snapshot.av1_profile0 = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileAv1Profile1)) {
+            snapshot.av1_profile1 = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileAv1Profile2)) {
+            snapshot.av1_profile2 = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileAv1Profile2_12Bit)) {
+            snapshot.av1_profile2_12bit = true;
+            continue;
+        }
+        if (guidEquals(profile, kDecoderProfileAv1Profile2_12Bit420)) {
+            snapshot.av1_profile2_12bit_420 = true;
+            continue;
+        }
+    }
+
+    return snapshot;
+}
+
+bool stringContainsCaseInsensitive(const std::string& text, const char* needle) {
+    if (!needle || needle[0] == '\0') {
+        return true;
+    }
+
+    std::string lhs(text);
+    std::string rhs(needle);
+    std::transform(lhs.begin(), lhs.end(), lhs.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    std::transform(rhs.begin(), rhs.end(), rhs.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lhs.find(rhs) != std::string::npos;
+}
+
+bool stringStartsWith(const std::string& text, const char* prefix) {
+    if (!prefix || prefix[0] == '\0') {
+        return true;
+    }
+    return text.rfind(prefix, 0) == 0;
+}
+
+void applyNativeDirectStartupPolicy(D3D11DiagnosticsSnapshot& snapshot) {
+    snapshot.native_direct_allowed = true;
+    snapshot.native_direct_startup_disabled = false;
+    snapshot.native_direct_disable_rule = "none";
+    snapshot.native_direct_disable_reason.clear();
+
+    if (!snapshot.probe_succeeded) {
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = "device_create_failed";
+        snapshot.native_direct_disable_reason = "D3D11 device creation failed";
+        return;
+    }
+
+    if (snapshot.software_adapter) {
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = "software_adapter";
+        snapshot.native_direct_disable_reason =
+            "software adapter is not a stable target for native direct D3D11 video surfaces";
+        return;
+    }
+
+    if (!snapshot.has_device3) {
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = "missing_device3";
+        snapshot.native_direct_disable_reason =
+            "ID3D11Device3 is required for plane-sliced CreateShaderResourceView1";
+        return;
+    }
+
+    if (!snapshot.has_video_device || !snapshot.has_video_context) {
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = "missing_video_interfaces";
+        snapshot.native_direct_disable_reason =
+            "D3D11 video decode interfaces are incomplete on this adapter/driver";
+        return;
+    }
+
+    const bool nv12_ready = snapshot.nv12_support.check_succeeded &&
+                            snapshot.nv12_support.texture2d &&
+                            snapshot.nv12_support.shader_sample &&
+                            snapshot.nv12_support.decoder_output;
+    if (!nv12_ready) {
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = "nv12_capability_gap";
+        snapshot.native_direct_disable_reason =
+            "NV12 lacks texture2d/shader_sample/decoder_output support for native direct";
+        return;
+    }
+
+    for (const NativeDirectBlacklistRule& rule : kNativeDirectBlacklistRules) {
+        if (rule.vendor_id && snapshot.vendor_id != *rule.vendor_id) {
+            continue;
+        }
+        if (rule.device_id && snapshot.device_id != *rule.device_id) {
+            continue;
+        }
+        if (!stringContainsCaseInsensitive(snapshot.adapter_name, rule.adapter_name_substring)) {
+            continue;
+        }
+        if (!stringStartsWith(snapshot.driver_version, rule.driver_version_prefix)) {
+            continue;
+        }
+        snapshot.native_direct_allowed = false;
+        snapshot.native_direct_startup_disabled = true;
+        snapshot.native_direct_disable_rule = rule.rule_name;
+        snapshot.native_direct_disable_reason = rule.reason;
+        return;
+    }
+}
+
+D3D11DiagnosticsSnapshot buildD3D11DiagnosticsSnapshot(const D3D11DeviceProbeContext& probe) {
+    D3D11DiagnosticsSnapshot snapshot;
+    snapshot.create_device_hr = static_cast<long>(probe.create_device_hr);
+    snapshot.probe_succeeded = SUCCEEDED(probe.create_device_hr) && probe.device && probe.context;
+    snapshot.feature_level = featureLevelName(probe.feature_level);
+    snapshot.debug_layer_enabled = probe.debug_layer_enabled;
+    snapshot.multithread_protected = probe.multithread_protected;
+    snapshot.has_device3 = probe.device3 != nullptr;
+
+    if (!snapshot.probe_succeeded) {
+        applyNativeDirectStartupPolicy(snapshot);
+        return snapshot;
+    }
+
+    ComPtr<IDXGIDevice> dxgi_device;
+    ComPtr<IDXGIAdapter> adapter;
+    ComPtr<IDXGIAdapter1> adapter1;
+    if (SUCCEEDED(probe.device->QueryInterface(IID_PPV_ARGS(dxgi_device.GetAddressOf()))) &&
+        dxgi_device &&
+        SUCCEEDED(dxgi_device->GetAdapter(adapter.GetAddressOf())) &&
+        adapter) {
+        snapshot.driver_version = adapterDriverVersionString(adapter.Get());
+        if (SUCCEEDED(adapter.As(&adapter1)) && adapter1) {
+            DXGI_ADAPTER_DESC1 desc1{};
+            if (SUCCEEDED(adapter1->GetDesc1(&desc1))) {
+                snapshot.adapter_name = utf8FromWide(desc1.Description);
+                snapshot.vendor_id = desc1.VendorId;
+                snapshot.device_id = desc1.DeviceId;
+                snapshot.subsystem_id = desc1.SubSysId;
+                snapshot.revision = desc1.Revision;
+                snapshot.dedicated_video_mib = bytesToMiB(desc1.DedicatedVideoMemory);
+                snapshot.dedicated_system_mib = bytesToMiB(desc1.DedicatedSystemMemory);
+                snapshot.shared_system_mib = bytesToMiB(desc1.SharedSystemMemory);
+                snapshot.software_adapter = (desc1.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+            }
+        } else {
+            DXGI_ADAPTER_DESC desc{};
+            if (SUCCEEDED(adapter->GetDesc(&desc))) {
+                snapshot.adapter_name = utf8FromWide(desc.Description);
+                snapshot.vendor_id = desc.VendorId;
+                snapshot.device_id = desc.DeviceId;
+                snapshot.subsystem_id = desc.SubSysId;
+                snapshot.revision = desc.Revision;
+                snapshot.dedicated_video_mib = bytesToMiB(desc.DedicatedVideoMemory);
+                snapshot.dedicated_system_mib = bytesToMiB(desc.DedicatedSystemMemory);
+                snapshot.shared_system_mib = bytesToMiB(desc.SharedSystemMemory);
+            }
+        }
+    }
+
+    ComPtr<ID3D11VideoDevice> video_device;
+    ComPtr<ID3D11VideoContext> video_context;
+    snapshot.has_video_device =
+        SUCCEEDED(probe.device->QueryInterface(IID_PPV_ARGS(video_device.GetAddressOf()))) && video_device;
+    snapshot.has_video_context =
+        SUCCEEDED(probe.context->QueryInterface(IID_PPV_ARGS(video_context.GetAddressOf()))) && video_context;
+    snapshot.nv12_support = queryFormatSupport(probe.device.Get(), DXGI_FORMAT_NV12);
+    snapshot.p010_support = queryFormatSupport(probe.device.Get(), DXGI_FORMAT_P010);
+    snapshot.p016_support = queryFormatSupport(probe.device.Get(), DXGI_FORMAT_P016);
+    snapshot.decoder_profiles = probeDecoderProfiles(video_device.Get());
+    applyNativeDirectStartupPolicy(snapshot);
+    return snapshot;
+}
+
+std::string decoderProfileSummary(const D3D11DecoderProfileSupport& snapshot) {
+    std::ostringstream oss;
+    oss << "[diag:d3d11-init] decoder_profiles"
+        << " enumeration_succeeded=" << boolName(snapshot.enumeration_succeeded)
+        << " enumerated_profile_count=" << snapshot.enumerated_profile_count
+        << " h264_vld_nofgt=" << boolName(snapshot.h264_vld_nofgt)
+        << " h264_vld_fgt=" << boolName(snapshot.h264_vld_fgt)
+        << " hevc_main=" << boolName(snapshot.hevc_main)
+        << " hevc_main10=" << boolName(snapshot.hevc_main10)
+        << " vp9_profile0=" << boolName(snapshot.vp9_profile0)
+        << " vp9_profile2_10bit=" << boolName(snapshot.vp9_profile2_10bit)
+        << " av1_profile0=" << boolName(snapshot.av1_profile0)
+        << " av1_profile1=" << boolName(snapshot.av1_profile1)
+        << " av1_profile2=" << boolName(snapshot.av1_profile2)
+        << " av1_profile2_12bit=" << boolName(snapshot.av1_profile2_12bit)
+        << " av1_profile2_12bit_420=" << boolName(snapshot.av1_profile2_12bit_420);
+    return oss.str();
+}
+
+void logD3D11StartupDiagnostics(const D3D11DiagnosticsSnapshot& snapshot) {
+    std::ostringstream adapter_log;
+    adapter_log << "[diag:d3d11-init] adapter=\"" << snapshot.adapter_name
+                << "\" vendor_id=0x" << std::hex << std::uppercase << snapshot.vendor_id
+                << " device_id=0x" << snapshot.device_id
+                << " subsystem_id=0x" << snapshot.subsystem_id
+                << std::dec << " revision=" << snapshot.revision
+                << " driver_version=" << snapshot.driver_version
+                << " software_adapter=" << boolName(snapshot.software_adapter)
+                << " dedicated_video_mib=" << snapshot.dedicated_video_mib
+                << " dedicated_system_mib=" << snapshot.dedicated_system_mib
+                << " shared_system_mib=" << snapshot.shared_system_mib;
+    LOG_INFO(adapter_log.str());
+
+    std::ostringstream device_log;
+    device_log << "[diag:d3d11-init] device feature_level=" << snapshot.feature_level
+               << " debug_layer=" << boolName(snapshot.debug_layer_enabled)
+               << " multithread_protected=" << boolName(snapshot.multithread_protected)
+               << " device3=" << boolName(snapshot.has_device3)
+               << " video_device=" << boolName(snapshot.has_video_device)
+               << " video_context=" << boolName(snapshot.has_video_context);
+    LOG_INFO(device_log.str());
+
+    LOG_INFO(std::string("[diag:d3d11-init] format_support ") +
+             formatSupportSummary(DXGI_FORMAT_NV12, snapshot.nv12_support) + " " +
+             formatSupportSummary(DXGI_FORMAT_P010, snapshot.p010_support) + " " +
+             formatSupportSummary(DXGI_FORMAT_P016, snapshot.p016_support));
+    LOG_INFO(decoderProfileSummary(snapshot.decoder_profiles));
+
+    std::ostringstream native_direct_log;
+    native_direct_log << "[diag:d3d11-init] native_direct startup_allowed="
+                      << boolName(snapshot.native_direct_allowed)
+                      << " startup_disabled=" << boolName(snapshot.native_direct_startup_disabled)
+                      << " rule=" << snapshot.native_direct_disable_rule;
+    if (!snapshot.native_direct_disable_reason.empty()) {
+        native_direct_log << " reason=\"" << snapshot.native_direct_disable_reason << '"';
+    }
+    if (!snapshot.native_direct_allowed) {
+        native_direct_log << " fallback=copyback-to-software";
+        LOG_WARNING(native_direct_log.str());
+        return;
+    }
+    LOG_INFO(native_direct_log.str());
+}
+
+D3D11DeviceProbeContext createD3D11DeviceProbeContext() {
+    D3D11DeviceProbeContext probe;
+    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#if defined(DEBUG_MODE)
+    flags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif
+    const D3D_FEATURE_LEVEL requested_levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
+    probe.feature_level = D3D_FEATURE_LEVEL_11_0;
+    probe.create_device_hr = D3D11CreateDevice(nullptr,
+                                               D3D_DRIVER_TYPE_HARDWARE,
+                                               nullptr,
+                                               flags,
+                                               requested_levels,
+                                               2u,
+                                               D3D11_SDK_VERSION,
+                                               probe.device.GetAddressOf(),
+                                               &probe.feature_level,
+                                               probe.context.GetAddressOf());
+#if defined(DEBUG_MODE)
+    if (FAILED(probe.create_device_hr)) {
+        flags &= ~D3D11_CREATE_DEVICE_DEBUG;
+        probe.create_device_hr = D3D11CreateDevice(nullptr,
+                                                   D3D_DRIVER_TYPE_HARDWARE,
+                                                   nullptr,
+                                                   flags,
+                                                   requested_levels,
+                                                   2u,
+                                                   D3D11_SDK_VERSION,
+                                                   probe.device.ReleaseAndGetAddressOf(),
+                                                   &probe.feature_level,
+                                                   probe.context.ReleaseAndGetAddressOf());
+    }
+#endif
+    probe.debug_layer_enabled = (flags & D3D11_CREATE_DEVICE_DEBUG) != 0;
+    if (FAILED(probe.create_device_hr) || !probe.device || !probe.context) {
+        return probe;
+    }
+
+    probe.device.As(&probe.device3);
+    ComPtr<ID3D11Multithread> multithread;
+    if (SUCCEEDED(probe.context.As(&multithread)) && multithread) {
+        multithread->SetMultithreadProtected(TRUE);
+        probe.multithread_protected = true;
+    }
+    return probe;
+}
+
+void logD3D11SwapChainDiagnostics(const DXGI_SWAP_CHAIN_DESC1& desc) {
+    std::ostringstream oss;
+    oss << "[diag:d3d11-init] swap_chain width=" << desc.Width
+        << " height=" << desc.Height
+        << " format=" << dxgiFormatName(desc.Format)
+        << " buffer_count=" << desc.BufferCount
+        << " sample_count=" << desc.SampleDesc.Count
+        << " swap_effect=" << swapEffectName(desc.SwapEffect)
+        << " alpha_mode=" << alphaModeName(desc.AlphaMode)
+        << " usage=0x" << std::hex << std::uppercase << desc.BufferUsage;
+    LOG_INFO(oss.str());
+}
 
 struct WindowSize {
     int width;
@@ -411,6 +956,11 @@ private:
     bool ensureSoftwareTextures(int width, int height);
     bool ensureOverlayBuffer(size_t vertex_count);
     bool resizeSwapChainLocked(int width, int height);
+    void disableNativeDirectRendering(const char* reason,
+                                      const D3D11_TEXTURE2D_DESC* texture_desc,
+                                      intptr_t texture_index,
+                                      HRESULT y_plane_hr = S_OK,
+                                      HRESULT uv_plane_hr = S_OK);
     bool ensureNativeShaderResourcesLocked(ID3D11Texture2D* texture, intptr_t index, DXGI_FORMAT format);
     bool bindSoftwareFrameLocked(const AVFrame* frame);
     bool bindNativeFrameLocked(const AVFrame* frame);
@@ -518,8 +1068,9 @@ private:
     DXGI_FORMAT native_texture_format_{DXGI_FORMAT_UNKNOWN};
     ComPtr<ID3D11ShaderResourceView1> native_srv_y_;
     ComPtr<ID3D11ShaderResourceView1> native_srv_uv_;
+    std::atomic<bool> native_direct_rendering_disabled_{false};
+    D3D11DiagnosticsSnapshot d3d11_diagnostics_{};
 };
-
 bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
     close();
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
@@ -547,6 +1098,7 @@ bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
     }
 
     resetRequests();
+    native_direct_rendering_disabled_.store(false);
     if (!createDeviceResources() || !createTextResources() || !createSwapChainForWindow() || !createBackBuffer() || !createShaders() ||
         !createBlendState()) {
         close();
@@ -566,6 +1118,8 @@ void D3D11VideoRenderer::Impl::close() {
     native_texture_format_ = DXGI_FORMAT_UNKNOWN;
     native_srv_y_.Reset();
     native_srv_uv_.Reset();
+    native_direct_rendering_disabled_.store(false);
+    d3d11_diagnostics_ = {};
     tex_y_.Reset();
     tex_u_.Reset();
     tex_v_.Reset();
@@ -613,32 +1167,19 @@ void D3D11VideoRenderer::Impl::close() {
 }
 
 bool D3D11VideoRenderer::Impl::createDeviceResources() {
-    UINT flags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-#if defined(DEBUG_MODE)
-    flags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif
-    const D3D_FEATURE_LEVEL requested_levels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
-    D3D_FEATURE_LEVEL actual_level = D3D_FEATURE_LEVEL_11_0;
-    HRESULT hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, requested_levels,
-                                   2u, D3D11_SDK_VERSION,
-                                   device_.GetAddressOf(), &actual_level, context_.GetAddressOf());
-#if defined(DEBUG_MODE)
-    if (FAILED(hr)) {
-        flags &= ~D3D11_CREATE_DEVICE_DEBUG;
-        hr = D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, flags, requested_levels,
-                               2u, D3D11_SDK_VERSION,
-                               device_.GetAddressOf(), &actual_level, context_.GetAddressOf());
-    }
-#endif
-    if (FAILED(hr) || !device_ || !context_) {
-        LOG_ERROR("D3D11CreateDevice failed");
+    D3D11DeviceProbeContext probe = createD3D11DeviceProbeContext();
+    if (FAILED(probe.create_device_hr) || !probe.device || !probe.context) {
+        LOG_ERROR("D3D11CreateDevice failed: hr=" << static_cast<long>(probe.create_device_hr));
         return false;
     }
-    device_.As(&device3_);
-    ComPtr<ID3D11Multithread> multithread;
-    if (SUCCEEDED(context_.As(&multithread)) && multithread) {
-        multithread->SetMultithreadProtected(TRUE);
-    }
+
+    device_ = probe.device;
+    context_ = probe.context;
+    device3_ = probe.device3;
+    d3d11_diagnostics_ = buildD3D11DiagnosticsSnapshot(probe);
+    logD3D11StartupDiagnostics(d3d11_diagnostics_);
+    native_direct_rendering_disabled_.store(d3d11_diagnostics_.native_direct_startup_disabled);
+
     D3D11_SAMPLER_DESC sampler_desc{};
     sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
     sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
@@ -651,7 +1192,6 @@ bool D3D11VideoRenderer::Impl::createDeviceResources() {
     }
     return true;
 }
-
 bool D3D11VideoRenderer::Impl::createSwapChainForWindow() {
     SDL_SysWMinfo wm_info{};
     SDL_VERSION(&wm_info.version);
@@ -688,7 +1228,11 @@ bool D3D11VideoRenderer::Impl::createSwapChainForWindow() {
         LOG_ERROR("CreateSwapChainForHwnd failed");
         return false;
     }
-    factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+    logD3D11SwapChainDiagnostics(swap_desc);
+    const HRESULT window_assoc_hr = factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
+    if (FAILED(window_assoc_hr)) {
+        LOG_WARNING("MakeWindowAssociation failed: hr=" << static_cast<long>(window_assoc_hr));
+    }
     return true;
 }
 
@@ -995,6 +1539,35 @@ bool D3D11VideoRenderer::Impl::ensureOverlayBuffer(size_t vertex_count) {
     return SUCCEEDED(device_->CreateBuffer(&desc, nullptr, overlay_vertex_buffer_.GetAddressOf()));
 }
 
+void D3D11VideoRenderer::Impl::disableNativeDirectRendering(const char* reason,
+                                                            const D3D11_TEXTURE2D_DESC* texture_desc,
+                                                            intptr_t texture_index,
+                                                            HRESULT y_plane_hr,
+                                                            HRESULT uv_plane_hr) {
+    native_srv_y_.Reset();
+    native_srv_uv_.Reset();
+    native_texture_ptr_ = nullptr;
+    native_texture_index_ = 0;
+    native_texture_format_ = DXGI_FORMAT_UNKNOWN;
+
+    if (native_direct_rendering_disabled_.exchange(true)) {
+        return;
+    }
+
+    LOG_WARNING("D3D11 native direct rendering disabled for current session: " << reason
+                << " texture_format="
+                << (texture_desc ? dxgiFormatName(texture_desc->Format) : "UNKNOWN")
+                << " texture_format_id="
+                << (texture_desc ? static_cast<int>(texture_desc->Format) : static_cast<int>(DXGI_FORMAT_UNKNOWN))
+                << " array_size=" << (texture_desc ? texture_desc->ArraySize : 0)
+                << " bind_flags=" << (texture_desc ? texture_desc->BindFlags : 0)
+                << " misc_flags=" << (texture_desc ? texture_desc->MiscFlags : 0)
+                << " texture_index=" << texture_index
+                << " y_plane_hr=" << static_cast<long>(y_plane_hr)
+                << " uv_plane_hr=" << static_cast<long>(uv_plane_hr)
+                << " fallback=copyback-to-software");
+}
+
 bool D3D11VideoRenderer::Impl::ensureNativeShaderResourcesLocked(ID3D11Texture2D* texture, intptr_t index, DXGI_FORMAT format) {
     if (!device3_ || !texture) {
         return false;
@@ -1038,8 +1611,20 @@ bool D3D11VideoRenderer::Impl::ensureNativeShaderResourcesLocked(ID3D11Texture2D
     } else {
         uv_desc.Texture2D.PlaneSlice = 1;
     }
-    return SUCCEEDED(device3_->CreateShaderResourceView1(texture, &y_desc, native_srv_y_.GetAddressOf())) &&
-           SUCCEEDED(device3_->CreateShaderResourceView1(texture, &uv_desc, native_srv_uv_.GetAddressOf()));
+
+    const HRESULT y_plane_hr = device3_->CreateShaderResourceView1(texture, &y_desc, native_srv_y_.GetAddressOf());
+    if (FAILED(y_plane_hr)) {
+        disableNativeDirectRendering("CreateShaderResourceView1 for Y plane failed", &texture_desc, index, y_plane_hr, S_OK);
+        return false;
+    }
+
+    const HRESULT uv_plane_hr = device3_->CreateShaderResourceView1(texture, &uv_desc, native_srv_uv_.GetAddressOf());
+    if (FAILED(uv_plane_hr)) {
+        disableNativeDirectRendering("CreateShaderResourceView1 for UV plane failed", &texture_desc, index, y_plane_hr, uv_plane_hr);
+        return false;
+    }
+
+    return true;
 }
 
 bool D3D11VideoRenderer::Impl::bindSoftwareFrameLocked(const AVFrame* frame) {
@@ -1072,7 +1657,11 @@ bool D3D11VideoRenderer::Impl::bindNativeFrameLocked(const AVFrame* frame) {
     texture->GetDesc(&desc);
     const bool supported = desc.Format == DXGI_FORMAT_NV12 || desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016;
     if (!supported) {
-        LOG_WARNING("D3D11 native frame format not supported for direct present: " << static_cast<int>(desc.Format));
+        disableNativeDirectRendering("decoder surface format is not supported for direct shader sampling",
+                                     &desc,
+                                     index,
+                                     S_OK,
+                                     S_OK);
         return false;
     }
     if (!ensureNativeShaderResourcesLocked(texture, index, desc.Format)) {
@@ -1779,11 +2368,14 @@ void D3D11VideoRenderer::Impl::setSubtitleItems(const std::vector<subtitle::Subt
     }
 }
 void D3D11VideoRenderer::Impl::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { std::lock_guard<std::mutex> request_lock(request_mutex_); hotkey_manager_ = hotkey_manager; }
-bool D3D11VideoRenderer::Impl::supportsNativeFrameFormat(AVPixelFormat format) const { return format == AV_PIX_FMT_D3D11 && device3_ != nullptr; }
+bool D3D11VideoRenderer::Impl::supportsNativeFrameFormat(AVPixelFormat format) const { return format == AV_PIX_FMT_D3D11 && device3_ != nullptr && !native_direct_rendering_disabled_.load(); }
 void* D3D11VideoRenderer::Impl::nativeDeviceHandle() const { return device_.Get(); }
 
 D3D11VideoRenderer::D3D11VideoRenderer() : impl_(std::make_unique<Impl>()) {}
 D3D11VideoRenderer::~D3D11VideoRenderer() = default;
+D3D11DiagnosticsSnapshot D3D11VideoRenderer::probeSystemDiagnostics() {
+    return buildD3D11DiagnosticsSnapshot(createD3D11DeviceProbeContext());
+}
 bool D3D11VideoRenderer::init(const VideoRendererConfig& config) { return impl_->init(config); }
 void D3D11VideoRenderer::close() { impl_->close(); }
 void D3D11VideoRenderer::renderFrame(const core::VideoFrame& frame) { impl_->renderFrame(frame); }
