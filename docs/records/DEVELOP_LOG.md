@@ -2,6 +2,95 @@
 
 
 
+## 问题 94: 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户明确确认按 `1.0.0-rc1` 方向推进，希望把 RC 发布清单、已知问题和发布说明收口成一套可直接使用的文档。
+- 这轮目标不是继续扩功能，而是判断“当前版本是否已经足够发 RC”，并把证据与限制讲清楚。
+
+### 日志输出
+```text
+Release gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4" -ForcedFailSessionSampleMs 2200
+[1/3] Probe exit code: 0
+[2/3] Forced FailSession exit code: 0
+[3/3] Regression exit code: 0
+Format regression report: docs/reports/FORMAT_REGRESSION_20260323_224615.md
+Summary: Total=17 PASS=17 PARTIAL=0 FAIL=0 SKIP=0
+
+Release diagnostics:
+build\Release\modern-video-player.exe --d3d11-diagnostics
+d3d11-diagnostics.probe_succeeded=true
+d3d11-diagnostics.decoder_profiles.h264_any=true
+d3d11-diagnostics.decoder_profiles.hevc_any=true
+d3d11-diagnostics.decoder_profiles.vp9_any=true
+d3d11-diagnostics.decoder_profiles.av1_any=false
+d3d11-diagnostics.native_direct.allowed=true
+d3d11-diagnostics.result=PASS
+
+Release performance smoke:
+build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000
+performance-log-check.renderer_backend=D3D11
+performance-log-check.decoder_backend=D3D11VA
+performance-log-check.video_native_output_frames=62
+performance-log-check.video_copy_back_frames=0
+performance-log-check.result=PASS
+
+Release long playback smoke:
+build\Release\modern-video-player.exe --long-playback-check .\juren-30s.mp4 10000
+long-playback-check.still_playing_after_window=true
+long-playback-check.late_drops=0
+long-playback-check.demux_dropped_packets=0
+long-playback-check.result=PASS
+
+Release serial/failsession gate:
+build\Release\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4
+serial-failsession-regression-check.pass_count=3
+serial-failsession-regression-check.total_count=3
+serial-failsession-regression-check.result=PASS
+```
+
+### 分析记录
+1. 这轮证据已经足够支持“可发 RC”而不是仅停留在“本地偶尔能播”：Release gate、格式回归、长时播放、seek/serial、forced failsession 和 D3D11 diagnostics 都有最新结果。
+2. 当前 RC 结论应当明确区分为“可打 `v1.0.0-rc1` 标签”与“不可直接宣称正式版已完成”。真正阻止直接 GA 的，不是主链不可用，而是兼容矩阵和长尾路径尚未完全吃透。
+3. 最需要显式写进已知问题的是 `问题 79`：software video decode 运行态路径仍未完全收口。它当前不阻塞 `D3D11VA` 主链 RC，但它仍是正式版前的剩余风险。
+4. 当前机器的 `AV1` profile 诊断结果仍为 `false`，这再次证明 RC 发布说明不能把“可播放 AV1 文件”和“普遍具备 AV1 硬解能力”混为一谈。
+
+### 处理结果
+- 新增 `docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`：
+  - 输出 RC 发布结论
+  - 汇总本轮 Release 验证证据
+  - 收口发布说明、已知问题与发布清单
+- 更新 `docs/reports/README.md` 与 `docs/README.md`：
+  - 为 RC 汇总报告增加入口
+- 更新 `docs/records/VERSION.md`：
+  - 增加 `当前发布候选: 1.0.0-rc1`
+  - 增加 `发布状态: 可发布 RC，不建议直接 GA`
+  - 记录本轮 RC 结论与最新验证证据
+- `CHANGELOG / DEVELOP_LOG` 已同步记录本次发布准备收口。
+
+### 本地验收结果
+- 当前结论：`可打 v1.0.0-rc1 标签`。
+- 不建议当前直接打 `v1.0.0` 正式版。
+- 最新 Release 证据：
+  - `run_all_checks.ps1`：通过
+  - `FORMAT_REGRESSION_20260323_224615.md`：`17 PASS / 0 PARTIAL / 0 FAIL / 0 SKIP`
+  - `--d3d11-diagnostics`：通过
+  - `--performance-log-check`：通过
+  - `--long-playback-check`：通过
+  - `--serial-failsession-regression-check`：通过
+
+### 修改文件
+- docs/reports/V1_0_0_RC1_RELEASE_READINESS.md
+- docs/reports/FORMAT_REGRESSION_20260323_224615.md
+- docs/reports/README.md
+- docs/README.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/VERSION.md
 ## 问题 93: D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
 
 **日期**: 2026-03-23

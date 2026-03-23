@@ -40,12 +40,34 @@
 
 - **项目版本**: 1.0.0
 
+- **当前发布候选**: 1.0.0-rc1
+
+- **发布状态**: 可发布 RC，不建议直接 GA
+
 - **构建类型**: Release / Debug
 
 - **支持平台**: Windows, Linux, macOS
 
 
 
+### 2026-03-23 更新：1.0.0-rc1 发布准备完成
+
+- 当前结论已收口为：`可打 v1.0.0-rc1 标签`，但不建议直接发布正式版 `1.0.0`。
+
+- 本轮基于 `Release` 构建重新执行并通过：
+  - `tools/run_all_checks.ps1`
+  - `--d3d11-diagnostics`
+  - `--performance-log-check .\juren-30s.mp4 2000`
+  - `--long-playback-check .\juren-30s.mp4 10000`
+  - `--serial-failsession-regression-check .\juren-30s.mp4`
+
+- 最新格式回归报告 `docs/reports/FORMAT_REGRESSION_20260323_224615.md` 汇总结果为：`17 PASS / 0 PARTIAL / 0 FAIL / 0 SKIP`。
+
+- 已新增 RC 汇总文档：`docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`，统一收口发布清单、已知问题、发布说明和今天的验证证据。
+
+- 当前 RC 仍保留两类明确风险：
+  - `问题 79` 对应的 software video decode 运行态路径仍未完全收口
+  - D3D11 driver / adapter quirk blacklist 规则仍需继续扩充
 ### 2026-03-23 更新：D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
 
 - `D3D11VideoRenderer` 现已输出结构化 `D3D11DiagnosticsSnapshot`，统一包含 adapter/driver、feature level、`NV12/P010/P016` 格式支持、decoder profiles 与 native direct 启动期策略。

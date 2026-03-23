@@ -311,6 +311,7 @@
 | 91 | 2026-03-23 | D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样 | ✅ 已修复 |
 | 92 | 2026-03-23 | D3D11 启动期能力探测与 adapter/driver 诊断日志补齐 | ✅ 已修复 |
 | 93 | 2026-03-23 | D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI | ✅ 已修复 |
+| 94 | 2026-03-23 | 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口 | ✅ 已修复 |
 
 
 
@@ -318,6 +319,58 @@
 
 
 
+## 问题 94: 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 当前播放器已经具备主流本地播放能力、稳定 seek 主链以及 `D3D11VA + D3D11` 主力渲染路径，但仓库里仍缺少一份面向 `RC` 发布的统一结论文档。
+
+- 现有验证证据分散在 `VERSION / CHANGELOG / DEVELOP_LOG` 以及多个 `reports/*_LOCAL_CHECK.md` 中，缺少一个可以直接回答“现在能不能发 `1.0.0-rc1`、已知问题是什么、对外该怎么描述”的收口入口。
+
+### 原因分析
+
+- 过去的 records 更偏向问题修复和能力增量记录，不直接等价于发布说明。
+
+- 即便近期 D3D11、serial/failsession、format regression 等能力已经继续收口，没有单独的 RC 汇总文档，仍然容易把“可发 RC”和“可发正式版”混为一谈。
+
+- 同时，当前还有一个必须显式告知的残余风险：`问题 79` 对应的 software video decode 运行态路径尚未完全收口。
+
+### 解决方案
+
+- 新增 RC 汇总报告 `docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`，统一包含：
+  - `1.0.0-rc1` 发布结论
+  - 本轮新增验证证据
+  - 既有能力证据入口
+  - 发布说明
+  - 已知问题
+  - 发布清单
+
+- 重新基于 `Release` 构建执行 RC 直接相关检查：
+  - `tools/run_all_checks.ps1`
+  - `--d3d11-diagnostics`
+  - `--performance-log-check .\juren-30s.mp4 2000`
+  - `--long-playback-check .\juren-30s.mp4 10000`
+  - `--serial-failsession-regression-check .\juren-30s.mp4`
+
+- 同步更新 `docs/README.md`、`docs/reports/README.md` 和 `docs/records/VERSION.md`，把当前 RC 候选状态和入口文档显式化。
+
+### 修改文件
+
+- docs/reports/V1_0_0_RC1_RELEASE_READINESS.md
+
+- docs/reports/FORMAT_REGRESSION_20260323_224615.md
+
+- docs/reports/README.md
+
+- docs/README.md
+
+- docs/records/CHANGELOG.md
+
+- docs/records/DEVELOP_LOG.md
+
+- docs/records/VERSION.md
 ## 问题 93: D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
 
 **日期**: 2026-03-23
