@@ -17,10 +17,11 @@ VideoFrame::~VideoFrame() {
 
 /// 移动构造只转移帧所有权，不复制底层像素数据。
 VideoFrame::VideoFrame(VideoFrame&& other) noexcept
-    : frame(other.frame), pts(other.pts), duration(other.duration), valid(other.valid) {
+    : frame(other.frame), pts(other.pts), duration(other.duration), serial(other.serial), valid(other.valid) {
     other.frame = nullptr;
     other.pts = 0.0;
     other.duration = 0.0;
+    other.serial = kInvalidTimelineSerial;
     other.valid = false;
 }
 
@@ -37,11 +38,13 @@ VideoFrame& VideoFrame::operator=(VideoFrame&& other) noexcept {
     frame = other.frame;
     pts = other.pts;
     duration = other.duration;
+    serial = other.serial;
     valid = other.valid;
 
     other.frame = nullptr;
     other.pts = 0.0;
     other.duration = 0.0;
+    other.serial = kInvalidTimelineSerial;
     other.valid = false;
     return *this;
 }

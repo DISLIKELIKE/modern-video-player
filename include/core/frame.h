@@ -10,6 +10,9 @@ extern "C" {
 
 namespace vp::core {
 
+using TimelineSerial = uint64_t;
+constexpr TimelineSerial kInvalidTimelineSerial = 0;
+
 /// 视频帧封装；拥有一个 `AVFrame` 并附带时间戳、时长等调度元数据。
 struct VideoFrame {
     /// 持有的 FFmpeg 帧对象，所有权归 `VideoFrame`。
@@ -18,6 +21,8 @@ struct VideoFrame {
     double pts{0.0};
     /// 该帧估算显示时长（秒）。
     double duration{0.0};
+    /// 该帧所属的时间线序号。
+    TimelineSerial serial{kInvalidTimelineSerial};
     /// 标记该帧是否可用于渲染。
     bool valid{false};
 
@@ -46,6 +51,7 @@ struct AudioFrame {
     std::vector<uint8_t> samples;
     double pts{0.0};
     double duration{0.0};
+    TimelineSerial serial{kInvalidTimelineSerial};
     int sample_rate{0};
     int channels{0};
     bool valid{false};

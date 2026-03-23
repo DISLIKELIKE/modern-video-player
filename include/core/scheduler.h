@@ -1,106 +1,314 @@
 #pragma once
 
+
+
 #include <atomic>
+
 #include <chrono>
+
 #include <cstddef>
+
 #include <cstdint>
+
 #include <functional>
+
 #include <thread>
+
 #include <utility>
 
+
+
 #include "core/clock.h"
+
 #include "core/frame.h"
+
 #include "core/frame_queue.h"
+
+
 
 namespace vp::core {
 
+
+
 struct SchedulerStats {
+
     uint64_t video_decoded_frames{0};
+
     uint64_t audio_decoded_frames{0};
+
     uint64_t rendered_frames{0};
+
     uint64_t dropped_late_frames{0};
+
     uint64_t wait_events{0};
+
     uint64_t video_backpressure_events{0};
+
     uint64_t audio_backpressure_events{0};
+
     uint64_t video_backpressure_wait_ms{0};
+
     uint64_t audio_backpressure_wait_ms{0};
+
     uint64_t video_restart_attempts{0};
+
     uint64_t audio_restart_attempts{0};
+
     uint64_t render_restart_attempts{0};
+
     uint64_t video_restart_limit_hits{0};
+
     uint64_t audio_restart_limit_hits{0};
+
     uint64_t render_restart_limit_hits{0};
+
 };
+
+
+
+enum class SchedulerRunState {
+
+    Stopped,
+
+    Starting,
+
+    Running,
+
+    Pausing,
+
+    Paused,
+
+    Stopping,
+
+    Ended
+
+};
+
+
+
+enum class SchedulerPipelinePhase {
+
+    Idle,
+
+    Normal,
+
+    Seeking,
+
+    Draining,
+
+    Flushing
+
+};
+
+
+
+enum class SchedulerEndedPolicy {
+
+    StopOutput,
+
+    HoldLastFrame,
+
+    HoldLastFrameNoClockSync
+
+};
+
+
+enum class SchedulerClockPolicy {
+
+    UseClockSource,
+
+    AudioMaster,
+
+    VideoMaster,
+
+    SystemMonotonic
+
+};
+
+
+enum class SchedulerAudioMasterPolicy {
+
+    Disabled,
+
+    SoftWhenAudioReady,
+
+    RequireBufferedAudio
+
+};
+
+
+struct SchedulerControlSnapshot {
+
+    SchedulerRunState run_state{SchedulerRunState::Stopped};
+
+    SchedulerPipelinePhase pipeline_phase{SchedulerPipelinePhase::Idle};
+
+    TimelineSerial accepted_timeline_serial{kInvalidTimelineSerial};
+
+    ClockSource clock_source{ClockSource::Audio};
+
+    SchedulerClockPolicy clock_policy{SchedulerClockPolicy::UseClockSource};
+
+    bool audio_output_initialized{false};
+
+    SchedulerAudioMasterPolicy audio_master_policy{SchedulerAudioMasterPolicy::Disabled};
+
+    double audio_buffered_seconds{0.0};
+
+    bool audio_master_sync_active{false};
+
+    SchedulerEndedPolicy ended_policy{SchedulerEndedPolicy::StopOutput};
+
+};
+
+
 
 class Scheduler {
+
 public:
+
     Scheduler();
+
     ~Scheduler();
 
+
+
     void setVideoDecoder(std::function<bool(VideoFrame&)> decoder);
+
     void setAudioDecoder(std::function<bool(AudioFrame&)> decoder);
+
     void setVideoQueue(FrameQueue<VideoFrame>* queue);
+
     void setAudioQueue(FrameQueue<AudioFrame>* queue);
-    void setRenderCallback(std::function<void(VideoFrame&&)> callback);
+
+    void setRenderCallback(std::function<bool(VideoFrame&&)> callback);
+
     void setIdleCallback(std::function<void()> callback);
+
     void setClock(Clock* clock);
 
+    void setControlSnapshotProvider(std::function<SchedulerControlSnapshot()> provider);
+
+
+
     void start();
+
     void pause();
+
     void resume();
+
     void stop();
+
     void requestStopAsync();
+
     void flush();
+
     void pumpRenderOnce();
 
+
+
     size_t getVideoQueueSize() const;
+
     size_t getAudioQueueSize() const;
+
     SchedulerStats getStats() const;
 
+
+
 private:
+
     struct WorkerRestartBudget {
+
         std::atomic<int> total_restarts{0};
+
         std::atomic<int> window_restarts{0};
+
         std::atomic<int64_t> window_start_ms{0};
+
         std::atomic<uint64_t> limit_hits{0};
+
     };
 
+
+
     void videoDecoderLoop();
+
     void audioDecoderLoop();
+
     void renderLoop();
 
+    SchedulerControlSnapshot getControlSnapshot() const;
+
+
+
     template <typename Func>
+
     void runProtectedLoop(const char* worker_name, Func&& fn, WorkerRestartBudget& restart_budget);
 
+
+
     std::atomic<bool> running_{false};
+
     std::atomic<bool> paused_{false};
 
+
+
     std::thread video_thread_;
+
     std::thread audio_thread_;
+
     std::thread render_thread_;
 
+
+
     std::function<bool(VideoFrame&)> video_decoder_;
+
     std::function<bool(AudioFrame&)> audio_decoder_;
-    std::function<void(VideoFrame&&)> render_callback_;
+
+    std::function<bool(VideoFrame&&)> render_callback_;
+
     std::function<void()> idle_callback_;
 
+    std::function<SchedulerControlSnapshot()> control_snapshot_provider_;
+
+
+
     FrameQueue<VideoFrame>* video_queue_{nullptr};
+
     FrameQueue<AudioFrame>* audio_queue_{nullptr};
 
+
+
     Clock* clock_{nullptr};
+
     WorkerRestartBudget video_restart_budget_{};
+
     WorkerRestartBudget audio_restart_budget_{};
+
     WorkerRestartBudget render_restart_budget_{};
+
     std::atomic<uint64_t> video_decoded_frames_{0};
+
     std::atomic<uint64_t> audio_decoded_frames_{0};
+
     std::atomic<uint64_t> rendered_frames_{0};
+
     std::atomic<uint64_t> dropped_late_frames_{0};
+
     std::atomic<uint64_t> wait_events_{0};
+
     std::atomic<uint64_t> video_backpressure_events_{0};
+
     std::atomic<uint64_t> audio_backpressure_events_{0};
+
     std::atomic<uint64_t> video_backpressure_wait_ms_{0};
+
     std::atomic<uint64_t> audio_backpressure_wait_ms_{0};
+
     std::chrono::steady_clock::time_point last_render_wall_tp_{};
+
 };
+
+
 
 }  // namespace vp::core
