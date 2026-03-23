@@ -1,6 +1,49 @@
-﻿cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.15)
 set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
+
+set(MVP_VERSION_PRERELEASE "rc1" CACHE STRING "Prerelease suffix without leading dash")
+set(MVP_VERSION_BUILD 0 CACHE STRING "Fourth component for Windows file version")
+set(MVP_PRODUCT_NAME "Modern Video Player")
+set(MVP_PACKAGE_VENDOR "modern-video-player")
+
+set(MVP_VERSION_SUFFIX "")
+set(MVP_VERSION_RESOURCE_FILEFLAGS "0x0L")
+if(MVP_VERSION_PRERELEASE)
+    set(MVP_VERSION_SUFFIX "-${MVP_VERSION_PRERELEASE}")
+    set(MVP_VERSION_RESOURCE_FILEFLAGS "VS_FF_PRERELEASE")
+endif()
+
+set(MVP_VERSION_SEMVER "${PROJECT_VERSION}${MVP_VERSION_SUFFIX}")
+set(MVP_VERSION_FILE_DOTTED
+    "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}.${MVP_VERSION_BUILD}"
+)
+set(MVP_VERSION_FILE_COMMA
+    "${PROJECT_VERSION_MAJOR},${PROJECT_VERSION_MINOR},${PROJECT_VERSION_PATCH},${MVP_VERSION_BUILD}"
+)
+
+if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    set(MVP_PACKAGE_ARCH "x64")
+else()
+    set(MVP_PACKAGE_ARCH "x86")
+endif()
+
+if(WIN32)
+    set(MVP_PACKAGE_PLATFORM "windows")
+elseif(APPLE)
+    set(MVP_PACKAGE_PLATFORM "macos")
+else()
+    set(MVP_PACKAGE_PLATFORM "linux")
+endif()
+
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/generated")
+configure_file("${CMAKE_SOURCE_DIR}/cmake/mvp_version.h.in"
+               "${CMAKE_BINARY_DIR}/generated/mvp_version.h" @ONLY)
+if(WIN32)
+    configure_file("${CMAKE_SOURCE_DIR}/cmake/version_info.rc.in"
+                   "${CMAKE_BINARY_DIR}/generated/version_info.rc" @ONLY)
+    set(MVP_WIN32_RESOURCE "${CMAKE_BINARY_DIR}/generated/version_info.rc")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -138,6 +181,7 @@ else()
 endif()
 
 include_directories(
+    ${CMAKE_BINARY_DIR}/generated
     ${CMAKE_SOURCE_DIR}/include
     ${SDL2_INCLUDE_DIRS}
     ${QUILL_INCLUDE_DIRS}
@@ -186,6 +230,7 @@ add_executable(${PROJECT_NAME}
     src/filters/saturation_filter.cpp
     src/filters/volume_balance_filter.cpp
     src/filters/builtin_filters.cpp
+    ${MVP_WIN32_RESOURCE}
 )
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 if(MSVC)
@@ -253,6 +298,44 @@ else()
     )
 endif()
 
+install(TARGETS ${PROJECT_NAME}
+    RUNTIME DESTINATION .
+    BUNDLE DESTINATION .
+)
+install(TARGETS sample_logger_plugin
+    RUNTIME DESTINATION plugins
+    LIBRARY DESTINATION plugins
+)
+
+if(SDL2_EXTERNAL_DIR AND EXISTS "${SDL2_EXTERNAL_DIR}/lib/x64/SDL2.dll")
+    install(FILES "${SDL2_EXTERNAL_DIR}/lib/x64/SDL2.dll" DESTINATION .)
+endif()
+
+if(FFMPEG_DLLS)
+    install(FILES ${FFMPEG_DLLS} DESTINATION .)
+endif()
+
+if(EXISTS "${CMAKE_SOURCE_DIR}/docs/reports/V1_0_0_RC1_RELEASE_NOTES.md")
+    install(FILES "${CMAKE_SOURCE_DIR}/docs/reports/V1_0_0_RC1_RELEASE_NOTES.md"
+            DESTINATION .
+            RENAME RELEASE_NOTES.md)
+endif()
+
+set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
+set(CPACK_PACKAGE_VENDOR "${MVP_PACKAGE_VENDOR}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Modern Video Player")
+set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH "${PROJECT_VERSION_PATCH}")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}-${MVP_VERSION_SEMVER}")
+set(CPACK_PACKAGE_FILE_NAME
+    "${PROJECT_NAME}-${MVP_VERSION_SEMVER}-${MVP_PACKAGE_PLATFORM}-${MVP_PACKAGE_ARCH}"
+)
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+endif()
+set(CPACK_VERBATIM_VARIABLES YES)
+
 if(QUILL_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE USE_QUILL_LOGGING)
     target_compile_definitions(${PROJECT_NAME} PRIVATE QUILL_DISABLE_ASSERTIONS)
@@ -271,8 +354,11 @@ endif()
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Version: ${MVP_VERSION_SEMVER}")
 message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
+
+include(CPack)
 
 
 

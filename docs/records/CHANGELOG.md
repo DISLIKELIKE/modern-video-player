@@ -1,4 +1,4 @@
-﻿# 问题修复记录
+# 问题修复记录
 
 
 
@@ -312,12 +312,71 @@
 | 92 | 2026-03-23 | D3D11 启动期能力探测与 adapter/driver 诊断日志补齐 | ✅ 已修复 |
 | 93 | 2026-03-23 | D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI | ✅ 已修复 |
 | 94 | 2026-03-23 | 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口 | ✅ 已修复 |
+| 95 | 2026-03-23 | RC 版本元数据、Release 页正文与安装包版本标识补齐 | ✅ 已修复 |
 
 
 
 
 
 
+
+## 问题 95: RC 版本元数据、Release 页正文与安装包版本标识补齐
+
+**日期**: 2026-03-23
+
+### 问题描述
+
+- 用户要求明确 Release 页正文放在哪里，并要求把程序内部版本、Windows 可执行文件版本和安装包版本都统一显示为 `rc1`。
+
+- 当时工程里的 `CMakeLists.txt` 仍只有 `project(... VERSION 1.0.0)`，仓库里也没有单独的 Release 正文文件、`--version` CLI、`VERSIONINFO` 资源和 `CPack` 包命名规则。
+
+- `HTTP` 下载链路的 `user_agent` 仍固定为 `modern-video-player/1.0`，不利于区分 RC 构建与后续正式版/后续候选版。
+
+### 原因分析
+
+- 原有版本信息只停留在 `CMake project version`，没有把 prerelease suffix 传播到程序内部字符串、Windows 资源信息和发布包命名。
+
+- 项目此前缺少 `VERSIONINFO` 资源与独立 `Release Notes` 文件，因此“可发 RC”的内部结论和“可直接贴出去的发布正文”之间仍有缺口。
+
+- 没有打包规则时，压缩包命名、内容边界和是否混入本地配置也都无法被自动验证。
+
+### 解决方案
+
+- 新增 `docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`，作为 GitHub Release 页可直接使用的正文。
+
+- 在 `CMakeLists.txt` 中引入统一版本源，生成 `mvp_version.h` 与 Windows `version_info.rc`，统一输出 `1.0.0-rc1`。
+
+- `main` 新增 `--version`；`http_stream_downloader.cpp` 改为复用统一版本头，`user_agent` 变为 `modern-video-player/1.0.0-rc1`。
+
+- 新增 `CPack ZIP` 打包规则与安装项，验证产物文件名为 `modern-video-player-1.0.0-rc1-windows-x64.zip`，并将 `RELEASE_NOTES.md` 一并打包，同时排除本地 `config/player_settings.ini`。
+
+- 基于 Release 构建验证：`--version`、Windows `FileVersionInfo`、`PACKAGE` 目标和 `--d3d11-diagnostics`。
+
+### 修改文件
+
+- CMakeLists.txt
+
+- cmake/mvp_version.h.in
+
+- cmake/version_info.rc.in
+
+- src/main.cpp
+
+- src/streaming/http_stream_downloader.cpp
+
+- docs/reports/V1_0_0_RC1_RELEASE_NOTES.md
+
+- docs/reports/V1_0_0_RC1_RELEASE_READINESS.md
+
+- docs/reports/README.md
+
+- docs/README.md
+
+- docs/records/CHANGELOG.md
+
+- docs/records/DEVELOP_LOG.md
+
+- docs/records/VERSION.md
 
 ## 问题 94: 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口
 

@@ -1,4 +1,4 @@
-﻿# 文档索引
+# 文档索引
 
 `docs/` 目录已按用途重新分类，建议优先从本页进入查找。
 每个分类目录下也补充了一个就近的 `README.md`，方便在 IDE 侧边栏按文件夹浏览。
@@ -98,6 +98,7 @@
 
 | 文档 | 说明 |
 |------|------|
+| [V1_0_0_RC1_RELEASE_NOTES.md](./reports/V1_0_0_RC1_RELEASE_NOTES.md) | 1.0.0-rc1 可直接粘贴到 Release 页的正文 |
 | [V1_0_0_RC1_RELEASE_READINESS.md](./reports/V1_0_0_RC1_RELEASE_READINESS.md) | 1.0.0-rc1 发布准备、已知问题与发布说明 |
 | [DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨 / 字幕延迟调节本地验收记录 |
 | [NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 数字热键 `1..9` 跳转本地验收记录 |

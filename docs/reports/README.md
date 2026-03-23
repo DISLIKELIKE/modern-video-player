@@ -1,4 +1,4 @@
-﻿# Reports 文档入口
+# Reports 文档入口
 
 本目录存放本地验收和专项验证报告，适合需要确认某项能力是否已经被本地验证时查看。
 
@@ -17,6 +17,7 @@
 
 | 文档 | 验证内容 |
 |------|----------|
+| [V1_0_0_RC1_RELEASE_NOTES.md](./V1_0_0_RC1_RELEASE_NOTES.md) | 1.0.0-rc1 对外 Release 页正文 |
 | [V1_0_0_RC1_RELEASE_READINESS.md](./V1_0_0_RC1_RELEASE_READINESS.md) | 1.0.0-rc1 发布准备、已知问题与发布说明 |
 | [1080P60_STABILITY_LOCAL_CHECK.md](./1080P60_STABILITY_LOCAL_CHECK.md) | 1080p60 稳定播放 |
 | [4K_PLAYBACK_LOCAL_CHECK.md](./4K_PLAYBACK_LOCAL_CHECK.md) | 4K 播放与降级 |

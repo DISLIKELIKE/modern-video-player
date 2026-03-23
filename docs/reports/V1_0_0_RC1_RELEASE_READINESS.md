@@ -1,9 +1,10 @@
-﻿# 1.0.0-rc1 发布准备结论
+# 1.0.0-rc1 发布准备结论
 
 - 日期：`2026-03-23`
 - 目标版本：`1.0.0-rc1`
 - 适用范围：`Windows x64`，当前主力路径为 `D3D11 renderer + D3D11VA decode`
 - 发布结论：`可打 RC 标签`，但`不建议直接打正式版 1.0.0`
+- Release 页正文：`[V1_0_0_RC1_RELEASE_NOTES.md](./V1_0_0_RC1_RELEASE_NOTES.md)`
 
 ## 结论摘要
 

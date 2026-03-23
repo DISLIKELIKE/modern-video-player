@@ -14,6 +14,8 @@
 
 #include "logger.h"
 
+#include "mvp_version.h"
+
 #include "streaming/adaptive_bitrate_selector.h"
 
 #include "streaming/dash_manifest_parser.h"
@@ -8516,7 +8518,17 @@ void signalHandler([[maybe_unused]] int signal) {
 
 /// 打印 CLI 用法、验证命令和播放器交互快捷键说明。
 
+void printVersion() {
+
+    std::cout << vp::build::kProductName << ' ' << vp::build::kVersion << std::endl;
+
+}
+
 void printUsage(const char* program_name) {
+
+    std::cout << vp::build::kProductName << ' ' << vp::build::kVersion << std::endl;
+
+    std::cout << std::endl;
 
     std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
 
@@ -8561,6 +8573,8 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --forced-failsession-check <media_file> [sample_ms]" << std::endl;
 
     std::cout << "       " << program_name << " --d3d11-diagnostics" << std::endl;
+
+    std::cout << "       " << program_name << " --version" << std::endl;
 
     std::cout << "       " << program_name << " --performance-log-check <media_file> [sample_ms]" << std::endl;
 
@@ -8645,6 +8659,14 @@ void printUsage(const char* program_name) {
 /// 程序主入口；分发 CLI 检查命令或进入正常播放模式。
 
 int main(int argc, char* argv[]) {
+
+    if (argc >= 2 && std::string(argv[1]) == "--version") {
+
+        printVersion();
+
+        return 0;
+
+    }
 
     if (argc >= 2 && std::string(argv[1]) == "--capabilities") {
 

@@ -1,0 +1,33 @@
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION @MVP_VERSION_FILE_COMMA@
+ PRODUCTVERSION @MVP_VERSION_FILE_COMMA@
+ FILEFLAGSMASK 0x3fL
+#if defined(_DEBUG)
+ FILEFLAGS VS_FF_DEBUG | @MVP_VERSION_RESOURCE_FILEFLAGS@
+#else
+ FILEFLAGS @MVP_VERSION_RESOURCE_FILEFLAGS@
+#endif
+ FILEOS VOS__WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName", "@MVP_PACKAGE_VENDOR@\0"
+            VALUE "FileDescription", "@MVP_PRODUCT_NAME@\0"
+            VALUE "FileVersion", "@MVP_VERSION_FILE_DOTTED@\0"
+            VALUE "InternalName", "@PROJECT_NAME@\0"
+            VALUE "OriginalFilename", "@PROJECT_NAME@.exe\0"
+            VALUE "ProductName", "@MVP_PRODUCT_NAME@\0"
+            VALUE "ProductVersion", "@MVP_VERSION_SEMVER@\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

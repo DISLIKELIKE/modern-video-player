@@ -1,4 +1,79 @@
-﻿# 开发日志
+# 开发日志
+
+## 问题 95: RC 版本元数据、Release 页正文与安装包版本标识补齐
+
+**日期**: 2026-03-23
+**状态**: 已解决
+
+### 问题描述
+- 用户追问“Release 页正文在哪里”，并要求把程序内部版本、Windows 可执行文件版本和安装包版本都补成 `1.0.0-rc1`。
+- 这轮目标不是继续改播放链，而是把 RC 版本标识从文档层补齐到 CLI、EXE 属性、HTTP UA 和发布包产物层。
+
+### 日志输出
+```text
+Version CLI:
+build\Release\modern-video-player.exe --version
+Modern Video Player 1.0.0-rc1
+
+Windows file version:
+FileVersion=1.0.0.0
+ProductVersion=1.0.0-rc1
+ProductName=Modern Video Player
+
+Package:
+cmake --build build --config Release --target PACKAGE
+CPack: - package: D:/VSProject/sssssssssssssss/modern-video-player/build/modern-video-player-1.0.0-rc1-windows-x64.zip generated.
+
+Package entries:
+modern-video-player-1.0.0-rc1-windows-x64/modern-video-player.exe
+modern-video-player-1.0.0-rc1-windows-x64/plugins/sample_logger_plugin.dll
+modern-video-player-1.0.0-rc1-windows-x64/RELEASE_NOTES.md
+modern-video-player-1.0.0-rc1-windows-x64/SDL2.dll
+modern-video-player-1.0.0-rc1-windows-x64/avcodec-62.dll
+...
+config/player_settings.ini absent
+
+Diagnostics smoke:
+build\Release\modern-video-player.exe --d3d11-diagnostics
+d3d11-diagnostics.decoder_profiles.h264_any=true
+d3d11-diagnostics.decoder_profiles.av1_any=false
+d3d11-diagnostics.native_direct.allowed=true
+d3d11-diagnostics.result=PASS
+```
+
+### 分析记录
+1. `V1_0_0_RC1_RELEASE_READINESS.md` 是内部发布结论，不等于可直接贴到 GitHub Release 页的正文，因此需要单独补一份 `Release Notes` 文档。
+2. 版本号如果只存在于 `project(... VERSION 1.0.0)`，程序 CLI、Windows 资源、压缩包名和 HTTP `user_agent` 会继续分裂，RC 现场排障和版本识别成本很高。
+3. Windows 文件版本和产品版本应该区分：`FileVersion` 维持四段数值 `1.0.0.0`，`ProductVersion`/对外版本名使用 `1.0.0-rc1`。
+4. 发布包必须避免打入本地脏的 `config/player_settings.ini`，否则产物会混入开发机本地配置；本轮打包已显式验证该文件未进入 ZIP。
+
+### 处理结果
+- 新增 `docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`，作为 Release 页正文来源。
+- `CMake` 引入统一版本源，并生成 `mvp_version.h` 与 `version_info.rc`。
+- `main` 新增 `--version`；`http_stream_downloader` 的 `user_agent` 改为 `modern-video-player/1.0.0-rc1`。
+- 新增 `CPack ZIP` 打包规则，产物名固定为 `modern-video-player-1.0.0-rc1-windows-x64.zip`，并将 `RELEASE_NOTES.md` 打入包内。
+- `docs/README.md`、`docs/reports/README.md` 与 `V1_0_0_RC1_RELEASE_READINESS.md` 已补入 Release Notes 入口。
+
+### 本地验收结果
+- `build\Release\modern-video-player.exe --version`：通过。
+- Windows `FileVersionInfo`：`FileVersion=1.0.0.0`、`ProductVersion=1.0.0-rc1`、`ProductName=Modern Video Player`。
+- `cmake --build build --config Release --target PACKAGE`：通过，生成 `build/modern-video-player-1.0.0-rc1-windows-x64.zip`。
+- ZIP 已确认包含 `modern-video-player.exe`、依赖 DLL、`plugins/sample_logger_plugin.dll` 与 `RELEASE_NOTES.md`，且不包含 `config/player_settings.ini`。
+- `build\Release\modern-video-player.exe --d3d11-diagnostics`：通过，`result=PASS`。
+
+### 修改文件
+- CMakeLists.txt
+- cmake/mvp_version.h.in
+- cmake/version_info.rc.in
+- src/main.cpp
+- src/streaming/http_stream_downloader.cpp
+- docs/reports/V1_0_0_RC1_RELEASE_NOTES.md
+- docs/reports/V1_0_0_RC1_RELEASE_READINESS.md
+- docs/reports/README.md
+- docs/README.md
+- docs/records/CHANGELOG.md
+- docs/records/DEVELOP_LOG.md
+- docs/records/VERSION.md
 
 
 

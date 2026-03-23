@@ -1,0 +1,13 @@
+#pragma once
+
+namespace vp::build {
+
+inline constexpr char kProjectName[] = "@PROJECT_NAME@";
+inline constexpr char kProductName[] = "@MVP_PRODUCT_NAME@";
+inline constexpr char kVersion[] = "@MVP_VERSION_SEMVER@";
+inline constexpr char kBaseVersion[] = "@PROJECT_VERSION@";
+inline constexpr char kPrerelease[] = "@MVP_VERSION_PRERELEASE@";
+inline constexpr char kFileVersion[] = "@MVP_VERSION_FILE_DOTTED@";
+inline constexpr char kUserAgent[] = "@PROJECT_NAME@/@MVP_VERSION_SEMVER@";
+
+}  // namespace vp::build

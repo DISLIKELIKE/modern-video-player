@@ -1,5 +1,7 @@
 #include "streaming/http_stream_downloader.h"
 
+#include "mvp_version.h"
+
 #include <algorithm>
 #include <limits>
 
@@ -37,7 +39,7 @@ bool HttpStreamDownloader::open(const std::string& url) {
     }
 
     AVDictionary* options = nullptr;
-    av_dict_set(&options, "user_agent", "modern-video-player/1.0", 0);
+    av_dict_set(&options, "user_agent", vp::build::kUserAgent, 0);
     const int open_result = avio_open2(&io_ctx_, url_.c_str(), AVIO_FLAG_READ, nullptr, &options);
     av_dict_free(&options);
     if (open_result < 0) {

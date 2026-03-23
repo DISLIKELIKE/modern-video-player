@@ -1,4 +1,4 @@
-﻿# 项目版本记录
+# 项目版本记录
 
 
 
@@ -48,7 +48,32 @@
 
 - **支持平台**: Windows, Linux, macOS
 
+- **程序显示版本**: 1.0.0-rc1（`--version`）
 
+- **Windows 文件版本**: 1.0.0.0
+
+- **发布包文件名**: modern-video-player-1.0.0-rc1-windows-x64.zip
+
+
+
+### 2026-03-23 更新：RC 版本元数据、Release 页正文与包版本标识补齐
+
+- 已新增可直接贴到 GitHub Release 页的正文文件：`docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`。
+
+- `CMake` 现已引入统一版本源：基础版本 `1.0.0`，预发布后缀 `rc1`，统一生成程序内部版本串、Windows 资源版本以及打包文件名。
+
+- `main` 新增 `--version`；当前实测输出为：`Modern Video Player 1.0.0-rc1`。
+
+- Windows `VERSIONINFO` 已补齐；当前实测结果为：
+  - `FileVersion=1.0.0.0`
+  - `ProductVersion=1.0.0-rc1`
+  - `ProductName=Modern Video Player`
+
+- 新增 `CPack ZIP` 打包规则；当前实测产物为：`build/modern-video-player-1.0.0-rc1-windows-x64.zip`。
+
+- 当前发布包已确认包含 `modern-video-player.exe`、依赖 DLL、`plugins/sample_logger_plugin.dll` 与 `RELEASE_NOTES.md`，且未打入本地 `config/player_settings.ini`。
+
+- `HTTP` 下载链路的 `user_agent` 现已统一更新为 `modern-video-player/1.0.0-rc1`，便于后续 RC 阶段日志归档与线上排障。
 
 ### 2026-03-23 更新：1.0.0-rc1 发布准备完成
 
