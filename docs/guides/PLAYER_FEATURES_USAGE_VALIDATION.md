@@ -1,110 +1,114 @@
-# 当前功能、使用方式与验证指南
+﻿# 当前功能、使用方式与验证指南
 
-本文档汇总截至 `2026-03-08` 当前主程序**已经落地且可验证**的能力，回答三个问题：
+> 2026-03-24 更新：`OpenGLVideoRenderer` 已从 stub 变为可用的 opt-in GPU 后端，并已补齐基础字幕/OSD 叠加与 `D3D11VA -> OpenGL` 原生互操作。
+> 当前播放器的渲染后端能力为：`SDL` 可用、`D3D11` 为默认主路径、`OpenGL` 可通过 `MVP_RENDERER_BACKEND=opengl` 显式启用。
+> 本轮 `Release` 验证结果：`$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000` 输出 `renderer_backend=OpenGL`、`decoder_backend=D3D11VA`、`video_copy_back_frames=0`、`result=PASS`。
+> 现阶段 `OpenGL` 仍不是成熟播放器级 GPU 后端；与 `mpv / MPC-HC` 的差距主要还在 `ASS/SSA` 完整排版、HDR/色彩管理、多平台后端策略收敛和更强的驱动兼容层。
+鏈枃妗ｆ眹鎬绘埅鑷?`2026-03-08` 褰撳墠涓荤▼搴?*宸茬粡钀藉湴涓斿彲楠岃瘉**鐨勮兘鍔涳紝鍥炵瓟涓変釜闂锛?
 
-- 现在程序已经有哪些功能；
-- 你可以通过哪些方式使用它；
-- 目前应该如何验证这些功能。
+- 鐜板湪绋嬪簭宸茬粡鏈夊摢浜涘姛鑳斤紱
+- 浣犲彲浠ラ€氳繃鍝簺鏂瑰紡浣跨敤瀹冿紱
+- 鐩墠搴旇濡備綍楠岃瘉杩欎簺鍔熻兘銆?
 
-> 说明：本文档区分“用户可直接使用的功能”和“开发/验收能力”。像插件、流媒体缓冲、HLS/DASH ABR 这类能力虽然已经实现并有本地验收，但**不等于**已经成为完整的终端用户播放入口。
+> 璇存槑锛氭湰鏂囨。鍖哄垎鈥滅敤鎴峰彲鐩存帴浣跨敤鐨勫姛鑳解€濆拰鈥滃紑鍙?楠屾敹鑳藉姏鈥濄€傚儚鎻掍欢銆佹祦濯掍綋缂撳啿銆丠LS/DASH ABR 杩欑被鑳藉姏铏界劧宸茬粡瀹炵幇骞舵湁鏈湴楠屾敹锛屼絾**涓嶇瓑浜?*宸茬粡鎴愪负瀹屾暣鐨勭粓绔敤鎴锋挱鏀惧叆鍙ｃ€?
 
-## 1. 当前功能总览
+## 1. 褰撳墠鍔熻兘鎬昏
 
-### 1.1 用户可直接使用的播放功能
+### 1.1 鐢ㄦ埛鍙洿鎺ヤ娇鐢ㄧ殑鎾斁鍔熻兘
 
-| 类别 | 当前能力 | 说明 |
+| 绫诲埆 | 褰撳墠鑳藉姏 | 璇存槑 |
 |------|----------|------|
-| 本地播放 | 本地音视频文件播放 | 具备音视频解码、画面显示、音频播放与 A/V 同步 |
-| 播放列表 | 多文件顺序播放、本地 `m3u8` 播放列表 | 支持上一项/下一项、EOF 自动下一项、恢复上次索引 |
-| 字幕 | 外挂 `SRT` 加载、自动探测同名字幕、字幕开关 | 支持播放/暂停/seek 后同步与字幕时延调节 |
-| 基础控制 | 播放/暂停、退出、全屏、拖动进度条 seek | 适合本地文件的日常播放 |
-| 音量与静音 | 音量增减、鼠标拖动音量条、静音切换 | 当前基于 `SDL` 音频输出 |
-| 播放速度 | 变速降速 / 升速 / 恢复 `1.0x` | 设置可持久化 |
-| 精细跳转 | `5s / 30s` 快进快退、`1..9` 百分比跳转 | `1..9` 对应 `10%..90%` |
-| 章节导航 | 上一章 / 下一章 | 依赖媒体章节信息 |
-| A-B Repeat | 设置 A 点 / B 点 / 清除 A-B 循环 | 适合短片段反复观看 |
-| 帧步进 | 暂停态单帧后退 / 前进 | 默认按键 `,` / `.` |
-| 截图 | 保存当前画面截图 | 输出到 `screenshots/` 目录，格式为 `.ppm` |
-| 设置持久化 | 启动加载、退出保存、失败回退默认值 | 当前覆盖音量、速度、音/字幕时延、硬解偏好、播放列表恢复、热键 |
-| 热键系统 | 默认热键、持久化、自定义、冲突检测、恢复默认 | 自定义入口为 `config/player_settings.ini` |
-| 格式探测 | 媒体探测与运行时能力查看 | 支持 `--capabilities`、`--probe-file`、`--evaluate-target` |
+| 鏈湴鎾斁 | 鏈湴闊宠棰戞枃浠舵挱鏀?| 鍏峰闊宠棰戣В鐮併€佺敾闈㈡樉绀恒€侀煶棰戞挱鏀句笌 A/V 鍚屾 |
+| 鎾斁鍒楄〃 | 澶氭枃浠堕『搴忔挱鏀俱€佹湰鍦?`m3u8` 鎾斁鍒楄〃 | 鏀寔涓婁竴椤?涓嬩竴椤广€丒OF 鑷姩涓嬩竴椤广€佹仮澶嶄笂娆＄储寮?|
+| 瀛楀箷 | 澶栨寕 `SRT` 鍔犺浇銆佽嚜鍔ㄦ帰娴嬪悓鍚嶅瓧骞曘€佸瓧骞曞紑鍏?| 鏀寔鎾斁/鏆傚仠/seek 鍚庡悓姝ヤ笌瀛楀箷鏃跺欢璋冭妭 |
+| 鍩虹鎺у埗 | 鎾斁/鏆傚仠銆侀€€鍑恒€佸叏灞忋€佹嫋鍔ㄨ繘搴︽潯 seek | 閫傚悎鏈湴鏂囦欢鐨勬棩甯告挱鏀?|
+| 闊抽噺涓庨潤闊?| 闊抽噺澧炲噺銆侀紶鏍囨嫋鍔ㄩ煶閲忔潯銆侀潤闊冲垏鎹?| 褰撳墠鍩轰簬 `SDL` 闊抽杈撳嚭 |
+| 鎾斁閫熷害 | 鍙橀€熼檷閫?/ 鍗囬€?/ 鎭㈠ `1.0x` | 璁剧疆鍙寔涔呭寲 |
+| 绮剧粏璺宠浆 | `5s / 30s` 蹇繘蹇€€銆乣1..9` 鐧惧垎姣旇烦杞?| `1..9` 瀵瑰簲 `10%..90%` |
+| 绔犺妭瀵艰埅 | 涓婁竴绔?/ 涓嬩竴绔?| 渚濊禆濯掍綋绔犺妭淇℃伅 |
+| A-B Repeat | 璁剧疆 A 鐐?/ B 鐐?/ 娓呴櫎 A-B 寰幆 | 閫傚悎鐭墖娈靛弽澶嶈鐪?|
+| 甯ф杩?| 鏆傚仠鎬佸崟甯у悗閫€ / 鍓嶈繘 | 榛樿鎸夐敭 `,` / `.` |
+| 鎴浘 | 淇濆瓨褰撳墠鐢婚潰鎴浘 | 杈撳嚭鍒?`screenshots/` 鐩綍锛屾牸寮忎负 `.ppm` |
+| 璁剧疆鎸佷箙鍖?| 鍚姩鍔犺浇銆侀€€鍑轰繚瀛樸€佸け璐ュ洖閫€榛樿鍊?| 褰撳墠瑕嗙洊闊抽噺銆侀€熷害銆侀煶/瀛楀箷鏃跺欢銆佺‖瑙ｅ亸濂姐€佹挱鏀惧垪琛ㄦ仮澶嶃€佺儹閿?|
+| 鐑敭绯荤粺 | 榛樿鐑敭銆佹寔涔呭寲銆佽嚜瀹氫箟銆佸啿绐佹娴嬨€佹仮澶嶉粯璁?| 鑷畾涔夊叆鍙ｄ负 `config/player_settings.ini` |
+| 鏍煎紡鎺㈡祴 | 濯掍綋鎺㈡祴涓庤繍琛屾椂鑳藉姏鏌ョ湅 | 鏀寔 `--capabilities`銆乣--probe-file`銆乣--evaluate-target` |
 
-### 1.2 平台与后端能力
+### 1.2 骞冲彴涓庡悗绔兘鍔?
 
-| 类别 | 当前能力 | 说明 |
+| 绫诲埆 | 褰撳墠鑳藉姏 | 璇存槑 |
 |------|----------|------|
-| 视频解码 | 软件解码 + `D3D11VA` 硬解 | 可通过配置偏好硬解，失败可回退软解 |
-| 视频渲染 | `SDL` 可用，`D3D11` 最小链路可用 | `D3D11` 失败可回退 `SDL` |
-| 格式覆盖 | 主力容器 / 视频编码 / 音频编码矩阵已补齐 | 结果可通过 `--capabilities` 和回归报告追溯 |
-| 性能目标 | `1080p60`、`4K`、`>80Mbps` 样本已有本地验收 | 具备性能日志输出与降级验证 |
+| 瑙嗛瑙ｇ爜 | 杞欢瑙ｇ爜 + `D3D11VA` 纭В | 鍙€氳繃閰嶇疆鍋忓ソ纭В锛屽け璐ュ彲鍥為€€杞В |
+| 瑙嗛娓叉煋 | `SDL` 鍙敤锛宍D3D11` 鏈€灏忛摼璺彲鐢?| `D3D11` 澶辫触鍙洖閫€ `SDL` |
+| 鏍煎紡瑕嗙洊 | 涓诲姏瀹瑰櫒 / 瑙嗛缂栫爜 / 闊抽缂栫爜鐭╅樀宸茶ˉ榻?| 缁撴灉鍙€氳繃 `--capabilities` 鍜屽洖褰掓姤鍛婅拷婧?|
+| 鎬ц兘鐩爣 | `1080p60`銆乣4K`銆乣>80Mbps` 鏍锋湰宸叉湁鏈湴楠屾敹 | 鍏峰鎬ц兘鏃ュ織杈撳嚭涓庨檷绾ч獙璇?|
 
-### 1.3 已实现但偏开发/验收向的能力
+### 1.3 宸插疄鐜颁絾鍋忓紑鍙?楠屾敹鍚戠殑鑳藉姏
 
-| 类别 | 当前能力 | 当前定位 |
+| 绫诲埆 | 褰撳墠鑳藉姏 | 褰撳墠瀹氫綅 |
 |------|----------|----------|
-| 插件系统 | `DLL` 动态加载、API 版本校验、初始化/卸载、示例插件 | 已可验证，暂无用户级插件管理 UI |
-| 流媒体基础 | 真实 HTTP 下载、HLS/DASH 清单解析、分片缓冲 | 已可本地验收，尚未形成完整播放链路 |
-| 自适应码率 | HLS/DASH 多码率解析、ABR 选择、升降档验证 | 已可本地验收，属于基础设施能力 |
-| 滤镜/增强基础 | 内置视频/音频滤镜与注册表 | 管线已在代码中存在，但缺少稳定用户入口 |
+| 鎻掍欢绯荤粺 | `DLL` 鍔ㄦ€佸姞杞姐€丄PI 鐗堟湰鏍￠獙銆佸垵濮嬪寲/鍗歌浇銆佺ず渚嬫彃浠?| 宸插彲楠岃瘉锛屾殏鏃犵敤鎴风骇鎻掍欢绠＄悊 UI |
+| 娴佸獟浣撳熀纭€ | 鐪熷疄 HTTP 涓嬭浇銆丠LS/DASH 娓呭崟瑙ｆ瀽銆佸垎鐗囩紦鍐?| 宸插彲鏈湴楠屾敹锛屽皻鏈舰鎴愬畬鏁存挱鏀鹃摼璺?|
+| 鑷€傚簲鐮佺巼 | HLS/DASH 澶氱爜鐜囪В鏋愩€丄BR 閫夋嫨銆佸崌闄嶆。楠岃瘉 | 宸插彲鏈湴楠屾敹锛屽睘浜庡熀纭€璁炬柦鑳藉姏 |
+| 婊ら暅/澧炲己鍩虹 | 鍐呯疆瑙嗛/闊抽婊ら暅涓庢敞鍐岃〃 | 绠＄嚎宸插湪浠ｇ爜涓瓨鍦紝浣嗙己灏戠ǔ瀹氱敤鎴峰叆鍙?|
 
-## 2. 你现在可以怎么使用这个程序
+## 2. 浣犵幇鍦ㄥ彲浠ユ€庝箞浣跨敤杩欎釜绋嬪簭
 
-### 2.1 普通播放模式
+### 2.1 鏅€氭挱鏀炬ā寮?
 
-#### 方式 1：播放单个本地媒体文件
+#### 鏂瑰紡 1锛氭挱鏀惧崟涓湰鍦板獟浣撴枃浠?
 
 ```powershell
 .\build\Debug\modern-video-player.exe .\juren-30s.mp4
 ```
 
-#### 方式 2：一次传入多个媒体文件，作为临时播放列表
+#### 鏂瑰紡 2锛氫竴娆′紶鍏ュ涓獟浣撴枃浠讹紝浣滀负涓存椂鎾斁鍒楄〃
 
 ```powershell
 .\build\Debug\modern-video-player.exe .\video1.mp4 .\video2.mkv .\video3.webm
 ```
 
-#### 方式 3：加载本地 `m3u8` 播放列表文件
+#### 鏂瑰紡 3锛氬姞杞芥湰鍦?`m3u8` 鎾斁鍒楄〃鏂囦欢
 
 ```powershell
 .\build\Debug\modern-video-player.exe .\playlist.m3u8
 ```
 
-说明：这里的 `.m3u8` 指**本地播放列表文件**，不是完整 HLS 在线播放入口。
+璇存槑锛氳繖閲岀殑 `.m3u8` 鎸?*鏈湴鎾斁鍒楄〃鏂囦欢**锛屼笉鏄畬鏁?HLS 鍦ㄧ嚎鎾斁鍏ュ彛銆?
 
-#### 方式 4：显式指定外挂字幕
+#### 鏂瑰紡 4锛氭樉寮忔寚瀹氬鎸傚瓧骞?
 
 ```powershell
 .\build\Debug\modern-video-player.exe .\movie.mkv --subtitle .\movie.srt
 ```
 
-说明：如果不显式指定字幕，程序还会尝试自动加载同名 `.srt` 文件。
+璇存槑锛氬鏋滀笉鏄惧紡鎸囧畾瀛楀箷锛岀▼搴忚繕浼氬皾璇曡嚜鍔ㄥ姞杞藉悓鍚?`.srt` 鏂囦欢銆?
 
-### 2.2 运行时能力 / 诊断模式
+### 2.2 杩愯鏃惰兘鍔?/ 璇婃柇妯″紡
 
-#### 方式 5：查看当前运行时能力矩阵
+#### 鏂瑰紡 5锛氭煡鐪嬪綋鍓嶈繍琛屾椂鑳藉姏鐭╅樀
 
 ```powershell
 .\build\Debug\modern-video-player.exe --capabilities
 ```
 
-#### 方式 6：探测单个媒体文件
+#### 鏂瑰紡 6锛氭帰娴嬪崟涓獟浣撴枃浠?
 
 ```powershell
 .\build\Debug\modern-video-player.exe --probe-file .\juren-30s.mp4
 .\build\Debug\modern-video-player.exe --probe-file .\juren-30s.mp4 --json
 ```
 
-#### 方式 7：评估某个目标播放场景是否适合当前机器
+#### 鏂瑰紡 7锛氳瘎浼版煇涓洰鏍囨挱鏀惧満鏅槸鍚﹂€傚悎褰撳墠鏈哄櫒
 
 ```powershell
 .\build\Debug\modern-video-player.exe --evaluate-target 3840 2160 60 6 80
 ```
 
-### 2.3 配置与自定义方式
+### 2.3 閰嶇疆涓庤嚜瀹氫箟鏂瑰紡
 
-配置文件：`config/player_settings.ini`
+閰嶇疆鏂囦欢锛歚config/player_settings.ini`
 
-当前已落地的主要配置项：
+褰撳墠宸茶惤鍦扮殑涓昏閰嶇疆椤癸細
 
 ```ini
 player.volume_percent=100
@@ -121,51 +125,51 @@ hotkey.seek_forward=RIGHT
 ...
 ```
 
-说明：
+璇存槑锛?
 
-- `player.*` 用于持久化运行参数；
-- `decoder.prefer_hardware_decode` 控制是否优先尝试硬解；
-- `hotkey.*` 可覆盖默认键位；
-- 如需恢复默认热键，可将 `hotkey.restore_defaults=true` 后重启程序。
+- `player.*` 鐢ㄤ簬鎸佷箙鍖栬繍琛屽弬鏁帮紱
+- `decoder.prefer_hardware_decode` 鎺у埗鏄惁浼樺厛灏濊瘯纭В锛?
+- `hotkey.*` 鍙鐩栭粯璁ら敭浣嶏紱
+- 濡傞渶鎭㈠榛樿鐑敭锛屽彲灏?`hotkey.restore_defaults=true` 鍚庨噸鍚▼搴忋€?
 
-### 2.4 交互方式（默认热键 / 鼠标）
+### 2.4 浜や簰鏂瑰紡锛堥粯璁ょ儹閿?/ 榧犳爣锛?
 
-| 方式 | 当前作用 |
+| 鏂瑰紡 | 褰撳墠浣滅敤 |
 |------|----------|
-| `Space` | 播放 / 暂停 |
-| `Enter` / `F` / `Alt+Enter` | 切换全屏 |
-| `Esc` | 退出全屏；窗口态下退出播放器 |
-| `Q` | 退出播放器 |
+| `Space` | 鎾斁 / 鏆傚仠 |
+| `Enter` / `F` / `Alt+Enter` | 鍒囨崲鍏ㄥ睆 |
+| `Esc` | 閫€鍑哄叏灞忥紱绐楀彛鎬佷笅閫€鍑烘挱鏀惧櫒 |
+| `Q` | 閫€鍑烘挱鏀惧櫒 |
 | `Left / Right` | `-5s / +5s` |
 | `Ctrl+Left / Ctrl+Right` | `-30s / +30s` |
-| `Up / Down / +/-` | 音量增减 |
-| `M` | 静音 |
-| `[` / `]` / `R` | 降速 / 升速 / 恢复 `1.0x` |
-| `PageUp / PageDown` | 上一项 / 下一项 |
-| `Home / End` | 上一章 / 下一章 |
-| `A / B / C` | 设置 A 点 / B 点 / 清除 A-B 重复 |
-| `S` | 截图 |
-| `,` / `.` | 暂停态单帧后退 / 前进 |
-| `J / K` | 字幕时延 `-100ms / +100ms` |
-| `Ctrl+J / Ctrl+K` | 音频时延 `-100ms / +100ms` |
-| `1..9` | 跳转到 `10%..90%` |
-| `V` | 字幕开关 |
-| 鼠标拖动进度条 | seek |
-| 鼠标拖动音量条 | 调整音量 |
+| `Up / Down / +/-` | 闊抽噺澧炲噺 |
+| `M` | 闈欓煶 |
+| `[` / `]` / `R` | 闄嶉€?/ 鍗囬€?/ 鎭㈠ `1.0x` |
+| `PageUp / PageDown` | 涓婁竴椤?/ 涓嬩竴椤?|
+| `Home / End` | 涓婁竴绔?/ 涓嬩竴绔?|
+| `A / B / C` | 璁剧疆 A 鐐?/ B 鐐?/ 娓呴櫎 A-B 閲嶅 |
+| `S` | 鎴浘 |
+| `,` / `.` | 鏆傚仠鎬佸崟甯у悗閫€ / 鍓嶈繘 |
+| `J / K` | 瀛楀箷鏃跺欢 `-100ms / +100ms` |
+| `Ctrl+J / Ctrl+K` | 闊抽鏃跺欢 `-100ms / +100ms` |
+| `1..9` | 璺宠浆鍒?`10%..90%` |
+| `V` | 瀛楀箷寮€鍏?|
+| 榧犳爣鎷栧姩杩涘害鏉?| seek |
+| 榧犳爣鎷栧姩闊抽噺鏉?| 璋冩暣闊抽噺 |
 
-### 2.5 作为开发/验收工具使用
+### 2.5 浣滀负寮€鍙?楠屾敹宸ュ叿浣跨敤
 
-当前程序除了“正常播放”，还可以直接作为以下工具使用：
+褰撳墠绋嬪簭闄や簡鈥滄甯告挱鏀锯€濓紝杩樺彲浠ョ洿鎺ヤ綔涓轰互涓嬪伐鍏蜂娇鐢細
 
-- 本地能力探测工具：`--capabilities`、`--probe-file`、`--evaluate-target`
-- 交互功能验收工具：`--chapter-nav-check`、`--ab-repeat-check`、`--frame-step-check`、`--delay-adjust-check`、`--numeric-seek-check`、`--screenshot-check`
-- 播放稳定性 / 性能验收工具：`--performance-log-check`、`--1080p60-check`、`--4k-playback-check`、`--high-bitrate-check`、`--long-playback-check`
-- 后端 / 平台验收工具：`--renderer-fallback-check`、`--windows-backend-check`
-- 扩展与流媒体基础设施验收工具：`--plugin-check`、`--streaming-buffer-check`、`--adaptive-bitrate-check`
+- 鏈湴鑳藉姏鎺㈡祴宸ュ叿锛歚--capabilities`銆乣--probe-file`銆乣--evaluate-target`
+- 浜や簰鍔熻兘楠屾敹宸ュ叿锛歚--chapter-nav-check`銆乣--ab-repeat-check`銆乣--frame-step-check`銆乣--delay-adjust-check`銆乣--numeric-seek-check`銆乣--screenshot-check`
+- 鎾斁绋冲畾鎬?/ 鎬ц兘楠屾敹宸ュ叿锛歚--performance-log-check`銆乣--1080p60-check`銆乣--4k-playback-check`銆乣--high-bitrate-check`銆乣--long-playback-check`
+- 鍚庣 / 骞冲彴楠屾敹宸ュ叿锛歚--renderer-fallback-check`銆乣--windows-backend-check`
+- 鎵╁睍涓庢祦濯掍綋鍩虹璁炬柦楠屾敹宸ュ叿锛歚--plugin-check`銆乣--streaming-buffer-check`銆乣--adaptive-bitrate-check`
 
-## 3. 目前怎么验证这个项目现有的功能
+## 3. 鐩墠鎬庝箞楠岃瘉杩欎釜椤圭洰鐜版湁鐨勫姛鑳?
 
-### 3.1 最短验证路径（推荐）
+### 3.1 鏈€鐭獙璇佽矾寰勶紙鎺ㄨ崘锛?
 
 ```powershell
 & 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' `
@@ -180,56 +184,60 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1
 .\build\Debug\modern-video-player.exe --probe-file .\juren-30s.mp4 --json
 ```
 
-## 3.2 功能分项验证清单
+## 3.2 鍔熻兘鍒嗛」楠岃瘉娓呭崟
 
-下表列出“当前主要功能 -> 推荐验证命令 -> 对应报告”的映射。具体样本路径、端口和输出摘要，优先以对应报告文件为准。
+涓嬭〃鍒楀嚭鈥滃綋鍓嶄富瑕佸姛鑳?-> 鎺ㄨ崘楠岃瘉鍛戒护 -> 瀵瑰簲鎶ュ憡鈥濈殑鏄犲皠銆傚叿浣撴牱鏈矾寰勩€佺鍙ｅ拰杈撳嚭鎽樿锛屼紭鍏堜互瀵瑰簲鎶ュ憡鏂囦欢涓哄噯銆?
 
-| 功能 | 推荐验证命令 | 对应报告 |
+| 鍔熻兘 | 鎺ㄨ崘楠岃瘉鍛戒护 | 瀵瑰簲鎶ュ憡 |
 |------|--------------|----------|
-| 外挂字幕加载与同步 | `--subtitle-sync-check <subtitle.srt>` | `docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md` |
-| 播放列表连续播放 | `--playlist-flow-check <media1> <media2> ...` | `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md` |
-| 设置持久化 | `--settings-persistence-check [settings_file]` | `docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md` |
-| 渲染失败回退 | `--renderer-fallback-check <media_file>` | `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md` |
-| Windows 后端与硬解回退 | `--windows-backend-check <media_file>` | `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md` |
-| 章节导航 | `--chapter-nav-check <media_file>` | `docs/reports/CHAPTER_NAV_LOCAL_CHECK.md` |
+| 澶栨寕瀛楀箷鍔犺浇涓庡悓姝?| `--subtitle-sync-check <subtitle.srt>` | `docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md` |
+| 鎾斁鍒楄〃杩炵画鎾斁 | `--playlist-flow-check <media1> <media2> ...` | `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md` |
+| 璁剧疆鎸佷箙鍖?| `--settings-persistence-check [settings_file]` | `docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md` |
+| 娓叉煋澶辫触鍥為€€ | `--renderer-fallback-check <media_file>` | `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md` |
+| Windows 鍚庣涓庣‖瑙ｅ洖閫€ | `--windows-backend-check <media_file>` | `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md` |
+| 绔犺妭瀵艰埅 | `--chapter-nav-check <media_file>` | `docs/reports/CHAPTER_NAV_LOCAL_CHECK.md` |
 | A-B Repeat | `--ab-repeat-check <media_file>` | `docs/reports/AB_REPEAT_LOCAL_CHECK.md` |
-| 帧步进 | `--frame-step-check <media_file>` | `docs/reports/FRAME_STEP_LOCAL_CHECK.md` |
-| 音频 / 字幕时延调节 | `--delay-adjust-check <media_file> <subtitle.srt>` | `docs/reports/DELAY_ADJUST_LOCAL_CHECK.md` |
-| `1..9` 百分比跳转 | `--numeric-seek-check <media_file>` | `docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md` |
-| 截图 | `--screenshot-check <media_file>` | `docs/reports/SCREENSHOT_LOCAL_CHECK.md` |
-| 播放性能日志 | `--performance-log-check <media_file> [sample_ms]` | `docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md` |
-| `1080p60` 稳定性 | `--1080p60-check <media_file> [sample_ms]` | `docs/reports/1080P60_STABILITY_LOCAL_CHECK.md` |
-| `4K` 播放与降级 | `--4k-playback-check <media_file> [sample_ms]` | `docs/reports/4K_PLAYBACK_LOCAL_CHECK.md` |
-| `>80Mbps` 高码率 | `--high-bitrate-check <media_file> [sample_ms]` | `docs/reports/HIGH_BITRATE_LOCAL_CHECK.md` |
-| 长时播放稳定性 | `--long-playback-check <media_file> [sample_ms]` | `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md` |
-| 插件系统 | `--plugin-check [plugin_dir_or_file]` | `docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md` |
-| 流媒体 HTTP 分片与缓冲 | `--streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]` | `docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md` |
-| HLS/DASH 自适应码率 | `--adaptive-bitrate-check <manifest_url> <bandwidth_samples_csv> [segment_limit] [target_buffer_bytes]` | `docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md` |
-| 主力格式矩阵 | `tools/format_regression/run_format_regression.ps1` | `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md` |
+| 甯ф杩?| `--frame-step-check <media_file>` | `docs/reports/FRAME_STEP_LOCAL_CHECK.md` |
+| 闊抽 / 瀛楀箷鏃跺欢璋冭妭 | `--delay-adjust-check <media_file> <subtitle.srt>` | `docs/reports/DELAY_ADJUST_LOCAL_CHECK.md` |
+| `1..9` 鐧惧垎姣旇烦杞?| `--numeric-seek-check <media_file>` | `docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md` |
+| 鎴浘 | `--screenshot-check <media_file>` | `docs/reports/SCREENSHOT_LOCAL_CHECK.md` |
+| 鎾斁鎬ц兘鏃ュ織 | `--performance-log-check <media_file> [sample_ms]` | `docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md` |
+| `1080p60` 绋冲畾鎬?| `--1080p60-check <media_file> [sample_ms]` | `docs/reports/1080P60_STABILITY_LOCAL_CHECK.md` |
+| `4K` 鎾斁涓庨檷绾?| `--4k-playback-check <media_file> [sample_ms]` | `docs/reports/4K_PLAYBACK_LOCAL_CHECK.md` |
+| `>80Mbps` 楂樼爜鐜?| `--high-bitrate-check <media_file> [sample_ms]` | `docs/reports/HIGH_BITRATE_LOCAL_CHECK.md` |
+| 闀挎椂鎾斁绋冲畾鎬?| `--long-playback-check <media_file> [sample_ms]` | `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md` |
+| 鎻掍欢绯荤粺 | `--plugin-check [plugin_dir_or_file]` | `docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md` |
+| 娴佸獟浣?HTTP 鍒嗙墖涓庣紦鍐?| `--streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]` | `docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md` |
+| HLS/DASH 鑷€傚簲鐮佺巼 | `--adaptive-bitrate-check <manifest_url> <bandwidth_samples_csv> [segment_limit] [target_buffer_bytes]` | `docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md` |
+| 涓诲姏鏍煎紡鐭╅樀 | `tools/format_regression/run_format_regression.ps1` | `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md` |
 
-## 3.3 输出与痕迹位置
+## 3.3 杈撳嚭涓庣棔杩逛綅缃?
 
-- 截图输出：`screenshots/`
-- 持久化配置：`config/player_settings.ini`
-- 本地验收报告：`docs/reports/`
-- 格式回归脚本与操作手册：`docs/workflows/FORMAT_REGRESSION.md`、`docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
-- 每周收敛留痕：`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`、`.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`
+- 鎴浘杈撳嚭锛歚screenshots/`
+- 鎸佷箙鍖栭厤缃細`config/player_settings.ini`
+- 鏈湴楠屾敹鎶ュ憡锛歚docs/reports/`
+- 鏍煎紡鍥炲綊鑴氭湰涓庢搷浣滄墜鍐岋細`docs/workflows/FORMAT_REGRESSION.md`銆乣docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
+- 姣忓懆鏀舵暃鐣欑棔锛歚.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`銆乣.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`
 
-## 4. 当前边界与未完成功能
+## 4. 褰撳墠杈圭晫涓庢湭瀹屾垚鍔熻兘
 
-以下能力**不要误认为已经是完整终端用户功能**：
+浠ヤ笅鑳藉姏**涓嶈璇涓哄凡缁忔槸瀹屾暣缁堢鐢ㄦ埛鍔熻兘**锛?
 
-- 流媒体：当前已经具备真实 HTTP 下载、HLS/DASH 清单解析、分片缓冲与 ABR 验证，但**真正播放链路接入仍待补齐**。
-- 插件系统：当前已经具备 `DLL` 动态加载和生命周期管理，但还没有用户级配置界面、插件分发与隔离策略。
-- 皮肤系统：当前仍是骨架 / 未接入状态。
-- 字幕系统：当前可用的是外挂 `SRT`；内嵌字幕、字幕轨切换、`ASS/SSA` 等能力尚未补齐。
-- 渲染后端：`SDL` 与 `D3D11` 已有可用路径，`OpenGL` 仍不是当前主路径。
-- 滤镜增强：内置视频/音频增强基础设施已存在，但暂未形成稳定、可见、可调的用户功能入口。
+- 娴佸獟浣擄細褰撳墠宸茬粡鍏峰鐪熷疄 HTTP 涓嬭浇銆丠LS/DASH 娓呭崟瑙ｆ瀽銆佸垎鐗囩紦鍐蹭笌 ABR 楠岃瘉锛屼絾**鐪熸鎾斁閾捐矾鎺ュ叆浠嶅緟琛ラ綈**銆?
+- 鎻掍欢绯荤粺锛氬綋鍓嶅凡缁忓叿澶?`DLL` 鍔ㄦ€佸姞杞藉拰鐢熷懡鍛ㄦ湡绠＄悊锛屼絾杩樻病鏈夌敤鎴风骇閰嶇疆鐣岄潰銆佹彃浠跺垎鍙戜笌闅旂绛栫暐銆?
+- 鐨偆绯荤粺锛氬綋鍓嶄粛鏄鏋?/ 鏈帴鍏ョ姸鎬併€?
+- 瀛楀箷绯荤粺锛氬綋鍓嶅彲鐢ㄧ殑鏄鎸?`SRT`锛涘唴宓屽瓧骞曘€佸瓧骞曡建鍒囨崲銆乣ASS/SSA` 绛夎兘鍔涘皻鏈ˉ榻愩€?
+- 娓叉煋鍚庣锛歚SDL` 涓?`D3D11` 宸叉湁鍙敤璺緞锛宍OpenGL` 浠嶄笉鏄綋鍓嶄富璺緞銆?
+- 婊ら暅澧炲己锛氬唴缃棰?闊抽澧炲己鍩虹璁炬柦宸插瓨鍦紝浣嗘殏鏈舰鎴愮ǔ瀹氥€佸彲瑙併€佸彲璋冪殑鐢ㄦ埛鍔熻兘鍏ュ彛銆?
 
-## 5. 推荐阅读
+## 5. 鎺ㄨ崘闃呰
 
-- 入口索引：`docs/README.md`
-- 回归手册：`docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
-- 格式回归说明：`docs/workflows/FORMAT_REGRESSION.md`
-- 当前差距评估：`docs/analysis/MPC_HC_GAP_ANALYSIS.md`
-- 根文档概览：`README.md`
+- 鍏ュ彛绱㈠紩锛歚docs/README.md`
+- 鍥炲綊鎵嬪唽锛歚docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md`
+- 鏍煎紡鍥炲綊璇存槑锛歚docs/workflows/FORMAT_REGRESSION.md`
+- 褰撳墠宸窛璇勪及锛歚docs/analysis/MPC_HC_GAP_ANALYSIS.md`
+- 鏍规枃妗ｆ瑙堬細`README.md`
+
+
+
+

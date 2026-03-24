@@ -6094,19 +6094,23 @@ bool PlayerCore::applySeekSideEffects(double timestamp,
 
 void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
 
-    releaseDecoders();
-
     if (audio_player_) {
 
         audio_player_->close();
 
     }
 
+    // Release cached native frames and stop the renderer before tearing down
+    // decoder-backed hardware surfaces and shared device state.
+    clearLastRenderedFrame();
+
     if (video_renderer_) {
 
         video_renderer_->close();
 
     }
+
+    releaseDecoders();
 
     audio_player_.reset();
 
@@ -6143,8 +6147,6 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
         screenshot_path_pending_ = false;
 
     }
-
-    clearLastRenderedFrame();
 
     opened_.store(false);
 

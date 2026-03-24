@@ -1,4 +1,43 @@
-# 问题修复记录
+﻿# 闂淇璁板綍
+
+## 问题 96: OpenGL 渲染链路 M0 落地并完成本地验收
+
+**日期**: 2026-03-24
+
+### 问题描述
+- `OpenGLVideoRenderer` 之前仍是 stub，显式选择 `OpenGL` 后端时只能回退 `SoftwareSDL`。
+- 用户要求把 OpenGL 链路补成可实际播放的后端，并明确它与成熟播放器 GPU 渲染链路的差距。
+
+### 原因分析
+- 旧实现缺少 SDL OpenGL 窗口、上下文、shader、纹理上传、颜色转换与事件泵，只有接口没有真正渲染路径。
+- 因此显式设置 `MVP_RENDERER_BACKEND=opengl` 时，并不存在可交付的视频显示能力。
+
+### 解决方案
+- 实现 `SDL + OpenGL 2.1 compatibility context + GLSL 120` 的最小可用渲染线程。
+- 支持 `YUV420P / NV12` 直接帧格式、基础热键控制、全屏切换、退出事件与失败自动回退。
+- 新增 `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md` 记录本地验收结果，并同步功能说明与差距文档口径。
+- 保持默认后端策略不变，当前 `OpenGL` 仍为 opt-in 的 M0 过渡后端。
+
+### 本地验收
+- `Release` 构建通过。
+- `MVP_RENDERER_BACKEND=opengl` + `--performance-log-check .\juren-30s.mp4 2000` 输出：
+  - `performance-log-check.renderer_backend=OpenGL`
+  - `performance-log-check.decoder_backend=D3D11VA`
+  - `performance-log-check.result=PASS`
+
+### 修改文件
+- `CMakeLists.txt`
+- `include/render/opengl_video_renderer.h`
+- `src/render/opengl_video_renderer.cpp`
+- `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md`
+- `docs/analysis/PLAYERCORE_DAY4_RENDERER_ANALYSIS.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 
 
@@ -6,8 +45,7 @@
 
 
 
-本文档记录开发过程中遇到的问题及其解决方案。
-
+鏈枃妗ｈ褰曞紑鍙戣繃绋嬩腑閬囧埌鐨勯棶棰樺強鍏惰В鍐虫柟妗堛€?
 
 
 
@@ -22,7 +60,7 @@
 
 
 
-## 问题列表
+## 闂鍒楄〃
 
 
 
@@ -30,7 +68,7 @@
 
 
 
-| # | 日期 | 问题 | 状态 |
+| # | 鏃ユ湡 | 闂 | 鐘舵€?|
 
 
 
@@ -38,281 +76,281 @@
 
 
 
-| 1 | 2026-02-17 | FFmpeg 8.0 兼容性问题 | ✅ 已修复 |
+| 1 | 2026-02-17 | FFmpeg 8.0 鍏煎鎬ч棶棰?| 鉁?宸蹭慨澶?|
 
 
 
-| 2 | 2026-02-24 | 视频流索引不匹配 | ✅ 已修复 |
+| 2 | 2026-02-24 | 瑙嗛娴佺储寮曚笉鍖归厤 | 鉁?宸蹭慨澶?|
 
 
 
-| 3 | 2026-02-24 | 音频流索引不匹配 | ✅ 已修复 |
+| 3 | 2026-02-24 | 闊抽娴佺储寮曚笉鍖归厤 | 鉁?宸蹭慨澶?|
 
 
 
-| 4 | 2026-02-24 | YUV 数据渲染错误 | ✅ 已修复 |
+| 4 | 2026-02-24 | YUV 鏁版嵁娓叉煋閿欒 | 鉁?宸蹭慨澶?|
 
 
 
-| 5 | 2026-02-24 | 企业级 Quill 日志通道 | ✅ 已修复 |
+| 5 | 2026-02-24 | 浼佷笟绾?Quill 鏃ュ織閫氶亾 | 鉁?宸蹭慨澶?|
 
 
 
-| 6 | 2026-02-25 | 多线程播放架构重构 | ✅ 已完成 |
+| 6 | 2026-02-25 | 澶氱嚎绋嬫挱鏀炬灦鏋勯噸鏋?| 鉁?宸插畬鎴?|
 
 
 
-| 7 | 2026-02-25 | 音频播放架构修复 | ✅ 已修复 |
+| 7 | 2026-02-25 | 闊抽鎾斁鏋舵瀯淇 | 鉁?宸蹭慨澶?|
 
 
 
-| 9 | 2026-02-25 | VideoFrame/AudioFrame 移动语义缺陷 | ✅ 已修复 |
+| 9 | 2026-02-25 | VideoFrame/AudioFrame 绉诲姩璇箟缂洪櫡 | 鉁?宸蹭慨澶?|
 
 
 
-| 10 | 2026-02-25 | 多解码器实例竞争读取导致解码错误 | ✅ 已修复 |
+| 10 | 2026-02-25 | 澶氳В鐮佸櫒瀹炰緥绔炰簤璇诲彇瀵艰嚧瑙ｇ爜閿欒 | 鉁?宸蹭慨澶?|
 
 
 
-| 11 | 2026-02-27 | 并发读取 AVFormatContext 导致崩溃 | ✅ 已修复 |
+| 11 | 2026-02-27 | 骞跺彂璇诲彇 AVFormatContext 瀵艰嚧宕╂簝 | 鉁?宸蹭慨澶?|
 
 
 
-| 12 | 2026-02-27 | 企业级多线程架构重构 | ✅ 已完成 |
+| 12 | 2026-02-27 | 浼佷笟绾у绾跨▼鏋舵瀯閲嶆瀯 | 鉁?宸插畬鎴?|
 
 
 
-| 15 | 2026-03-06 | 小屏窗口过大且拖拽缩放不稳定 | ✅ 已修复 |
+| 15 | 2026-03-06 | 灏忓睆绐楀彛杩囧ぇ涓旀嫋鎷界缉鏀句笉绋冲畾 | 鉁?宸蹭慨澶?|
 
 
 
-| 18 | 2026-03-07 | DASH 解析编译失败与格式能力矩阵缺失 | ✅ 已修复 |
+| 18 | 2026-03-07 | DASH 瑙ｆ瀽缂栬瘧澶辫触涓庢牸寮忚兘鍔涚煩闃电己澶?| 鉁?宸蹭慨澶?|
 
 
 
-| 19 | 2026-03-07 | D3D11VA 硬解最小闭环与软解回退 | ✅ 已修复 |
+| 19 | 2026-03-07 | D3D11VA 纭В鏈€灏忛棴鐜笌杞В鍥為€€ | 鉁?宸蹭慨澶?|
 
 
 
-| 20 | 2026-03-07 | 探测入口与格式回归脚本落地 | ✅ 已修复 |
+| 20 | 2026-03-07 | 鎺㈡祴鍏ュ彛涓庢牸寮忓洖褰掕剼鏈惤鍦?| 鉁?宸蹭慨澶?|
 
 
 
-| 21 | 2026-03-07 | GitHub Actions 自动格式回归接入 | ✅ 已修复 |
+| 21 | 2026-03-07 | GitHub Actions 鑷姩鏍煎紡鍥炲綊鎺ュ叆 | 鉁?宸蹭慨澶?|
 
 
 
-| 22 | 2026-03-07 | 播放列表主链路、设置持久化与快捷键首版接入 | ✅ 已修复 |
+| 22 | 2026-03-07 | 鎾斁鍒楄〃涓婚摼璺€佽缃寔涔呭寲涓庡揩鎹烽敭棣栫増鎺ュ叆 | 鉁?宸蹭慨澶?|
 
 
 
-| 23 | 2026-03-07 | 移除 Core 单元测试目标与测试文件 | ✅ 已修复 |
+| 23 | 2026-03-07 | 绉婚櫎 Core 鍗曞厓娴嬭瘯鐩爣涓庢祴璇曟枃浠?| 鉁?宸蹭慨澶?|
 
 
 
-| 24 | 2026-03-07 | 外挂字幕加载入口（SRT）接入主流程 | ✅ 已修复 |
+| 24 | 2026-03-07 | 澶栨寕瀛楀箷鍔犺浇鍏ュ彛锛圫RT锛夋帴鍏ヤ富娴佺▼ | 鉁?宸蹭慨澶?|
 
 
 
-| 25 | 2026-03-07 | 字幕渲染叠加与播放时序同步接入 | ✅ 已修复 |
+| 25 | 2026-03-07 | 瀛楀箷娓叉煋鍙犲姞涓庢挱鏀炬椂搴忓悓姝ユ帴鍏?| 鉁?宸蹭慨澶?|
 
 
 
-| 26 | 2026-03-08 | 字幕开关控制与字幕加载异常处理完善 | ✅ 已修复 |
+| 26 | 2026-03-08 | 瀛楀箷寮€鍏虫帶鍒朵笌瀛楀箷鍔犺浇寮傚父澶勭悊瀹屽杽 | 鉁?宸蹭慨澶?|
 
 
 
-| 27 | 2026-03-08 | 快捷键配置持久化接入（hotkey.*） | ✅ 已修复 |
+| 27 | 2026-03-08 | 蹇嵎閿厤缃寔涔呭寲鎺ュ叆锛坔otkey.*锛?| 鉁?宸蹭慨澶?|
 
 
 
-| 28 | 2026-03-08 | 快捷键冲突检测与恢复默认能力 | ✅ 已修复 |
+| 28 | 2026-03-08 | 蹇嵎閿啿绐佹娴嬩笌鎭㈠榛樿鑳藉姏 | 鉁?宸蹭慨澶?|
 
 
 
-| 29 | 2026-03-08 | M1 验收 1.4.1：SRT seek 同步自检命令落地 | ✅ 已修复 |
+| 29 | 2026-03-08 | M1 楠屾敹 1.4.1锛歋RT seek 鍚屾鑷鍛戒护钀藉湴 | 鉁?宸蹭慨澶?|
 
 
 
-| 30 | 2026-03-08 | M1 验收 1.4.2：播放列表连续播放 5 文件自检通过 | ✅ 已修复 |
+| 30 | 2026-03-08 | M1 楠屾敹 1.4.2锛氭挱鏀惧垪琛ㄨ繛缁挱鏀?5 鏂囦欢鑷閫氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 31 | 2026-03-08 | M1 验收 1.4.3：设置重启恢复自检通过 | ✅ 已修复 |
+| 31 | 2026-03-08 | M1 楠屾敹 1.4.3锛氳缃噸鍚仮澶嶈嚜妫€閫氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 32 | 2026-03-08 | M2 2.1.2：容器矩阵补齐 mov/avi/m2ts 并回归通过 | ✅ 已修复 |
+| 32 | 2026-03-08 | M2 2.1.2锛氬鍣ㄧ煩闃佃ˉ榻?mov/avi/m2ts 骞跺洖褰掗€氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 33 | 2026-03-08 | M2 2.1.3：视频编码矩阵补齐 MPEG-2 并回归通过 | ✅ 已修复 |
+| 33 | 2026-03-08 | M2 2.1.3锛氳棰戠紪鐮佺煩闃佃ˉ榻?MPEG-2 骞跺洖褰掗€氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 34 | 2026-03-08 | M2 2.1.4：音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM 并回归通过 | ✅ 已修复 |
+| 34 | 2026-03-08 | M2 2.1.4锛氶煶棰戠紪鐮佺煩闃佃ˉ榻?E-AC3/DTS/Vorbis/PCM 骞跺洖褰掗€氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 35 | 2026-03-08 | M3 3.1.1：DecoderFactory 接入真实初始化流程 | ✅ 已修复 |
+| 35 | 2026-03-08 | M3 3.1.1锛欴ecoderFactory 鎺ュ叆鐪熷疄鍒濆鍖栨祦绋?| 鉁?宸蹭慨澶?|
 
 
 
-| 36 | 2026-03-08 | M3 3.1.2：D3D11VA 协商失败软解兜底完善 | ✅ 已修复 |
+| 36 | 2026-03-08 | M3 3.1.2锛欴3D11VA 鍗忓晢澶辫触杞В鍏滃簳瀹屽杽 | 鉁?宸蹭慨澶?|
 
 
 
-| 37 | 2026-03-08 | M3 3.2.1：D3D11 渲染最小可用链路落地 | ✅ 已修复 |
+| 37 | 2026-03-08 | M3 3.2.1锛欴3D11 娓叉煋鏈€灏忓彲鐢ㄩ摼璺惤鍦?| 鉁?宸蹭慨澶?|
 
 
 
-| 38 | 2026-03-08 | M3 3.3.2：渲染失败降级回归入口补齐 | ✅ 已修复 |
+| 38 | 2026-03-08 | M3 3.3.2锛氭覆鏌撳け璐ラ檷绾у洖褰掑叆鍙ｈˉ榻?| 鉁?宸蹭慨澶?|
 
 
 
-| 39 | 2026-03-08 | M3 3.3.1：Windows 软解/硬解主力样本回归通过 | ✅ 已修复 |
+| 39 | 2026-03-08 | M3 3.3.1锛歐indows 杞В/纭В涓诲姏鏍锋湰鍥炲綊閫氳繃 | 鉁?宸蹭慨澶?|
 
 
 
-| 40 | 2026-03-08 | M4 4.1：章节导航（上一章/下一章）接入与验收 | ✅ 已修复 |
+| 40 | 2026-03-08 | M4 4.1锛氱珷鑺傚鑸紙涓婁竴绔?涓嬩竴绔狅級鎺ュ叆涓庨獙鏀?| 鉁?宸蹭慨澶?|
 
 
 
-| 41 | 2026-03-08 | M4 4.2：A-B Repeat（A/B/C）接入与验收 | ✅ 已修复 |
+| 41 | 2026-03-08 | M4 4.2锛欰-B Repeat锛圓/B/C锛夋帴鍏ヤ笌楠屾敹 | 鉁?宸蹭慨澶?|
 
 
 
-| 42 | 2026-03-08 | M4 4.3（截图） | ✅ 已修复 |
+| 42 | 2026-03-08 | M4 4.3锛堟埅鍥撅級 | 鉁?宸蹭慨澶?|
 
 
 
-| 43 | 2026-03-08 | `MPC_HC_GAP_ANALYSIS` 评估结论过期 | ✅ 已修复 |
+| 43 | 2026-03-08 | `MPC_HC_GAP_ANALYSIS` 璇勪及缁撹杩囨湡 | 鉁?宸蹭慨澶?|
 
 
 
-| 44 | 2026-03-08 | `docs/records/VERSION.md` 历史路径描述过期 | ✅ 已修复 |
+| 44 | 2026-03-08 | `docs/records/VERSION.md` 鍘嗗彶璺緞鎻忚堪杩囨湡 | 鉁?宸蹭慨澶?|
 
 
 
-| 45 | 2026-03-08 | README 与架构文档仍混用旧主链表述 | ✅ 已修复 |
+| 45 | 2026-03-08 | README 涓庢灦鏋勬枃妗ｄ粛娣风敤鏃т富閾捐〃杩?| 鉁?宸蹭慨澶?|
 
 
 
-| 46 | 2026-03-08 | 实现教程与迭代计划缺少历史/当前边界说明 | ✅ 已修复 |
+| 46 | 2026-03-08 | 瀹炵幇鏁欑▼涓庤凯浠ｈ鍒掔己灏戝巻鍙?褰撳墠杈圭晫璇存槑 | 鉁?宸蹭慨澶?|
 
 
 
-| 47 | 2026-03-08 | 辅助说明文档仍缺少当前入口与状态边界 | ✅ 已修复 |
+| 47 | 2026-03-08 | 杈呭姪璇存槑鏂囨。浠嶇己灏戝綋鍓嶅叆鍙ｄ笌鐘舵€佽竟鐣?| 鉁?宸蹭慨澶?|
 
 
 
-| 48 | 2026-03-08 | 根 README 故障排除与历史问题归档仍有旧口径 | ✅ 已修复 |
+| 48 | 2026-03-08 | 鏍?README 鏁呴殰鎺掗櫎涓庡巻鍙查棶棰樺綊妗ｄ粛鏈夋棫鍙ｅ緞 | 鉁?宸蹭慨澶?|
 
 
 
-| 49 | 2026-03-08 | 缺少独立的文档巡检总表 | ✅ 已修复 |
+| 49 | 2026-03-08 | 缂哄皯鐙珛鐨勬枃妗ｅ贰妫€鎬昏〃 | 鉁?宸蹭慨澶?|
 
 
 
-| 50 | 2026-03-08 | M4 4.4：暂停态帧步进接入与验收 | ✅ 已修复 |
+| 50 | 2026-03-08 | M4 4.4锛氭殏鍋滄€佸抚姝ヨ繘鎺ュ叆涓庨獙鏀?| 鉁?宸蹭慨澶?|
 
 
 
-| 53 | 2026-03-08 | M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU） | ✅ 已修复 |
+| 53 | 2026-03-08 | M2 2.2.4锛氳緭鍑烘挱鏀炬€ц兘鏃ュ織锛堟帀甯?闃熷垪/CPU/GPU锛?| 鉁?宸蹭慨澶?|
 
 
 
-| 54 | 2026-03-08 | M2 2.2.1 / 2.3.2：1080p60 稳定播放验收 | ✅ 已修复 |
+| 54 | 2026-03-08 | M2 2.2.1 / 2.3.2锛?080p60 绋冲畾鎾斁楠屾敹 | 鉁?宸蹭慨澶?|
 
 
 
-| 55 | 2026-03-08 | M2 2.2.2 / 2.3.3：4K 播放与降级验收 | ✅ 已修复 |
+| 55 | 2026-03-08 | M2 2.2.2 / 2.3.3锛?K 鎾斁涓庨檷绾ч獙鏀?| 鉁?宸蹭慨澶?|
 
 
 
-| 56 | 2026-03-08 | M2 2.2.3：>80Mbps 高码率样本验收 | ✅ 已修复 |
+| 56 | 2026-03-08 | M2 2.2.3锛?80Mbps 楂樼爜鐜囨牱鏈獙鏀?| 鉁?宸蹭慨澶?|
 
 
 
-| 57 | 2026-03-18 | D3D11 原生 GPU 渲染链补齐 | ✅ 已修复 |
+| 57 | 2026-03-18 | D3D11 鍘熺敓 GPU 娓叉煋閾捐ˉ榻?| 鉁?宸蹭慨澶?|
 
 
 
-| 66 | 2026-03-18 | 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链 | ✅ 已修复 |
+| 66 | 2026-03-18 | 鍏ㄥ眬鏋勫缓闃诲娓呯悊涓?ASS/SSA 鍘熺敓 D3D11 瀛楀箷閾?| 鉁?宸蹭慨澶?|
 
 
 
-| 67 | 2026-03-18 | ASS 标签解析与 UTF-16 字幕范围修正 | ✅ 已修复 |
+| 67 | 2026-03-18 | ASS 鏍囩瑙ｆ瀽涓?UTF-16 瀛楀箷鑼冨洿淇 | 鉁?宸蹭慨澶?|
 
 
 
-| 68 | 2026-03-18 | MSVC warning debt 分层清理（C4819 / C4996 / C4706） | ✅ 已修复 |
+| 68 | 2026-03-18 | MSVC warning debt 鍒嗗眰娓呯悊锛圕4819 / C4996 / C4706锛?| 鉁?宸蹭慨澶?|
 
 
 
-| 69 | 2026-03-19 | PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复 | ✅ 已修复 |
+| 69 | 2026-03-19 | PlayerCore 鍋滄挱鏀跺彛銆佸寘闃熷垪鎵€鏈夋潈涓?Clock/Demuxer 璁捐鍊轰慨澶?| 鉁?宸蹭慨澶?|
 
 
 
-| 70 | 2026-03-19 | 音频设备失败时的视频-only降级与回归门禁纠偏 | ✅ 已修复 |
+| 70 | 2026-03-19 | 闊抽璁惧澶辫触鏃剁殑瑙嗛-only闄嶇骇涓庡洖褰掗棬绂佺籂鍋?| 鉁?宸蹭慨澶?|
 
 
 
-| 71 | 2026-03-19 | 4K backend session 子进程退出路径修复 | ✅ 已修复 |
+| 71 | 2026-03-19 | 4K backend session 瀛愯繘绋嬮€€鍑鸿矾寰勪慨澶?| 鉁?宸蹭慨澶?|
 
 
 
-| 72 | 2026-03-19 | 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强 | ✅ 已修复 |
+| 72 | 2026-03-19 | 楂樼爜鐜?4K 闃熷垪瀹归噺銆佽嚜閫傚簲鑺傛祦涓?copy-back 璇婃柇澧炲己 | 鉁?宸蹭慨澶?|
 
 
 
-| 73 | 2026-03-19 | SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override | ✅ 已修复 |
+| 73 | 2026-03-19 | SoftwareSDL 鎷疯礉閾捐矾閲忓寲銆丼cheduler 閲嶅惎棰勭畻涓?renderer override | 鉁?宸蹭慨澶?|
 
 
 
-| 74 | 2026-03-19 | Audio-master lateness 收紧与 SoftwareSDL 减拷贝有限重构 | ✅ 已修复 |
+| 74 | 2026-03-19 | Audio-master lateness 鏀剁揣涓?SoftwareSDL 鍑忔嫹璐濇湁闄愰噸鏋?| 鉁?宸蹭慨澶?|
 
 
 
-| 75 | 2026-03-19 | 撤回 SoftwareSDL automatic software-first 并补软解阻塞诊断 | ✅ 已修复 |
+| 75 | 2026-03-19 | 鎾ゅ洖 SoftwareSDL automatic software-first 骞惰ˉ杞В闃诲璇婃柇 | 鉁?宸蹭慨澶?|
 
 
 
-| 76 | 2026-03-19 | Software video decode 真实产帧专项检查与 blocker 定位 | ✅ 已修复 |
+| 76 | 2026-03-19 | Software video decode 鐪熷疄浜у抚涓撻」妫€鏌ヤ笌 blocker 瀹氫綅 | 鉁?宸蹭慨澶?|
 
 
 
-| 77 | 2026-03-19 | Software decode 首包停滞复核与 SDL renderer 注释乱码修复 | ✅ 已修复 |
+| 77 | 2026-03-19 | Software decode 棣栧寘鍋滄粸澶嶆牳涓?SDL renderer 娉ㄩ噴涔辩爜淇 | 鉁?宸蹭慨澶?|
 
 
 
-| 78 | 2026-03-19 | software decode 最小 send/dequeue 计数接入与首包送包停滞钉死 | ✅ 已修复 |
+| 78 | 2026-03-19 | software decode 鏈€灏?send/dequeue 璁℃暟鎺ュ叆涓庨鍖呴€佸寘鍋滄粸閽夋 | 鉁?宸蹭慨澶?|
 
 
 
-| 79 | 2026-03-19 | PlayerCore 运行态 software send probe 对照收敛 | 🔍 已定位 |
+| 79 | 2026-03-19 | PlayerCore 杩愯鎬?software send probe 瀵圭収鏀舵暃 | 馃攳 宸插畾浣?|
 
 
 
-| 80 | 2026-03-19 | 文档一致性补齐：CHANGELOG 索引修复与问题 69 analysis 回填 | ✅ 已修复 |
+| 80 | 2026-03-19 | 鏂囨。涓€鑷存€цˉ榻愶細CHANGELOG 绱㈠紩淇涓庨棶棰?69 analysis 鍥炲～ | 鉁?宸蹭慨澶?|
 
 
 
-| 81 | 2026-03-20 | PlayerCore seek/flush timeline serial 化第二阶段 | ✅ 已修复 |
-| 82 | 2026-03-20 | PlayerCore EOF/Ended 终态语义重设计 | ✅ 已修复 |
-| 83 | 2026-03-20 | PlayerCore queue generation 与 Scheduler 控制快照收口 | ✅ 已修复 |
-| 84 | 2026-03-20 | PlayerCore 副作用集中化与 runtime failure/recovery policy 收口 | ✅ 已修复 |
-| 85 | 2026-03-20 | PlayerCore 剩余风险收敛：Scheduler 终版策略、FailSession 实化与 serial/generation 观测强化 | ✅ 已修复 |
-| 86 | 2026-03-20 | 增补 serial/failsession 回归探针（连续 seek、暂停态 seek、close/reopen） | ✅ 已修复 |
-| 87 | 2026-03-20 | serial/failsession 回归增加一键聚合 gate（降低漏跑风险） | ✅ 已修复 |
-| 88 | 2026-03-20 | 强制 FailSession 回归探针与 codec 锁重入崩溃修复 | ✅ 已修复 |
-| 89 | 2026-03-20 | run_all_checks 接入 forced-failsession 一键 gate | ✅ 已修复 |
-| 90 | 2026-03-23 | D3D11 原生直采样黑屏：运行时禁用 native direct 并回退 copy-back | ✅ 已修复 |
-| 91 | 2026-03-23 | D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样 | ✅ 已修复 |
-| 92 | 2026-03-23 | D3D11 启动期能力探测与 adapter/driver 诊断日志补齐 | ✅ 已修复 |
-| 93 | 2026-03-23 | D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI | ✅ 已修复 |
-| 94 | 2026-03-23 | 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口 | ✅ 已修复 |
-| 95 | 2026-03-23 | RC 版本元数据、Release 页正文与安装包版本标识补齐 | ✅ 已修复 |
+| 81 | 2026-03-20 | PlayerCore seek/flush timeline serial 鍖栫浜岄樁娈?| 鉁?宸蹭慨澶?|
+| 82 | 2026-03-20 | PlayerCore EOF/Ended 缁堟€佽涔夐噸璁捐 | 鉁?宸蹭慨澶?|
+| 83 | 2026-03-20 | PlayerCore queue generation 涓?Scheduler 鎺у埗蹇収鏀跺彛 | 鉁?宸蹭慨澶?|
+| 84 | 2026-03-20 | PlayerCore 鍓綔鐢ㄩ泦涓寲涓?runtime failure/recovery policy 鏀跺彛 | 鉁?宸蹭慨澶?|
+| 85 | 2026-03-20 | PlayerCore 鍓╀綑椋庨櫓鏀舵暃锛歋cheduler 缁堢増绛栫暐銆丗ailSession 瀹炲寲涓?serial/generation 瑙傛祴寮哄寲 | 鉁?宸蹭慨澶?|
+| 86 | 2026-03-20 | 澧炶ˉ serial/failsession 鍥炲綊鎺㈤拡锛堣繛缁?seek銆佹殏鍋滄€?seek銆乧lose/reopen锛?| 鉁?宸蹭慨澶?|
+| 87 | 2026-03-20 | serial/failsession 鍥炲綊澧炲姞涓€閿仛鍚?gate锛堥檷浣庢紡璺戦闄╋級 | 鉁?宸蹭慨澶?|
+| 88 | 2026-03-20 | 寮哄埗 FailSession 鍥炲綊鎺㈤拡涓?codec 閿侀噸鍏ュ穿婧冧慨澶?| 鉁?宸蹭慨澶?|
+| 89 | 2026-03-20 | run_all_checks 鎺ュ叆 forced-failsession 涓€閿?gate | 鉁?宸蹭慨澶?|
+| 90 | 2026-03-23 | D3D11 鍘熺敓鐩撮噰鏍烽粦灞忥細杩愯鏃剁鐢?native direct 骞跺洖閫€ copy-back | 鉁?宸蹭慨澶?|
+| 91 | 2026-03-23 | D3D11VA 鑷畾涔?hw_frames_ctx锛氱敵璇峰彲閲囨牱瑙ｇ爜琛ㄩ潰骞舵仮澶嶉浂鎷疯礉鐩撮噰鏍?| 鉁?宸蹭慨澶?|
+| 92 | 2026-03-23 | D3D11 鍚姩鏈熻兘鍔涙帰娴嬩笌 adapter/driver 璇婃柇鏃ュ織琛ラ綈 | 鉁?宸蹭慨澶?|
+| 93 | 2026-03-23 | D3D11 decoder profile 鎺㈡祴銆乹uirk blacklist 涓庣嫭绔?diagnostics CLI | 鉁?宸蹭慨澶?|
+| 94 | 2026-03-23 | 1.0.0-rc1 鍙戝竷鍑嗗锛氬彂甯冩竻鍗曘€佸凡鐭ラ棶棰樹笌鍙戝竷璇存槑鏀跺彛 | 鉁?宸蹭慨澶?|
+| 95 | 2026-03-23 | RC 鐗堟湰鍏冩暟鎹€丷elease 椤垫鏂囦笌瀹夎鍖呯増鏈爣璇嗚ˉ榻?| 鉁?宸蹭慨澶?|
 
 
 
@@ -320,39 +358,27 @@
 
 
 
-## 问题 95: RC 版本元数据、Release 页正文与安装包版本标识补齐
+## 闂 95: RC 鐗堟湰鍏冩暟鎹€丷elease 椤垫鏂囦笌瀹夎鍖呯増鏈爣璇嗚ˉ榻?
+**鏃ユ湡**: 2026-03-23
 
-**日期**: 2026-03-23
+### 闂鎻忚堪
 
-### 问题描述
+- 鐢ㄦ埛瑕佹眰鏄庣‘ Release 椤垫鏂囨斁鍦ㄥ摢閲岋紝骞惰姹傛妸绋嬪簭鍐呴儴鐗堟湰銆乄indows 鍙墽琛屾枃浠剁増鏈拰瀹夎鍖呯増鏈兘缁熶竴鏄剧ず涓?`rc1`銆?
+- 褰撴椂宸ョ▼閲岀殑 `CMakeLists.txt` 浠嶅彧鏈?`project(... VERSION 1.0.0)`锛屼粨搴撻噷涔熸病鏈夊崟鐙殑 Release 姝ｆ枃鏂囦欢銆乣--version` CLI銆乣VERSIONINFO` 璧勬簮鍜?`CPack` 鍖呭懡鍚嶈鍒欍€?
+- `HTTP` 涓嬭浇閾捐矾鐨?`user_agent` 浠嶅浐瀹氫负 `modern-video-player/1.0`锛屼笉鍒╀簬鍖哄垎 RC 鏋勫缓涓庡悗缁寮忕増/鍚庣画鍊欓€夌増銆?
+### 鍘熷洜鍒嗘瀽
 
-- 用户要求明确 Release 页正文放在哪里，并要求把程序内部版本、Windows 可执行文件版本和安装包版本都统一显示为 `rc1`。
+- 鍘熸湁鐗堟湰淇℃伅鍙仠鐣欏湪 `CMake project version`锛屾病鏈夋妸 prerelease suffix 浼犳挱鍒扮▼搴忓唴閮ㄥ瓧绗︿覆銆乄indows 璧勬簮淇℃伅鍜屽彂甯冨寘鍛藉悕銆?
+- 椤圭洰姝ゅ墠缂哄皯 `VERSIONINFO` 璧勬簮涓庣嫭绔?`Release Notes` 鏂囦欢锛屽洜姝も€滃彲鍙?RC鈥濈殑鍐呴儴缁撹鍜屸€滃彲鐩存帴璐村嚭鍘荤殑鍙戝竷姝ｆ枃鈥濅箣闂翠粛鏈夌己鍙ｃ€?
+- 娌℃湁鎵撳寘瑙勫垯鏃讹紝鍘嬬缉鍖呭懡鍚嶃€佸唴瀹硅竟鐣屽拰鏄惁娣峰叆鏈湴閰嶇疆涔熼兘鏃犳硶琚嚜鍔ㄩ獙璇併€?
+### 瑙ｅ喅鏂规
 
-- 当时工程里的 `CMakeLists.txt` 仍只有 `project(... VERSION 1.0.0)`，仓库里也没有单独的 Release 正文文件、`--version` CLI、`VERSIONINFO` 资源和 `CPack` 包命名规则。
-
-- `HTTP` 下载链路的 `user_agent` 仍固定为 `modern-video-player/1.0`，不利于区分 RC 构建与后续正式版/后续候选版。
-
-### 原因分析
-
-- 原有版本信息只停留在 `CMake project version`，没有把 prerelease suffix 传播到程序内部字符串、Windows 资源信息和发布包命名。
-
-- 项目此前缺少 `VERSIONINFO` 资源与独立 `Release Notes` 文件，因此“可发 RC”的内部结论和“可直接贴出去的发布正文”之间仍有缺口。
-
-- 没有打包规则时，压缩包命名、内容边界和是否混入本地配置也都无法被自动验证。
-
-### 解决方案
-
-- 新增 `docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`，作为 GitHub Release 页可直接使用的正文。
-
-- 在 `CMakeLists.txt` 中引入统一版本源，生成 `mvp_version.h` 与 Windows `version_info.rc`，统一输出 `1.0.0-rc1`。
-
-- `main` 新增 `--version`；`http_stream_downloader.cpp` 改为复用统一版本头，`user_agent` 变为 `modern-video-player/1.0.0-rc1`。
-
-- 新增 `CPack ZIP` 打包规则与安装项，验证产物文件名为 `modern-video-player-1.0.0-rc1-windows-x64.zip`，并将 `RELEASE_NOTES.md` 一并打包，同时排除本地 `config/player_settings.ini`。
-
-- 基于 Release 构建验证：`--version`、Windows `FileVersionInfo`、`PACKAGE` 目标和 `--d3d11-diagnostics`。
-
-### 修改文件
+- 鏂板 `docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`锛屼綔涓?GitHub Release 椤靛彲鐩存帴浣跨敤鐨勬鏂囥€?
+- 鍦?`CMakeLists.txt` 涓紩鍏ョ粺涓€鐗堟湰婧愶紝鐢熸垚 `mvp_version.h` 涓?Windows `version_info.rc`锛岀粺涓€杈撳嚭 `1.0.0-rc1`銆?
+- `main` 鏂板 `--version`锛沗http_stream_downloader.cpp` 鏀逛负澶嶇敤缁熶竴鐗堟湰澶达紝`user_agent` 鍙樹负 `modern-video-player/1.0.0-rc1`銆?
+- 鏂板 `CPack ZIP` 鎵撳寘瑙勫垯涓庡畨瑁呴」锛岄獙璇佷骇鐗╂枃浠跺悕涓?`modern-video-player-1.0.0-rc1-windows-x64.zip`锛屽苟灏?`RELEASE_NOTES.md` 涓€骞舵墦鍖咃紝鍚屾椂鎺掗櫎鏈湴 `config/player_settings.ini`銆?
+- 鍩轰簬 Release 鏋勫缓楠岃瘉锛歚--version`銆乄indows `FileVersionInfo`銆乣PACKAGE` 鐩爣鍜?`--d3d11-diagnostics`銆?
+### 淇敼鏂囦欢
 
 - CMakeLists.txt
 
@@ -378,44 +404,37 @@
 
 - docs/records/VERSION.md
 
-## 问题 94: 1.0.0-rc1 发布准备：发布清单、已知问题与发布说明收口
+## 闂 94: 1.0.0-rc1 鍙戝竷鍑嗗锛氬彂甯冩竻鍗曘€佸凡鐭ラ棶棰樹笌鍙戝竷璇存槑鏀跺彛
 
-**日期**: 2026-03-23
+**鏃ユ湡**: 2026-03-23
 
-### 问题描述
+### 闂鎻忚堪
 
-- 当前播放器已经具备主流本地播放能力、稳定 seek 主链以及 `D3D11VA + D3D11` 主力渲染路径，但仓库里仍缺少一份面向 `RC` 发布的统一结论文档。
+- 褰撳墠鎾斁鍣ㄥ凡缁忓叿澶囦富娴佹湰鍦版挱鏀捐兘鍔涖€佺ǔ瀹?seek 涓婚摼浠ュ強 `D3D11VA + D3D11` 涓诲姏娓叉煋璺緞锛屼絾浠撳簱閲屼粛缂哄皯涓€浠介潰鍚?`RC` 鍙戝竷鐨勭粺涓€缁撹鏂囨。銆?
+- 鐜版湁楠岃瘉璇佹嵁鍒嗘暎鍦?`VERSION / CHANGELOG / DEVELOP_LOG` 浠ュ強澶氫釜 `reports/*_LOCAL_CHECK.md` 涓紝缂哄皯涓€涓彲浠ョ洿鎺ュ洖绛斺€滅幇鍦ㄨ兘涓嶈兘鍙?`1.0.0-rc1`銆佸凡鐭ラ棶棰樻槸浠€涔堛€佸澶栬鎬庝箞鎻忚堪鈥濈殑鏀跺彛鍏ュ彛銆?
+### 鍘熷洜鍒嗘瀽
 
-- 现有验证证据分散在 `VERSION / CHANGELOG / DEVELOP_LOG` 以及多个 `reports/*_LOCAL_CHECK.md` 中，缺少一个可以直接回答“现在能不能发 `1.0.0-rc1`、已知问题是什么、对外该怎么描述”的收口入口。
+- 杩囧幓鐨?records 鏇村亸鍚戦棶棰樹慨澶嶅拰鑳藉姏澧為噺璁板綍锛屼笉鐩存帴绛変环浜庡彂甯冭鏄庛€?
+- 鍗充究杩戞湡 D3D11銆乻erial/failsession銆乫ormat regression 绛夎兘鍔涘凡缁忕户缁敹鍙ｏ紝娌℃湁鍗曠嫭鐨?RC 姹囨€绘枃妗ｏ紝浠嶇劧瀹规槗鎶娾€滃彲鍙?RC鈥濆拰鈥滃彲鍙戞寮忕増鈥濇贩涓轰竴璋堛€?
+- 鍚屾椂锛屽綋鍓嶈繕鏈変竴涓繀椤绘樉寮忓憡鐭ョ殑娈嬩綑椋庨櫓锛歚闂 79` 瀵瑰簲鐨?software video decode 杩愯鎬佽矾寰勫皻鏈畬鍏ㄦ敹鍙ｃ€?
+### 瑙ｅ喅鏂规
 
-### 原因分析
+- 鏂板 RC 姹囨€绘姤鍛?`docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`锛岀粺涓€鍖呭惈锛?  - `1.0.0-rc1` 鍙戝竷缁撹
+  - 鏈疆鏂板楠岃瘉璇佹嵁
+  - 鏃㈡湁鑳藉姏璇佹嵁鍏ュ彛
+  - 鍙戝竷璇存槑
+  - 宸茬煡闂
+  - 鍙戝竷娓呭崟
 
-- 过去的 records 更偏向问题修复和能力增量记录，不直接等价于发布说明。
-
-- 即便近期 D3D11、serial/failsession、format regression 等能力已经继续收口，没有单独的 RC 汇总文档，仍然容易把“可发 RC”和“可发正式版”混为一谈。
-
-- 同时，当前还有一个必须显式告知的残余风险：`问题 79` 对应的 software video decode 运行态路径尚未完全收口。
-
-### 解决方案
-
-- 新增 RC 汇总报告 `docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`，统一包含：
-  - `1.0.0-rc1` 发布结论
-  - 本轮新增验证证据
-  - 既有能力证据入口
-  - 发布说明
-  - 已知问题
-  - 发布清单
-
-- 重新基于 `Release` 构建执行 RC 直接相关检查：
+- 閲嶆柊鍩轰簬 `Release` 鏋勫缓鎵ц RC 鐩存帴鐩稿叧妫€鏌ワ細
   - `tools/run_all_checks.ps1`
   - `--d3d11-diagnostics`
   - `--performance-log-check .\juren-30s.mp4 2000`
   - `--long-playback-check .\juren-30s.mp4 10000`
   - `--serial-failsession-regression-check .\juren-30s.mp4`
 
-- 同步更新 `docs/README.md`、`docs/reports/README.md` 和 `docs/records/VERSION.md`，把当前 RC 候选状态和入口文档显式化。
-
-### 修改文件
+- 鍚屾鏇存柊 `docs/README.md`銆乣docs/reports/README.md` 鍜?`docs/records/VERSION.md`锛屾妸褰撳墠 RC 鍊欓€夌姸鎬佸拰鍏ュ彛鏂囨。鏄惧紡鍖栥€?
+### 淇敼鏂囦欢
 
 - docs/reports/V1_0_0_RC1_RELEASE_READINESS.md
 
@@ -430,47 +449,37 @@
 - docs/records/DEVELOP_LOG.md
 
 - docs/records/VERSION.md
-## 问题 93: D3D11 decoder profile 探测、quirk blacklist 与独立 diagnostics CLI
+## 闂 93: D3D11 decoder profile 鎺㈡祴銆乹uirk blacklist 涓庣嫭绔?diagnostics CLI
 
-**日期**: 2026-03-23
+**鏃ユ湡**: 2026-03-23
 
-### 问题描述
+### 闂鎻忚堪
 
-- 在问题 92 已补齐 D3D11 启动期 adapter/driver/format 日志后，当前项目仍缺少成熟播放器常见的三项基础设施：
-  - 视频解码 profile 级别的能力探测，无法直接回答当前机器对 `H.264 / HEVC / VP9 / AV1` 到底支持哪些 decoder profile
-  - 启动期 quirk / blacklist 策略，无法在已知不稳定设备上提前禁用 native direct
-  - 独立、机器可读的 D3D11 诊断 CLI，自动化和问题复现场景仍只能依赖播放期日志
+- 鍦ㄩ棶棰?92 宸茶ˉ榻?D3D11 鍚姩鏈?adapter/driver/format 鏃ュ織鍚庯紝褰撳墠椤圭洰浠嶇己灏戞垚鐔熸挱鏀惧櫒甯歌鐨勪笁椤瑰熀纭€璁炬柦锛?  - 瑙嗛瑙ｇ爜 profile 绾у埆鐨勮兘鍔涙帰娴嬶紝鏃犳硶鐩存帴鍥炵瓟褰撳墠鏈哄櫒瀵?`H.264 / HEVC / VP9 / AV1` 鍒板簳鏀寔鍝簺 decoder profile
+  - 鍚姩鏈?quirk / blacklist 绛栫暐锛屾棤娉曞湪宸茬煡涓嶇ǔ瀹氳澶囦笂鎻愬墠绂佺敤 native direct
+  - 鐙珛銆佹満鍣ㄥ彲璇荤殑 D3D11 璇婃柇 CLI锛岃嚜鍔ㄥ寲鍜岄棶棰樺鐜板満鏅粛鍙兘渚濊禆鎾斁鏈熸棩蹇?
+### 鍘熷洜鍒嗘瀽
 
-### 原因分析
+- 鏃у疄鐜板彧鏈?format-level 鑳藉姏鎺㈡祴锛屾病鏈夋灇涓?`ID3D11VideoDevice::GetVideoDecoderProfile*`锛屽洜姝も€滄牸寮忚兘寤虹汗鐞嗏€濆拰鈥滆缂栫爜 profile 鑳藉惁纭В鈥濅箣闂翠粛瀛樺湪鐩插尯銆?
+- native direct 鐨勫惎鍋滄鍓嶄富瑕佷緷璧栬繍琛屾椂鐔旀柇锛岀己灏戝儚 `mpv / MPC-HC` 閭ｆ牱鐨勫惎鍔ㄦ湡淇濆畧绛栫暐锛岄亣鍒?software adapter銆佺己澶卞叧閿帴鍙ｆ垨鏄庣‘榛戝悕鍗曢┍鍔ㄦ椂锛屼笉鑳藉湪鎾斁鍓嶇洿鎺ラ檷绾с€?
+- 椤圭洰鐜版湁妫€鏌ュ懡浠や互鎾斁閾捐矾涓轰腑蹇冿紝缂哄皯涓€涓笉渚濊禆瀹為檯鎾斁銆佸彲涓€娆℃€ц緭鍑哄畬鏁?D3D11 鑳藉姏蹇収鐨勭嫭绔嬪叆鍙ｃ€?
+### 瑙ｅ喅鏂规
 
-- 旧实现只有 format-level 能力探测，没有枚举 `ID3D11VideoDevice::GetVideoDecoderProfile*`，因此“格式能建纹理”和“该编码 profile 能否硬解”之间仍存在盲区。
-
-- native direct 的启停此前主要依赖运行时熔断，缺少像 `mpv / MPC-HC` 那样的启动期保守策略，遇到 software adapter、缺失关键接口或明确黑名单驱动时，不能在播放前直接降级。
-
-- 项目现有检查命令以播放链路为中心，缺少一个不依赖实际播放、可一次性输出完整 D3D11 能力快照的独立入口。
-
-### 解决方案
-
-- 在 `D3D11VideoRenderer` 中新增结构化 `D3D11DiagnosticsSnapshot`，统一汇总：
+- 鍦?`D3D11VideoRenderer` 涓柊澧炵粨鏋勫寲 `D3D11DiagnosticsSnapshot`锛岀粺涓€姹囨€伙細
   - adapter / driver / feature level / interface availability
-  - `NV12 / P010 / P016` 格式支持位
-  - `H.264 / HEVC / VP9 / AV1` decoder profile 支持情况
-  - native direct 启动期 allow / disable policy、命中规则和原因
+  - `NV12 / P010 / P016` 鏍煎紡鏀寔浣?  - `H.264 / HEVC / VP9 / AV1` decoder profile 鏀寔鎯呭喌
+  - native direct 鍚姩鏈?allow / disable policy銆佸懡涓鍒欏拰鍘熷洜
 
-- 新增 decoder profile 探测逻辑，直接枚举 `ID3D11VideoDevice` 暴露的 decoder profiles，并输出：
-  - `h264_vld_nofgt / h264_vld_fgt`
+- 鏂板 decoder profile 鎺㈡祴閫昏緫锛岀洿鎺ユ灇涓?`ID3D11VideoDevice` 鏆撮湶鐨?decoder profiles锛屽苟杈撳嚭锛?  - `h264_vld_nofgt / h264_vld_fgt`
   - `hevc_main / hevc_main10`
   - `vp9_profile0 / vp9_profile2_10bit`
   - `av1_profile0 / av1_profile1 / av1_profile2 / av1_profile2_12bit / av1_profile2_12bit_420`
 
-- 新增启动期 native direct 策略判断；若探测失败、software adapter、缺失 `ID3D11Device3 / ID3D11VideoDevice / ID3D11VideoContext`、`NV12` 不满足 `texture2d + shader_sample + decoder_output`，或命中 blacklist，则在 renderer 初始化阶段直接关闭 native direct。
+- 鏂板鍚姩鏈?native direct 绛栫暐鍒ゆ柇锛涜嫢鎺㈡祴澶辫触銆乻oftware adapter銆佺己澶?`ID3D11Device3 / ID3D11VideoDevice / ID3D11VideoContext`銆乣NV12` 涓嶆弧瓒?`texture2d + shader_sample + decoder_output`锛屾垨鍛戒腑 blacklist锛屽垯鍦?renderer 鍒濆鍖栭樁娈电洿鎺ュ叧闂?native direct銆?
+- 棣栫増 quirk / blacklist 瑙勫垯鏄惧紡钀藉湴锛?  - `microsoft-basic-render-driver`
 
-- 首版 quirk / blacklist 规则显式落地：
-  - `microsoft-basic-render-driver`
-
-- `main` 新增 `--d3d11-diagnostics`，以 `key=value` 形式机器可读输出整个 D3D11 能力快照，并给出 `result=PASS/FAIL`。
-
-### 修改文件
+- `main` 鏂板 `--d3d11-diagnostics`锛屼互 `key=value` 褰㈠紡鏈哄櫒鍙杈撳嚭鏁翠釜 D3D11 鑳藉姏蹇収锛屽苟缁欏嚭 `result=PASS/FAIL`銆?
+### 淇敼鏂囦欢
 
 - include/render/d3d11_video_renderer.h
 
@@ -483,33 +492,27 @@
 - docs/records/VERSION.md
 
 - docs/records/DEVELOP_LOG.md
-## 问题 92: D3D11 启动期能力探测与 adapter/driver 诊断日志补齐
+## 闂 92: D3D11 鍚姩鏈熻兘鍔涙帰娴嬩笌 adapter/driver 璇婃柇鏃ュ織琛ラ綈
 
-**日期**: 2026-03-23
+**鏃ユ湡**: 2026-03-23
 
-### 问题描述
+### 闂鎻忚堪
 
-- 在问题 90 和问题 91 已先后解决“黑屏兜底”和“D3D11VA 可采样帧池”后，D3D11 仍缺少成熟播放器常见的启动期能力探测与 adapter/driver 诊断日志。
+- 鍦ㄩ棶棰?90 鍜岄棶棰?91 宸插厛鍚庤В鍐斥€滈粦灞忓厹搴曗€濆拰鈥淒3D11VA 鍙噰鏍峰抚姹犫€濆悗锛孌3D11 浠嶇己灏戞垚鐔熸挱鏀惧櫒甯歌鐨勫惎鍔ㄦ湡鑳藉姏鎺㈡祴涓?adapter/driver 璇婃柇鏃ュ織銆?
+- 褰撳墠濡傛灉鍚庣画鍐嶉亣鍒版煇鍙版満鍣ㄧ殑鏍煎紡鍏煎銆侀┍鍔ㄥ樊寮傘€乻wap chain 鎴?feature level 闂锛屾棩蹇楁棤娉曞湪鍒濆鍖栭樁娈电洿鎺ョ粰鍑鸿冻澶熶笂涓嬫枃銆?
+### 鍘熷洜鍒嗘瀽
 
-- 当前如果后续再遇到某台机器的格式兼容、驱动差异、swap chain 或 feature level 问题，日志无法在初始化阶段直接给出足够上下文。
+- 鏃у疄鐜板彧鍦ㄥ垵濮嬪寲鎴愬姛鍚庤緭鍑?`Native D3D11 renderer initialized`锛屾病鏈夎褰?adapter 鍚嶇О銆乿endor/device id銆乨river version銆乫eature level銆佹牳蹇冩帴鍙ｅ彲鐢ㄦ€с€佹牸寮忔敮鎸佷綅涓?swap chain 鍙傛暟銆?
+- 杩欏鑷存帓鏌ユ椂鍙兘浠庢挱鏀炬湡鐥囩姸鍙嶆帹锛岃€屼笉鑳藉儚鎴愮啛鎾斁鍣ㄩ偅鏍峰湪鍚姩鏈熷氨鍒ゆ柇鈥滃綋鍓嶈澶囨敮鎸佷粈涔堛€佷笉鏀寔浠€涔堚€濄€?
+### 瑙ｅ喅鏂规
 
-### 原因分析
+- 鍦?`D3D11VideoRenderer` 鍚姩鏃舵柊澧炵粨鏋勫寲璇婃柇鏃ュ織锛岃緭鍑猴細
+  - adapter 鎻忚堪銆乿endor/device/subsystem/revision銆乨river version銆佹樉瀛?鍏变韩鍐呭瓨銆佹槸鍚?software adapter
+  - feature level銆乨ebug layer銆乵ultithread protection銆乣ID3D11Device3` / `ID3D11VideoDevice` / `ID3D11VideoContext` 鍙敤鎬?  - `NV12 / P010 / P016` 鐨?`CheckFormatSupport` 缁撴灉
+  - swap chain 瀹介珮銆佹牸寮忋€乥uffer count銆乻wap effect銆乤lpha mode銆乽sage
 
-- 旧实现只在初始化成功后输出 `Native D3D11 renderer initialized`，没有记录 adapter 名称、vendor/device id、driver version、feature level、核心接口可用性、格式支持位与 swap chain 参数。
-
-- 这导致排查时只能从播放期症状反推，而不能像成熟播放器那样在启动期就判断“当前设备支持什么、不支持什么”。
-
-### 解决方案
-
-- 在 `D3D11VideoRenderer` 启动时新增结构化诊断日志，输出：
-  - adapter 描述、vendor/device/subsystem/revision、driver version、显存/共享内存、是否 software adapter
-  - feature level、debug layer、multithread protection、`ID3D11Device3` / `ID3D11VideoDevice` / `ID3D11VideoContext` 可用性
-  - `NV12 / P010 / P016` 的 `CheckFormatSupport` 结果
-  - swap chain 宽高、格式、buffer count、swap effect、alpha mode、usage
-
-- `MakeWindowAssociation` 改为显式检查失败并输出警告，避免静默丢失窗口关联错误。
-
-### 修改文件
+- `MakeWindowAssociation` 鏀逛负鏄惧紡妫€鏌ュけ璐ュ苟杈撳嚭璀﹀憡锛岄伩鍏嶉潤榛樹涪澶辩獥鍙ｅ叧鑱旈敊璇€?
+### 淇敼鏂囦欢
 
 - src/render/d3d11_video_renderer.cpp
 
@@ -518,31 +521,23 @@
 - docs/records/VERSION.md
 
 - docs/records/DEVELOP_LOG.md
-## 问题 91: D3D11VA 自定义 hw_frames_ctx：申请可采样解码表面并恢复零拷贝直采样
+## 闂 91: D3D11VA 鑷畾涔?hw_frames_ctx锛氱敵璇峰彲閲囨牱瑙ｇ爜琛ㄩ潰骞舵仮澶嶉浂鎷疯礉鐩撮噰鏍?
+**鏃ユ湡**: 2026-03-23
 
-**日期**: 2026-03-23
+### 闂鎻忚堪
 
-### 问题描述
+- 铏界劧闂 90 宸茬敤杩愯鏃?fallback 鍏滀綇浜嗛粦灞忥紝浣嗘牴鍥犱粛鍦細褰撳墠 `PlayerCore` 鍙粦瀹氫簡 `D3D11VA` 璁惧锛屾病鏈夎嚜宸辨帴绠?`hw_frames_ctx`锛屽鑷?FFmpeg/椹卞姩榛樿鍒嗛厤鍑烘潵鐨勬槸 decoder-only surface銆?
+- 杩欎細璁?D3D11 renderer 鍗充娇鏀寔鍘熺敓 `AV_PIX_FMT_D3D11`锛屼篃鎷夸笉鍒板彲鐩存帴鍒涘缓 shader resource view 鐨勮В鐮佽〃闈紝闆舵嫹璐濈洿閲囨牱鏃犳硶绋冲畾鎴愮珛銆?
+### 鍘熷洜鍒嗘瀽
 
-- 虽然问题 90 已用运行时 fallback 兜住了黑屏，但根因仍在：当前 `PlayerCore` 只绑定了 `D3D11VA` 设备，没有自己接管 `hw_frames_ctx`，导致 FFmpeg/驱动默认分配出来的是 decoder-only surface。
+- FFmpeg 鐨?`AVD3D11VAFramesContext` 鎻愪緵浜?`BindFlags`锛屽厑璁歌皟鐢ㄦ柟鍦?`get_format()` 闃舵鎸囧畾瑙ｇ爜甯ф睜鐨勭汗鐞嗙粦瀹氭柟寮忥紱褰撳墠椤圭洰姝ゅ墠娌℃湁璧拌繖鏉¤矾寰勶紝鍙缃簡 `hw_device_ctx`銆?
+- 瀹炴祴鍦ㄥ綋鍓嶆満鍣ㄤ笂锛屽彧瑕佹妸 frames context 鐢宠涓?`D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE`锛孌3D11 鍘熺敓鐩撮噰鏍峰嵆鍙仮澶嶏紝璇存槑涔嬪墠鐨勬牳蹇冪己鍙ｆ槸鈥滃抚姹犲垎閰嶇瓥鐣ヤ笉瀹屾暣鈥濓紝涓嶆槸纭欢缁濆涓嶆敮鎸?D3D11 鐩撮噰鏍枫€?
+### 瑙ｅ喅鏂规
 
-- 这会让 D3D11 renderer 即使支持原生 `AV_PIX_FMT_D3D11`，也拿不到可直接创建 shader resource view 的解码表面，零拷贝直采样无法稳定成立。
-
-### 原因分析
-
-- FFmpeg 的 `AVD3D11VAFramesContext` 提供了 `BindFlags`，允许调用方在 `get_format()` 阶段指定解码帧池的纹理绑定方式；当前项目此前没有走这条路径，只设置了 `hw_device_ctx`。
-
-- 实测在当前机器上，只要把 frames context 申请为 `D3D11_BIND_DECODER | D3D11_BIND_SHADER_RESOURCE`，D3D11 原生直采样即可恢复，说明之前的核心缺口是“帧池分配策略不完整”，不是硬件绝对不支持 D3D11 直采样。
-
-### 解决方案
-
-- 在 `PlayerCore::selectVideoPixelFormat()` 中改为显式调用 `avcodec_get_hw_frames_parameters()`，创建并初始化自定义 `hw_frames_ctx`。
-
-- 在 `AVD3D11VAFramesContext::BindFlags` 上追加 `D3D11_BIND_SHADER_RESOURCE`，并把 `extra_hw_frames` 预算叠加到 `initial_pool_size`，让解码帧池既能给 decoder 使用，也能被 D3D11 renderer 直接采样。
-
-- 如果自定义 frames ctx 初始化失败，则仅回退到 decoder-owned D3D11VA surface，不中断硬解；同时问题 90 已有的运行时 fallback 继续作为最后兜底。
-
-### 修改文件
+- 鍦?`PlayerCore::selectVideoPixelFormat()` 涓敼涓烘樉寮忚皟鐢?`avcodec_get_hw_frames_parameters()`锛屽垱寤哄苟鍒濆鍖栬嚜瀹氫箟 `hw_frames_ctx`銆?
+- 鍦?`AVD3D11VAFramesContext::BindFlags` 涓婅拷鍔?`D3D11_BIND_SHADER_RESOURCE`锛屽苟鎶?`extra_hw_frames` 棰勭畻鍙犲姞鍒?`initial_pool_size`锛岃瑙ｇ爜甯ф睜鏃㈣兘缁?decoder 浣跨敤锛屼篃鑳借 D3D11 renderer 鐩存帴閲囨牱銆?
+- 濡傛灉鑷畾涔?frames ctx 鍒濆鍖栧け璐ワ紝鍒欎粎鍥為€€鍒?decoder-owned D3D11VA surface锛屼笉涓柇纭В锛涘悓鏃堕棶棰?90 宸叉湁鐨勮繍琛屾椂 fallback 缁х画浣滀负鏈€鍚庡厹搴曘€?
+### 淇敼鏂囦欢
 
 - include/core/player_core.h
 
@@ -553,33 +548,25 @@
 - docs/records/VERSION.md
 
 - docs/records/DEVELOP_LOG.md
-## 问题 90: D3D11 原生直采样黑屏：运行时禁用 native direct 并回退 copy-back
+## 闂 90: D3D11 鍘熺敓鐩撮噰鏍烽粦灞忥細杩愯鏃剁鐢?native direct 骞跺洖閫€ copy-back
 
-**日期**: 2026-03-23
+**鏃ユ湡**: 2026-03-23
 
-### 问题描述
+### 闂鎻忚堪
 
-- 使用 `Release` 构建程序播放 `juren-30s.mp4` 时，出现“有声音、无画面”。
+- 浣跨敤 `Release` 鏋勫缓绋嬪簭鎾斁 `juren-30s.mp4` 鏃讹紝鍑虹幇鈥滄湁澹伴煶銆佹棤鐢婚潰鈥濄€?
+- `--performance-log-check` 宸叉樉绀?`renderer_backend=D3D11`銆乣decoder_backend=D3D11VA`銆乣render_frames > 0`锛岃鏄庢挱鏀句富閾捐矾浠嶅湪杩愯锛岄粦灞忛泦涓湪 D3D11 鍘熺敓鐩撮噰鏍锋樉绀洪樁娈点€?
+### 鍘熷洜鍒嗘瀽
 
-- `--performance-log-check` 已显示 `renderer_backend=D3D11`、`decoder_backend=D3D11VA`、`render_frames > 0`，说明播放主链路仍在运行，黑屏集中在 D3D11 原生直采样显示阶段。
+- 鏃ч€昏緫鍙娓叉煋鍣ㄥ０鏄庢敮鎸?`AV_PIX_FMT_D3D11`锛屽氨鎸佺画鎶婄‖瑙ｅ抚鎸?native direct 璺緞閫佸叆鍍忕礌鐫€鑹插櫒锛岄粯璁ゅ亣璁捐В鐮佽〃闈㈡€昏兘鍦ㄨ繍琛屾椂鎴愬姛鍒涘缓 Y/UV plane 鐨?shader resource view銆?
+- 瀹炴祴褰撳墠璁惧/椹卞姩缁勫悎涓婏紝`CreateShaderResourceView1` 瀵?`NV12` 瑙ｇ爜琛ㄩ潰杩斿洖澶辫触锛屾棩蹇椾负 `y_plane_hr=-2147024809`锛屽鑷村儚绱犵潃鑹插櫒鎷夸笉鍒板钩闈㈣祫婧愶紝浣?swap chain 浠嶇户缁?present锛屼簬鏄敤鎴风湅鍒扳€滃彧鏈夊０闊筹紝娌℃湁鐢婚潰鈥濄€?
+- 杩欐槸杩愯鏃惰澶囧吋瀹规€ч棶棰橈紝涓嶆槸濯掍綋鏂囦欢鎹熷潖锛屼篃涓嶆槸 D3D11VA 瑙ｇ爜鏈韩澶辫触銆?
+### 瑙ｅ喅鏂规
 
-### 原因分析
-
-- 旧逻辑只要渲染器声明支持 `AV_PIX_FMT_D3D11`，就持续把硬解帧按 native direct 路径送入像素着色器，默认假设解码表面总能在运行时成功创建 Y/UV plane 的 shader resource view。
-
-- 实测当前设备/驱动组合上，`CreateShaderResourceView1` 对 `NV12` 解码表面返回失败，日志为 `y_plane_hr=-2147024809`，导致像素着色器拿不到平面资源，但 swap chain 仍继续 present，于是用户看到“只有声音，没有画面”。
-
-- 这是运行时设备兼容性问题，不是媒体文件损坏，也不是 D3D11VA 解码本身失败。
-
-### 解决方案
-
-- 在 `D3D11VideoRenderer` 中新增运行时熔断：若 Y/UV plane 的 `CreateShaderResourceView1` 失败，或解码表面格式不支持直接采样，则立即关闭当前会话的 native direct rendering。
-
-- native direct 被关闭后，`supportsNativeFrameFormat()` 返回 `false`，`PlayerCore::prepareVideoOutputFrame()` 会把后续硬解帧走 `av_hwframe_transfer_data()` copy-back 到软件帧，再复用现有软件纹理上传路径继续显示。
-
-- 同时补充明确告警日志，输出失败原因、纹理格式、数组大小、纹理索引、HRESULT，并标记 `fallback=copyback-to-software`，便于后续继续做驱动差异排查。
-
-### 修改文件
+- 鍦?`D3D11VideoRenderer` 涓柊澧炶繍琛屾椂鐔旀柇锛氳嫢 Y/UV plane 鐨?`CreateShaderResourceView1` 澶辫触锛屾垨瑙ｇ爜琛ㄩ潰鏍煎紡涓嶆敮鎸佺洿鎺ラ噰鏍凤紝鍒欑珛鍗冲叧闂綋鍓嶄細璇濈殑 native direct rendering銆?
+- native direct 琚叧闂悗锛宍supportsNativeFrameFormat()` 杩斿洖 `false`锛宍PlayerCore::prepareVideoOutputFrame()` 浼氭妸鍚庣画纭В甯ц蛋 `av_hwframe_transfer_data()` copy-back 鍒拌蒋浠跺抚锛屽啀澶嶇敤鐜版湁杞欢绾圭悊涓婁紶璺緞缁х画鏄剧ず銆?
+- 鍚屾椂琛ュ厖鏄庣‘鍛婅鏃ュ織锛岃緭鍑哄け璐ュ師鍥犮€佺汗鐞嗘牸寮忋€佹暟缁勫ぇ灏忋€佺汗鐞嗙储寮曘€丠RESULT锛屽苟鏍囪 `fallback=copyback-to-software`锛屼究浜庡悗缁户缁仛椹卞姩宸紓鎺掓煡銆?
+### 淇敼鏂囦欢
 
 - src/render/d3d11_video_renderer.cpp
 
@@ -588,35 +575,11 @@
 - docs/records/VERSION.md
 
 - docs/records/DEVELOP_LOG.md
-## 问题 80: 文档一致性补齐：CHANGELOG 索引修复与问题 69 analysis 回填
+## 闂 80: 鏂囨。涓€鑷存€цˉ榻愶細CHANGELOG 绱㈠紩淇涓庨棶棰?69 analysis 鍥炲～
 
 
 
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 今天三次提交完成后，records / analysis 对照里还留了两处文档一致性缺口：
-
-
-
-  - `CHANGELOG` 的问题总表缺少 `问题 78`，但正文已经存在 `问题 78`
-
-
-
-  - `问题 69` 已写入 `CHANGELOG / DEVELOP_LOG / VERSION`，但没有对应的 implementation planner analysis 文档
-
-
-
-- 这两个问题都不影响代码运行，但会直接影响后续文档检索、问题追踪和新会话接续质量。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -624,43 +587,61 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- `CHANGELOG` 的问题总表依赖手工维护；在同一天多次连续补写问题记录时，`78` 的索引行被漏掉了。
+- 浠婂ぉ涓夋鎻愪氦瀹屾垚鍚庯紝records / analysis 瀵圭収閲岃繕鐣欎簡涓ゅ鏂囨。涓€鑷存€х己鍙ｏ細
 
 
 
-- 上午 `fix: 收口 PlayerCore 停播线程与运行时设计债` 那次提交只带了 records 三件套，没有把对应的分析文档一起回填。
+  - `CHANGELOG` 鐨勯棶棰樻€昏〃缂哄皯 `闂 78`锛屼絾姝ｆ枃宸茬粡瀛樺湪 `闂 78`
 
 
 
+  - `闂 69` 宸插啓鍏?`CHANGELOG / DEVELOP_LOG / VERSION`锛屼絾娌℃湁瀵瑰簲鐨?implementation planner analysis 鏂囨。
 
 
 
-
-### 解决方案
-
-
-
-- 补齐 `CHANGELOG` 问题总表中的 `问题 78` 索引，并登记本次 `问题 80`。
-
-
-
-- 新增回填分析文档 `docs/analysis/PLAYERCORE_DAY6_DEFERRED_STOP_AND_RUNTIME_DEBT_FIX.md`，把 `问题 69` 的 implementation planner、结论和边界单独沉淀下来。
-
-
-
-- 同步更新 `问题 69` 的 records 文件修改清单，以及 `VERSION / DEVELOP_LOG` 中的文档一致性记录。
+- 杩欎袱涓棶棰橀兘涓嶅奖鍝嶄唬鐮佽繍琛岋紝浣嗕細鐩存帴褰卞搷鍚庣画鏂囨。妫€绱€侀棶棰樿拷韪拰鏂颁細璇濇帴缁川閲忋€?
 
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
-### 修改文件
+
+
+- `CHANGELOG` 鐨勯棶棰樻€昏〃渚濊禆鎵嬪伐缁存姢锛涘湪鍚屼竴澶╁娆¤繛缁ˉ鍐欓棶棰樿褰曟椂锛宍78` 鐨勭储寮曡琚紡鎺変簡銆?
+
+
+- 涓婂崍 `fix: 鏀跺彛 PlayerCore 鍋滄挱绾跨▼涓庤繍琛屾椂璁捐鍊篳 閭ｆ鎻愪氦鍙甫浜?records 涓変欢濂楋紝娌℃湁鎶婂搴旂殑鍒嗘瀽鏂囨。涓€璧峰洖濉€?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
+
+
+
+- 琛ラ綈 `CHANGELOG` 闂鎬昏〃涓殑 `闂 78` 绱㈠紩锛屽苟鐧昏鏈 `闂 80`銆?
+
+
+- 鏂板鍥炲～鍒嗘瀽鏂囨。 `docs/analysis/PLAYERCORE_DAY6_DEFERRED_STOP_AND_RUNTIME_DEBT_FIX.md`锛屾妸 `闂 69` 鐨?implementation planner銆佺粨璁哄拰杈圭晫鍗曠嫭娌夋穩涓嬫潵銆?
+
+
+- 鍚屾鏇存柊 `闂 69` 鐨?records 鏂囦欢淇敼娓呭崟锛屼互鍙?`VERSION / DEVELOP_LOG` 涓殑鏂囨。涓€鑷存€ц褰曘€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -684,27 +665,11 @@
 
 
 
-## 问题 79: PlayerCore 运行态 software send probe 对照收敛
+## 闂 79: PlayerCore 杩愯鎬?software send probe 瀵圭収鏀舵暃
 
 
 
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 在问题 78 已确认 software decode 线程能 dequeue 到首包、但首个 `avcodec_send_packet()` 没有完成返回后，本轮继续按 implementation planner 做“真实运行态专项对照”，目标是把 blocker 再定死一层。
-
-
-
-- 用户明确要求继续围绕 software decode blocker 推进，不要再先动 `SoftwareSDL` 渲染侧。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -712,27 +677,39 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- 独立 `--software-video-send-probe` 已证明 FFmpeg software H.264 decode 本体可用，但它还没有完全覆盖 `PlayerCore` 真实运行态的全部差异。
+- 鍦ㄩ棶棰?78 宸茬‘璁?software decode 绾跨▼鑳?dequeue 鍒伴鍖呫€佷絾棣栦釜 `avcodec_send_packet()` 娌℃湁瀹屾垚杩斿洖鍚庯紝鏈疆缁х画鎸?implementation planner 鍋氣€滅湡瀹炶繍琛屾€佷笓椤瑰鐓р€濓紝鐩爣鏄妸 blocker 鍐嶅畾姝讳竴灞傘€?
 
 
-
-- 因此需要继续逐项排除：`receive->send` 顺序、packet queue 交接、demux read-ahead、音频链、当前 video decode 线程上下文。
-
-
+- 鐢ㄦ埛鏄庣‘瑕佹眰缁х画鍥寸粫 software decode blocker 鎺ㄨ繘锛屼笉瑕佸啀鍏堝姩 `SoftwareSDL` 娓叉煋渚с€?
 
 
 
 
 
-### 解决方案
+
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 扩展 `--software-video-send-probe`，补充：
+- 鐙珛 `--software-video-send-probe` 宸茶瘉鏄?FFmpeg software H.264 decode 鏈綋鍙敤锛屼絾瀹冭繕娌℃湁瀹屽叏瑕嗙洊 `PlayerCore` 鐪熷疄杩愯鎬佺殑鍏ㄩ儴宸紓銆?
+
+
+- 鍥犳闇€瑕佺户缁€愰」鎺掗櫎锛歚receive->send` 椤哄簭銆乸acket queue 浜ゆ帴銆乨emux read-ahead銆侀煶棰戦摼銆佸綋鍓?video decode 绾跨▼涓婁笅鏂囥€?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
+
+
+
+- 鎵╁睍 `--software-video-send-probe`锛岃ˉ鍏咃細
 
 
 
@@ -748,47 +725,43 @@
 
 
 
-- 扩展 `--software-video-decode-check`：
+- 鎵╁睍 `--software-video-decode-check`锛?
+
+
+  - 鏂板 `audio_probe_mode`
 
 
 
-  - 新增 `audio_probe_mode`
+  - 鏀寔 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 鐨?video-only 瀵圭収
 
 
 
-  - 支持 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 的 video-only 对照
+- 鍦?`PlayerCore::decodeVideoFrame()` 鏂板浠呯幆澧冨彉閲忓紑鍚殑 `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 璇婃柇璺緞锛岀敤浜庣‘璁?software `send_packet` 鏄惁鍙細鍗″湪褰撳墠 decode 绾跨▼銆?
+
+
+- 鏈疆鍏抽敭缁撹锛?
+
+
+  - 鐙珛 probe 鍦?`pre-receive + packet queue round-trip + read-ahead=512` 鍚庝粛 `send_ret=0 / result=PASS`
 
 
 
-- 在 `PlayerCore::decodeVideoFrame()` 新增仅环境变量开启的 `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 诊断路径，用于确认 software `send_packet` 是否只会卡在当前 decode 线程。
+  - video-only software decode 浠?`video_packet_dequeue_count=1 / video_send_packet_ok=0 / result=FAIL`
 
 
 
-- 本轮关键结论：
+  - `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD=1` 涓嬩粛鍑虹幇 `Offthread software video send_packet probe timed out after 500ms`
 
 
 
-  - 独立 probe 在 `pre-receive + packet queue round-trip + read-ahead=512` 后仍 `send_ret=0 / result=PASS`
-
-
-
-  - video-only software decode 仍 `video_packet_dequeue_count=1 / video_send_packet_ok=0 / result=FAIL`
-
-
-
-  - `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD=1` 下仍出现 `Offthread software video send_packet probe timed out after 500ms`
-
-
-
-- 结论因此继续收敛为：blocker 不在 FFmpeg software decoder 本体、packet queue、demux read-ahead、音频链或当前 video decode 线程本身，而在 `PlayerCore` 运行态里的 software codec context / surrounding state 差异。
-
+- 缁撹鍥犳缁х画鏀舵暃涓猴細blocker 涓嶅湪 FFmpeg software decoder 鏈綋銆乸acket queue銆乨emux read-ahead銆侀煶棰戦摼鎴栧綋鍓?video decode 绾跨▼鏈韩锛岃€屽湪 `PlayerCore` 杩愯鎬侀噷鐨?software codec context / surrounding state 宸紓銆?
 
 
 
 
 
 
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -816,27 +789,11 @@
 
 
 
-## 问题 78: software decode 最小 send/dequeue 计数接入与首包送包停滞钉死
+## 闂 78: software decode 鏈€灏?send/dequeue 璁℃暟鎺ュ叆涓庨鍖呴€佸寘鍋滄粸閽夋
 
 
 
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 用户明确要求不要再先动 `SoftwareSDL` 渲染侧，而是直接沿 software decode 首包停滞方向补最小计数。
-
-
-
-- 当前已知 software path 会出现 `decode_video_ok=0 / render_frames=0`，但仅靠旧日志还不能把问题拆成“没 dequeue 到包”还是“`send_packet` 本身卡住”。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -844,27 +801,39 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- 旧诊断里只有 `decode_video_ok / decode_video_send_eagain / video_decoder_drain_signals`，缺少 packet dequeue 与 `send_packet` 成功返回层面的最小观测值。
+- 鐢ㄦ埛鏄庣‘瑕佹眰涓嶈鍐嶅厛鍔?`SoftwareSDL` 娓叉煋渚э紝鑰屾槸鐩存帴娌?software decode 棣栧寘鍋滄粸鏂瑰悜琛ユ渶灏忚鏁般€?
 
 
-
-- 因此即使已经怀疑首包送入 decoder 阶段有问题，也无法用结构化数字直接证明。
-
-
+- 褰撳墠宸茬煡 software path 浼氬嚭鐜?`decode_video_ok=0 / render_frames=0`锛屼絾浠呴潬鏃ф棩蹇楄繕涓嶈兘鎶婇棶棰樻媶鎴愨€滄病 dequeue 鍒板寘鈥濊繕鏄€渀send_packet` 鏈韩鍗′綇鈥濄€?
 
 
 
 
 
-### 解决方案
+
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 在 `PlayerCore` 补三项最小计数：
+- 鏃ц瘖鏂噷鍙湁 `decode_video_ok / decode_video_send_eagain / video_decoder_drain_signals`锛岀己灏?packet dequeue 涓?`send_packet` 鎴愬姛杩斿洖灞傞潰鐨勬渶灏忚娴嬪€笺€?
+
+
+- 鍥犳鍗充娇宸茬粡鎬€鐤戦鍖呴€佸叆 decoder 闃舵鏈夐棶棰橈紝涔熸棤娉曠敤缁撴瀯鍖栨暟瀛楃洿鎺ヨ瘉鏄庛€?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
+
+
+
+- 鍦?`PlayerCore` 琛ヤ笁椤规渶灏忚鏁帮細
 
 
 
@@ -880,7 +849,7 @@
 
 
 
-- 将它们透传到：
+- 灏嗗畠浠€忎紶鍒帮細
 
 
 
@@ -888,7 +857,7 @@
 
 
 
-  - 低频链路诊断日志
+  - 浣庨閾捐矾璇婃柇鏃ュ織
 
 
 
@@ -900,8 +869,7 @@
 
 
 
-- 本轮复跑 software decode 样本后，关键诊断已收敛到：
-
+- 鏈疆澶嶈窇 software decode 鏍锋湰鍚庯紝鍏抽敭璇婃柇宸叉敹鏁涘埌锛?
 
 
   - `v_pkt_deq=1`
@@ -924,15 +892,14 @@
 
 
 
-- 结论因此进一步收紧为：software decode 线程已经取到首个视频包，但首个 `avcodec_send_packet()` 没有形成成功返回。
+- 缁撹鍥犳杩涗竴姝ユ敹绱т负锛歴oftware decode 绾跨▼宸茬粡鍙栧埌棣栦釜瑙嗛鍖咃紝浣嗛涓?`avcodec_send_packet()` 娌℃湁褰㈡垚鎴愬姛杩斿洖銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -968,27 +935,11 @@
 
 
 
-## 问题 77: Software decode 首包停滞复核与 SDL renderer 注释乱码修复
+## 闂 77: Software decode 棣栧寘鍋滄粸澶嶆牳涓?SDL renderer 娉ㄩ噴涔辩爜淇
 
 
 
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 在 Day12 已经把 `SoftwareSDL + Software decode` 的“0 帧输出”单独钉死后，本轮继续按 implementation planner 复跑并验证：保守 software decode 线程配置是否能解除 blocker。
-
-
-
-- 同时，代码文件里还残留一处真实注释乱码：`src/render/sdl_video_renderer.cpp` 的函数头注释存在明显 mojibake，影响后续阅读和 diff 审核。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -996,47 +947,55 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- 本轮复跑后，`Video decoder threading: backend=Software thread_count=1 thread_type=none` 已证明保守线程配置已经实际生效；但 `decode_video_ok=0 / scheduler_video_decoded_frames=0 / render_frames=0` 仍然全部为 0，说明 blocker 不是“激进线程配置导致的偶发交互问题”。
+- 鍦?Day12 宸茬粡鎶?`SoftwareSDL + Software decode` 鐨勨€? 甯ц緭鍑衡€濆崟鐙拤姝诲悗锛屾湰杞户缁寜 implementation planner 澶嶈窇骞堕獙璇侊細淇濆畧 software decode 绾跨▼閰嶇疆鏄惁鑳借В闄?blocker銆?
 
 
-
-- 结合运行期诊断日志 `demux(v=163) / pkt_q(v=162)` 与仅出现 `Video decode first send_packet start` 的事实，可以推断 software decode 线程更像是在首个视频包提交阶段后停住。
-
-
-
-- `src/render/sdl_video_renderer.cpp` 的乱码则是单纯编码遗留问题，不影响逻辑，但会持续污染代码阅读和审阅结果。
+- 鍚屾椂锛屼唬鐮佹枃浠堕噷杩樻畫鐣欎竴澶勭湡瀹炴敞閲婁贡鐮侊細`src/render/sdl_video_renderer.cpp` 鐨勫嚱鏁板ご娉ㄩ噴瀛樺湪鏄庢樉 mojibake锛屽奖鍝嶅悗缁槄璇诲拰 diff 瀹℃牳銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 保持当前 software decode 保守线程配置不回退，并重新执行 `--software-video-decode-check`，把 blocker 结论从“0 帧输出”进一步收敛到“首个视频包后停住”。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 修复 `src/render/sdl_video_renderer.cpp` 的 9 处函数头注释乱码，仅改中文注释，不改逻辑。
+- 鏈疆澶嶈窇鍚庯紝`Video decoder threading: backend=Software thread_count=1 thread_type=none` 宸茶瘉鏄庝繚瀹堢嚎绋嬮厤缃凡缁忓疄闄呯敓鏁堬紱浣?`decode_video_ok=0 / scheduler_video_decoded_frames=0 / render_frames=0` 浠嶇劧鍏ㄩ儴涓?0锛岃鏄?blocker 涓嶆槸鈥滄縺杩涚嚎绋嬮厤缃鑷寸殑鍋跺彂浜や簰闂鈥濄€?
 
 
+- 缁撳悎杩愯鏈熻瘖鏂棩蹇?`demux(v=163) / pkt_q(v=162)` 涓庝粎鍑虹幇 `Video decode first send_packet start` 鐨勪簨瀹烇紝鍙互鎺ㄦ柇 software decode 绾跨▼鏇村儚鏄湪棣栦釜瑙嗛鍖呮彁浜ら樁娈靛悗鍋滀綇銆?
 
-- 再次扫描 `src/`、`include/` 的 `///` 与 `//` 注释行，确认本轮未再命中新的可疑乱码注释。
+
+- `src/render/sdl_video_renderer.cpp` 鐨勪贡鐮佸垯鏄崟绾紪鐮侀仐鐣欓棶棰橈紝涓嶅奖鍝嶉€昏緫锛屼絾浼氭寔缁薄鏌撲唬鐮侀槄璇诲拰瀹￠槄缁撴灉銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 淇濇寔褰撳墠 software decode 淇濆畧绾跨▼閰嶇疆涓嶅洖閫€锛屽苟閲嶆柊鎵ц `--software-video-decode-check`锛屾妸 blocker 缁撹浠庘€? 甯ц緭鍑衡€濊繘涓€姝ユ敹鏁涘埌鈥滈涓棰戝寘鍚庡仠浣忊€濄€?
+
+
+- 淇 `src/render/sdl_video_renderer.cpp` 鐨?9 澶勫嚱鏁板ご娉ㄩ噴涔辩爜锛屼粎鏀逛腑鏂囨敞閲婏紝涓嶆敼閫昏緫銆?
+
+
+- 鍐嶆鎵弿 `src/`銆乣include/` 鐨?`///` 涓?`//` 娉ㄩ噴琛岋紝纭鏈疆鏈啀鍛戒腑鏂扮殑鍙枒涔辩爜娉ㄩ噴銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -1060,27 +1019,11 @@
 
 
 
-## 问题 76: Software video decode 真实产帧专项检查与 blocker 定位
+## 闂 76: Software video decode 鐪熷疄浜у抚涓撻」妫€鏌ヤ笌 blocker 瀹氫綅
 
 
 
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 上一轮已经确认“继续减少或规避 `av_hwframe_transfer_data()` copy-back”的下一步，不该直接把 fallback 默认切到 `software-first`，而应该先把当前工程的 software video decode blocker 定位清楚。
-
-
-
-- 旧的 `--windows-backend-session-check soft` 只能证明“能打开并进入播放循环”，不能证明“软件视频解码真的产出并渲染视频帧”；同时一旦 soft decode 卡死，直接 `stop/close` 还可能把专项命令本身拖挂。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -1088,32 +1031,42 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- 现有回归命令缺少对“真实产帧”的硬门槛，无法区分“audio clock 在推进”与“video frame 真出来了”。
+- 涓婁竴杞凡缁忕‘璁も€滅户缁噺灏戞垨瑙勯伩 `av_hwframe_transfer_data()` copy-back鈥濈殑涓嬩竴姝ワ紝涓嶈鐩存帴鎶?fallback 榛樿鍒囧埌 `software-first`锛岃€屽簲璇ュ厛鎶婂綋鍓嶅伐绋嬬殑 software video decode blocker 瀹氫綅娓呮銆?
 
 
-
-- 当前 blocker 下，`SoftwareSDL + Software decode` 不仅会表现为 `decode_video_ok=0 / render_frames=0 / video_frame_queue_peak_size=0`，还会让常规收尾路径变得不可靠；因此专项检查命令也必须像 probe 一样自带硬退出能力。
-
-
+- 鏃х殑 `--windows-backend-session-check soft` 鍙兘璇佹槑鈥滆兘鎵撳紑骞惰繘鍏ユ挱鏀惧惊鐜€濓紝涓嶈兘璇佹槑鈥滆蒋浠惰棰戣В鐮佺湡鐨勪骇鍑哄苟娓叉煋瑙嗛甯р€濓紱鍚屾椂涓€鏃?soft decode 鍗℃锛岀洿鎺?`stop/close` 杩樺彲鑳芥妸涓撻」鍛戒护鏈韩鎷栨寕銆?
 
 
 
 
 
-### 解决方案
+
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 新增 `--software-video-decode-check <media_file> [sample_ms]`。
+- 鐜版湁鍥炲綊鍛戒护缂哄皯瀵光€滅湡瀹炰骇甯р€濈殑纭棬妲涳紝鏃犳硶鍖哄垎鈥渁udio clock 鍦ㄦ帹杩涒€濅笌鈥渧ideo frame 鐪熷嚭鏉ヤ簡鈥濄€?
+
+
+- 褰撳墠 blocker 涓嬶紝`SoftwareSDL + Software decode` 涓嶄粎浼氳〃鐜颁负 `decode_video_ok=0 / render_frames=0 / video_frame_queue_peak_size=0`锛岃繕浼氳甯歌鏀跺熬璺緞鍙樺緱涓嶅彲闈狅紱鍥犳涓撻」妫€鏌ュ懡浠や篃蹇呴』鍍?probe 涓€鏍疯嚜甯︾‖閫€鍑鸿兘鍔涖€?
 
 
 
-- 命令内部强制：
 
+
+
+### 瑙ｅ喅鏂规
+
+
+
+- 鏂板 `--software-video-decode-check <media_file> [sample_ms]`銆?
+
+
+- 鍛戒护鍐呴儴寮哄埗锛?
 
 
   - `MVP_RENDERER_BACKEND=software`
@@ -1128,7 +1081,7 @@
 
 
 
-- 通过条件收紧为“真实产帧”而不是“只打开成功”：
+- 閫氳繃鏉′欢鏀剁揣涓衡€滅湡瀹炰骇甯р€濊€屼笉鏄€滃彧鎵撳紑鎴愬姛鈥濓細
 
 
 
@@ -1160,15 +1113,14 @@
 
 
 
-- 命令改成 probe 式硬退出，避免在 soft decode blocker 下被 `stop/close` 卡住。
+- 鍛戒护鏀规垚 probe 寮忕‖閫€鍑猴紝閬垮厤鍦?soft decode blocker 涓嬭 `stop/close` 鍗′綇銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1196,11 +1148,11 @@
 
 
 
-## 问题 75: 撤回 SoftwareSDL automatic software-first 并补软解阻塞诊断
+## 闂 75: 鎾ゅ洖 SoftwareSDL automatic software-first 骞惰ˉ杞В闃诲璇婃柇
 
 
 
-**日期**: 2026-03-19
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -1208,75 +1160,66 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 当前目标原本想继续沿着“减少或规避 `av_hwframe_transfer_data()` copy-back”推进，于是临时尝试把 `SoftwareSDL` fallback 改成 renderer-aware `software-first`。
+- 褰撳墠鐩爣鍘熸湰鎯崇户缁部鐫€鈥滃噺灏戞垨瑙勯伩 `av_hwframe_transfer_data()` copy-back鈥濇帹杩涳紝浜庢槸涓存椂灏濊瘯鎶?`SoftwareSDL` fallback 鏀规垚 renderer-aware `software-first`銆?
 
 
+- 浣嗗疄闄呴獙璇佹樉绀猴紝涓€鏃?`SoftwareSDL + Software decode` 鑷姩鍚敤锛屾挱鏀惧櫒浼氬嚭鐜?`decode_video_ok=0 / render_frames=0`锛宍--performance-log-check` 鏃犳硶姝ｅ父鏀跺彛銆?
 
-- 但实际验证显示，一旦 `SoftwareSDL + Software decode` 自动启用，播放器会出现 `decode_video_ok=0 / render_frames=0`，`--performance-log-check` 无法正常收口。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- 浠庢挱鏀惧櫒璁捐鐞嗗康涓婄湅锛宻ystem-memory renderer 浼樺厛閬垮厤 copy-back 鐨勬柟鍚戞湰韬槸鎴愮珛鐨勶紝涔熺鍚堟垚鐔熸挱鏀惧櫒甯歌鎬濊矾銆?
 
 
-- 从播放器设计理念上看，system-memory renderer 优先避免 copy-back 的方向本身是成立的，也符合成熟播放器常见思路。
+- 浣嗗綋鍓嶅伐绋嬬殑 FFmpeg 杞欢瑙嗛瑙ｇ爜鎺ュ叆璺緞鏈韩瀛樺湪闃诲锛氬己鍒?`D3D11 + Software decode` 鏃朵篃鑳藉鐜拌蒋瑙ｉ摼涓嶅舰鎴愭湁鏁堣棰戜骇鍑猴紝鍥犳闂涓嶅湪 `SoftwareSDL` renderer锛岃€屽湪杞欢瑙嗛瑙ｇ爜鎺ュ叆銆?
 
 
+- 鍦ㄨ繖涓墠鎻愪笅锛岀户缁粯璁ゅ惎鐢?`software-first` 鍙細鎶婂綋鍓嶇ǔ瀹氱殑 fallback 閾惧甫鍏ュ洖褰掋€?
 
-- 但当前工程的 FFmpeg 软件视频解码接入路径本身存在阻塞：强制 `D3D11 + Software decode` 时也能复现软解链不形成有效视频产出，因此问题不在 `SoftwareSDL` renderer，而在软件视频解码接入。
 
 
 
-- 在这个前提下，继续默认启用 `software-first` 只会把当前稳定的 fallback 链带入回归。
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鎾ゅ洖鑷姩 renderer-aware `software-first` decoder 椤哄簭璋冩暣锛屾仮澶嶉粯璁?`D3D11VA -> Software`銆?
 
 
-### 解决方案
+- 淇濈暀涓婁竴杞凡缁忛獙璇侀€氳繃鐨?`NV12` 鐩翠紶銆乣AVFrame` 寮曠敤澶嶇敤鍜?`SoftwareSDL` 闆?`swscale` / 闆?`display_copy` 鏀归€犮€?
 
 
+- 涓哄悗缁崟鐙慨杞欢瑙嗛瑙ｇ爜鎺ュ叆琛ュ厖浣庨璇婃柇锛?
 
-- 撤回自动 renderer-aware `software-first` decoder 顺序调整，恢复默认 `D3D11VA -> Software`。
 
+  - FFmpeg 閿欒鐮佸瓧绗︿覆
 
 
-- 保留上一轮已经验证通过的 `NV12` 直传、`AVFrame` 引用复用和 `SoftwareSDL` 零 `swscale` / 零 `display_copy` 改造。
 
+  - 棣栨 `send_packet` 鎺㈤拡
 
 
-- 为后续单独修软件视频解码接入补充低频诊断：
 
+  - stall 涓婁笅鏂囨棩蹇?
 
 
-  - FFmpeg 错误码字符串
 
 
 
-  - 首次 `send_packet` 探针
 
-
-
-  - stall 上下文日志
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1308,87 +1251,75 @@
 
 
 
-## 问题 74: Audio-master lateness 收紧与 SoftwareSDL 减拷贝有限重构
+## 闂 74: Audio-master lateness 鏀剁揣涓?SoftwareSDL 鍑忔嫹璐濇湁闄愰噸鏋?
 
 
+**鏃ユ湡**: 2026-03-19
 
-**日期**: 2026-03-19
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 鐢ㄦ埛宸叉墜鍔ㄦ彁浜や笂涓€杞粨鏋滃悗锛岃姹備富閾剧户缁墦纾?`audio-master lateness / catch-up`锛屽悓鏃跺湪杞欢鍥為€€閾句笂鍋氣€滃噺灏?copy-back + swscale + 娣辨嫹璐濇鏁扳€濈殑鏈夐檺閲嶆瀯銆?
 
-- 用户已手动提交上一轮结果后，要求主链继续打磨 `audio-master lateness / catch-up`，同时在软件回退链上做“减少 copy-back + swscale + 深拷贝次数”的有限重构。
 
+- 鏃х殑 `Scheduler::pumpRenderOnce()` 鍦?`Audio` master 涓嬩粛鐒舵槸鈥滄渶澶氱潯 5ms锛岀劧鍚庣洿鎺?render鈥濓紝瀹规槗杩囨棭鍑哄抚銆?
 
 
-- 旧的 `Scheduler::pumpRenderOnce()` 在 `Audio` master 下仍然是“最多睡 5ms，然后直接 render”，容易过早出帧。
+- `SoftwareSDL` 鍥為€€閾捐櫧鐒跺凡缁忚兘閲忓寲鐑偣锛屼絾璺緞浠嶆槸 `copy-back + swscale + display memcpy` 涓夋鍙犲姞锛岃惤鍒?4K60 鏃舵垚鏈繃楂樸€?
 
 
 
-- `SoftwareSDL` 回退链虽然已经能量化热点，但路径仍是 `copy-back + swscale + display memcpy` 三段叠加，落到 4K60 时成本过高。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- `Audio` master 姝ｅ悜 diff 鍙潯涓€娆′笖涓嶉噸璇讳富鏃堕挓锛屼細璁?renderer 鍦ㄩ煶棰戞椂閽熷皻鏈拷涓婃椂鎻愬墠鎻愪氦瑙嗛甯с€?
 
-### 原因分析
 
+- `-250ms` 鍥哄畾 late-drop 闃堝€艰繃绮楋紝瀵?24fps/60fps 浠ュ強涓嶅悓闃熷垪濉厖搴﹂兘涓嶅鍚堢悊銆?
 
 
-- `Audio` master 正向 diff 只睡一次且不重读主时钟，会让 renderer 在音频时钟尚未追上时提前提交视频帧。
+- `SoftwareSDL` 涔嬪墠鍙兘鍚?`IYUV` 娣辨嫹璐濆抚锛屽鑷?copy-back 涔嬪悗杩樿棰濆 `swscale`銆乣Display::copyFrameData()` 娣辨嫹璐濓紝鍐嶄氦缁?SDL 涓婁紶銆?
 
 
 
-- `-250ms` 固定 late-drop 阈值过粗，对 24fps/60fps 以及不同队列填充度都不够合理。
 
 
 
-- `SoftwareSDL` 之前只能吃 `IYUV` 深拷贝帧，导致 copy-back 之后还要额外 `swscale`、`Display::copyFrameData()` 深拷贝，再交给 SDL 上传。
+### 瑙ｅ喅鏂规
 
 
 
+- `IVideoRenderer` 鏂板 `supportsDirectFrameFormat()`锛宍SdlVideoRenderer` 澹版槑鏀寔 `YUV420P/NV12`銆?
 
 
+- `PlayerCore::prepareVideoOutputFrame()` 鍦ㄦ棤瑙嗛婊ら暅鏃跺厑璁?copy-back 鍚庣殑杞欢甯х洿鎺ヤ氦缁?`SoftwareSDL`锛屼笉鍐嶅己鍒?`swscale -> YUV420P`銆?
 
 
-### 解决方案
+- `Display` 鏀规垚鈥滀紭鍏堜繚鐣?`AVFrame` 寮曠敤锛岃礋 stride/涓嶉€傞厤鏃舵墠娣辨嫹璐濃€濓紝骞惰ˉ `SDL_UpdateNVTexture()` 鏀寔 `NV12` 鐩翠紶銆?
 
 
+- `Scheduler::pumpRenderOnce()` 鐨?`Audio` master 閫昏緫鏀规垚鍒嗘绛夊緟骞堕噸璇?clock锛屽悓鏃舵妸 late-drop 闃堝€兼敼鎴愬熀浜?`frame.duration + queue fill ratio` 鐨勫姩鎬佺獥鍙ｏ紝骞惰ˉ鏈€灏?sleep 閲忓瓙閬垮厤浼繖绛夈€?
 
-- `IVideoRenderer` 新增 `supportsDirectFrameFormat()`，`SdlVideoRenderer` 声明支持 `YUV420P/NV12`。
 
+- 宸查噸鏂版墽琛岋細榛樿 `D3D11 --performance-log-check`銆佸己鍒?`SoftwareSDL --performance-log-check`銆乣SDL_AUDIODRIVER=dummy` 涓嬬殑 `Audio` master `--performance-log-check`銆?
 
 
-- `PlayerCore::prepareVideoOutputFrame()` 在无视频滤镜时允许 copy-back 后的软件帧直接交给 `SoftwareSDL`，不再强制 `swscale -> YUV420P`。
 
 
 
-- `Display` 改成“优先保留 `AVFrame` 引用，负 stride/不适配时才深拷贝”，并补 `SDL_UpdateNVTexture()` 支持 `NV12` 直传。
 
-
-
-- `Scheduler::pumpRenderOnce()` 的 `Audio` master 逻辑改成分段等待并重读 clock，同时把 late-drop 阈值改成基于 `frame.duration + queue fill ratio` 的动态窗口，并补最小 sleep 量子避免伪忙等。
-
-
-
-- 已重新执行：默认 `D3D11 --performance-log-check`、强制 `SoftwareSDL --performance-log-check`、`SDL_AUDIODRIVER=dummy` 下的 `Audio` master `--performance-log-check`。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1436,11 +1367,11 @@
 
 
 
-## 问题 73: SoftwareSDL 拷贝链路量化、Scheduler 重启预算与 renderer override
+## 闂 73: SoftwareSDL 鎷疯礉閾捐矾閲忓寲銆丼cheduler 閲嶅惎棰勭畻涓?renderer override
 
 
 
-**日期**: 2026-03-19
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -1448,75 +1379,64 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 在上一轮确认 D3D11 主链仍是 zero-copy 之后，用户继续要求判断 `Display::copyFrameData()` 与 `Scheduler` 重启策略是否是高码率/4K 不稳定的真实原因。
+- 鍦ㄤ笂涓€杞‘璁?D3D11 涓婚摼浠嶆槸 zero-copy 涔嬪悗锛岀敤鎴风户缁姹傚垽鏂?`Display::copyFrameData()` 涓?`Scheduler` 閲嶅惎绛栫暐鏄惁鏄珮鐮佺巼/4K 涓嶇ǔ瀹氱殑鐪熷疄鍘熷洜銆?
 
 
+- 鏃у疄鐜版棤娉曢噺鍖?`SoftwareSDL` 璺緞姣忓抚 memcpy 鐨勫疄闄呮垚鏈紝`Scheduler` 涔熶粛鐒朵娇鐢ㄥ浐瀹氭鏁伴噸鍚瓥鐣ワ紝涓?renderer 閫夋嫨閾炬病鏈夌湡姝ｆ敮鎸佸己鍒?`SoftwareSDL` 閲囨牱銆?
 
-- 旧实现无法量化 `SoftwareSDL` 路径每帧 memcpy 的实际成本，`Scheduler` 也仍然使用固定次数重启策略，且 renderer 选择链没有真正支持强制 `SoftwareSDL` 采样。
 
+- 杩欏鑷寸 8銆?0 鐐逛粛鐒跺彧鑳藉崐瀹氭€у垽鏂紝鏃犳硶鍍忎富閾?zero-copy 閭ｆ牱缁欏嚭纭暟鎹€?
 
 
-- 这导致第 8、10 点仍然只能半定性判断，无法像主链 zero-copy 那样给出硬数据。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- `Display::copyFrameData()` 鐨勭粺璁℃病鏈夐€忎紶鍒?`PlayerCore` 鍜?CLI锛岃嚜鐒朵篃灏辨棤娉曠畻鍑?4K60 涓嬬殑鍗犳瘮銆?
 
 
+- `Scheduler` 鍥哄畾閲嶅惎娆℃暟杩囦簬鐢熺‖锛岀煭鏃跺紓甯稿拰鎸佺画鎶栧姩鏃犳硶鍖哄垎銆?
 
-- `Display::copyFrameData()` 的统计没有透传到 `PlayerCore` 和 CLI，自然也就无法算出 4K60 下的占比。
 
+- `RendererFactory` 涔嬪墠瀹屽叏鏃犺 `MVP_D3D11_DRIVER_HINT` / renderer override锛屽鑷?`--renderer-fallback-check` 鍜?`SoftwareSDL` 鎬ц兘閲囨牱閮戒笉鍙潬銆?
 
 
-- `Scheduler` 固定重启次数过于生硬，短时异常和持续抖动无法区分。
 
 
 
-- `RendererFactory` 之前完全无视 `MVP_D3D11_DRIVER_HINT` / renderer override，导致 `--renderer-fallback-check` 和 `SoftwareSDL` 性能采样都不可靠。
 
+### 瑙ｅ喅鏂规
 
 
 
+- 涓?`Display` 澧炲姞 `FrameCopyStats`锛屽苟缁忕敱 `SdlVideoRenderer -> RendererDiagnostics -> PlayerCore::DiagnosticsSnapshot` 閫忎紶鍒?`--performance-log-check`銆?
 
 
+- `Scheduler` 閲嶅惎绛栫暐鏀规垚鈥?0s 绐楀彛鍐呮渶澶?4 娆?+ 100ms 鍐峰嵈鈥濓紝骞舵柊澧?`scheduler_*_restart_limit_hits`銆?
 
-### 解决方案
 
+- `RendererFactory::detectBestRendererType()` 鏂板 `MVP_RENDERER_BACKEND` override锛屽苟鍦?Windows 涓嬫敮鎸?`MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`銆?
 
 
-- 为 `Display` 增加 `FrameCopyStats`，并经由 `SdlVideoRenderer -> RendererDiagnostics -> PlayerCore::DiagnosticsSnapshot` 透传到 `--performance-log-check`。
+- 宸查噸鏂版墽琛岋細`MSBuild`銆乣--renderer-fallback-check`銆侀粯璁?`D3D11 --performance-log-check`銆佸己鍒?`SoftwareSDL --performance-log-check`銆?
 
 
+- 鍏抽敭缁撴灉锛歚SoftwareSDL` 4K60 閲囨牱閲?`display_copy_ratio_percent=21.8407`銆乣video_copy_back_ratio_percent=30.1018`銆乣video_swscale_ratio_percent=18.6623`锛涢粯璁?`D3D11` 涓婚摼鍒欎笁鑰呴兘涓?`0`銆?
 
-- `Scheduler` 重启策略改成“30s 窗口内最多 4 次 + 100ms 冷却”，并新增 `scheduler_*_restart_limit_hits`。
 
 
 
-- `RendererFactory::detectBestRendererType()` 新增 `MVP_RENDERER_BACKEND` override，并在 Windows 下支持 `MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`。
 
 
-
-- 已重新执行：`MSBuild`、`--renderer-fallback-check`、默认 `D3D11 --performance-log-check`、强制 `SoftwareSDL --performance-log-check`。
-
-
-
-- 关键结果：`SoftwareSDL` 4K60 采样里 `display_copy_ratio_percent=21.8407`、`video_copy_back_ratio_percent=30.1018`、`video_swscale_ratio_percent=18.6623`；默认 `D3D11` 主链则三者都为 `0`。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1584,11 +1504,11 @@
 
 
 
-## 问题 72: 高码率/4K 队列容量、自适应节流与 copy-back 诊断增强
+## 闂 72: 楂樼爜鐜?4K 闃熷垪瀹归噺銆佽嚜閫傚簲鑺傛祦涓?copy-back 璇婃柇澧炲己
 
 
 
-**日期**: 2026-03-19
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -1596,83 +1516,71 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 用户要求继续围绕高码率视频不稳定输出帧的问题，重点判断 `FrameQueue` 容量、`Scheduler` 背压/节流、`Display::copyFrameData()`、`av_hwframe_transfer_data()` 与 `Scheduler` 线程策略是否是真正瓶颈。
+- 鐢ㄦ埛瑕佹眰缁х画鍥寸粫楂樼爜鐜囪棰戜笉绋冲畾杈撳嚭甯х殑闂锛岄噸鐐瑰垽鏂?`FrameQueue` 瀹归噺銆乣Scheduler` 鑳屽帇/鑺傛祦銆乣Display::copyFrameData()`銆乣av_hwframe_transfer_data()` 涓?`Scheduler` 绾跨▼绛栫暐鏄惁鏄湡姝ｇ摱棰堛€?
 
 
+- 鐜版湁涓婚摼宸茬粡鍏峰 D3D11 native zero-copy锛屼絾缂哄皯 queue 宄板€笺€佽儗鍘嬬瓑寰呮椂闀裤€乧opy-back/swscale 鏃堕棿缁熻锛屽鑷撮槦鍒楁槸鍚﹁繃灏忋€乧opy-back 鏄惁鐑偣閮藉彧鑳介潬鐚溿€?
 
-- 现有主链已经具备 D3D11 native zero-copy，但缺少 queue 峰值、背压等待时长、copy-back/swscale 时间统计，导致队列是否过小、copy-back 是否热点都只能靠猜。
 
+- 鍚屾椂锛宍Video` master 璺緞鐨勭瓑寰呯瓥鐣ヨ繃浜庣矖绯欙紝render loop 钀藉悗鏃朵竴娆″彧涓竴甯э紝涔熶細鏀惧ぇ楂樺垎杈ㄧ巼鏍锋湰涓嬬殑鏃跺簭鎶栧姩銆?
 
 
-- 同时，`Video` master 路径的等待策略过于粗糙，render loop 落后时一次只丢一帧，也会放大高分辨率样本下的时序抖动。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- `FrameQueue` 涔嬪墠鍙湁褰撳墠 size/capacity锛屾病鏈?peak 涓?push timeout锛屾棤娉曠‘璁ゆ槸鍚︾湡鐨勮 frame queue 椤舵弧銆?
 
 
+- `Scheduler` 鐨勫崟鐐硅儗鍘嬮槇鍊煎拰鍥哄畾灏忔绛夊緟浼氬湪楂樼爜鐜?4K 涓嬪舰鎴愨€滆涔堣繃鏃╅檺娴併€佽涔堣拷甯уお鎱⑩€濈殑涓ょ鏋佺銆?
 
-- `FrameQueue` 之前只有当前 size/capacity，没有 peak 与 push timeout，无法确认是否真的被 frame queue 顶满。
 
+- 鐩存帴鏀惧ぇ 4K `D3D11VA` 瑙嗛闃熷垪鍙堜細鎵撳埌 FFmpeg 鐨勫浐瀹氱‖浠跺抚姹狅紝鍥犳 frame queue 鍜?`extra_hw_frames` 蹇呴』鑱斿姩銆?
 
 
-- `Scheduler` 的单点背压阈值和固定小步等待会在高码率/4K 下形成“要么过早限流、要么追帧太慢”的两种极端。
+- 閲囨牱楠岃瘉琛ㄦ槑褰撳墠 4K 涓婚摼鍛戒腑鐨勪粛鐒舵槸 `D3D11VA -> D3D11` native path锛岃€屼笉鏄?copy-back / swscale锛涘洜姝?`av_hwframe_transfer_data()` 骞朵笉鏄綋鍓嶈繖鍙版満鍣ㄤ笂鐨勪富鐡堕銆?
 
 
 
-- 直接放大 4K `D3D11VA` 视频队列又会打到 FFmpeg 的固定硬件帧池，因此 frame queue 和 `extra_hw_frames` 必须联动。
 
 
 
-- 采样验证表明当前 4K 主链命中的仍然是 `D3D11VA -> D3D11` native path，而不是 copy-back / swscale；因此 `av_hwframe_transfer_data()` 并不是当前这台机器上的主瓶颈。
+### 瑙ｅ喅鏂规
 
 
 
+- 涓?`FrameQueue` 澧炲姞 `peak_size / push_timeout_count / getStats / resetStats`銆?
 
 
+- `PlayerCore::open()` 鐜板湪浼氭寜濯掍綋灞炴€ч厤缃棰?闊抽 frame queue 瀹归噺锛屽苟鍦?`D3D11VA` 鎵撳紑鍓嶈缃?`extra_hw_frames`锛岄伩鍏?4K native path 鎵撶垎 surface pool銆?
 
 
-### 解决方案
+- `Scheduler` 鑳屽帇鏀规垚 enter/exit hysteresis锛屽苟鏂板 `video/audio_backpressure_wait_ms` 缁熻銆?
 
 
+- `Scheduler::pumpRenderOnce()` 鐜板湪浼氾細
 
-- 为 `FrameQueue` 增加 `peak_size / push_timeout_count / getStats / resetStats`。
 
 
+  - 鍦?`Video` master 涓嬫寜鐪熷疄 wall-clock 鍋?frame pacing
 
-- `PlayerCore::open()` 现在会按媒体属性配置视频/音频 frame queue 容量，并在 `D3D11VA` 打开前设置 `extra_hw_frames`，避免 4K native path 打爆 surface pool。
 
 
+  - 鍦ㄤ竴娆?pump 鍐呰繛缁涪寮冭繃鏈熷抚锛岀洿鍒版嬁鍒板彲鏄剧ず甯?
 
-- `Scheduler` 背压改成 enter/exit hysteresis，并新增 `video/audio_backpressure_wait_ms` 统计。
 
+- `--performance-log-check` 鎵╁睍杈撳嚭 copy-back/swscale 鏃堕棿銆乹ueue capacity/peak/timeout 涓庤儗鍘嬬瓑寰呮椂闀裤€?
 
 
-- `Scheduler::pumpRenderOnce()` 现在会：
-
-
-
-  - 在 `Video` master 下按真实 wall-clock 做 frame pacing
-
-
-
-  - 在一次 pump 内连续丢弃过期帧，直到拿到可显示帧
-
-
-
-- `--performance-log-check` 扩展输出 copy-back/swscale 时间、queue capacity/peak/timeout 与背压等待时长。
-
-
-
-- 已重新执行：
+- 宸查噸鏂版墽琛岋細
 
 
 
@@ -1692,15 +1600,14 @@
 
 
 
-  当前均通过。
+  褰撳墠鍧囬€氳繃銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1744,31 +1651,10 @@
 
 
 
-## 问题 71: 4K backend session 子进程退出路径修复
+## 闂 71: 4K backend session 瀛愯繘绋嬮€€鍑鸿矾寰勪慨澶?
 
 
-
-**日期**: 2026-03-19
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 在上一轮修复 video-only 降级和 demux 门禁后，`--4k-playback-check` 仍然失败，但失败点已收敛到 `fallback_ok=false`。
-
-
-
-- 进一步复跑发现：`--windows-backend-session-check hard` 会在打印 `PASS` 后卡到父进程超时，`soft` 会在打印 `PASS` 后以异常退出码结束。
-
-
-
-- 这使得 4K 回归仍然被 backend probe 子进程误判拖成 FAIL。
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -1776,43 +1662,54 @@
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- `runWindowsBackendSessionCheck()` 本质是专供父进程消费的 probe 子进程，不是用户态长期运行播放器会话。
+- 鍦ㄤ笂涓€杞慨澶?video-only 闄嶇骇鍜?demux 闂ㄧ鍚庯紝`--4k-playback-check` 浠嶇劧澶辫触锛屼絾澶辫触鐐瑰凡鏀舵暃鍒?`fallback_ok=false`銆?
 
 
-
-- 旧实现错误地复用了常规退出假设，导致这条 probe 路径在不同 backend 组合下出现“结果已打印、进程未正常结束”的问题。
-
+- 杩涗竴姝ュ璺戝彂鐜帮細`--windows-backend-session-check hard` 浼氬湪鎵撳嵃 `PASS` 鍚庡崱鍒扮埗杩涚▼瓒呮椂锛宍soft` 浼氬湪鎵撳嵃 `PASS` 鍚庝互寮傚父閫€鍑虹爜缁撴潫銆?
 
 
-- 因为 `runBackendSessionSubprocess()` 同时要求 `mode_ok=true` 且 `exit_code==0`，所以这种超时/异常退出会直接把 `fallback_ok` 拉成 false。
+- 杩欎娇寰?4K 鍥炲綊浠嶇劧琚?backend probe 瀛愯繘绋嬭鍒ゆ嫋鎴?FAIL銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 将 `runWindowsBackendSessionCheck` 改为专用的 `runWindowsBackendSessionCheckAndExit()`。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 该命令在打印结构化结果后会显式 flush `stdout/stderr`，并在 Windows 下直接调用 `TerminateProcess(GetCurrentProcess(), code)` 退出子进程。
+- `runWindowsBackendSessionCheck()` 鏈川鏄笓渚涚埗杩涚▼娑堣垂鐨?probe 瀛愯繘绋嬶紝涓嶆槸鐢ㄦ埛鎬侀暱鏈熻繍琛屾挱鏀惧櫒浼氳瘽銆?
+
+
+- 鏃у疄鐜伴敊璇湴澶嶇敤浜嗗父瑙勯€€鍑哄亣璁撅紝瀵艰嚧杩欐潯 probe 璺緞鍦ㄤ笉鍚?backend 缁勫悎涓嬪嚭鐜扳€滅粨鏋滃凡鎵撳嵃銆佽繘绋嬫湭姝ｅ父缁撴潫鈥濈殑闂銆?
+
+
+- 鍥犱负 `runBackendSessionSubprocess()` 鍚屾椂瑕佹眰 `mode_ok=true` 涓?`exit_code==0`锛屾墍浠ヨ繖绉嶈秴鏃?寮傚父閫€鍑轰細鐩存帴鎶?`fallback_ok` 鎷夋垚 false銆?
 
 
 
-- `main()` 的 `--windows-backend-session-check` 分支已切到这条专用退出路径。
 
 
 
-- 已重新执行：
+### 瑙ｅ喅鏂规
+
+
+
+- 灏?`runWindowsBackendSessionCheck` 鏀逛负涓撶敤鐨?`runWindowsBackendSessionCheckAndExit()`銆?
+
+
+- 璇ュ懡浠ゅ湪鎵撳嵃缁撴瀯鍖栫粨鏋滃悗浼氭樉寮?flush `stdout/stderr`锛屽苟鍦?Windows 涓嬬洿鎺ヨ皟鐢?`TerminateProcess(GetCurrentProcess(), code)` 閫€鍑哄瓙杩涚▼銆?
+
+
+- `main()` 鐨?`--windows-backend-session-check` 鍒嗘敮宸插垏鍒拌繖鏉′笓鐢ㄩ€€鍑鸿矾寰勩€?
+
+
+- 宸查噸鏂版墽琛岋細
 
 
 
@@ -1832,15 +1729,14 @@
 
 
 
-  当前均通过。
+  褰撳墠鍧囬€氳繃銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -1864,107 +1760,94 @@
 
 
 
-## 问题 70: 音频设备失败时的视频-only降级与回归门禁纠偏
+## 闂 70: 闊抽璁惧澶辫触鏃剁殑瑙嗛-only闄嶇骇涓庡洖褰掗棬绂佺籂鍋?
 
 
+**鏃ユ湡**: 2026-03-19
 
-**日期**: 2026-03-19
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 褰撳墠鏈哄櫒涓?`WASAPI` 闊抽璁惧鍒濆鍖栧け璐ユ椂锛宍PlayerCore::open()` 铏界劧浼氱户缁蛋涓嬪幓锛屼絾浠嶇劧浼氬彂鍑?`AudioInitFailed` 閿欒锛屽鑷粹€滈潪鑷村懡鑳藉姏闄嶇骇鈥濆拰鈥滅湡姝ｆ墦寮€澶辫触鈥濊涔夋贩鍦ㄤ竴璧枫€?
 
-- 当前机器上 `WASAPI` 音频设备初始化失败时，`PlayerCore::open()` 虽然会继续走下去，但仍然会发出 `AudioInitFailed` 错误，导致“非致命能力降级”和“真正打开失败”语义混在一起。
 
+- 楂樼爜鐜囧満鏅殑鍥炲綊妫€鏌ヤ粛鐒舵妸 `demux_dropped_packets` 褰撴垚缁熶竴澶辫触闂ㄧ锛涘湪 video-only 闄嶇骇鏃讹紝琚鐢ㄩ煶棰戞祦鐨勫寘浼氱疮璁¤繘 `demux_ignored_packets`锛屼粠鑰屾妸鈥滈鏈熷拷鐣モ€濊鍒ゆ垚鈥滈槦鍒楄儗鍘嬩涪鍖呪€濄€?
 
 
-- 高码率场景的回归检查仍然把 `demux_dropped_packets` 当成统一失败门禁；在 video-only 降级时，被禁用音频流的包会累计进 `demux_ignored_packets`，从而把“预期忽略”误判成“队列背压丢包”。
+- 鏃犻煶棰戣緭鍑烘椂锛屾棫閫昏緫鎶婁富鏃堕挓閫€鍥?`System`锛岃繖瀵圭函瑙嗛鎺ㄨ繘涓嶅绋冲畾锛屼篃涓嶅埄浜庤瘖鏂?video-only 鍦烘櫙銆?
 
 
 
-- 无音频输出时，旧逻辑把主时钟退回 `System`，这对纯视频推进不够稳定，也不利于诊断 video-only 场景。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- `initDecoders()` 宸茬粡鐢?`audio_player_->isInitialized()` 鎺у埗闊抽瑙ｇ爜鏄惁鍚敤锛屼絾 `open()` 灞傜己灏戞樉寮忕殑鈥滆棰戝彲缁х画鎾?/ 闊抽-only 蹇呴』澶辫触鈥濆垎鏀紝鎵€浠ヨ涓轰緷璧栧壇浣滅敤鑰屼笉鏄瓥鐣ャ€?
 
-### 原因分析
 
+- `demux_dropped_packets` 鍚屾椂娣峰悎浜?ignored 鍜?queue-drop 涓ょ被璇箟锛岄€傚悎鍋氭€婚噺瑙傛祴锛屼笉閫傚悎鐩存帴褰撻珮鐮佺巼绋冲畾鎬ч棬绂併€?
 
 
-- `initDecoders()` 已经用 `audio_player_->isInitialized()` 控制音频解码是否启用，但 `open()` 层缺少显式的“视频可继续播 / 音频-only 必须失败”分支，所以行为依赖副作用而不是策略。
+- 娌℃湁鎶婂綋鍓嶆挱鏀炬ā寮忕洿鎺ユ毚闇插埌 diagnostics锛屽鑷存瘡娆￠兘瑕佸洖鐪嬫棩蹇楁墠鑳界‘璁ゆ槸鍚﹀彂鐢熶簡 video-only 闄嶇骇銆?
 
 
 
-- `demux_dropped_packets` 同时混合了 ignored 和 queue-drop 两类语义，适合做总量观测，不适合直接当高码率稳定性门禁。
 
 
 
-- 没有把当前播放模式直接暴露到 diagnostics，导致每次都要回看日志才能确认是否发生了 video-only 降级。
+### 瑙ｅ喅鏂规
 
 
 
+- 璋冩暣 `PlayerCore::open()`锛?
 
 
+  - 鏈夎棰戞祦鏃讹紝闊抽璁惧鍒濆鍖栧け璐ュ彧璁?warning锛屽苟缁х画浠?video-only 妯″紡鎵撳紑
 
 
-### 解决方案
 
+  - 娌℃湁瑙嗛娴佹椂锛岄煶棰戣澶囧垵濮嬪寲澶辫触浠嶇洿鎺ヨ繑鍥炲け璐?
 
 
-- 调整 `PlayerCore::open()`：
+- 璋冩暣涓绘椂閽熼€夋嫨锛?
 
 
+  - 鏈夐煶棰戣緭鍑烘椂浣跨敤 `Audio`
 
-  - 有视频流时，音频设备初始化失败只记 warning，并继续以 video-only 模式打开
 
 
+  - 鏃犻煶棰戣緭鍑轰絾鏈夎棰戞祦鏃朵娇鐢?`Video`
 
-  - 没有视频流时，音频设备初始化失败仍直接返回失败
 
 
+  - 鍙湁閮戒笉鍙敤鏃舵墠鍥為€€ `System`
 
-- 调整主时钟选择：
 
 
+- 鎵╁睍 `DiagnosticsSnapshot` 涓?CLI 杈撳嚭锛屾柊澧?`audio_output_initialized / video_only_fallback / clock_source`銆?
 
-  - 有音频输出时使用 `Audio`
 
+- 灏?`1080p60-check`銆乣high-bitrate-check`銆乣long-playback-check` 鐨?demux 闂ㄧ鏀逛负 `demux_queue_drop_packets == 0`锛屽苟琛ュ厖鎵撳嵃 `demux_ignored_packets / demux_queue_drop_packets`銆?
 
 
-  - 无音频输出但有视频流时使用 `Video`
+- 宸查噸鏂版墽琛?`MSBuild`銆乣--1080p60-check`銆乣--high-bitrate-check`銆乣--long-playback-check`銆乣--performance-log-check`锛涘綋鍓嶉€氳繃銆俙--4k-playback-check` 浠嶅墿 `fallback_ok` 瀛愯繘绋嬭矾寰勫緟鍚庣画澶勭悊銆?
 
 
 
-  - 只有都不可用时才回退 `System`
 
 
 
-- 扩展 `DiagnosticsSnapshot` 与 CLI 输出，新增 `audio_output_initialized / video_only_fallback / clock_source`。
-
-
-
-- 将 `1080p60-check`、`high-bitrate-check`、`long-playback-check` 的 demux 门禁改为 `demux_queue_drop_packets == 0`，并补充打印 `demux_ignored_packets / demux_queue_drop_packets`。
-
-
-
-- 已重新执行 `MSBuild`、`--1080p60-check`、`--high-bitrate-check`、`--long-playback-check`、`--performance-log-check`；当前通过。`--4k-playback-check` 仍剩 `fallback_ok` 子进程路径待后续处理。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -2000,95 +1883,82 @@
 
 
 
-## 问题 69: PlayerCore 停播收口、包队列所有权与 Clock/Demuxer 设计债修复
+## 闂 69: PlayerCore 鍋滄挱鏀跺彛銆佸寘闃熷垪鎵€鏈夋潈涓?Clock/Demuxer 璁捐鍊轰慨澶?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-19
 
-**日期**: 2026-03-19
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 鍦ㄤ笂涓€杞鏌ヤ腑鍙戠幇锛宍PlayerCore` 鐨?EOF 鑷姩鍋滄挱鍜岄儴鍒?UI 鍋滄挱璺緞鍙慨鏀逛簡鎾斁鐘舵€侊紝娌℃湁瀹屾暣鏀跺彛 demux/audio/scheduler 绾跨▼锛屽瓨鍦ㄢ€滅姸鎬佸凡鍋溿€佺嚎绋嬫湭娓呪€濈殑鍙噸鍚闄┿€?
 
-- 在上一轮审查中发现，`PlayerCore` 的 EOF 自动停播和部分 UI 停播路径只修改了播放状态，没有完整收口 demux/audio/scheduler 线程，存在“状态已停、线程未清”的可重启风险。
 
+- `PacketQueue` 浠嶄互 `AVPacket*` 鍘熷鎸囬拡鎵胯浇鎵€鏈夋潈锛宍flush/clear/reset` 璺緞浼氶仐鐣欐湭閲婃斁鍘嬬缉鍖呫€?
 
 
-- `PacketQueue` 仍以 `AVPacket*` 原始指针承载所有权，`flush/clear/reset` 路径会遗留未释放压缩包。
+- `Clock` 鍦ㄧ郴缁熸椂閽熻矾寰勪笂鐨?`pause()` / `setSpeed()` 鍩哄噯鏇存柊涓嶆纭紝绾棰戞垨 system-clock 璺緞浼氬嚭鐜版椂闂磋烦鍙橈紱`Demuxer::open()` 鎸侀攣璋冪敤 `close()` 杩樺瓨鍦ㄨ嚜閿侀闄┿€?
 
 
 
-- `Clock` 在系统时钟路径上的 `pause()` / `setSpeed()` 基准更新不正确，纯视频或 system-clock 路径会出现时间跳变；`Demuxer::open()` 持锁调用 `close()` 还存在自锁风险。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- EOF 鑷姩鍋滄挱鍙戠敓鍦?scheduler 鐨?render 绾跨▼鍐咃紝涓嶈兘鐩存帴璧板悓姝?`stop()`锛屽惁鍒欎細瑙﹀彂绾跨▼鑷?join锛涙棫瀹炵幇鍥犳閫€鍖栨垚鈥滃彧鏀?`state_`鈥濄€?
 
-### 原因分析
 
+- `ThreadSafeQueue<AVPacket*>` 鍙鐞嗘寚閽堟惉杩愶紝涓嶇鐞?FFmpeg 鍖呯敓鍛藉懆鏈燂紝瀵艰嚧 `clear()` 涓庨槦鍒楁瀽鏋勪笉浼氶噴鏀鹃槦鍒椾腑鍓╀綑鍖呫€?
 
 
-- EOF 自动停播发生在 scheduler 的 render 线程内，不能直接走同步 `stop()`，否则会触发线程自 join；旧实现因此退化成“只改 `state_`”。
+- `Clock::pause()` 鍏堝啓 `paused_` 鍐嶈褰撳墠鏃堕棿锛宍Clock::setSpeed()` 涔熸病鏈夊厛鍥哄寲鏃у熀鍑嗭紝瀵艰嚧 system clock 杩炵画鎬ц鐮村潖銆?
 
 
+- `Demuxer::open()` 鍦ㄥ凡鎸佹湁 `mutex_` 鏃跺啀娆¤皟鐢ㄥ悓鏍蜂細涓婇攣鐨?`close()`锛屾帴鍙ｅ鐢ㄦ椂浼氬崱姝汇€?
 
-- `ThreadSafeQueue<AVPacket*>` 只管理指针搬运，不管理 FFmpeg 包生命周期，导致 `clear()` 与队列析构不会释放队列中剩余包。
 
 
 
-- `Clock::pause()` 先写 `paused_` 再读当前时间，`Clock::setSpeed()` 也没有先固化旧基准，导致 system clock 连续性被破坏。
 
 
+### 瑙ｅ喅鏂规
 
-- `Demuxer::open()` 在已持有 `mutex_` 时再次调用同样会上锁的 `close()`，接口复用时会卡死。
 
 
+- 涓?`PlayerCore` 澧炲姞 deferred stop 鏀跺彛璺緞锛欵OF 鍦?render 绾跨▼鍐呭彧鍙戝嚭寮傛鍋滄満璇锋眰骞舵爣璁板緟娓呯悊锛屽悗缁敱瀹夊叏绾跨▼鎵ц鐪熷疄 `stop/join/flush`锛屽悓鏃朵慨澶?`next/previous/quit` 璇锋眰鐩存帴璧板畬鏁?`stop()`銆?
 
 
+- 鎶?`PacketQueue` 鏀逛负 `ThreadSafeQueue<unique_ptr<AVPacket, AvPacketDeleter>>`锛屽苟璁?`ThreadSafeQueue::push()` 鏀寔寤惰繜 move锛屽交搴曟妸 FFmpeg 鍖呯敓鍛藉懆鏈熸敹鍥炲埌 RAII銆?
 
 
+- 涓?`Scheduler` 澧炲姞寮傛鍋滄満鍏ュ彛骞跺湪閲嶆柊 `start()` 鍓嶅洖鏀跺凡閫€鍑?worker锛岄伩鍏?EOF 鍚庝笅涓€娆″惎鍔ㄨЕ鍙?`std::terminate`銆?
 
-### 解决方案
 
+- 淇 `Clock` 鐨?pause/speed 鍩哄噯鏇存柊閫昏緫锛屼繚璇?system-clock 璺緞鐨勬殏鍋滃拰鍙橀€熸椂闂磋繛缁紱`Demuxer::open()` 鏀逛负鍦ㄥ悓涓€閿佸煙鍐呯洿鎺ュ叧闂棫杈撳叆锛屼笉鍐嶉噸鍏?`close()`銆?
 
 
-- 为 `PlayerCore` 增加 deferred stop 收口路径：EOF 在 render 线程内只发出异步停机请求并标记待清理，后续由安全线程执行真实 `stop/join/flush`，同时修复 `next/previous/quit` 请求直接走完整 `stop()`。
+- 宸查噸鏂版墽琛?`MSBuild` 鍏ㄩ噺閲嶅缓锛歚& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`锛屽綋鍓嶇粨鏋滀负 `0 涓鍛?/ 0 涓敊璇痐銆?
 
 
 
-- 把 `PacketQueue` 改为 `ThreadSafeQueue<unique_ptr<AVPacket, AvPacketDeleter>>`，并让 `ThreadSafeQueue::push()` 支持延迟 move，彻底把 FFmpeg 包生命周期收回到 RAII。
 
 
 
-- 为 `Scheduler` 增加异步停机入口并在重新 `start()` 前回收已退出 worker，避免 EOF 后下一次启动触发 `std::terminate`。
-
-
-
-- 修正 `Clock` 的 pause/speed 基准更新逻辑，保证 system-clock 路径的暂停和变速时间连续；`Demuxer::open()` 改为在同一锁域内直接关闭旧输入，不再重入 `close()`。
-
-
-
-- 已重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `0 个警告 / 0 个错误`。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -2144,91 +2014,79 @@
 
 
 
-## 问题 68: MSVC warning debt 分层清理（C4819 / C4996 / C4706）
+## 闂 68: MSVC warning debt 鍒嗗眰娓呯悊锛圕4819 / C4996 / C4706锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-18
 
-**日期**: 2026-03-18
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- GitHub Actions 鐨?Windows `Debug` 鏋勫缓铏界劧宸茬粡鑳介€氳繃涓绘祦绋嬬紪璇戯紝浣嗛暱鏈熸畫鐣欏ぇ閲?warning锛屽奖鍝?CI 鍙鎬у拰鍚庣画鍥炲綊瀹氫綅銆?
 
-- GitHub Actions 的 Windows `Debug` 构建虽然已经能通过主流程编译，但长期残留大量 warning，影响 CI 可读性和后续回归定位。
 
+- `C4819` 涓昏鏉ヨ嚜 MSVC 浠ユ湰鍦颁唬鐮侀〉璇诲彇 UTF-8 婧愭枃浠讹紱`C4996` 鍚屾椂鍑虹幇鍦ㄧ涓夋柟澶存枃浠跺拰椤圭洰鏈湴浠ｇ爜锛涘彟鏈夊皯閲忔湰鍦?`C4100 / C4706` 鎻愮ず銆?
 
 
-- `C4819` 主要来自 MSVC 以本地代码页读取 UTF-8 源文件；`C4996` 同时出现在第三方头文件和项目本地代码；另有少量本地 `C4100 / C4706` 提示。
+- 闇€瑕佸厛鎸夆€滅紪鐮佸憡璀︺€佺涓夋柟 warning銆佹湰鍦?warning鈥濅笁灞傛媶寮€娌荤悊锛岄伩鍏嶇畝鍗曞叏灞€闈欓粯鎶婄湡瀹為棶棰樹竴璧峰悶鎺夈€?
 
 
 
-- 需要先按“编码告警、第三方 warning、本地 warning”三层拆开治理，避免简单全局静默把真实问题一起吞掉。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鏈湴婧愮爜涓瓨鍦ㄤ腑鏂囨敞閲婂拰 UTF-8 鍐呭锛屼絾 MSVC 榛樿骞朵笉鎸?UTF-8 瑙ｉ噴婧愭枃浠讹紝瑙﹀彂 `C4819`銆?
 
-### 原因分析
 
+- FFmpeg / Quill 澶存枃浠跺睘浜庣涓夋柟渚濊禆锛屼笉搴旇瑕佹眰椤圭洰閫氳繃鏀圭涓夋柟婧愮爜鏉ユ秷闄?warning锛屾洿鍚堥€傜殑鍔炴硶鏄妸瀹冧滑闅旂鍒板閮ㄥご鏂囦欢 warning 灞傘€?
 
 
-- 本地源码中存在中文注释和 UTF-8 内容，但 MSVC 默认并不按 UTF-8 解释源文件，触发 `C4819`。
+- 鏈湴 `logger / subtitle / player_core / main` 涓粛淇濈暀浜嗚嫢骞插彲鐩存帴淇帀鐨勫畨鍏ㄥ嚱鏁颁笌琛ㄨ揪寮?warning銆?
 
 
 
-- FFmpeg / Quill 头文件属于第三方依赖，不应该要求项目通过改第三方源码来消除 warning，更合适的办法是把它们隔离到外部头文件 warning 层。
 
 
 
-- 本地 `logger / subtitle / player_core / main` 中仍保留了若干可直接修掉的安全函数与表达式 warning。
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`CMakeLists.txt` 涓负 MSVC 鐩爣澧炲姞 `/utf-8 /external:anglebrackets /external:W0`锛岃鏈湴婧愮爜鎸?UTF-8 缂栬瘧锛屽苟鎶婄涓夋柟 angle-bracket 澶存枃浠?warning 涓嬮檷鍒板閮ㄥ眰澶勭悊銆?
 
 
+- 鍦?`src/logger.cpp` 涓柊澧炲畨鍏ㄧ幆澧冨彉閲忚鍙?helper锛岀敤 `_dupenv_s` 鏇挎崲 Windows 涓嬬殑 `std::getenv` 鐢ㄦ硶銆?
 
 
-### 解决方案
+- 鍦?`src/subtitle/srt_parser.cpp` 鍜?`src/subtitle/ass_parser.cpp` 涓噰鐢ㄢ€淲indows 璧?`sscanf_s`锛屽叾浠栧钩鍙颁繚鐣?`std::sscanf`鈥濈殑璺ㄥ钩鍙拌В鏋愬垎鏀紝娓呯悊鏈湴 `C4996` 鑰屼笉鐮村潖鍙Щ妞嶆€с€?
 
 
+- 鍦?`src/main.cpp` 涓妸淇″彿澶勭悊鍙傛暟鏍囪涓?`[[maybe_unused]]`锛涘湪 `src/core/player_core.cpp` 涓妸 demux push 閲嶈瘯閫昏緫鏀瑰啓涓烘樉寮忚祴鍊硷紝鍘绘帀鏉′欢琛ㄨ揪寮忓唴璧嬪€煎鑷寸殑 `C4706`銆?
 
-- 在 `CMakeLists.txt` 中为 MSVC 目标增加 `/utf-8 /external:anglebrackets /external:W0`，让本地源码按 UTF-8 编译，并把第三方 angle-bracket 头文件 warning 下降到外部层处理。
 
+- 閲嶆柊鎵ц `MSBuild` 鍏ㄩ噺閲嶅缓锛歚& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`锛屽綋鍓嶇粨鏋滀负 `0 涓鍛?/ 0 涓敊璇痐銆?
 
 
-- 在 `src/logger.cpp` 中新增安全环境变量读取 helper，用 `_dupenv_s` 替换 Windows 下的 `std::getenv` 用法。
 
 
 
-- 在 `src/subtitle/srt_parser.cpp` 和 `src/subtitle/ass_parser.cpp` 中采用“Windows 走 `sscanf_s`，其他平台保留 `std::sscanf`”的跨平台解析分支，清理本地 `C4996` 而不破坏可移植性。
 
-
-
-- 在 `src/main.cpp` 中把信号处理参数标记为 `[[maybe_unused]]`；在 `src/core/player_core.cpp` 中把 demux push 重试逻辑改写为显式赋值，去掉条件表达式内赋值导致的 `C4706`。
-
-
-
-- 重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `0 个警告 / 0 个错误`。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -2276,7 +2134,7 @@
 
 
 
-## 问题 67: ASS 标签解析与 UTF-16 字幕范围修正
+## 闂 67: ASS 鏍囩瑙ｆ瀽涓?UTF-16 瀛楀箷鑼冨洿淇
 
 
 
@@ -2284,7 +2142,7 @@
 
 
 
-**日期**: 2026-03-18
+**鏃ユ湡**: 2026-03-18
 
 
 
@@ -2292,67 +2150,58 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- `ASS/SSA` override block 中的 `\fnArial`、`\rDefault` 之类紧凑写法会被错误识别成标签名 `fnArial`、`rDefault`，导致常见样式标签失效。
+- `ASS/SSA` override block 涓殑 `\fnArial`銆乣\rDefault` 涔嬬被绱у噾鍐欐硶浼氳閿欒璇嗗埆鎴愭爣绛惧悕 `fnArial`銆乣rDefault`锛屽鑷村父瑙佹牱寮忔爣绛惧け鏁堛€?
 
 
-
-- `SubtitleTextRun.start/length` 之前按 UTF-8 code point 计数，但 D3D11 字幕渲染最终直接把它们传给 DirectWrite 的 `DWRITE_TEXT_RANGE`，遇到 emoji 或非 BMP 字符时会产生范围错位。
-
+- `SubtitleTextRun.start/length` 涔嬪墠鎸?UTF-8 code point 璁℃暟锛屼絾 D3D11 瀛楀箷娓叉煋鏈€缁堢洿鎺ユ妸瀹冧滑浼犵粰 DirectWrite 鐨?`DWRITE_TEXT_RANGE`锛岄亣鍒?emoji 鎴栭潪 BMP 瀛楃鏃朵細浜х敓鑼冨洿閿欎綅銆?
 
 
-- 需要在前一轮 D3D11 原生字幕链提交后，再做一次整工程构建复核并把当前结果同步到记录文档。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 旧解析逻辑在读取 override 标签名时会把连续字母整体吞掉，缺少对常用 ASS 标签前缀的显式匹配。
-
-
-
-- 字幕解析阶段和渲染阶段使用了不同的文本长度语义：前者偏向 UTF-8 code point，后者实际需要 UTF-16 code unit。
-
-
-
-- 这类问题不会直接造成崩溃或泄漏，但会破坏 ASS/SSA 样式字幕在原生 D3D11 链中的语义正确性。
+- 闇€瑕佸湪鍓嶄竴杞?D3D11 鍘熺敓瀛楀箷閾炬彁浜ゅ悗锛屽啀鍋氫竴娆℃暣宸ョ▼鏋勫缓澶嶆牳骞舵妸褰撳墠缁撴灉鍚屾鍒拌褰曟枃妗ｃ€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 在 `src/subtitle/ass_parser.cpp` 中加入常用 ASS 标签的显式前缀匹配，按最长标签优先识别 `alpha / bord / shad / pos / fn / fs / an / 1c / 1a / c / a / b / i / u / s / r`，未命中时再回退到旧的宽松解析逻辑。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 将 `ASS/SSA` 文本 run 长度和纯文本字幕 fallback 路径统一改为按 UTF-16 code unit 计数，使 `SubtitleTextRun` 与 DirectWrite `DWRITE_TEXT_RANGE` 语义一致。`ass_parser.cpp` 内顺手清掉了本地 `sscanf` / 局部变量遮蔽告警。
+- 鏃цВ鏋愰€昏緫鍦ㄨ鍙?override 鏍囩鍚嶆椂浼氭妸杩炵画瀛楁瘝鏁翠綋鍚炴帀锛岀己灏戝甯哥敤 ASS 鏍囩鍓嶇紑鐨勬樉寮忓尮閰嶃€?
 
 
+- 瀛楀箷瑙ｆ瀽闃舵鍜屾覆鏌撻樁娈典娇鐢ㄤ簡涓嶅悓鐨勬枃鏈暱搴﹁涔夛細鍓嶈€呭亸鍚?UTF-8 code point锛屽悗鑰呭疄闄呴渶瑕?UTF-16 code unit銆?
 
-- 重新执行 `MSBuild` 全量重建：`& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`，当前结果为 `167 个警告 / 0 个错误`。
+
+- 杩欑被闂涓嶄細鐩存帴閫犳垚宕╂簝鎴栨硠婕忥紝浣嗕細鐮村潖 ASS/SSA 鏍峰紡瀛楀箷鍦ㄥ師鐢?D3D11 閾句腑鐨勮涔夋纭€с€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鍦?`src/subtitle/ass_parser.cpp` 涓姞鍏ュ父鐢?ASS 鏍囩鐨勬樉寮忓墠缂€鍖归厤锛屾寜鏈€闀挎爣绛句紭鍏堣瘑鍒?`alpha / bord / shad / pos / fn / fs / an / 1c / 1a / c / a / b / i / u / s / r`锛屾湭鍛戒腑鏃跺啀鍥為€€鍒版棫鐨勫鏉捐В鏋愰€昏緫銆?
+
+
+- 灏?`ASS/SSA` 鏂囨湰 run 闀垮害鍜岀函鏂囨湰瀛楀箷 fallback 璺緞缁熶竴鏀逛负鎸?UTF-16 code unit 璁℃暟锛屼娇 `SubtitleTextRun` 涓?DirectWrite `DWRITE_TEXT_RANGE` 璇箟涓€鑷淬€俙ass_parser.cpp` 鍐呴『鎵嬫竻鎺変簡鏈湴 `sscanf` / 灞€閮ㄥ彉閲忛伄钄藉憡璀︺€?
+
+
+- 閲嶆柊鎵ц `MSBuild` 鍏ㄩ噺閲嶅缓锛歚& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`锛屽綋鍓嶇粨鏋滀负 `167 涓鍛?/ 0 涓敊璇痐銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -2384,95 +2233,82 @@
 
 
 
-## 问题 66: 全局构建阻塞清理与 ASS/SSA 原生 D3D11 字幕链
+## 闂 66: 鍏ㄥ眬鏋勫缓闃诲娓呯悊涓?ASS/SSA 鍘熺敓 D3D11 瀛楀箷閾?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-18
 
-**日期**: 2026-03-18
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 鍏ㄥ眬 `Debug|x64` 鏋勫缓鏇捐澶氬澶存枃浠?婧愭枃浠剁殑缂栫爜璇闃诲锛屽鑷粹€淒3D11 鍘熺敓閾句唬鐮佸凡鏀瑰ソ锛屼絾鏃犳硶鏁翠綋楠岃瘉鈥濄€?
 
-- 全局 `Debug|x64` 构建曾被多处头文件/源文件的编码误读阻塞，导致“D3D11 原生链代码已改好，但无法整体验证”。
 
+- D3D11 鍘熺敓瀛楀箷閾炬鍓嶅彧瑕嗙洊绾枃鏈彔鍔狅紝`.ass/.ssa` 鐨勬牱寮忋€佸畾浣嶅拰澶氭潯鍚屾椂婵€娲诲瓧骞曡繕娌℃湁杩涘叆 native renderer銆?
 
 
-- D3D11 原生字幕链此前只覆盖纯文本叠加，`.ass/.ssa` 的样式、定位和多条同时激活字幕还没有进入 native renderer。
+- 澶栨寕瀛楀箷鑷姩鎺㈡祴涓庢樉寮忓姞杞介渶瑕佽鐩?`.ass`銆乣.ssa`銆乣.srt` 涓夌鏍煎紡锛岃€屼笉鏄彧闈㈠悜 SRT銆?
 
 
 
-- 外挂字幕自动探测与显式加载需要覆盖 `.ass`、`.ssa`、`.srt` 三种格式，而不是只面向 SRT。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 閮ㄥ垎甯︿腑鏂囨敞閲婄殑澶存枃浠跺拰婧愭枃浠跺湪褰撳墠 MSVC/浠ｇ爜椤电粍鍚堜笅琚璇伙紝瑙﹀彂鍏ㄥ眬璇硶/鏍囪鍖栭敊璇紝鏋勬垚涓庝笟鍔￠€昏緫鏃犲叧鐨勬瀯寤洪樆濉炪€?
 
-### 原因分析
 
+- 鏃у瓧骞曟ā鍨嬪彧鏈夌函鏂囨湰璇箟锛宍IVideoRenderer` 鎺ュ彛涔熷彧鎺ユ敹鍗曞瓧绗︿覆锛屽鑷?`PlayerCore` 鏃犳硶鎶?ASS/SSA 鐨勬牱寮忋€佸眰绾у拰瀹氫綅淇℃伅浼犵粰 D3D11 娓叉煋鍣ㄣ€?
 
 
-- 部分带中文注释的头文件和源文件在当前 MSVC/代码页组合下被误读，触发全局语法/标记化错误，构成与业务逻辑无关的构建阻塞。
+- 鏃堕棿绾夸笂鍘熸湰鍙В鏋愬崟鏉℃椿鍔ㄥ瓧骞曪紝涓嶈冻浠ヨ〃杈?ASS/SSA 甯歌鐨勫 cue 鍚屽睆鍦烘櫙銆?
 
 
 
-- 旧字幕模型只有纯文本语义，`IVideoRenderer` 接口也只接收单字符串，导致 `PlayerCore` 无法把 ASS/SSA 的样式、层级和定位信息传给 D3D11 渲染器。
 
 
 
-- 时间线上原本只解析单条活动字幕，不足以表达 ASS/SSA 常见的多 cue 同屏场景。
+### 瑙ｅ喅鏂规
 
 
 
+- 灏嗗彈褰卞搷鐨勫ご鏂囦欢鍜屾簮鏂囦欢鏀瑰啓涓?ASCII-safe 褰㈠紡锛屾仮澶?`MSBuild` 鍏ㄩ噺鏋勫缓鍩虹嚎銆?
 
 
+- 鎵╁睍瀛楀箷鏁版嵁妯″瀷锛屾柊澧?`SubtitleStyle`銆乣SubtitleTextRun`銆乣SubtitleItem.layer/play_res/runs`锛屽苟璁╄В鏋愬伐鍘傛敮鎸?`.ass/.ssa/.srt`銆?
 
 
-### 解决方案
+- 鏂板 `AssParser`锛岃В鏋?`Script Info / Styles / Events`锛岃鐩栧父鐢?`\b \i \u \s \fs \fn \an \a \pos \c/\1c \alpha/\1a \bord \shad \r` 鏍囩銆?
 
 
+- 璁?`PlayerCore` 璁＄畻澶氭潯褰撳墠婵€娲诲瓧骞曪紝骞堕€氳繃 `IVideoRenderer::setSubtitleItems()` 鎶婄粨鏋勫寲瀛楀箷瀵硅薄鐩存帴閫佸叆 `D3D11VideoRenderer`銆?
 
-- 将受影响的头文件和源文件改写为 ASCII-safe 形式，恢复 `MSBuild` 全量构建基线。
 
+- 鍦?`D3D11VideoRenderer` 鍚屼竴鍧?swap chain backbuffer 涓婂畬鎴?ASS/SSA 鏂囨湰濉厖銆佹弿杈广€侀槾褰便€佽儗鏅銆佸榻愬拰瀹氫綅缁樺埗锛涢潪 D3D11 娓叉煋鍣ㄩ粯璁ら€€鍖栦负绾枃鏈樉绀恒€?
 
 
-- 扩展字幕数据模型，新增 `SubtitleStyle`、`SubtitleTextRun`、`SubtitleItem.layer/play_res/runs`，并让解析工厂支持 `.ass/.ssa/.srt`。
+- 鏇存柊 `main.cpp` 鐨勮嚜鍔ㄥ鎸傚瓧骞曟帰娴嬮『搴忎负 `.ass -> .ssa -> .srt`锛屽苟鍦ㄦ暣宸ョ▼绾у埆閲嶆柊楠岃瘉鏋勫缓閫氳繃銆?
 
 
 
-- 新增 `AssParser`，解析 `Script Info / Styles / Events`，覆盖常用 `\b \i \u \s \fs \fn \an \a \pos \c/\1c \alpha/\1a \bord \shad \r` 标签。
 
 
 
-- 让 `PlayerCore` 计算多条当前激活字幕，并通过 `IVideoRenderer::setSubtitleItems()` 把结构化字幕对象直接送入 `D3D11VideoRenderer`。
-
-
-
-- 在 `D3D11VideoRenderer` 同一块 swap chain backbuffer 上完成 ASS/SSA 文本填充、描边、阴影、背景框、对齐和定位绘制；非 D3D11 渲染器默认退化为纯文本显示。
-
-
-
-- 更新 `main.cpp` 的自动外挂字幕探测顺序为 `.ass -> .ssa -> .srt`，并在整工程级别重新验证构建通过。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -2640,7 +2476,14 @@
 
 
 
-## 问题 57: D3D11 原生 GPU 渲染链补齐
+## 闂 57: D3D11 鍘熺敓 GPU 娓叉煋閾捐ˉ榻?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-18
 
 
 
@@ -2648,71 +2491,55 @@
 
 
 
-**日期**: 2026-03-18
+### 闂鎻忚堪
+
+
+
+- `D3D11VideoRenderer` 宸茬粡鍏峰鐙珛鐨?D3D11 瑙嗛鍛堢幇鑳藉姏锛屼絾瀛楀箷浠嶇劧鍙繚瀛樻枃鏈姸鎬侊紝娌℃湁鐪熸缁樺埗鍒板悓涓€鍧?swap chain backbuffer 涓娿€?
+
+
+- 鏃у垎鏋愭枃妗ｄ粛鎶?D3D11 renderer 鎻忚堪涓?SDL 鍖呰鍣紝宸茬粡涓嶇鍚堝綋鍓嶄粨搴撶姸鎬併€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- `D3D11VideoRenderer` 已经具备独立的 D3D11 视频呈现能力，但字幕仍然只保存文本状态，没有真正绘制到同一块 swap chain backbuffer 上。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 旧分析文档仍把 D3D11 renderer 描述为 SDL 包装器，已经不符合当前仓库状态。
+- 鍘熺敓瑙嗛涓婚潰涓?D3D11VA device sharing 宸茬粡钀藉湴锛屽墿浣欑己鍙ｉ泦涓湪瀛楀箷鍙犲姞杩欎竴鍧楁渶鍚庣殑 UI/overlay 鍚堟垚璺緞銆?
+
+
+- 濡傛灉瀛楀箷浠嶄緷璧?SDL `Display` 鎴栬蒋浠剁汗鐞嗛摼锛屾暣鏉℃覆鏌撻摼灏变笉鑳界О涓衡€滃畬鏁淬€佺嫭绔嬨€佸師鐢?D3D11 GPU 閾捐矾鈥濄€?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 原生视频主面与 D3D11VA device sharing 已经落地，剩余缺口集中在字幕叠加这一块最后的 UI/overlay 合成路径。
+### 瑙ｅ喅鏂规
 
 
 
-- 如果字幕仍依赖 SDL `Display` 或软件纹理链，整条渲染链就不能称为“完整、独立、原生 D3D11 GPU 链路”。
+- 鍦?`D3D11VideoRenderer` 鍐呮柊澧?D2D1 / DirectWrite 璧勬簮锛岀洿鎺ュ DXGI swap chain backbuffer 杩涜瀛楀箷鏂囨湰缁樺埗銆?
 
 
+- 淇濈暀鐜版湁 D3D11 瑙嗛闈㈤噰鏍疯矾寰勶紝骞跺皢瀛楀箷缁樺埗涓插埌鍚屼竴甯?present 鍓嶃€?
 
 
+- 瀵规殏鍋滄€佸瓧骞曞彉鍖栧鍔犲嵆鏃堕噸缁橈紝纭繚 seek / frame-step 鍚庡瓧骞曚笌瑙嗛鐘舵€佷竴鑷淬€?
 
 
-
-### 解决方案
-
-
-
-- 在 `D3D11VideoRenderer` 内新增 D2D1 / DirectWrite 资源，直接对 DXGI swap chain backbuffer 进行字幕文本绘制。
-
-
-
-- 保留现有 D3D11 视频面采样路径，并将字幕绘制串到同一帧 present 前。
-
-
-
-- 对暂停态字幕变化增加即时重绘，确保 seek / frame-step 后字幕与视频状态一致。
-
-
-
-- 同步更新设计文档和旧分析文档的历史说明，避免后续继续沿用过期结论。
+- 鍚屾鏇存柊璁捐鏂囨。鍜屾棫鍒嗘瀽鏂囨。鐨勫巻鍙茶鏄庯紝閬垮厤鍚庣画缁х画娌跨敤杩囨湡缁撹銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -2756,7 +2583,7 @@
 
 
 
-## 问题 12: 企业级多线程架构重构
+## 闂 12: 浼佷笟绾у绾跨▼鏋舵瀯閲嶆瀯
 
 
 
@@ -2764,7 +2591,7 @@
 
 
 
-**日期**: 2026-02-27
+**鏃ユ湡**: 2026-02-27
 
 
 
@@ -2772,7 +2599,7 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -2780,27 +2607,17 @@
 
 
 
-原有架构存在以下问题：
+鍘熸湁鏋舵瀯瀛樺湪浠ヤ笅闂锛?
+
+
+1. 缁勪欢鑱岃矗涓嶆竻鏅帮紝VideoPlayer 鎵挎媴杩囧鑱岃矗
 
 
 
-1. 组件职责不清晰，VideoPlayer 承担过多职责
+2. 绾跨▼妯″瀷澶嶆潅锛岄毦浠ョ淮鎶?
 
 
-
-2. 线程模型复杂，难以维护
-
-
-
-3. 内存管理容易出错，导致双重释放等 bug
-
-
-
-
-
-
-
-### 解决方案
+3. 鍐呭瓨绠＄悊瀹规槗鍑洪敊锛屽鑷村弻閲嶉噴鏀剧瓑 bug
 
 
 
@@ -2808,7 +2625,15 @@
 
 
 
-重构为企业级多线程架构：
+### 瑙ｅ喅鏂规
+
+
+
+
+
+
+
+閲嶆瀯涓轰紒涓氱骇澶氱嚎绋嬫灦鏋勶細
 
 
 
@@ -2820,60 +2645,46 @@
 
 
 
-┌─────────────────────────────────────────────────────────────┐
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 
 
-
-│                    VideoPlayer (主控制器)                    │
-
+鈹?                   VideoPlayer (涓绘帶鍒跺櫒)                    鈹?
 
 
-├─────────────────────────────────────────────────────────────┤
+鈹溾攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 
 
-
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-
+鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹?
 
 
-│  │ Demuxer      │  │ DecoderWorker│  │ Display      │      │
+鈹? 鈹?Demuxer      鈹? 鈹?DecoderWorker鈹? 鈹?Display      鈹?     鈹?
 
 
-
-│  │ (解封装器)    │  │ (解码工作线程)│  │ (渲染器)     │      │
-
+鈹? 鈹?(瑙ｅ皝瑁呭櫒)    鈹? 鈹?(瑙ｇ爜宸ヤ綔绾跨▼)鈹? 鈹?(娓叉煋鍣?     鈹?     鈹?
 
 
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
+鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹?
 
 
-
-│         │                 │                 │               │
-
+鈹?        鈹?                鈹?                鈹?              鈹?
 
 
-│         ▼                 ▼                 ▼               │
+鈹?        鈻?                鈻?                鈻?              鈹?
 
 
-
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-
+鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹?
 
 
-│  │PacketQueue   │  │ Clock        │  │ AudioPlayer  │      │
+鈹? 鈹侾acketQueue   鈹? 鈹?Clock        鈹? 鈹?AudioPlayer  鈹?     鈹?
 
 
-
-│  │ (包队列)     │  │ (时钟同步)   │  │ (音频播放)   │      │
-
+鈹? 鈹?(鍖呴槦鍒?     鈹? 鈹?(鏃堕挓鍚屾)   鈹? 鈹?(闊抽鎾斁)   鈹?     鈹?
 
 
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
+鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹? 鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     鈹?
 
 
-
-└─────────────────────────────────────────────────────────────┘
-
+鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?
 
 
 ```
@@ -2884,7 +2695,7 @@
 
 
 
-### 新增组件
+### 鏂板缁勪欢
 
 
 
@@ -2892,119 +2703,114 @@
 
 
 
-1. **Demuxer (解封装器)**
+1. **Demuxer (瑙ｅ皝瑁呭櫒)**
 
 
 
-   - 封装 AVFormatContext 的读取操作
+   - 灏佽 AVFormatContext 鐨勮鍙栨搷浣?
 
 
+   - 鎻愪緵缁熶竴鐨?packet 璇诲彇鎺ュ彛
 
-   - 提供统一的 packet 读取接口
 
 
+   - 鏀寔 seek 鎿嶄綔
 
-   - 支持 seek 操作
 
 
 
 
 
 
+2. **DecoderWorker (瑙ｇ爜宸ヤ綔绾跨▼)**
 
-2. **DecoderWorker (解码工作线程)**
 
 
+   - 灏佽鍗曚釜娴佺殑瑙ｇ爜閫昏緫
 
-   - 封装单个流的解码逻辑
 
 
+   - 浠?PacketQueue 鑾峰彇 packet锛岃В鐮佸悗閫氳繃鍥炶皟杈撳嚭
 
-   - 从 PacketQueue 获取 packet，解码后通过回调输出
 
 
+   - 鏀寔鏆傚仠/鎭㈠/flush
 
-   - 支持暂停/恢复/flush
 
 
 
 
 
 
+3. **ThreadSafeQueue (绾跨▼瀹夊叏闃熷垪)**
 
-3. **ThreadSafeQueue (线程安全队列)**
 
 
+   - 閫氱敤鐨勭嚎绋嬪畨鍏ㄩ槦鍒楁ā鏉?
 
-   - 通用的线程安全队列模板
 
+   - 鏀寔闃诲鍜岄潪闃诲鎿嶄綔
 
 
-   - 支持阻塞和非阻塞操作
 
+   - 鏀寔 EOF 淇″彿浼犻€?
 
 
-   - 支持 EOF 信号传递
 
 
 
 
+4. **Clock (鏃堕挓鍚屾)**
 
 
 
-4. **Clock (时钟同步)**
+   - 绠＄悊涓绘椂閽?
 
 
+   - 璁＄畻闊宠棰戝悓姝ュ欢杩?
 
-   - 管理主时钟
 
+   - 鏀寔澶氱鍚屾妯″紡
 
 
-   - 计算音视频同步延迟
 
 
 
-   - 支持多种同步模式
 
 
+### 淇敼鏂囦欢
 
 
 
 
 
-### 修改文件
 
 
+- 鏂板 `include/demuxer.h`, `src/demuxer.cpp`
 
 
 
+- 鏂板 `include/decoder_worker.h`, `src/decoder_worker.cpp`
 
 
-- 新增 `include/demuxer.h`, `src/demuxer.cpp`
 
+- 鏂板 `include/thread_safe_queue.h`
 
 
-- 新增 `include/decoder_worker.h`, `src/decoder_worker.cpp`
 
+- 鏂板 `include/clock.h`, `src/clock.cpp`
 
 
-- 新增 `include/thread_safe_queue.h`
 
+- 閲嶆瀯 `include/video_player.h`, `src/video_player.cpp`
 
 
-- 新增 `include/clock.h`, `src/clock.cpp`
 
+- 淇敼 `CMakeLists.txt`
 
 
-- 重构 `include/video_player.h`, `src/video_player.cpp`
 
-
-
-- 修改 `CMakeLists.txt`
-
-
-
-- 修复 `src/packet_reader.cpp` 双重释放 bug
+- 淇 `src/packet_reader.cpp` 鍙岄噸閲婃斁 bug
 
 
 
@@ -3020,7 +2826,7 @@
 
 
 
-## 问题 11: 并发读取 AVFormatContext 导致崩溃
+## 闂 11: 骞跺彂璇诲彇 AVFormatContext 瀵艰嚧宕╂簝
 
 
 
@@ -3028,7 +2834,7 @@
 
 
 
-**日期**: 2026-02-27
+**鏃ユ湡**: 2026-02-27
 
 
 
@@ -3036,7 +2842,7 @@
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -3044,7 +2850,7 @@
 
 
 
-播放视频时出现大量 FFmpeg 解码错误和访问冲突崩溃：
+鎾斁瑙嗛鏃跺嚭鐜板ぇ閲?FFmpeg 瑙ｇ爜閿欒鍜岃闂啿绐佸穿婧冿細
 
 
 
@@ -3060,8 +2866,7 @@
 
 
 
-0xC0000005: 写入位置 0x... 时发生访问冲突
-
+0xC0000005: 鍐欏叆浣嶇疆 0x... 鏃跺彂鐢熻闂啿绐?
 
 
 ```
@@ -3072,7 +2877,7 @@
 
 
 
-### 原因分析
+### 鍘熷洜鍒嗘瀽
 
 
 
@@ -3080,151 +2885,146 @@
 
 
 
-视频解码线程 (`VideoDecodeThread`) 和音频解码线程 (`AudioDecodeThread`) 各自拥有独立的解码器实例，但共享同一个 `AVFormatContext`。两个线程并发调用 `av_read_frame(format_ctx_, packet)` 导致数据竞争，读取到的 packet 数据错乱，引发 H264 解码错误和内存访问冲突。
+瑙嗛瑙ｇ爜绾跨▼ (`VideoDecodeThread`) 鍜岄煶棰戣В鐮佺嚎绋?(`AudioDecodeThread`) 鍚勮嚜鎷ユ湁鐙珛鐨勮В鐮佸櫒瀹炰緥锛屼絾鍏变韩鍚屼竴涓?`AVFormatContext`銆備袱涓嚎绋嬪苟鍙戣皟鐢?`av_read_frame(format_ctx_, packet)` 瀵艰嚧鏁版嵁绔炰簤锛岃鍙栧埌鐨?packet 鏁版嵁閿欎贡锛屽紩鍙?H264 瑙ｇ爜閿欒鍜屽唴瀛樿闂啿绐併€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 解决方案
 
 
 
 
 
 
+寮曞叆缁熶竴鐨?`PacketReaderThread` 浣滀负鍞竴鐨?packet 璇诲彇鍏ュ彛锛?
 
-引入统一的 `PacketReaderThread` 作为唯一的 packet 读取入口：
 
 
 
 
 
+1. **鏂板 PacketReaderThread 绫?*
 
 
-1. **新增 PacketReaderThread 类**
 
+   - 浣滀负鍞竴鐨?`av_read_frame()` 璋冪敤鐐?
 
 
-   - 作为唯一的 `av_read_frame()` 调用点
+   - 鏍规嵁 stream_index 灏?packet 鍒嗗彂鍒板搴旂殑 PacketQueue
 
 
 
-   - 根据 stream_index 将 packet 分发到对应的 PacketQueue
 
 
 
 
+2. **鏂板 PacketRef 鍜?PacketQueue 绫?*
 
 
 
-2. **新增 PacketRef 和 PacketQueue 类**
+   - `PacketRef`: 鍖呰 AVPacket 鐨勬櫤鑳界粨鏋勪綋锛屾敮鎸佺Щ鍔ㄨ涔?
 
 
+   - `PacketQueue`: 绾跨▼瀹夊叏鐨?packet 闃熷垪锛屾敮鎸侀樆濉炵瓑寰?
 
-   - `PacketRef`: 包装 AVPacket 的智能结构体，支持移动语义
 
 
 
-   - `PacketQueue`: 线程安全的 packet 队列，支持阻塞等待
 
 
+3. **淇敼瑙ｇ爜鍣ㄦ帴鍙?*
 
 
 
+   - `VideoDecoder` 鍜?`AudioDecoder` 鏂板 `decodePacket()` 鏂规硶
 
 
-3. **修改解码器接口**
 
+   - 鎺ユ敹澶栭儴浼犲叆鐨?packet锛岃€岄潪鍐呴儴璇诲彇
 
 
-   - `VideoDecoder` 和 `AudioDecoder` 新增 `decodePacket()` 方法
 
 
 
-   - 接收外部传入的 packet，而非内部读取
 
 
+4. **閲嶆瀯瑙ｇ爜绾跨▼**
 
 
 
+   - `VideoDecodeThread` 鍜?`AudioDecodeThread` 浠?`PacketQueue` 鑾峰彇 packet
 
 
-4. **重构解码线程**
 
+   - 涓嶅啀鐩存帴璋冪敤 `av_read_frame()`
 
 
-   - `VideoDecodeThread` 和 `AudioDecodeThread` 从 `PacketQueue` 获取 packet
 
 
 
-   - 不再直接调用 `av_read_frame()`
 
 
+### 淇敼鏂囦欢
 
 
 
 
 
-### 修改文件
 
 
+- 鏂板 `include/packet_reader.h`
 
 
 
+- 鏂板 `src/packet_reader.cpp`
 
 
-- 新增 `include/packet_reader.h`
 
+- 淇敼 `include/video_decoder.h`
 
 
-- 新增 `src/packet_reader.cpp`
 
+- 淇敼 `src/video_decoder.cpp`
 
 
-- 修改 `include/video_decoder.h`
 
+- 淇敼 `include/audio_decoder.h`
 
 
-- 修改 `src/video_decoder.cpp`
 
+- 淇敼 `src/audio_decoder.cpp`
 
 
-- 修改 `include/audio_decoder.h`
 
+- 淇敼 `include/video_decode_thread.h`
 
 
-- 修改 `src/audio_decoder.cpp`
 
+- 淇敼 `src/video_decode_thread.cpp`
 
 
-- 修改 `include/video_decode_thread.h`
 
+- 淇敼 `include/audio_decode_thread.h`
 
 
-- 修改 `src/video_decode_thread.cpp`
 
+- 淇敼 `src/audio_decode_thread.cpp`
 
 
-- 修改 `include/audio_decode_thread.h`
 
+- 淇敼 `include/video_player.h`
 
 
-- 修改 `src/audio_decode_thread.cpp`
 
+- 淇敼 `src/video_player.cpp`
 
 
-- 修改 `include/video_player.h`
 
-
-
-- 修改 `src/video_player.cpp`
-
-
-
-- 修改 `CMakeLists.txt`
+- 淇敼 `CMakeLists.txt`
 
 
 
@@ -3240,7 +3040,7 @@
 
 
 
-## 问题 10: 多解码器实例竞争读取导致解码错误
+## 闂 10: 澶氳В鐮佸櫒瀹炰緥绔炰簤璇诲彇瀵艰嚧瑙ｇ爜閿欒
 
 
 
@@ -3248,79 +3048,75 @@
 
 
 
-## 问题 1: FFmpeg 8.0 兼容性问题
+## 闂 1: FFmpeg 8.0 鍏煎鎬ч棶棰?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-02-17
 
-**日期**: 2026-02-17
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
 
 
 
 
+缂栬瘧鏃舵姤閿欙紝`codec_ctx_->avctx->priv_data` 鍦?FFmpeg 8.0 涓笉鍙敤銆?
 
-编译时报错，`codec_ctx_->avctx->priv_data` 在 FFmpeg 8.0 中不可用。
 
 
 
 
 
+### 鍘熷洜
 
 
-### 原因
 
 
 
 
 
+FFmpeg 8.0 鏇存敼浜?API锛岀Щ闄や簡瀵?`avctx->priv_data` 鐨勭洿鎺ヨ闂€?
 
 
-FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
 
 
 
 
+淇敼 `video_decoder.cpp` 鍜?`audio_decoder.cpp`锛?
 
 
+- 鍦ㄨВ鐮佸櫒绫讳腑娣诲姞 `format_ctx_` 鎴愬憳鍙橀噺
 
-修改 `video_decoder.cpp` 和 `audio_decoder.cpp`：
 
 
+- 鐩存帴浣跨敤浼犲叆鐨?format context 鑰岄潪浠?codec context 鑾峰彇
 
-- 在解码器类中添加 `format_ctx_` 成员变量
 
 
 
-- 直接使用传入的 format context 而非从 codec context 获取
 
 
 
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -3356,7 +3152,7 @@ FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
 
 
 
-## 问题 2: 视频流索引不匹配
+## 闂 2: 瑙嗛娴佺储寮曚笉鍖归厤
 
 
 
@@ -3364,7 +3160,7 @@ FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
 
 
 
-**日期**: 2026-02-24
+**鏃ユ湡**: 2026-02-24
 
 
 
@@ -3372,7 +3168,7 @@ FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -3380,7 +3176,7 @@ FFmpeg 8.0 更改了 API，移除了对 `avctx->priv_data` 的直接访问。
 
 
 
-播放 mp4 文件时，视频无法正常显示。日志显示：
+鎾斁 mp4 鏂囦欢鏃讹紝瑙嗛鏃犳硶姝ｅ父鏄剧ず銆傛棩蹇楁樉绀猴細
 
 
 
@@ -3400,7 +3196,14 @@ decodeFrame: packet stream mismatch, skipping
 
 
 
-程序循环 48 次才能读到正确的视频帧。
+绋嬪簭寰幆 48 娆℃墠鑳借鍒版纭殑瑙嗛甯с€?
+
+
+
+
+
+
+### 鍘熷洜
 
 
 
@@ -3408,7 +3211,14 @@ decodeFrame: packet stream mismatch, skipping
 
 
 
-### 原因
+MP4 鏂囦欢鐨勬祦椤哄簭鏄細闊抽娴?绱㈠紩 0) 鍦ㄥ墠锛岃棰戞祦(绱㈠紩 1) 鍦ㄥ悗銆俙av_read_frame()` 杩斿洖鐨勫寘鍙兘鏄换鎰忔祦鐨勶紙閫氬父鏄涓€涓祦 - 闊抽娴侊級銆傚師浠ｇ爜閬囧埌涓嶅尮閰嶇殑娴佹椂鐩存帴杩斿洖 false锛屽鑷磋棰戝抚鏃犳硶瑙ｇ爜銆?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
 
 
 
@@ -3416,39 +3226,21 @@ decodeFrame: packet stream mismatch, skipping
 
 
 
-MP4 文件的流顺序是：音频流(索引 0) 在前，视频流(索引 1) 在后。`av_read_frame()` 返回的包可能是任意流的（通常是第一个流 - 音频流）。原代码遇到不匹配的流时直接返回 false，导致视频帧无法解码。
+淇敼 `src/video_decoder.cpp` 鐨?`decodeFrame()` 鏂规硶锛?
+
+
+- 灏嗛亣鍒颁笉鍖归厤娴佹椂杩斿洖 false锛屾敼涓?continue 璺宠繃璇ュ寘
+
+
+
+- 寰幆璇诲彇鐩村埌鎵惧埌姝ｇ‘娴佺储寮曠殑鍖?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-
-
-
-
-修改 `src/video_decoder.cpp` 的 `decodeFrame()` 方法：
-
-
-
-- 将遇到不匹配流时返回 false，改为 continue 跳过该包
-
-
-
-- 循环读取直到找到正确流索引的包
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -3464,7 +3256,7 @@ MP4 文件的流顺序是：音频流(索引 0) 在前，视频流(索引 1) 在
 
 
 
-### 代码变更
+### 浠ｇ爜鍙樻洿
 
 
 
@@ -3476,8 +3268,7 @@ MP4 文件的流顺序是：音频流(索引 0) 在前，视频流(索引 1) 在
 
 
 
-// 修改前
-
+// 淇敼鍓?
 
 
 if (packet->stream_index != stream_idx_) {
@@ -3504,8 +3295,7 @@ if (packet->stream_index != stream_idx_) {
 
 
 
-// 修改后
-
+// 淇敼鍚?
 
 
 while (true) {
@@ -3528,7 +3318,7 @@ while (true) {
 
 
 
-        continue;  // 继续循环读取
+        continue;  // 缁х画寰幆璇诲彇
 
 
 
@@ -3536,7 +3326,7 @@ while (true) {
 
 
 
-    break;  // 找到正确的流
+    break;  // 鎵惧埌姝ｇ‘鐨勬祦
 
 
 
@@ -3560,7 +3350,7 @@ while (true) {
 
 
 
-## 问题 3: 音频流索引不匹配
+## 闂 3: 闊抽娴佺储寮曚笉鍖归厤
 
 
 
@@ -3568,7 +3358,7 @@ while (true) {
 
 
 
-**日期**: 2026-02-24
+**鏃ユ湡**: 2026-02-24
 
 
 
@@ -3576,7 +3366,7 @@ while (true) {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -3584,7 +3374,14 @@ while (true) {
 
 
 
-与视频流索引相同的问题，但出现在音频解码器中。
+涓庤棰戞祦绱㈠紩鐩稿悓鐨勯棶棰橈紝浣嗗嚭鐜板湪闊抽瑙ｇ爜鍣ㄤ腑銆?
+
+
+
+
+
+
+### 鍘熷洜
 
 
 
@@ -3592,7 +3389,14 @@ while (true) {
 
 
 
-### 原因
+鍚屾牱鐨勯棶棰橈細闊抽鍖呭彲鑳戒笉鏄涓€涓璇诲彇鐨勬祦銆?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
 
 
 
@@ -3600,31 +3404,14 @@ while (true) {
 
 
 
-同样的问题：音频包可能不是第一个被读取的流。
+淇敼 `src/audio_decoder.cpp` 鐨?`decodeFrame()` 鏂规硶锛屽簲鐢ㄤ笌瑙嗛瑙ｇ爜鍣ㄧ浉鍚岀殑淇銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-
-
-
-
-修改 `src/audio_decoder.cpp` 的 `decodeFrame()` 方法，应用与视频解码器相同的修复。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -3648,7 +3435,7 @@ while (true) {
 
 
 
-## 问题 4: YUV 数据渲染错误
+## 闂 4: YUV 鏁版嵁娓叉煋閿欒
 
 
 
@@ -3656,7 +3443,7 @@ while (true) {
 
 
 
-**日期**: 2026-02-24
+**鏃ユ湡**: 2026-02-24
 
 
 
@@ -3664,7 +3451,7 @@ while (true) {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -3672,67 +3459,62 @@ while (true) {
 
 
 
-解码成功后程序立即退出，没有画面显示。
+瑙ｇ爜鎴愬姛鍚庣▼搴忕珛鍗抽€€鍑猴紝娌℃湁鐢婚潰鏄剧ず銆?
 
 
 
 
 
 
+### 鍘熷洜
 
-### 原因
 
 
 
 
 
 
+`renderFrame` 鍑芥暟浣跨敤閿欒鐨?YUV 鏁版嵁锛?
 
-`renderFrame` 函数使用错误的 YUV 数据：
 
+- 鍘熸潵浼犻€掔殑鏄?`frame->data[0]`锛堝彧鏄?Y 骞抽潰鎸囬拡锛?
 
 
-- 原来传递的是 `frame->data[0]`（只是 Y 平面指针）
+- 鐒跺悗閿欒鍦板亣璁?Y/U/V 鏄繛缁瓨鍌ㄧ殑
 
 
 
-- 然后错误地假设 Y/U/V 是连续存储的
 
 
 
 
+瀹為檯涓?AVFrame 涓?Y/U/V 鏄垎寮€瀛樺偍鐨勶紝浣跨敤 `linesize` 鏉ヨ绠楁瘡琛岀殑姝ラ暱銆?
 
 
 
-实际上 AVFrame 中 Y/U/V 是分开存储的，使用 `linesize` 来计算每行的步长。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
 
-### 解决方案
 
 
 
+1. 浼犻€掓暣涓?AVFrame 鎸囬拡鑰屼笉鏄?`data[0]`
 
 
 
+2. 姝ｇ‘浣跨敤 Y/U/V 骞抽潰鐨勬暟鎹拰琛屽ぇ灏?
 
-1. 传递整个 AVFrame 指针而不是 `data[0]`
 
 
 
-2. 正确使用 Y/U/V 平面的数据和行大小
 
 
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -3752,7 +3534,7 @@ while (true) {
 
 
 
-### 代码变更
+### 浠ｇ爜鍙樻洿
 
 
 
@@ -3764,8 +3546,7 @@ while (true) {
 
 
 
-// video_player.cpp - 修改前
-
+// video_player.cpp - 淇敼鍓?
 
 
 display_->renderFrame(frame->data[0], frame->width, frame->height);
@@ -3776,8 +3557,7 @@ display_->renderFrame(frame->data[0], frame->width, frame->height);
 
 
 
-// video_player.cpp - 修改后
-
+// video_player.cpp - 淇敼鍚?
 
 
 display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
@@ -3788,12 +3568,11 @@ display_->renderFrame((const uint8_t*)frame, frame->width, frame->height);
 
 
 
-// display.cpp - renderFrame 函数
+// display.cpp - renderFrame 鍑芥暟
 
 
 
-// 修改前
-
+// 淇敼鍓?
 
 
 int ret = SDL_UpdateYUVTexture(
@@ -3824,8 +3603,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-// 修改后
-
+// 淇敼鍚?
 
 
 AVFrame* frame = (AVFrame*)data;
@@ -3872,7 +3650,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-## 问题 5: 企业级 Quill 日志通道
+## 闂 5: 浼佷笟绾?Quill 鏃ュ織閫氶亾
 
 
 
@@ -3880,7 +3658,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-**日期**: 2026-02-24
+**鏃ユ湡**: 2026-02-24
 
 
 
@@ -3888,7 +3666,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -3896,71 +3674,62 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-- 旧日志系统只使用 `std::cout/std::cerr`，无法满足企业记录、异步写盘与轮转需求。
+- 鏃ф棩蹇楃郴缁熷彧浣跨敤 `std::cout/std::cerr`锛屾棤娉曟弧瓒充紒涓氳褰曘€佸紓姝ュ啓鐩樹笌杞浆闇€姹傘€?
 
 
+- 鏃犺繍琛屾椂閰嶇疆閫氶亾锛屾棤娉曟牴鎹幆澧冭皟鏁存棩蹇楃洰褰曘€佹枃浠跺ぇ灏忎笌绛夌骇闃堝€笺€?
 
-- 无运行时配置通道，无法根据环境调整日志目录、文件大小与等级阈值。
 
+- 缂轰箯鍋ュ．鎬э細鐩綍涓嶅彲鍐欐垨 Quill 鍒濆鍖栧け璐ユ椂娌℃湁鏄庣‘鍛婅涓庨檷绾ч€昏緫銆?
 
 
-- 缺乏健壮性：目录不可写或 Quill 初始化失败时没有明确告警与降级逻辑。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
 
 
 
 
+- 涓鸿閬?Quill v6.x API 鍙樻洿鏇句复鏃剁鐢?Quill锛屽紩璧峰姛鑳藉€掗€€銆?
 
 
+- Logger 閫昏緫闆嗕腑鍦ㄥご鏂囦欢瀹忓唴锛屾墿灞曠偣鏈夐檺锛屾柊澧為厤缃笌闄嶇骇璺緞鍥伴毦銆?
 
-- 为规避 Quill v6.x API 变更曾临时禁用 Quill，引起功能倒退。
 
 
 
-- Logger 逻辑集中在头文件宏内，扩展点有限，新增配置与降级路径困难。
 
 
+### 瑙ｅ喅鏂规
 
 
 
 
 
-### 解决方案
 
 
+- 閲嶆柊鍚敤 Quill锛屾瀯寤哄紓姝?Backend + ConsoleSink + RotatingFileSink 鍙岄€氶亾锛涙棩蹇楁寜鐓?`[time][level][thread][logger][category] message` 缁熶竴鏍煎紡杈撳嚭銆?
 
 
+- 鏂板 `LoggingConfigLoader`锛岃В鏋?`config/logging.conf` 鍙?`MVP_LOG_*` 鐜鍙橀噺锛岄潪娉曞€艰嚜鍔ㄧ籂姝ｅ苟杈撳嚭 `LOG_WARNING`銆?
 
 
+- 褰?`USE_QUILL_LOGGING` 鏈畾涔夈€佺洰褰曚笉鍙啓鎴?Quill 鎶涘嚭寮傚父鏃讹紝鑷姩闄嶇骇鍒?stdout/stderr锛屽苟淇濈暀鏃у畯琛屼负銆?
 
-- 重新启用 Quill，构建异步 Backend + ConsoleSink + RotatingFileSink 双通道；日志按照 `[time][level][thread][logger][category] message` 统一格式输出。
 
+- 鍚屾鏇存柊鏂囨。锛圠OGGING.md銆乂ERSION.md銆丆HANGELOG.md锛夊苟鎻愪緵榛樿閰嶇疆鏂囦欢銆?
 
 
-- 新增 `LoggingConfigLoader`，解析 `config/logging.conf` 及 `MVP_LOG_*` 环境变量，非法值自动纠正并输出 `LOG_WARNING`。
 
 
 
-- 当 `USE_QUILL_LOGGING` 未定义、目录不可写或 Quill 抛出异常时，自动降级到 stdout/stderr，并保留旧宏行为。
 
-
-
-- 同步更新文档（LOGGING.md、VERSION.md、CHANGELOG.md）并提供默认配置文件。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -4004,131 +3773,132 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-## 问题 6: 多线程播放架构重构
+## 闂 6: 澶氱嚎绋嬫挱鏀炬灦鏋勯噸鏋?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-02-25
 
-**日期**: 2026-02-25
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
 
 
 
 
+- 鍘熸湁鏋舵瀯涓哄崟绾跨▼ playLoop锛岃В鐮佸拰娓叉煋鍦ㄥ悓涓€绾跨▼
 
-- 原有架构为单线程 playLoop，解码和渲染在同一线程
 
 
+- 瑙嗛瑙ｇ爜浼氶樆濉炴覆鏌撶嚎绋嬶紝瀵艰嚧鐢婚潰鍗￠】
 
-- 视频解码会阻塞渲染线程，导致画面卡顿
 
 
+- 闊宠棰戝悓姝ュ疄鐜板洶闅?
 
-- 音视频同步实现困难
 
+- 闃熷垪婊℃椂 CPU 蹇欒疆璇㈠鑷村崰鐢ㄨ繃楂?
 
 
-- 队列满时 CPU 忙轮询导致占用过高
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
 
 
 
 
+1. **鏂板 FrameQueue 妯℃澘绫?*
 
 
 
-1. **新增 FrameQueue 模板类**
+   - 瀹炵幇绾跨▼瀹夊叏鐨勫抚闃熷垪
 
 
 
-   - 实现线程安全的帧队列
+   - 浣跨敤 condition_variable 瀹炵幇闃诲绛夊緟锛岄伩鍏?CPU 蹇欒疆璇?
 
 
+   - 鏀寔 push/pop/clear/stop 鎿嶄綔
 
-   - 使用 condition_variable 实现阻塞等待，避免 CPU 忙轮询
 
 
 
-   - 支持 push/pop/clear/stop 操作
 
 
 
+2. **鏂板 VideoDecodeThread 鍜?AudioDecodeThread**
 
 
 
+   - 鐙珛鐨勮棰?闊抽瑙ｇ爜绾跨▼
 
-2. **新增 VideoDecodeThread 和 AudioDecodeThread**
 
 
+   - 瑙ｇ爜鍚庣殑甯ч€氳繃 FrameQueue 浼犻€掔粰娓叉煋绾跨▼
 
-   - 独立的视频/音频解码线程
 
 
+   - 鏀寔 pause/resume/flush 鎺у埗
 
-   - 解码后的帧通过 FrameQueue 传递给渲染线程
 
 
 
-   - 支持 pause/resume/flush 控制
 
 
 
+3. **鏂板 SyncManager 鍚屾绠＄悊鍣?*
 
 
 
+   - 鏀寔 AudioMaster/VideoMaster/Free 涓夌鍚屾妯″紡
 
-3. **新增 SyncManager 同步管理器**
 
 
+   - 瀹炵幇甯у欢杩熻绠?
 
-   - 支持 AudioMaster/VideoMaster/Free 三种同步模式
 
+   - 瀹炵幇璺冲抚/閲嶅甯х瓥鐣?
 
 
-   - 实现帧延迟计算
 
 
 
-   - 实现跳帧/重复帧策略
 
+4. **閲嶆瀯 VideoPlayer**
 
 
 
+   - 浠庡崟绾跨▼ playLoop 鏀逛负澶氱嚎绋?renderLoop
 
 
 
-4. **重构 VideoPlayer**
+   - 娣诲姞 setSyncMode 鏂规硶鏀寔鍚屾妯″紡鍒囨崲
 
 
 
-   - 从单线程 playLoop 改为多线程 renderLoop
+   - 淇 AudioPlayer::play 绛惧悕涓嶅尮閰嶉棶棰?
 
 
 
-   - 添加 setSyncMode 方法支持同步模式切换
 
 
 
-   - 修复 AudioPlayer::play 签名不匹配问题
+### 淇敼鏂囦欢
 
 
 
@@ -4136,55 +3906,47 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 修改文件
+- 鏂板 `include/frame_queue.h`
 
 
 
+- 鏂板 `include/video_decode_thread.h`
 
 
 
+- 鏂板 `include/audio_decode_thread.h`
 
-- 新增 `include/frame_queue.h`
 
 
+- 鏂板 `include/sync_manager.h`
 
-- 新增 `include/video_decode_thread.h`
 
 
+- 鏂板 `src/video_decode_thread.cpp`
 
-- 新增 `include/audio_decode_thread.h`
 
 
+- 鏂板 `src/audio_decode_thread.cpp`
 
-- 新增 `include/sync_manager.h`
 
 
+- 鏂板 `src/sync_manager.cpp`
 
-- 新增 `src/video_decode_thread.cpp`
 
 
+- 淇敼 `include/video_player.h`
 
-- 新增 `src/audio_decode_thread.cpp`
 
 
+- 淇敼 `include/audio_decoder.h`
 
-- 新增 `src/sync_manager.cpp`
 
 
+- 淇敼 `src/video_player.cpp`
 
-- 修改 `include/video_player.h`
 
 
-
-- 修改 `include/audio_decoder.h`
-
-
-
-- 修改 `src/video_player.cpp`
-
-
-
-- 修改 `CMakeLists.txt`
+- 淇敼 `CMakeLists.txt`
 
 
 
@@ -4200,7 +3962,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-## 问题 7: 音频播放架构修复
+## 闂 7: 闊抽鎾斁鏋舵瀯淇
 
 
 
@@ -4208,7 +3970,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-**日期**: 2026-02-25
+**鏃ユ湡**: 2026-02-25
 
 
 
@@ -4216,7 +3978,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -4224,23 +3986,14 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-- AudioDecodeThread 解码后的音频通过 FrameQueue 传递给 renderLoop
+- AudioDecodeThread 瑙ｇ爜鍚庣殑闊抽閫氳繃 FrameQueue 浼犻€掔粰 renderLoop
 
 
 
-- renderLoop 逐帧调用 AudioPlayer::play()，导致音频断断续续
+- renderLoop 閫愬抚璋冪敤 AudioPlayer::play()锛屽鑷撮煶棰戞柇鏂画缁?
 
 
-
-- SDL 回调机制需要持续的数据流，当前实现无法满足
-
-
-
-
-
-
-
-### 解决方案
+- SDL 鍥炶皟鏈哄埗闇€瑕佹寔缁殑鏁版嵁娴侊紝褰撳墠瀹炵幇鏃犳硶婊¤冻
 
 
 
@@ -4248,15 +4001,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-1. 修改 AudioDecodeThread::start() 方法，增加 AudioPlayer* 参数
-
-
-
-2. 解码线程解码完成后，直接调用 audio_player_->play() 将数据放入 SDL 队列
-
-
-
-3. 移除 renderLoop 中的音频播放代码，由解码线程直接处理
+### 瑙ｅ喅鏂规
 
 
 
@@ -4264,7 +4009,23 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 修改文件
+1. 淇敼 AudioDecodeThread::start() 鏂规硶锛屽鍔?AudioPlayer* 鍙傛暟
+
+
+
+2. 瑙ｇ爜绾跨▼瑙ｇ爜瀹屾垚鍚庯紝鐩存帴璋冪敤 audio_player_->play() 灏嗘暟鎹斁鍏?SDL 闃熷垪
+
+
+
+3. 绉婚櫎 renderLoop 涓殑闊抽鎾斁浠ｇ爜锛岀敱瑙ｇ爜绾跨▼鐩存帴澶勭悊
+
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -4296,7 +4057,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-## 待解决的问题
+## 寰呰В鍐崇殑闂
 
 
 
@@ -4304,24 +4065,21 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 问题 8: 硬件加速解码支持
+### 闂 8: 纭欢鍔犻€熻В鐮佹敮鎸?
 
 
 
 
 
 
-
-**状态**: 待实现
-
+**鐘舵€?*: 寰呭疄鐜?
 
 
 
 
 
 
-需要添加 CUDA/D3D11VA 硬件加速解码支持，提升解码性能。
-
+闇€瑕佹坊鍔?CUDA/D3D11VA 纭欢鍔犻€熻В鐮佹敮鎸侊紝鎻愬崌瑙ｇ爜鎬ц兘銆?
 
 
 
@@ -4336,7 +4094,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-## 问题 9: VideoFrame/AudioFrame 移动语义缺陷导致崩溃
+## 闂 9: VideoFrame/AudioFrame 绉诲姩璇箟缂洪櫡瀵艰嚧宕╂簝
 
 
 
@@ -4344,7 +4102,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-**日期**: 2026-02-25
+**鏃ユ湡**: 2026-02-25
 
 
 
@@ -4352,7 +4110,7 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -4360,7 +4118,18 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-程序启动播放后立即崩溃，错误信息：
+绋嬪簭鍚姩鎾斁鍚庣珛鍗冲穿婧冿紝閿欒淇℃伅锛?
+
+
+```
+
+
+
+modern-video-player.exe - 搴旂敤绋嬪簭閿欒
+
+
+
+0x00007FFF7A80DA4C 鎸囦护寮曠敤浜?0xFFFFFFFFFFFFFFFF 鍐呭瓨銆傝鍐呭瓨涓嶈兘涓?read
 
 
 
@@ -4368,15 +4137,11 @@ int ret = SDL_UpdateYUVTexture(
 
 
 
-modern-video-player.exe - 应用程序错误
 
 
 
-0x00007FFF7A80DA4C 指令引用了 0xFFFFFFFFFFFFFFFF 内存。该内存不能为 read
 
-
-
-```
+### 鍘熷洜鍒嗘瀽
 
 
 
@@ -4384,23 +4149,14 @@ modern-video-player.exe - 应用程序错误
 
 
 
-### 原因分析
+`VideoFrame` 鍜?`AudioFrame` 绫荤己灏戞纭殑绉诲姩璇箟瀹炵幇銆?
 
 
 
 
 
 
-
-`VideoFrame` 和 `AudioFrame` 类缺少正确的移动语义实现。
-
-
-
-
-
-
-
-在 `FrameQueue::pop()` 中使用 `std::move` 将帧移动出队列：
+鍦?`FrameQueue::pop()` 涓娇鐢?`std::move` 灏嗗抚绉诲姩鍑洪槦鍒楋細
 
 
 
@@ -4424,7 +4180,14 @@ queue_.pop();
 
 
 
-由于没有定义移动构造函数和移动赋值运算符，默认的移动操作只是浅拷贝 `frame_` 指针。当原对象析构时调用 `av_frame_free(&frame_)` 释放内存，目标对象的 `frame_` 变成悬空指针。渲染循环访问此悬空指针时导致崩溃。
+鐢变簬娌℃湁瀹氫箟绉诲姩鏋勯€犲嚱鏁板拰绉诲姩璧嬪€艰繍绠楃锛岄粯璁ょ殑绉诲姩鎿嶄綔鍙槸娴呮嫹璐?`frame_` 鎸囬拡銆傚綋鍘熷璞℃瀽鏋勬椂璋冪敤 `av_frame_free(&frame_)` 閲婃斁鍐呭瓨锛岀洰鏍囧璞＄殑 `frame_` 鍙樻垚鎮┖鎸囬拡銆傛覆鏌撳惊鐜闂鎮┖鎸囬拡鏃跺鑷村穿婧冦€?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
 
 
 
@@ -4432,35 +4195,26 @@ queue_.pop();
 
 
 
-### 解决方案
+1. 涓?`VideoFrame` 绫绘坊鍔犵Щ鍔ㄦ瀯閫犲嚱鏁板拰绉诲姩璧嬪€艰繍绠楃
+
+
+
+2. 涓?`AudioFrame` 绫绘坊鍔犵Щ鍔ㄦ瀯閫犲嚱鏁板拰绉诲姩璧嬪€艰繍绠楃
+
+
+
+3. 鏄惧紡鍒犻櫎鎷疯礉鏋勯€犲嚱鏁板拰鎷疯礉璧嬪€艰繍绠楃
+
+
+
+4. 绉诲姩鏃跺皢鍘熷璞＄殑 `frame_` 鎸囬拡缃负 nullptr锛岄槻姝㈡瀽鏋勬椂閲婃斁浠嶈浣跨敤鐨勫唴瀛?
 
 
 
 
 
 
-
-1. 为 `VideoFrame` 类添加移动构造函数和移动赋值运算符
-
-
-
-2. 为 `AudioFrame` 类添加移动构造函数和移动赋值运算符
-
-
-
-3. 显式删除拷贝构造函数和拷贝赋值运算符
-
-
-
-4. 移动时将原对象的 `frame_` 指针置为 nullptr，防止析构时释放仍被使用的内存
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -4488,7 +4242,7 @@ queue_.pop();
 
 
 
-### 代码变更
+### 浠ｇ爜鍙樻洿
 
 
 
@@ -4500,7 +4254,7 @@ queue_.pop();
 
 
 
-// video_decoder.h - 添加移动语义声明
+// video_decoder.h - 娣诲姞绉诲姩璇箟澹版槑
 
 
 
@@ -4524,8 +4278,7 @@ VideoFrame& operator=(const VideoFrame&) = delete;
 
 
 
-// video_decoder.cpp - 实现移动构造函数
-
+// video_decoder.cpp - 瀹炵幇绉诲姩鏋勯€犲嚱鏁?
 
 
 VideoFrame::VideoFrame(VideoFrame&& other) noexcept
@@ -4552,7 +4305,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-// audio_decoder.h/cpp - 类似实现
+// audio_decoder.h/cpp - 绫讳技瀹炵幇
 
 
 
@@ -4572,7 +4325,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-## 问题 10: 多解码器实例竞争读取导致解码错误
+## 闂 10: 澶氳В鐮佸櫒瀹炰緥绔炰簤璇诲彇瀵艰嚧瑙ｇ爜閿欒
 
 
 
@@ -4580,7 +4333,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-**日期**: 2026-02-25
+**鏃ユ湡**: 2026-02-25
 
 
 
@@ -4588,7 +4341,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
@@ -4596,8 +4349,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-播放视频时出现大量 FFmpeg 解码错误：
-
+鎾斁瑙嗛鏃跺嚭鐜板ぇ閲?FFmpeg 瑙ｇ爜閿欒锛?
 
 
 ```
@@ -4628,7 +4380,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-### 原因分析
+### 鍘熷洜鍒嗘瀽
 
 
 
@@ -4636,7 +4388,21 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-在 `VideoPlayer::open()` 中创建了 `video_decoder_` 和 `audio_decoder_` 解码器实例用于获取视频信息。然后在 `play()` -> `initDecodeThreads()` 中又创建了 `VideoDecodeThread` 和 `AudioDecodeThread`，这两个类内部又各自创建了新的解码器实例。
+鍦?`VideoPlayer::open()` 涓垱寤轰簡 `video_decoder_` 鍜?`audio_decoder_` 瑙ｇ爜鍣ㄥ疄渚嬬敤浜庤幏鍙栬棰戜俊鎭€傜劧鍚庡湪 `play()` -> `initDecodeThreads()` 涓張鍒涘缓浜?`VideoDecodeThread` 鍜?`AudioDecodeThread`锛岃繖涓や釜绫诲唴閮ㄥ張鍚勮嚜鍒涘缓浜嗘柊鐨勮В鐮佸櫒瀹炰緥銆?
+
+
+
+
+
+
+涓や釜瑙ｇ爜鍣ㄥ悓鏃朵粠鍚屼竴涓?`AVFormatContext` 璇诲彇 packet锛岄€犳垚鏁版嵁绔炰簤锛屽鑷磋В鐮侀敊璇拰鏁版嵁鎹熷潖銆?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
 
 
 
@@ -4644,24 +4410,7 @@ VideoFrame::VideoFrame(VideoFrame&& other) noexcept
 
 
 
-两个解码器同时从同一个 `AVFormatContext` 读取 packet，造成数据竞争，导致解码错误和数据损坏。
-
-
-
-
-
-
-
-### 解决方案
-
-
-
-
-
-
-
-在 `play()` 方法中，调用 `initDecodeThreads()` 之前，先关闭并释放 `video_decoder_` 和 `audio_decoder_`：
-
+鍦?`play()` 鏂规硶涓紝璋冪敤 `initDecodeThreads()` 涔嬪墠锛屽厛鍏抽棴骞堕噴鏀?`video_decoder_` 鍜?`audio_decoder_`锛?
 
 
 
@@ -4724,7 +4473,7 @@ void VideoPlayer::play() {
 
 
 
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -4748,7 +4497,7 @@ void VideoPlayer::play() {
 
 
 
-## 相关文档
+## 鐩稿叧鏂囨。
 
 
 
@@ -4756,19 +4505,19 @@ void VideoPlayer::play() {
 
 
 
-- [VERSION.md](./VERSION.md) - 版本记录
+- [VERSION.md](./VERSION.md) - 鐗堟湰璁板綍
 
 
 
-- [ARCHITECTURE.md](../design/ARCHITECTURE.md) - 架构设计
+- [ARCHITECTURE.md](../design/ARCHITECTURE.md) - 鏋舵瀯璁捐
 
 
 
-- [WINDOWS_SETUP.md](../guides/WINDOWS_SETUP.md) - Windows 配置指南
+- [WINDOWS_SETUP.md](../guides/WINDOWS_SETUP.md) - Windows 閰嶇疆鎸囧崡
 
 
 
-- [LOGGING.md](../design/LOGGING.md) - 日志系统说明
+- [LOGGING.md](../design/LOGGING.md) - 鏃ュ織绯荤粺璇存槑
 
 
 
@@ -4784,7 +4533,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 13: Core API + Scheduler + Filter 多线程重构落地
+## 闂 13: Core API + Scheduler + Filter 澶氱嚎绋嬮噸鏋勮惤鍦?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-06
 
 
 
@@ -4792,67 +4548,52 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-06
+### 闂鎻忚堪
+
+
+
+- 闇€瑕佹寜瑙勬牸寮曞叆 Core API銆丼cheduler 鍜?Filter 鎻掍欢妗嗘灦锛屽苟淇濇寔 `VideoPlayer` 澶栭儴鎺ュ彛绋冲畾銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 需要按规格引入 Core API、Scheduler 和 Filter 插件框架，并保持 `VideoPlayer` 外部接口稳定。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鏃ф灦鏋勪互 `VideoPlayer` 鑱氬悎澶ч儴鍒嗚亴璐ｏ紝缂哄皯鍙紨杩涚殑鏍稿績灞備笌璋冨害灞傘€?
 
 
-
-
-### 原因分析
-
-
-
-- 旧架构以 `VideoPlayer` 聚合大部分职责，缺少可演进的核心层与调度层。
-
-
-
-- 缺少 `USE_NEW_PLAYER_CORE` 受控迁移路径下的新核心实现。
+- 缂哄皯 `USE_NEW_PLAYER_CORE` 鍙楁帶杩佺Щ璺緞涓嬬殑鏂版牳蹇冨疄鐜般€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增 `core` 模块：`PlayerCore`、`Scheduler`、`FrameQueue`、`Clock`、`Command`、`Frame`。
+### 瑙ｅ喅鏂规
 
 
 
-- 新增 `filters` 模块：过滤器接口、注册中心、处理管道、亮度/对比度/饱和度内置滤镜。
+- 鏂板 `core` 妯″潡锛歚PlayerCore`銆乣Scheduler`銆乣FrameQueue`銆乣Clock`銆乣Command`銆乣Frame`銆?
 
 
-
-- `VideoPlayer` 改造为双路径：`USE_NEW_PLAYER_CORE=ON` 走新核心，OFF 保持旧实现。
-
+- 鏂板 `filters` 妯″潡锛氳繃婊ゅ櫒鎺ュ彛銆佹敞鍐屼腑蹇冦€佸鐞嗙閬撱€佷寒搴?瀵规瘮搴?楗卞拰搴﹀唴缃护闀溿€?
 
 
-- 新增 `tests/core_frame_queue_tests.cpp`、`tests/core_clock_tests.cpp`。
+- `VideoPlayer` 鏀归€犱负鍙岃矾寰勶細`USE_NEW_PLAYER_CORE=ON` 璧版柊鏍稿績锛孫FF 淇濇寔鏃у疄鐜般€?
+
+
+- 鏂板 `tests/core_frame_queue_tests.cpp`銆乣tests/core_clock_tests.cpp`銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -4972,7 +4713,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 14: 架构收敛为 Core 单路径
+## 闂 14: 鏋舵瀯鏀舵暃涓?Core 鍗曡矾寰?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-06
 
 
 
@@ -4980,59 +4728,46 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-06
+### 闂鎻忚堪
+
+
+
+- 鍘嗗彶涓婂苟瀛樼殑鏂版棫鎾斁閾捐矾澧炲姞浜嗙淮鎶ゆ垚鏈拰琛屼负涓嶄竴鑷撮闄┿€?
 
 
 
 
 
 
-
-### 问题描述
-
+### 鍘熷洜鍒嗘瀽
 
 
-- 历史上并存的新旧播放链路增加了维护成本和行为不一致风险。
 
+- 鏃ч摼璺拰鏂伴摼璺叡瀛樺鑷存帓闅滆矾寰勫鏉傦紝涓旀棫閾捐矾瀛樺湪缁撴瀯鎬у苟鍙戦殣鎮ｃ€?
 
 
 
 
 
 
-### 原因分析
+### 瑙ｅ喅鏂规
 
 
 
-- 旧链路和新链路共存导致排障路径复杂，且旧链路存在结构性并发隐患。
+- 鍒犻櫎鏃ч摼璺ā鍧楋紝缁熶竴鍒?`VideoPlayer -> PlayerCore -> Scheduler -> Queue -> Output`銆?
 
 
+- 鏋勫缓绯荤粺鏀逛负浠呯紪璇戞柊鏍稿績妯″潡銆?
 
 
-
-
-
-### 解决方案
-
-
-
-- 删除旧链路模块，统一到 `VideoPlayer -> PlayerCore -> Scheduler -> Queue -> Output`。
-
-
-
-- 构建系统改为仅编译新核心模块。
-
-
-
-- 新增重构文档说明保留文件与职责边界。
+- 鏂板閲嶆瀯鏂囨。璇存槑淇濈暀鏂囦欢涓庤亴璐ｈ竟鐣屻€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -5052,8 +4787,7 @@ void VideoPlayer::play() {
 
 
 
-- 旧模块头源文件删除（见 DEVELOP_LOG 问题 14）
-
+- 鏃фā鍧楀ご婧愭枃浠跺垹闄わ紙瑙?DEVELOP_LOG 闂 14锛?
 
 
 
@@ -5068,7 +4802,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 15: 小屏窗口过大且拖拽缩放不稳定
+## 闂 15: 灏忓睆绐楀彛杩囧ぇ涓旀嫋鎷界缉鏀句笉绋冲畾
 
 
 
@@ -5076,7 +4810,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-06
+**鏃ユ湡**: 2026-03-06
 
 
 
@@ -5084,63 +4818,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 小屏设备播放高分辨率视频时，窗口初始尺寸过大，影响操作。
+- 灏忓睆璁惧鎾斁楂樺垎杈ㄧ巼瑙嗛鏃讹紝绐楀彛鍒濆灏哄杩囧ぇ锛屽奖鍝嶆搷浣溿€?
 
 
-
-- 窗口拖拽后部分场景下渲染区域未及时更新，用户感知为“窗口不能调整”。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- `Display::init()` 直接使用视频原始分辨率创建窗口，未按屏幕可用区域做首屏缩放。
-
-
-
-- 事件处理仅监听 `SDL_WINDOWEVENT_RESIZED`，未覆盖 `SDL_WINDOWEVENT_SIZE_CHANGED`。
-
-
-
-- 渲染目标区域直接使用窗口宽高，缺少按视频比例计算的目标矩形。
+- 绐楀彛鎷栨嫿鍚庨儴鍒嗗満鏅笅娓叉煋鍖哄煙鏈強鏃舵洿鏂帮紝鐢ㄦ埛鎰熺煡涓衡€滅獥鍙ｄ笉鑳借皟鏁粹€濄€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 启动时通过 `SDL_GetDisplayUsableBounds()` 计算可用屏幕区域，将初始窗口限制在可用区 90% 内并保持视频比例。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 同时处理 `SDL_WINDOWEVENT_RESIZED` 与 `SDL_WINDOWEVENT_SIZE_CHANGED`，确保窗口尺寸变化实时生效。
+- `Display::init()` 鐩存帴浣跨敤瑙嗛鍘熷鍒嗚鲸鐜囧垱寤虹獥鍙ｏ紝鏈寜灞忓箷鍙敤鍖哄煙鍋氶灞忕缉鏀俱€?
 
 
+- 浜嬩欢澶勭悊浠呯洃鍚?`SDL_WINDOWEVENT_RESIZED`锛屾湭瑕嗙洊 `SDL_WINDOWEVENT_SIZE_CHANGED`銆?
 
-- 按源视频比例计算 `SDL_RenderCopy` 的目标矩形，避免拖拽后画面拉伸。
+
+- 娓叉煋鐩爣鍖哄煙鐩存帴浣跨敤绐楀彛瀹介珮锛岀己灏戞寜瑙嗛姣斾緥璁＄畻鐨勭洰鏍囩煩褰€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鍚姩鏃堕€氳繃 `SDL_GetDisplayUsableBounds()` 璁＄畻鍙敤灞忓箷鍖哄煙锛屽皢鍒濆绐楀彛闄愬埗鍦ㄥ彲鐢ㄥ尯 90% 鍐呭苟淇濇寔瑙嗛姣斾緥銆?
+
+
+- 鍚屾椂澶勭悊 `SDL_WINDOWEVENT_RESIZED` 涓?`SDL_WINDOWEVENT_SIZE_CHANGED`锛岀‘淇濈獥鍙ｅ昂瀵稿彉鍖栧疄鏃剁敓鏁堛€?
+
+
+- 鎸夋簮瑙嗛姣斾緥璁＄畻 `SDL_RenderCopy` 鐨勭洰鏍囩煩褰紝閬垮厤鎷栨嫿鍚庣敾闈㈡媺浼搞€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -5164,7 +4890,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 16: 最大化/缩放时画面卡住，并补充基础交互控制
+## 闂 16: 鏈€澶у寲/缂╂斁鏃剁敾闈㈠崱浣忥紝骞惰ˉ鍏呭熀纭€浜や簰鎺у埗
 
 
 
@@ -5172,7 +4898,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5180,63 +4906,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 播放时最大化窗口或拖动缩放窗口，视频画面可能卡住，音频继续播放。
+- 鎾斁鏃舵渶澶у寲绐楀彛鎴栨嫋鍔ㄧ缉鏀剧獥鍙ｏ紝瑙嗛鐢婚潰鍙兘鍗′綇锛岄煶棰戠户缁挱鏀俱€?
 
 
-
-- 缺少进度条、音量调节、拖动进度条等基础交互能力。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- SDL 窗口事件处理与渲染调用分散在不同线程路径，窗口尺寸变化时更容易触发画面刷新停滞。
-
-
-
-- 显示层没有控制条与鼠标交互请求上报能力。
+- 缂哄皯杩涘害鏉°€侀煶閲忚皟鑺傘€佹嫋鍔ㄨ繘搴︽潯绛夊熀纭€浜や簰鑳藉姏銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 调整事件处理路径：在渲染/空闲渲染路径中轮询 SDL 事件，主线程仅消费交互请求。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 为 Display 添加控制层绘制：进度条、音量条、暂停状态提示。
+- SDL 绐楀彛浜嬩欢澶勭悊涓庢覆鏌撹皟鐢ㄥ垎鏁ｅ湪涓嶅悓绾跨▼璺緞锛岀獥鍙ｅ昂瀵稿彉鍖栨椂鏇村鏄撹Е鍙戠敾闈㈠埛鏂板仠婊炪€?
 
 
-
-- 新增鼠标交互：拖动进度条触发 seek，拖动音量条调节音量。
-
-
-
-- PlayerCore 增加对 seek/音量请求的消费执行。
+- 鏄剧ず灞傛病鏈夋帶鍒舵潯涓庨紶鏍囦氦浜掕姹備笂鎶ヨ兘鍔涖€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 璋冩暣浜嬩欢澶勭悊璺緞锛氬湪娓叉煋/绌洪棽娓叉煋璺緞涓疆璇?SDL 浜嬩欢锛屼富绾跨▼浠呮秷璐逛氦浜掕姹傘€?
+
+
+- 涓?Display 娣诲姞鎺у埗灞傜粯鍒讹細杩涘害鏉°€侀煶閲忔潯銆佹殏鍋滅姸鎬佹彁绀恒€?
+
+
+- 鏂板榧犳爣浜や簰锛氭嫋鍔ㄨ繘搴︽潯瑙﹀彂 seek锛屾嫋鍔ㄩ煶閲忔潯璋冭妭闊抽噺銆?
+
+
+- PlayerCore 澧炲姞瀵?seek/闊抽噺璇锋眰鐨勬秷璐规墽琛屻€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -5272,7 +4990,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 17: 企业级 MPC-HC 模块骨架落地（阶段二/三推进）
+## 闂 17: 浼佷笟绾?MPC-HC 妯″潡楠ㄦ灦钀藉湴锛堥樁娈典簩/涓夋帹杩涳級
 
 
 
@@ -5280,7 +4998,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5288,59 +5006,52 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 企业级模块规划已定义，但多数模块缺少代码入口，无法继续并行开发。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 旧实现以核心播放链路为主，模块边界不完整，难以分工推进。
+- 浼佷笟绾фā鍧楄鍒掑凡瀹氫箟锛屼絾澶氭暟妯″潡缂哄皯浠ｇ爜鍏ュ彛锛屾棤娉曠户缁苟琛屽紑鍙戙€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增并接入企业级基础设施和模块骨架：任务队列、帧池、解码线程基类。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 引入渲染抽象层（`IVideoRenderer` + `RendererFactory`），并让 `PlayerCore` 切换到抽象接口。
-
-
-
-- 增加音频均衡器/混音器、解码器工厂、字幕 SRT 解析、播放列表、设置/快捷键、皮肤、插件、格式与流媒体解析模块。
-
-
-
-- 完善滤镜基类与音视频滤镜链，补齐音量平衡滤镜。
-
-
-
-- 同步更新 tasklist 对应已实现项。
+- 鏃у疄鐜颁互鏍稿績鎾斁閾捐矾涓轰富锛屾ā鍧楄竟鐣屼笉瀹屾暣锛岄毦浠ュ垎宸ユ帹杩涖€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鏂板骞舵帴鍏ヤ紒涓氱骇鍩虹璁炬柦鍜屾ā鍧楅鏋讹細浠诲姟闃熷垪銆佸抚姹犮€佽В鐮佺嚎绋嬪熀绫汇€?
+
+
+- 寮曞叆娓叉煋鎶借薄灞傦紙`IVideoRenderer` + `RendererFactory`锛夛紝骞惰 `PlayerCore` 鍒囨崲鍒版娊璞℃帴鍙ｃ€?
+
+
+- 澧炲姞闊抽鍧囪　鍣?娣烽煶鍣ㄣ€佽В鐮佸櫒宸ュ巶銆佸瓧骞?SRT 瑙ｆ瀽銆佹挱鏀惧垪琛ㄣ€佽缃?蹇嵎閿€佺毊鑲ゃ€佹彃浠躲€佹牸寮忎笌娴佸獟浣撹В鏋愭ā鍧椼€?
+
+
+- 瀹屽杽婊ら暅鍩虹被涓庨煶瑙嗛婊ら暅閾撅紝琛ラ綈闊抽噺骞宠　婊ら暅銆?
+
+
+- 鍚屾鏇存柊 tasklist 瀵瑰簲宸插疄鐜伴」銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -5540,7 +5251,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 18: DASH 解析编译失败与格式能力矩阵缺失
+## 闂 18: DASH 瑙ｆ瀽缂栬瘧澶辫触涓庢牸寮忚兘鍔涚煩闃电己澶?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5548,67 +5266,52 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+### 闂鎻忚堪
+
+
+
+- `src/streaming/dash_manifest_parser.cpp` 鍦?MSVC 涓嬬紪璇戝け璐ワ紝闃诲鍏ㄩ噺鏋勫缓銆?
+
+
+- 缂哄皯涓€涓彲鐩存帴澶嶇敤鐨勨€滆繍琛屾椂鏍煎紡鑳藉姏鐭╅樀鈥濆叆鍙ｏ紝涓嶅埄浜庡崟浜鸿凯浠ｄ腑蹇€熼獙璇佹牸寮忚鐩栥€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- `src/streaming/dash_manifest_parser.cpp` 在 MSVC 下编译失败，阻塞全量构建。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 缺少一个可直接复用的“运行时格式能力矩阵”入口，不利于单人迭代中快速验证格式覆盖。
+- 鍘熷瀛楃涓叉鍒欎娇鐢ㄤ簡榛樿鍒嗛殧绗︼紝琛ㄨ揪寮忎腑鍑虹幇 `)"` 瑙﹀彂鎻愬墠缁堟锛屽鑷磋娉曢敊璇€?
+
+
+- 鐜版湁鏍煎紡鏀寔妯″潡铏芥湁鍩虹鎺ュ彛锛屼絾缂哄皯缁熶竴 CLI 妫€鏌ュ叆鍙ｄ笌涓诲姏鏍煎紡瑕嗙洊杈撳嚭銆?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 原始字符串正则使用了默认分隔符，表达式中出现 `)"` 触发提前终止，导致语法错误。
+### 瑙ｅ喅鏂规
 
 
 
-- 现有格式支持模块虽有基础接口，但缺少统一 CLI 检查入口与主力格式覆盖输出。
+- 淇 DASH 姝ｅ垯锛氭敼涓鸿嚜瀹氫箟 raw-string 鍒嗛殧绗︼紝鎭㈠ MSVC 缂栬瘧閫氳繃銆?
+
+
+- 鎵╁睍 `FormatSupport`锛?
+
+
+  - 澧炲姞杩愯鏃跺鍣?缂栬В鐮佸櫒鏋氫妇锛坄av_demuxer_iterate` / `av_codec_iterate`锛?
+
+
+  - 澧炲姞鎾斁鐩爣璇勪及锛堥珮鍒嗚鲸鐜?楂樺抚鐜?澶氶煶閬擄級
 
 
 
-
-
-
-
-### 解决方案
-
-
-
-- 修复 DASH 正则：改为自定义 raw-string 分隔符，恢复 MSVC 编译通过。
-
-
-
-- 扩展 `FormatSupport`：
-
-
-
-  - 增加运行时容器/编解码器枚举（`av_demuxer_iterate` / `av_codec_iterate`）
-
-
-
-  - 增加播放目标评估（高分辨率/高帧率/多音道）
-
-
-
-- 改造 `main`，新增命令：
+- 鏀归€?`main`锛屾柊澧炲懡浠わ細
 
 
 
@@ -5620,15 +5323,14 @@ void VideoPlayer::play() {
 
 
 
-- 增强 `Demuxer` 与 `PlayerCore` 音频链路稳健性（多音道输出参数对齐、重采样器复用等）。
+- 澧炲己 `Demuxer` 涓?`PlayerCore` 闊抽閾捐矾绋冲仴鎬э紙澶氶煶閬撹緭鍑哄弬鏁板榻愩€侀噸閲囨牱鍣ㄥ鐢ㄧ瓑锛夈€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -5692,7 +5394,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 19: D3D11VA 硬解最小闭环与软解回退
+## 闂 19: D3D11VA 纭В鏈€灏忛棴鐜笌杞В鍥為€€
 
 
 
@@ -5700,7 +5402,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5708,63 +5410,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 需要在 Windows 下优先利用 D3D11VA 硬解高分辨率/高帧率视频，并确保失败时可自动回退软解。
+- 闇€瑕佸湪 Windows 涓嬩紭鍏堝埄鐢?D3D11VA 纭В楂樺垎杈ㄧ巼/楂樺抚鐜囪棰戯紝骞剁‘淇濆け璐ユ椂鍙嚜鍔ㄥ洖閫€杞В銆?
 
 
-
-- 硬件解码输出通常是 GPU 帧或 `NV12`，现有 SDL 渲染链路要求 `YUV420P`，存在格式不匹配风险。
-
-
-
-
-
-
-
-### 解决方案
-
-
-
-- `PlayerCore` 增加 D3D11VA 尝试逻辑：
-
-
-
-  - 检测 codec 的 D3D11VA HW config；
-
-
-
-  - 创建 `AV_HWDEVICE_TYPE_D3D11VA` 设备上下文；
-
-
-
-  - 绑定 `get_format` 回调选择硬件像素格式。
-
-
-
-- 若 `avcodec_open2` 在硬解路径失败，自动重建解码上下文并回退到软解。
-
-
-
-- 新增视频帧输出规整链路：
-
-
-
-  - 硬件帧先 `av_hwframe_transfer_data` 转到系统内存；
-
-
-
-  - 非 `YUV420P` 帧统一经 `sws_scale` 转为 `YUV420P` 再进入渲染。
+- 纭欢瑙ｇ爜杈撳嚭閫氬父鏄?GPU 甯ф垨 `NV12`锛岀幇鏈?SDL 娓叉煋閾捐矾瑕佹眰 `YUV420P`锛屽瓨鍦ㄦ牸寮忎笉鍖归厤椋庨櫓銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- `PlayerCore` 澧炲姞 D3D11VA 灏濊瘯閫昏緫锛?
+
+
+  - 妫€娴?codec 鐨?D3D11VA HW config锛?
+
+
+  - 鍒涘缓 `AV_HWDEVICE_TYPE_D3D11VA` 璁惧涓婁笅鏂囷紱
+
+
+
+  - 缁戝畾 `get_format` 鍥炶皟閫夋嫨纭欢鍍忕礌鏍煎紡銆?
+
+
+- 鑻?`avcodec_open2` 鍦ㄧ‖瑙ｈ矾寰勫け璐ワ紝鑷姩閲嶅缓瑙ｇ爜涓婁笅鏂囧苟鍥為€€鍒拌蒋瑙ｃ€?
+
+
+- 鏂板瑙嗛甯ц緭鍑鸿鏁撮摼璺細
+
+
+
+  - 纭欢甯у厛 `av_hwframe_transfer_data` 杞埌绯荤粺鍐呭瓨锛?
+
+
+  - 闈?`YUV420P` 甯х粺涓€缁?`sws_scale` 杞负 `YUV420P` 鍐嶈繘鍏ユ覆鏌撱€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -5788,7 +5482,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 20: 探测入口与格式回归脚本落地
+## 闂 20: 鎺㈡祴鍏ュ彛涓庢牸寮忓洖褰掕剼鏈惤鍦?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5796,67 +5497,50 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+### 闂鎻忚堪
+
+
+
+- 闇€瑕佹妸鏍煎紡瑕嗙洊楠岃瘉浠庘€滄墜宸ユ墦寮€瑙嗛瑙傚療鈥濆崌绾т负鈥滃彲閲嶅鐨勫懡浠よ鍥炲綊鈥濄€?
+
+
+- 鐜版湁鑳藉姏鍏ュ彛鍙湁鎬讳綋鑳藉姏璇勪及锛岀己灏戝崟鏂囦欢鎺㈡祴鍜屾壒閲忔牱鏈姤鍛娿€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 需要把格式覆盖验证从“手工打开视频观察”升级为“可重复的命令行回归”。
+### 瑙ｅ喅鏂规
 
 
 
-- 现有能力入口只有总体能力评估，缺少单文件探测和批量样本报告。
+- 鍦?`main` 涓柊澧?`--probe-file <media_file>`锛氳緭鍑?`probe.*` 鏈哄櫒鍙瀛楁锛屽寘鍚鍣?瑙嗛/闊抽鐘舵€併€佸垎杈ㄧ巼銆佸抚鐜囥€佸０閬撲笌寤鸿淇℃伅銆?
 
 
+- 鏂板 `tools/format_regression/run_format_regression.ps1`锛?
 
 
+  - 璇诲彇 `tools/format_regression/format_samples.csv`锛?
 
 
-
-### 解决方案
-
+  - 閫愪釜璋冪敤 `--probe-file`锛?
 
 
-- 在 `main` 中新增 `--probe-file <media_file>`：输出 `probe.*` 机器可读字段，包含容器/视频/音频状态、分辨率、帧率、声道与建议信息。
+  - 鐢熸垚 `docs/reports/FORMAT_REGRESSION_*.md` 鎶ュ憡锛?
 
 
-
-- 新增 `tools/format_regression/run_format_regression.ps1`：
-
+  - 杩斿洖鐮佽涔夛細`0=鍏ㄩ儴PASS`锛宍1=瀛樺湪PARTIAL`锛宍2=瀛樺湪FAIL`銆?
 
 
-  - 读取 `tools/format_regression/format_samples.csv`；
-
-
-
-  - 逐个调用 `--probe-file`；
-
-
-
-  - 生成 `docs/reports/FORMAT_REGRESSION_*.md` 报告；
-
-
-
-  - 返回码语义：`0=全部PASS`，`1=存在PARTIAL`，`2=存在FAIL`。
-
-
-
-- 补充 `docs/workflows/FORMAT_REGRESSION.md` 与文档索引，便于在 VS2022/PowerShell 下直接执行。
+- 琛ュ厖 `docs/workflows/FORMAT_REGRESSION.md` 涓庢枃妗ｇ储寮曪紝渚夸簬鍦?VS2022/PowerShell 涓嬬洿鎺ユ墽琛屻€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -5892,7 +5576,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 21: GitHub Actions 自动格式回归接入
+## 闂 21: GitHub Actions 鑷姩鏍煎紡鍥炲綊鎺ュ叆
 
 
 
@@ -5900,7 +5584,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -5908,71 +5592,59 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 回归链路虽可在本地运行，但缺少 PR/主分支自动执行，无法在提交阶段及时拦截格式退化。
+- 鍥炲綊閾捐矾铏藉彲鍦ㄦ湰鍦拌繍琛岋紝浣嗙己灏?PR/涓诲垎鏀嚜鍔ㄦ墽琛岋紝鏃犳硶鍦ㄦ彁浜ら樁娈靛強鏃舵嫤鎴牸寮忛€€鍖栥€?
 
 
+- Windows CI 鐜涓庢湰鍦颁緷璧栧彂鐜版柟寮忎笉涓€鑷达紝闇€琛ラ綈鏋勫缓涓庤剼鏈吋瀹规€с€?
 
-- Windows CI 环境与本地依赖发现方式不一致，需补齐构建与脚本兼容性。
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
-### 解决方案
 
+- 鏂板宸ヤ綔娴?`.github/workflows/format-regression.yml`锛?
 
 
-- 新增工作流 `.github/workflows/format-regression.yml`：
+  - 鍦?`windows-latest` 涓嬭浇 `SDL2/FFmpeg` 棰勭紪璇戝寘骞舵瀯寤?`Debug`锛?
 
 
+  - 鎵ц `download_test_samples.ps1` 涓?`run_all_checks.ps1`锛?
 
-  - 在 `windows-latest` 下载 `SDL2/FFmpeg` 预编译包并构建 `Debug`；
 
+  - 涓婁紶 `docs/reports/FORMAT_REGRESSION_CI.md` 鎶ュ憡浜х墿銆?
 
 
-  - 执行 `download_test_samples.ps1` 与 `run_all_checks.ps1`；
+- 璋冩暣 `CMakeLists.txt`锛?
 
 
+  - Windows 涓嬩紭鍏堣瘑鍒?`SDL2::`銆乣FFMPEG::` 涓?`unofficial::ffmpeg::` 瀵煎叆鐩爣锛?
 
-  - 上传 `docs/reports/FORMAT_REGRESSION_CI.md` 报告产物。
 
+  - 淇濈暀 `external/` 鐩綍鍥為€€閫昏緫锛屽吋瀹规湰鍦版棦鏈夋瀯寤恒€?
 
 
-- 调整 `CMakeLists.txt`：
+- 璋冩暣 `download_test_samples.ps1`锛?
 
 
+  - `-FfmpegPath` 鏀寔 PATH 鍛戒护鍚嶏紙濡?`ffmpeg`锛夛紝渚夸簬 CI 鐩存帴璋冪敤銆?
 
-  - Windows 下优先识别 `SDL2::`、`FFMPEG::` 与 `unofficial::ffmpeg::` 导入目标；
 
+- 鏇存柊鍥炲綊鏂囨。涓庝换鍔℃竻鍗曠姸鎬侊紝琛ラ綈鑷姩鍥炲綊鍏ュ彛璇存槑銆?
 
 
-  - 保留 `external/` 目录回退逻辑，兼容本地既有构建。
 
 
 
-- 调整 `download_test_samples.ps1`：
 
-
-
-  - `-FfmpegPath` 支持 PATH 命令名（如 `ffmpeg`），便于 CI 直接调用。
-
-
-
-- 更新回归文档与任务清单状态，补齐自动回归入口说明。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6016,7 +5688,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 22: 播放列表主链路、设置持久化与快捷键首版接入
+## 闂 22: 鎾斁鍒楄〃涓婚摼璺€佽缃寔涔呭寲涓庡揩鎹烽敭棣栫増鎺ュ叆
 
 
 
@@ -6024,7 +5696,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -6032,99 +5704,84 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 播放器主流程仅支持单文件，不支持上一首/下一首与 EOF 自动切换。
+- 鎾斁鍣ㄤ富娴佺▼浠呮敮鎸佸崟鏂囦欢锛屼笉鏀寔涓婁竴棣?涓嬩竴棣栦笌 EOF 鑷姩鍒囨崲銆?
 
 
+- 璁剧疆妯″潡鏈帴鍏ヨ繍琛岄摼璺紝鍚姩/閫€鍑烘椂鏃犳硶鎭㈠闊抽噺鍜屾挱鏀鹃€熷害銆?
 
-- 设置模块未接入运行链路，启动/退出时无法恢复音量和播放速度。
 
+- 榛樿蹇嵎閿己澶卞叧閿兘鍔涳紙鐩稿 seek銆佸彉閫熴€侀潤闊炽€佹挱鏀惧垪琛ㄥ垏鎹級銆?
 
 
-- 默认快捷键缺失关键能力（相对 seek、变速、静音、播放列表切换）。
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
+- 涓婚摼璺帴鍏?`PlaylistManager`锛?
 
 
+  - 鏀寔鍛戒护琛屼紶鍏ュ涓獟浣撴枃浠讹紱
 
-- 主链路接入 `PlaylistManager`：
 
 
+  - 鏀寔浼犲叆 `.m3u8` 浣滀负鎾斁鍒楄〃锛?
 
-  - 支持命令行传入多个媒体文件；
 
+  - 鏀寔 `PageUp/PageDown` 涓婁竴棣?涓嬩竴棣栵紱
 
 
-  - 支持传入 `.m3u8` 作为播放列表；
 
+  - EOF 鑷姩鍒囨崲涓嬩竴椤广€?
 
 
-  - 支持 `PageUp/PageDown` 上一首/下一首；
+- 涓婚摼璺帴鍏?`SettingsManager`锛?
 
 
+  - 鍚姩鏃跺姞杞?`config/player_settings.ini`锛?
 
-  - EOF 自动切换下一项。
 
+  - 缂哄け鎴栬В鏋愬け璐ユ椂鍥為€€榛樿鍊硷紙闊抽噺 100%銆侀€熷害 1.0x銆佹仮澶嶄笂娆＄储寮曪級锛?
 
 
-- 主链路接入 `SettingsManager`：
+  - 閫€鍑烘椂淇濆瓨褰撳墠闊抽噺銆佹挱鏀鹃€熷害鍜屾挱鏀惧垪琛ㄧ储寮曘€?
 
 
+- 鎵╁睍 SDL 浜嬩欢鍒版挱鏀惧櫒鎺у埗閾捐矾锛?
 
-  - 启动时加载 `config/player_settings.ini`；
 
+  - `Left/Right` seek 卤5 绉掞紱
 
 
-  - 缺失或解析失败时回退默认值（音量 100%、速度 1.0x、恢复上次索引）；
 
+  - `Ctrl+Left/Ctrl+Right` seek 卤30 绉掞紱
 
 
-  - 退出时保存当前音量、播放速度和播放列表索引。
 
+  - `[`/`]` 璋冮€燂紝`R` 鎭㈠ 1.0x锛?
 
 
-- 扩展 SDL 事件到播放器控制链路：
+  - `M` 闈欓煶/鎭㈠锛?
 
 
+  - `Enter/Alt+Enter/F` 鍏ㄥ睆鍒囨崲锛?
 
-  - `Left/Right` seek ±5 秒；
 
+  - `Esc` 鍏ㄥ睆鎬侀€€鍏ㄥ睆锛岀獥鍙ｆ€侀€€鍑恒€?
 
 
-  - `Ctrl+Left/Ctrl+Right` seek ±30 秒；
 
 
 
-  - `[`/`]` 调速，`R` 恢复 1.0x；
 
-
-
-  - `M` 静音/恢复；
-
-
-
-  - `Enter/Alt+Enter/F` 全屏切换；
-
-
-
-  - `Esc` 全屏态退全屏，窗口态退出。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6212,7 +5869,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 23: 移除 Core 单元测试目标与测试文件
+## 闂 23: 绉婚櫎 Core 鍗曞厓娴嬭瘯鐩爣涓庢祴璇曟枃浠?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -6220,52 +5884,37 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+### 闂鎻忚堪
+
+
+
+- 褰撳墠浠撳簱淇濈暀浜嗕袱涓?Core 鐩稿叧娴嬭瘯鐩爣涓庢祴璇曟枃浠讹紝浣嗘湰娆￠渶姹傝姹傜Щ闄よ繖涓ら」娴嬭瘯鍐呭骞跺垹闄ゆ枃浠躲€?
+
+
+- 鑻ヤ粎鍒犻櫎娴嬭瘯婧愮爜鑰屼笉娓呯悊鏋勫缓鑴氭湰锛屼細瀵艰嚧鏋勫缓閰嶇疆瀛樺湪鎮寕璺緞椋庨櫓銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 当前仓库保留了两个 Core 相关测试目标与测试文件，但本次需求要求移除这两项测试内容并删除文件。
+### 瑙ｅ喅鏂规
 
 
 
-- 若仅删除测试源码而不清理构建脚本，会导致构建配置存在悬挂路径风险。
+- 浠?`CMakeLists.txt` 绉婚櫎锛?
 
 
+  - `BUILD_CORE_TESTS` 閫夐」锛?
 
 
+  - `core_frame_queue_tests`銆乣core_clock_tests` 涓や釜娴嬭瘯鐩爣锛?
 
 
-
-### 解决方案
-
+  - `core_tests` 鑱氬悎鐩爣銆?
 
 
-- 从 `CMakeLists.txt` 移除：
-
-
-
-  - `BUILD_CORE_TESTS` 选项；
-
-
-
-  - `core_frame_queue_tests`、`core_clock_tests` 两个测试目标；
-
-
-
-  - `core_tests` 聚合目标。
-
-
-
-- 删除测试文件：
-
+- 鍒犻櫎娴嬭瘯鏂囦欢锛?
 
 
   - `tests/core_frame_queue_tests.cpp`
@@ -6276,15 +5925,14 @@ void VideoPlayer::play() {
 
 
 
-- 同步更新变更文档，确保记录与当前仓库状态一致。
+- 鍚屾鏇存柊鍙樻洿鏂囨。锛岀‘淇濊褰曚笌褰撳墠浠撳簱鐘舵€佷竴鑷淬€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6292,11 +5940,11 @@ void VideoPlayer::play() {
 
 
 
-- tests/core_frame_queue_tests.cpp（删除）
+- tests/core_frame_queue_tests.cpp锛堝垹闄わ級
 
 
 
-- tests/core_clock_tests.cpp（删除）
+- tests/core_clock_tests.cpp锛堝垹闄わ級
 
 
 
@@ -6324,7 +5972,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 24: 外挂字幕加载入口（SRT）接入主流程
+## 闂 24: 澶栨寕瀛楀箷鍔犺浇鍏ュ彛锛圫RT锛夋帴鍏ヤ富娴佺▼
 
 
 
@@ -6332,7 +5980,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-07
+**鏃ユ湡**: 2026-03-07
 
 
 
@@ -6340,67 +5988,58 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `1.1.1` 要求支持外挂字幕加载入口，但当前主流程只有视频/音频播放链路，未提供外部字幕文件入口。
+- 浠诲姟娓呭崟 `1.1.1` 瑕佹眰鏀寔澶栨寕瀛楀箷鍔犺浇鍏ュ彛锛屼絾褰撳墠涓绘祦绋嬪彧鏈夎棰?闊抽鎾斁閾捐矾锛屾湭鎻愪緵澶栭儴瀛楀箷鏂囦欢鍏ュ彛銆?
 
 
-
-- 项目已存在 `subtitle::SrtParser`，但未接入 `VideoPlayer` 与命令行参数。
-
-
-
-
-
-
-
-### 解决方案
-
-
-
-- 在 `VideoPlayer` 增加外挂字幕加载接口：
-
-
-
-  - `loadExternalSubtitle()` / `clearExternalSubtitle()`；
-
-
-
-  - 支持 `.srt` 文件解析与容错日志；
-
-
-
-  - 暴露已加载字幕路径与条目数量，便于后续渲染接入。
-
-
-
-- 在 `main` 增加命令行入口：
-
-
-
-  - 新增 `--subtitle <file.srt>`；
-
-
-
-  - 保持现有播放列表参数逻辑；
-
-
-
-  - 未显式传参时，自动尝试加载与媒体同名的 `.srt`。
-
-
-
-- 更新任务清单，标记 `1.1.1 外挂字幕加载入口` 已完成。
+- 椤圭洰宸插瓨鍦?`subtitle::SrtParser`锛屼絾鏈帴鍏?`VideoPlayer` 涓庡懡浠よ鍙傛暟銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鍦?`VideoPlayer` 澧炲姞澶栨寕瀛楀箷鍔犺浇鎺ュ彛锛?
+
+
+  - `loadExternalSubtitle()` / `clearExternalSubtitle()`锛?
+
+
+  - 鏀寔 `.srt` 鏂囦欢瑙ｆ瀽涓庡閿欐棩蹇楋紱
+
+
+
+  - 鏆撮湶宸插姞杞藉瓧骞曡矾寰勪笌鏉＄洰鏁伴噺锛屼究浜庡悗缁覆鏌撴帴鍏ャ€?
+
+
+- 鍦?`main` 澧炲姞鍛戒护琛屽叆鍙ｏ細
+
+
+
+  - 鏂板 `--subtitle <file.srt>`锛?
+
+
+  - 淇濇寔鐜版湁鎾斁鍒楄〃鍙傛暟閫昏緫锛?
+
+
+  - 鏈樉寮忎紶鍙傛椂锛岃嚜鍔ㄥ皾璇曞姞杞戒笌濯掍綋鍚屽悕鐨?`.srt`銆?
+
+
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.1.1 澶栨寕瀛楀箷鍔犺浇鍏ュ彛` 宸插畬鎴愩€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -6444,111 +6083,95 @@ void VideoPlayer::play() {
 
 
 
-## 问题 25: 字幕渲染叠加与播放时序同步接入
+## 闂 25: 瀛楀箷娓叉煋鍙犲姞涓庢挱鏀炬椂搴忓悓姝ユ帴鍏?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-07
 
-**日期**: 2026-03-07
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `1.1.2` 瑕佹眰瀛楀箷鍙覆鏌撳彔鍔犲埌鐢婚潰锛屼絾鐜版湁娓叉煋鎺ュ彛娌℃湁瀛楀箷鏂囨湰閫氶亾銆?
 
-- 任务清单 `1.1.2` 要求字幕可渲染叠加到画面，但现有渲染接口没有字幕文本通道。
 
+- 浠诲姟娓呭崟 `1.1.3` 瑕佹眰瀛楀箷涓庢挱鏀?鏆傚仠/seek 鍚屾锛屼絾涓绘挱鏀炬椂閽熼摼璺病鏈夊瓧骞曟椂闂磋酱鏇存柊閫昏緫銆?
 
 
-- 任务清单 `1.1.3` 要求字幕与播放/暂停/seek 同步，但主播放时钟链路没有字幕时间轴更新逻辑。
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
+- 鎵╁睍娓叉煋鎶借薄锛?
 
 
+  - 鍦?`IVideoRenderer` 澧炲姞 `setSubtitleText()`锛?
 
-- 扩展渲染抽象：
 
+  - SDL 娓叉煋鍣ㄨ浆鍙戝瓧骞曟枃鏈埌 `Display`锛?
 
 
-  - 在 `IVideoRenderer` 增加 `setSubtitleText()`；
+  - D3D11/OpenGL 鍏堟彁渚涘吋瀹规々瀹炵幇锛屼繚鎸佹帴鍙ｄ竴鑷淬€?
 
 
+- 鍦?`Display` 澧炲姞瀛楀箷鍙犲姞灞傦細
 
-  - SDL 渲染器转发字幕文本到 `Display`；
 
 
+  - 鏂板瀛楀箷鐘舵€佸瓨鍌ㄤ笌绾跨▼瀹夊叏鏇存柊锛?
 
-  - D3D11/OpenGL 先提供兼容桩实现，保持接口一致。
 
+  - 鍦ㄨ棰戝抚娓叉煋鍚庛€佹帶鍒舵潯娓叉煋鍓嶇粯鍒跺瓧骞曢潰鏉匡紱
 
 
-- 在 `Display` 增加字幕叠加层：
 
+  - 鏀寔澶氳瀛楀箷銆佽秴闀挎埅鏂笌鍩虹鍙鎬ф牱寮忥紙闃村奖+鍗婇€忔槑搴曟澘锛夈€?
 
 
-  - 新增字幕状态存储与线程安全更新；
+  - 褰撳墠浣跨敤杞婚噺瀛楁ā娓叉煋锛岄潪 ASCII 瀛楃浼氶檷绾ф樉绀恒€?
 
 
+- 鍦?`PlayerCore` 澧炲姞瀛楀箷鏃堕棿杞撮┍鍔細
 
-  - 在视频帧渲染后、控制条渲染前绘制字幕面板；
 
 
+  - 鏂板澶栨寕瀛楀箷杞ㄩ亾鐘舵€佷笌绱㈠紩缂撳瓨锛?
 
-  - 支持多行字幕、超长截断与基础可读性样式（阴影+半透明底板）。
 
+  - 娓叉煋甯ц矾寰勪笌绌洪棽浜嬩欢璺緞鍧囪皟鐢?`updateSubtitleOverlay()`锛?
 
 
-  - 当前使用轻量字模渲染，非 ASCII 字符会降级显示。
+  - 鍩轰簬褰撳墠鎾斁鏃堕棿閫夋嫨娲昏穬瀛楀箷锛岃鐩栨挱鏀俱€佹殏鍋滀笌 seek 鍦烘櫙锛?
 
 
+  - 淇閿佸唴璋冪敤娓叉煋鎺ュ彛鐨勯棶棰橈紝閬垮厤鍦ㄥ瓧骞曚簰鏂ラ攣鍐呰Е鍙戞覆鏌撳洖璋冦€?
 
-- 在 `PlayerCore` 增加字幕时间轴驱动：
 
+- 璋冩暣 `VideoPlayer::open()` 瀛楀箷鐘舵€佸鐞嗭紝娑堥櫎鈥滃厛娓呯┖鍐嶅垽鏂姞杞解€濈殑鐭涚浘閫昏緫銆?
 
 
-  - 新增外挂字幕轨道状态与索引缓存；
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.1.2`銆乣1.1.3` 宸插畬鎴愩€?
 
 
 
-  - 渲染帧路径与空闲事件路径均调用 `updateSubtitleOverlay()`；
 
 
 
-  - 基于当前播放时间选择活跃字幕，覆盖播放、暂停与 seek 场景；
-
-
-
-  - 修复锁内调用渲染接口的问题，避免在字幕互斥锁内触发渲染回调。
-
-
-
-- 调整 `VideoPlayer::open()` 字幕状态处理，消除“先清空再判断加载”的矛盾逻辑。
-
-
-
-- 更新任务清单，标记 `1.1.2`、`1.1.3` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6632,7 +6255,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 26: 字幕开关控制与字幕加载异常处理完善
+## 闂 26: 瀛楀箷寮€鍏虫帶鍒朵笌瀛楀箷鍔犺浇寮傚父澶勭悊瀹屽杽
 
 
 
@@ -6640,7 +6263,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -6648,75 +6271,65 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `1.1.4` 要求字幕开关与异常处理，但当前字幕仅支持“加载后显示”，缺少运行时开关。
+- 浠诲姟娓呭崟 `1.1.4` 瑕佹眰瀛楀箷寮€鍏充笌寮傚父澶勭悊锛屼絾褰撳墠瀛楀箷浠呮敮鎸佲€滃姞杞藉悗鏄剧ず鈥濓紝缂哄皯杩愯鏃跺紑鍏炽€?
 
 
+- 澶栨寕瀛楀箷鍔犺浇璺緞鍦ㄦ枃浠剁郴缁熷紓甯稿満鏅笅瀹归敊涓嶈冻锛屽奖鍝嶇ǔ瀹氭€ч鏈熴€?
 
-- 外挂字幕加载路径在文件系统异常场景下容错不足，影响稳定性预期。
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
-### 解决方案
 
+- 澧炲姞瀛楀箷寮€鍏虫帶鍒堕摼璺紙鎸夐敭 `V`锛夛細
 
 
-- 增加字幕开关控制链路（按键 `V`）：
 
+  - `Display` 鏂板瀛楀箷寮€鍏宠姹傦紱
 
 
-  - `Display` 新增字幕开关请求；
 
+  - `Renderer` 鎶借薄鏂板 `consumeToggleSubtitleRequest()`锛?
 
 
-  - `Renderer` 抽象新增 `consumeToggleSubtitleRequest()`；
+  - `PlayerCore` 鏂板瀛楀箷鏄剧ず鐘舵€佺鐞嗕笌鍒囨崲鎺ュ彛锛?
 
 
+  - 鍏抽棴瀛楀箷鏃剁珛鍗虫竻绌哄彔鍔犲眰锛屽紑鍚椂鎸夊綋鍓嶆挱鏀炬椂闂存仮澶嶅悓姝ャ€?
 
-  - `PlayerCore` 新增字幕显示状态管理与切换接口；
 
+- 澧炲己澶栨寕瀛楀箷寮傚父澶勭悊锛?
 
 
-  - 关闭字幕时立即清空叠加层，开启时按当前播放时间恢复同步。
+  - `VideoPlayer::loadExternalSubtitle()` 鏀逛负浣跨敤 `std::error_code` 璺緞妫€鏌ワ紱
 
 
 
-- 增强外挂字幕异常处理：
+  - 鎹曡幏瑙ｆ瀽鍣ㄥ紓甯稿苟闄嶇骇涓哄憡璀︽棩蹇楋紝涓嶄腑鏂挱鏀句富娴佺▼锛?
 
 
+  - 淇濇寔鈥滃姞杞藉け璐ヨ嚜鍔ㄦ竻绌烘棫瀛楀箷鈥濈殑鐘舵€佷竴鑷存€с€?
 
-  - `VideoPlayer::loadExternalSubtitle()` 改为使用 `std::error_code` 路径检查；
 
+- 鏇存柊甯姪淇℃伅锛岃ˉ鍏?`V - Toggle subtitles on/off`銆?
 
 
-  - 捕获解析器异常并降级为告警日志，不中断播放主流程；
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.1.4` 宸插畬鎴愩€?
 
 
 
-  - 保持“加载失败自动清空旧字幕”的状态一致性。
 
 
 
-- 更新帮助信息，补充 `V - Toggle subtitles on/off`。
-
-
-
-- 更新任务清单，标记 `1.1.4` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6804,99 +6417,85 @@ void VideoPlayer::play() {
 
 
 
-## 问题 27: 快捷键配置持久化接入（hotkey.*）
+## 闂 27: 蹇嵎閿厤缃寔涔呭寲鎺ュ叆锛坔otkey.*锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `1.3.2` 瑕佹眰鏀寔閿綅閰嶇疆鎸佷箙鍖栵紝浣嗗綋鍓嶅揩鎹烽敭閫昏緫鍥哄畾鍐欐鍦?`Display` 浜嬩欢鍒嗘敮涓€?
 
-- 任务清单 `1.3.2` 要求支持键位配置持久化，但当前快捷键逻辑固定写死在 `Display` 事件分支中。
 
+- `HotkeyManager` 浠呮湁楠ㄦ灦瀹炵幇锛屾湭鎺ュ叆涓绘挱鏀鹃摼锛屾棤娉曢€氳繃閰嶇疆鏂囦欢淇濇寔鑷畾涔夐敭浣嶃€?
 
 
-- `HotkeyManager` 仅有骨架实现，未接入主播放链，无法通过配置文件保持自定义键位。
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
+- 鎵╁睍 `HotkeyManager`锛?
 
 
+  - 瀵归綈褰撳墠棣栫増蹇嵎閿粯璁ゆ槧灏勶紙鎾斁銆乻eek銆侀煶閲忋€侀潤闊炽€佸彉閫熴€佸垏闆嗐€佸瓧骞曞紑鍏炽€佸叏灞忋€侀€€鍑猴級锛?
 
-- 扩展 `HotkeyManager`：
 
+  - 澧炲姞閰嶇疆搴忓垪鍖栬兘鍔涳細`actionConfigKey`銆乣keyCodeToToken`銆乣keyCodeFromToken`銆?
 
 
-  - 对齐当前首版快捷键默认映射（播放、seek、音量、静音、变速、切集、字幕开关、全屏、退出）；
+- 灏嗗揩鎹烽敭鏄犲皠鎺ュ叆娓叉煋杈撳叆閾撅細
 
 
 
-  - 增加配置序列化能力：`actionConfigKey`、`keyCodeToToken`、`keyCodeFromToken`。
+  - `Display` 浜嬩欢澶勭悊鏀逛负鐢?`HotkeyManager` 椹卞姩锛?
 
 
+  - 淇濈暀 `Esc` 涓?`Enter` 鐨勫吋瀹硅涓猴紱
 
-- 将快捷键映射接入渲染输入链：
 
 
+  - `Renderer`/`PlayerCore`/`VideoPlayer` 澧炲姞鐑敭绠＄悊閫忎紶鎺ュ彛銆?
 
-  - `Display` 事件处理改为由 `HotkeyManager` 驱动；
 
+- 鍦?`main` 鐨勮缃姞杞?淇濆瓨娴佺▼涓帴鍏?`hotkey.*`锛?
 
 
-  - 保留 `Esc` 与 `Enter` 的兼容行为；
+  - 鍚姩璇诲彇骞跺簲鐢?`player_settings.ini` 鐨?`hotkey.*`锛?
 
 
+  - 闈炴硶閿綅閰嶇疆闄嶇骇涓洪粯璁ゅ苟璁板綍鍛婅锛?
 
-  - `Renderer`/`PlayerCore`/`VideoPlayer` 增加热键管理透传接口。
 
+  - 閫€鍑烘椂灏嗗綋鍓嶉敭浣嶅洖鍐欓厤缃紝瀹炵幇鎸佷箙鍖栥€?
 
 
-- 在 `main` 的设置加载/保存流程中接入 `hotkey.*`：
+- 鏇存柊榛樿閰嶇疆鏍蜂緥 `config/player_settings.ini`锛岃ˉ榻愬叏閮?`hotkey.*` 椤广€?
 
 
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.3.2` 宸插畬鎴愩€?
 
-  - 启动读取并应用 `player_settings.ini` 的 `hotkey.*`；
 
 
 
-  - 非法键位配置降级为默认并记录告警；
 
 
-
-  - 退出时将当前键位回写配置，实现持久化。
-
-
-
-- 更新默认配置样例 `config/player_settings.ini`，补齐全部 `hotkey.*` 项。
-
-
-
-- 更新任务清单，标记 `1.3.2` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -6996,7 +6595,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 28: 快捷键冲突检测与恢复默认能力
+## 闂 28: 蹇嵎閿啿绐佹娴嬩笌鎭㈠榛樿鑳藉姏
 
 
 
@@ -7004,7 +6603,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -7012,79 +6611,68 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `1.3.3` 要求支持键位冲突检测与恢复默认。
+- 浠诲姟娓呭崟 `1.3.3` 瑕佹眰鏀寔閿綅鍐茬獊妫€娴嬩笌鎭㈠榛樿銆?
 
 
+- 鐜版湁 `hotkey.*` 鎸佷箙鍖栧凡鍙伐浣滐紝浣嗛噸澶嶉敭浣嶉厤缃細浜х敓鍔ㄤ綔鍐茬獊锛屼笖缂哄皯鈥滀竴閿洖鍒伴粯璁も€濊兘鍔涖€?
 
-- 现有 `hotkey.*` 持久化已可工作，但重复键位配置会产生动作冲突，且缺少“一键回到默认”能力。
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
-### 解决方案
 
+- 鎵╁睍 `HotkeyManager`锛?
 
 
-- 扩展 `HotkeyManager`：
+  - 鏂板 `findConflicts()` / `hasConflicts()`锛岀敤浜庢娴嬮噸澶嶉敭浣嶇粦瀹氾紱
 
 
 
-  - 新增 `findConflicts()` / `hasConflicts()`，用于检测重复键位绑定；
+  - 鏂板 `resetToDefaults()`锛岀粺涓€鎭㈠榛樿閿綅鏄犲皠銆?
 
 
+- 鍦ㄧ儹閿厤缃姞杞芥祦绋嬩腑鍔犲叆鍐茬獊娌荤悊锛?
 
-  - 新增 `resetToDefaults()`，统一恢复默认键位映射。
 
+  - 鍚姩鏃跺厛搴旂敤閰嶇疆鍒板€欓€夋槧灏勶紝鍐嶆墽琛屽啿绐佹娴嬶紱
 
 
-- 在热键配置加载流程中加入冲突治理：
 
+  - 鑻ュ彂鐜板啿绐侊紝璁板綍鍐茬獊鍔ㄤ綔涓庨敭浣嶆棩蹇楋紝鑷姩鍥為€€榛樿閿綅锛?
 
 
-  - 启动时先应用配置到候选映射，再执行冲突检测；
+  - 瀵归潪娉?token 淇濈暀榛樿骞惰緭鍑哄憡璀︺€?
 
 
+- 鏂板鎭㈠榛樿寮€鍏筹細
 
-  - 若发现冲突，记录冲突动作与键位日志，自动回退默认键位；
 
 
+  - 鍦?`player_settings.ini` 澧炲姞 `hotkey.restore_defaults`锛?
 
-  - 对非法 token 保留默认并输出告警。
 
+  - 璁剧疆涓?`true` 鍚庝笅娆″惎鍔ㄨ嚜鍔ㄦ仮澶嶉粯璁ゅ苟鍥炲啓涓?`false`銆?
 
 
-- 新增恢复默认开关：
+- 鏇存柊甯姪杈撳嚭锛岃ˉ鍏呮仮澶嶉粯璁よ鏄庛€?
 
 
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.3.3` 宸插畬鎴愩€?
 
-  - 在 `player_settings.ini` 增加 `hotkey.restore_defaults`；
 
 
 
-  - 设置为 `true` 后下次启动自动恢复默认并回写为 `false`。
 
 
-
-- 更新帮助输出，补充恢复默认说明。
-
-
-
-- 更新任务清单，标记 `1.3.3` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7132,87 +6720,78 @@ void VideoPlayer::play() {
 
 
 
-## 问题 29: M1 验收 1.4.1（SRT seek 同步自检命令落地）
+## 闂 29: M1 楠屾敹 1.4.1锛圫RT seek 鍚屾鑷鍛戒护钀藉湴锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `1.4.1` 瑕佹眰鈥渀SRT 瀛楀箷鍙敤涓?seek 鍚庡悓姝鈥濓紝鐜版湁瀹炵幇缂哄皯鍙噸澶嶆墽琛岀殑楠屾敹鍏ュ彛銆?
 
-- 任务清单 `1.4.1` 要求“`SRT 字幕可用且 seek 后同步`”，现有实现缺少可重复执行的验收入口。
 
+- 鑻ュ彧渚濊禆浜哄伐鎾斁瑙傚療锛屽洖褰掓垚鏈珮涓旈毦浠ョǔ瀹氬鐜般€?
 
 
-- 若只依赖人工播放观察，回归成本高且难以稳定复现。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 瀛楀箷鏃堕棿杞村尮閰嶉€昏緫浠呭瓨鍦ㄤ簬 `PlayerCore` 鍐呴儴锛屾棤娉曞崟鐙獙璇佲€滈『搴忔挱鏀?+ seek 璺宠浆鈥濅袱绫诲満鏅€?
 
 
 
-- 字幕时间轴匹配逻辑仅存在于 `PlayerCore` 内部，无法单独验证“顺序播放 + seek 跳转”两类场景。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鎻愬彇鍏叡鏃堕棿杞村嚱鏁?`subtitle::resolveActiveSubtitleIndex(...)`锛屽苟鐢?`PlayerCore` 澶嶇敤銆?
 
-### 解决方案
 
+- 鍦?`main` 澧炲姞 `--subtitle-sync-check <subtitle.srt>` 鍛戒护锛?
 
 
-- 提取公共时间轴函数 `subtitle::resolveActiveSubtitleIndex(...)`，并由 `PlayerCore` 复用。
+  - 椤哄簭鏃堕棿杞存鏌ワ紙ordered锛夛紱
 
 
 
-- 在 `main` 增加 `--subtitle-sync-check <subtitle.srt>` 命令：
+  - 闈為『搴?seek 璺宠浆妫€鏌ワ紙seek锛夛紱
 
 
 
-  - 顺序时间轴检查（ordered）；
+  - 杈撳嚭 `mismatches` 涓?`PASS/FAIL`銆?
 
 
+- 鏂板鏍蜂緥瀛楀箷 `samples/subtitle/subtitle_seek_sync_sample.srt` 鍜屾湰鍦版姤鍛?`docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`銆?
 
-  - 非顺序 seek 跳转检查（seek）；
 
+- 浠诲姟娓呭崟 `1.4.1` 鏍囪瀹屾垚銆?
 
 
-  - 输出 `mismatches` 与 `PASS/FAIL`。
 
 
 
-- 新增样例字幕 `samples/subtitle/subtitle_seek_sync_sample.srt` 和本地报告 `docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`。
 
-
-
-- 任务清单 `1.4.1` 标记完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7276,91 +6855,81 @@ void VideoPlayer::play() {
 
 
 
-## 问题 30: M1 验收 1.4.2（播放列表连续播放 5 文件自检）
+## 闂 30: M1 楠屾敹 1.4.2锛堟挱鏀惧垪琛ㄨ繛缁挱鏀?5 鏂囦欢鑷锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `1.4.2` 瑕佹眰鈥滄挱鏀惧垪琛ㄨ繛缁挱鏀?5 鏂囦欢閫氳繃鈥濓紝浣嗙己灏戝彲閲嶅鎵ц鐨勯獙鏀跺懡浠ゃ€?
 
-- 任务清单 `1.4.2` 要求“播放列表连续播放 5 文件通过”，但缺少可重复执行的验收命令。
 
+- 浠呴潬鎵嬪伐鐐瑰嚮楠岃瘉锛屽洖褰掓晥鐜囦綆涓旂粨鏋滀笉绋冲畾銆?
 
 
-- 仅靠手工点击验证，回归效率低且结果不稳定。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 褰撳墠涓绘祦绋嬪叿澶?EOF 鑷姩鍒囨崲閫昏緫锛屼絾娌℃湁缁撴瀯鍖栬緭鍑哄彲鐢ㄤ簬蹇€熼獙鏀躲€?
 
 
 
-- 当前主流程具备 EOF 自动切换逻辑，但没有结构化输出可用于快速验收。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`main` 鏂板 `--playlist-flow-check` 鍛戒护锛?
 
-### 解决方案
 
+  - 璇诲彇杈撳叆骞舵瀯寤烘挱鏀惧垪琛紱
 
 
-- 在 `main` 新增 `--playlist-flow-check` 命令：
 
+  - 鏍￠獙鑷冲皯 5 鏉＄洰锛?
 
 
-  - 读取输入并构建播放列表；
+  - 瀵瑰墠 5 鏉℃墽琛屽彲鎵撳紑鎺㈡祴锛坄--probe-file` 鍚屾簮閫昏緫锛夛紱
 
 
 
-  - 校验至少 5 条目；
+  - 妯℃嫙 EOF 鑷姩鍒囨崲椤哄簭锛岄獙璇?`0,1,2,3,4` 杩炵画瑕嗙洊锛?
 
 
+  - 杈撳嚭 `PASS/FAIL` 涓庡け璐ョ储寮曘€?
 
-  - 对前 5 条执行可打开探测（`--probe-file` 同源逻辑）；
 
+- 鏂板鏈湴鎶ュ憡 `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`銆?
 
 
-  - 模拟 EOF 自动切换顺序，验证 `0,1,2,3,4` 连续覆盖；
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.4.2` 瀹屾垚銆?
 
 
 
-  - 输出 `PASS/FAIL` 与失败索引。
 
 
 
-- 新增本地报告 `docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`。
-
-
-
-- 更新任务清单，标记 `1.4.2` 完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7404,87 +6973,77 @@ void VideoPlayer::play() {
 
 
 
-## 问题 31: M1 验收 1.4.3（设置重启恢复自检）
+## 闂 31: M1 楠屾敹 1.4.3锛堣缃噸鍚仮澶嶈嚜妫€锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `1.4.3` 瑕佹眰鈥滆缃噸鍚悗鍙仮澶嶁€濓紝浣嗙己灏戝彲閲嶅鎵ц鐨勯獙鏀跺叆鍙ｃ€?
 
-- 任务清单 `1.4.3` 要求“设置重启后可恢复”，但缺少可重复执行的验收入口。
 
+- 浠呮墜宸ラ噸鍚獙璇侀毦浠ヨ鐩栧叧閿瓧娈碉紙闊抽噺銆侀€熷害銆佹仮澶嶆爣蹇椼€佹挱鏀惧垪琛ㄧ储寮曘€佸揩鎹烽敭锛夈€?
 
 
-- 仅手工重启验证难以覆盖关键字段（音量、速度、恢复标志、播放列表索引、快捷键）。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 涓绘祦绋嬪凡鏈?`loadAppSettings/saveAppSettings`锛屼絾娌℃湁鐙珛鍛戒护琛岃緭鍑虹敤浜庡洖褰掗獙鏀躲€?
 
 
 
-- 主流程已有 `loadAppSettings/saveAppSettings`，但没有独立命令行输出用于回归验收。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`main` 鏂板 `--settings-persistence-check [settings_file]` 鍛戒护锛?
 
-### 解决方案
 
+  - 鍐欏叆涓€缁勬祴璇曡缃紱
 
 
-- 在 `main` 新增 `--settings-persistence-check [settings_file]` 命令：
 
+  - 閲嶆柊鍔犺浇骞堕€愰」鏍￠獙 volume/speed/resume/index/hotkey锛?
 
 
-  - 写入一组测试设置；
+  - 杈撳嚭 `settings-persistence-check.result=PASS/FAIL`銆?
 
 
+- 榛樿浣跨敤绯荤粺涓存椂鐩綍杩涜妫€鏌ワ紝涓嶆薄鏌撻」鐩唴 `config/player_settings.ini`銆?
 
-  - 重新加载并逐项校验 volume/speed/resume/index/hotkey；
 
+- 鏂板鏈湴鎶ュ憡 `docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`銆?
 
 
-  - 输出 `settings-persistence-check.result=PASS/FAIL`。
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`1.4.3` 瀹屾垚銆?
 
 
 
-- 默认使用系统临时目录进行检查，不污染项目内 `config/player_settings.ini`。
 
 
 
-- 新增本地报告 `docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`。
-
-
-
-- 更新任务清单，标记 `1.4.3` 完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7524,99 +7083,86 @@ void VideoPlayer::play() {
 
 
 
-## 问题 32: M2 2.1.2（容器矩阵补齐 mov/avi/m2ts）
+## 闂 32: M2 2.1.2锛堝鍣ㄧ煩闃佃ˉ榻?mov/avi/m2ts锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `2.1.2` 鐩爣瑕佹眰瀹瑰櫒瑕嗙洊 `mp4/mkv/mov/avi/webm/flv/ts/m2ts`銆?
 
-- 任务清单 `2.1.2` 目标要求容器覆盖 `mp4/mkv/mov/avi/webm/flv/ts/m2ts`。
 
+- 鐜版湁鏍煎紡鍥炲綊鏍锋湰浠呰鐩栦簡 `mp4/mkv/webm/flv/ts`锛岀己灏?`mov/avi/m2ts` 瀹炴祴闂幆銆?
 
 
-- 现有格式回归样本仅覆盖了 `mp4/mkv/webm/flv/ts`，缺少 `mov/avi/m2ts` 实测闭环。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 鍥炲綊鏍锋湰鍒楄〃涓庤嚜鍔ㄧ敓鎴愯剼鏈湭鍖呭惈 `mov/avi/m2ts` 杈撳嚭锛屽鑷村鍣ㄧ煩闃佃鐩栦笉瀹屾暣銆?
 
 
 
-- 回归样本列表与自动生成脚本未包含 `mov/avi/m2ts` 输出，导致容器矩阵覆盖不完整。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鎵╁睍鏍锋湰鐭╅樀 `format_samples.csv`锛屾柊澧烇細
 
-### 解决方案
 
 
+  - `mov`锛坔264 + aac锛?
 
-- 扩展样本矩阵 `format_samples.csv`，新增：
 
+  - `avi`锛坔264 + mp3锛?
 
 
-  - `mov`（h264 + aac）
+  - `m2ts`锛坔264 + ac3锛?
 
 
+- 鎵╁睍 `tools/download_test_samples.ps1`锛?
 
-  - `avi`（h264 + mp3）
 
+  - 鏂板 `samples/mov`銆乣samples/avi`銆乣samples/m2ts` 鐩綍鐢熸垚锛?
 
 
-  - `m2ts`（h264 + ac3）
+  - 鏂板涓夌被瀹瑰櫒鏍锋湰鐢熸垚鍛戒护銆?
 
 
+- 鏇存柊鏍锋湰鐩綍鏂囨。涓庡拷鐣ヨ鍒欙紝琛ラ綈 `.gitkeep`銆?
 
-- 扩展 `tools/download_test_samples.ps1`：
 
+- 鎵ц鏈湴鍥炲綊骞舵洿鏂版姤鍛婏細`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`銆?
 
 
-  - 新增 `samples/mov`、`samples/avi`、`samples/m2ts` 目录生成；
+- 浠诲姟娓呭崟 `2.1.2` 鏍囪瀹屾垚銆?
 
 
 
-  - 新增三类容器样本生成命令。
 
 
 
-- 更新样本目录文档与忽略规则，补齐 `.gitkeep`。
-
-
-
-- 执行本地回归并更新报告：`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`。
-
-
-
-- 任务清单 `2.1.2` 标记完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7688,7 +7234,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 33: M2 2.1.3（视频编码矩阵补齐 MPEG-2）
+## 闂 33: M2 2.1.3锛堣棰戠紪鐮佺煩闃佃ˉ榻?MPEG-2锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -7696,83 +7249,65 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `2.1.3` 鐩爣涓鸿棰戠紪鐮佹敮鎸?`H.264/H.265/VP9/AV1/MPEG-2`銆?
+
+
+- 鐜版湁鍥炲綊鏍锋湰宸茶鐩栧墠鍥涢」锛屼絾缂哄皯 `MPEG-2` 瑙嗛缂栫爜鏍锋湰锛岄獙鏀堕棴鐜笉瀹屾暣銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `2.1.3` 目标为视频编码支持 `H.264/H.265/VP9/AV1/MPEG-2`。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 现有回归样本已覆盖前四项，但缺少 `MPEG-2` 视频编码样本，验收闭环不完整。
+- `format_samples.csv` 涓?`download_test_samples.ps1` 鏈寘鍚?`mpeg2video` 鏍锋湰銆?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- `format_samples.csv` 与 `download_test_samples.ps1` 未包含 `mpeg2video` 样本。
+### 瑙ｅ喅鏂规
 
 
 
-
-
-
-
-### 解决方案
-
-
-
-- 在回归样本矩阵中新增 `mpeg2video` 条目：
-
+- 鍦ㄥ洖褰掓牱鏈煩闃典腑鏂板 `mpeg2video` 鏉＄洰锛?
 
 
   - `samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts`
 
 
 
-- 在样本生成脚本中新增 MPEG-2 样本生成流程：
+- 鍦ㄦ牱鏈敓鎴愯剼鏈腑鏂板 MPEG-2 鏍锋湰鐢熸垚娴佺▼锛?
 
 
-
-  - 视频编码 `mpeg2video`；
-
+  - 瑙嗛缂栫爜 `mpeg2video`锛?
 
 
-  - 音频编码 `ac3`；
+  - 闊抽缂栫爜 `ac3`锛?
 
 
-
-  - 容器 `mpegts`。
-
+  - 瀹瑰櫒 `mpegts`銆?
 
 
-- 运行本地格式回归并更新报告。
+- 杩愯鏈湴鏍煎紡鍥炲綊骞舵洿鏂版姤鍛娿€?
 
 
-
-- 任务清单 `2.1.3` 标记完成。
+- 浠诲姟娓呭崟 `2.1.3` 鏍囪瀹屾垚銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -7816,7 +7351,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 34: M2 2.1.4（音频编码矩阵补齐 E-AC3/DTS/Vorbis/PCM）
+## 闂 34: M2 2.1.4锛堥煶棰戠紪鐮佺煩闃佃ˉ榻?E-AC3/DTS/Vorbis/PCM锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -7824,48 +7366,36 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `2.1.4` 鐩爣瑕佹眰闊抽缂栫爜瑕嗙洊 `AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`銆?
+
+
+- 鐜版湁鍥炲綊鏍锋湰缂哄皯 `E-AC3/DTS/Vorbis/PCM` 瀹炴祴锛岄獙鏀堕棴鐜笉瀹屾暣銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `2.1.4` 目标要求音频编码覆盖 `AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 现有回归样本缺少 `E-AC3/DTS/Vorbis/PCM` 实测，验收闭环不完整。
+- 鍥炲綊鏍锋湰娓呭崟鍜岃嚜鍔ㄦ牱鏈敓鎴愯剼鏈湭瑕嗙洊涓婅堪鍥涚被闊抽缂栫爜銆?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 回归样本清单和自动样本生成脚本未覆盖上述四类音频编码。
+### 瑙ｅ喅鏂规
 
 
 
-
-
-
-
-### 解决方案
-
-
-
-- 扩展 `format_samples.csv` 新增四条样本：
-
+- 鎵╁睍 `format_samples.csv` 鏂板鍥涙潯鏍锋湰锛?
 
 
   - `h264 + eac3 (mkv)`
@@ -7884,15 +7414,13 @@ void VideoPlayer::play() {
 
 
 
-- 扩展 `download_test_samples.ps1` 生成流程并修复 DTS 编码：
+- 鎵╁睍 `download_test_samples.ps1` 鐢熸垚娴佺▼骞朵慨澶?DTS 缂栫爜锛?
 
 
-
-  - `dca` 编码使用 `-strict -2` 通过实验特性限制。
-
+  - `dca` 缂栫爜浣跨敤 `-strict -2` 閫氳繃瀹為獙鐗规€ч檺鍒躲€?
 
 
-- 扩展回归脚本兼容等价编码名：
+- 鎵╁睍鍥炲綊鑴氭湰鍏煎绛変环缂栫爜鍚嶏細
 
 
 
@@ -7908,19 +7436,17 @@ void VideoPlayer::play() {
 
 
 
-- 运行本地回归并更新报告。
+- 杩愯鏈湴鍥炲綊骞舵洿鏂版姤鍛娿€?
 
 
-
-- 任务清单 `2.1.4` 标记完成。
-
-
+- 浠诲姟娓呭崟 `2.1.4` 鏍囪瀹屾垚銆?
 
 
 
 
 
-### 修改文件
+
+### 淇敼鏂囦欢
 
 
 
@@ -7968,7 +7494,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 35: M3 3.1.1（DecoderFactory 接入真实初始化流程）
+## 闂 35: M3 3.1.1锛圖ecoderFactory 鎺ュ叆鐪熷疄鍒濆鍖栨祦绋嬶級
 
 
 
@@ -7976,7 +7502,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -7984,75 +7510,66 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `3.1.1` 要求 `DecoderFactory` 接入真实解码初始化流程。
+- 浠诲姟娓呭崟 `3.1.1` 瑕佹眰 `DecoderFactory` 鎺ュ叆鐪熷疄瑙ｇ爜鍒濆鍖栨祦绋嬨€?
 
 
+- 鐜版湁閾捐矾涓紝`DecoderFactory` 鏈舰鎴愮粺涓€鐨勨€滃€欓€夊悗绔?-> 閫愪釜灏濊瘯 -> 澶辫触鍥為€€鈥濅富娴佺▼銆?
 
-- 现有链路中，`DecoderFactory` 未形成统一的“候选后端 -> 逐个尝试 -> 失败回退”主流程。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- `DecoderFactory` 浠呮彁渚涒€滄渶浣冲悗绔€濋€夋嫨锛岀己灏戝€欓€夊簭鍒楁帴鍙ｃ€?
 
 
-- `DecoderFactory` 仅提供“最佳后端”选择，缺少候选序列接口。
+- `PlayerCore::initDecoders` 鐨勫垵濮嬪寲涓庡洖閫€閫昏緫鑰﹀悎鍦ㄥ眬閮ㄦ潯浠跺垎鏀腑锛屼笉鍒╀簬缁熶竴鎵╁睍銆?
 
 
 
-- `PlayerCore::initDecoders` 的初始化与回退逻辑耦合在局部条件分支中，不利于统一扩展。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- `DecoderFactory` 鏂板 `selectBackendOrder(codec_name, prefer_hardware)`锛岃緭鍑烘寜浼樺厛绾ф帓搴忕殑鍚庣鍊欓€夊簭鍒楋紝骞朵繚鐣欒蒋浠惰В鐮佸厹搴曘€?
 
-### 解决方案
 
+- `PlayerCore::initDecoders` 鏀逛负鎸夊€欓€夊簭鍒楅€愪釜灏濊瘯鍒濆鍖栵細
 
 
-- `DecoderFactory` 新增 `selectBackendOrder(codec_name, prefer_hardware)`，输出按优先级排序的后端候选序列，并保留软件解码兜底。
 
+  - 瀵规瘡涓€欓€夊悗绔噸寤哄苟閰嶇疆 `AVCodecContext`锛?
 
 
-- `PlayerCore::initDecoders` 改为按候选序列逐个尝试初始化：
+  - 鍚庣閰嶇疆澶辫触鎴?`avcodec_open2` 澶辫触鏃惰嚜鍔ㄥ垏鎹笅涓€涓€欓€夛紱
 
 
 
-  - 对每个候选后端重建并配置 `AVCodecContext`；
+  - 鎴愬姛鍚庣粺涓€璁板綍鏈€缁堣В鐮佸悗绔€?
 
 
+- `tryConfigureD3D11HardwareDecode` 璋冩暣涓虹函 D3D11 閰嶇疆鑱岃矗锛屼笉鍐嶅湪鍑芥暟鍐呭仛鍚庣绛栫暐鍐崇瓥銆?
 
-  - 后端配置失败或 `avcodec_open2` 失败时自动切换下一个候选；
 
+- 浠诲姟娓呭崟 `3.1.1` 鏍囪瀹屾垚銆?
 
 
-  - 成功后统一记录最终解码后端。
 
 
 
-- `tryConfigureD3D11HardwareDecode` 调整为纯 D3D11 配置职责，不再在函数内做后端策略决策。
 
-
-
-- 任务清单 `3.1.1` 标记完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -8096,7 +7613,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 36: M3 3.1.2（D3D11VA 初始化失败回退软解兜底）
+## 闂 36: M3 3.1.2锛圖3D11VA 鍒濆鍖栧け璐ュ洖閫€杞В鍏滃簳锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -8104,75 +7628,59 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `3.1.2` 瑕佹眰 D3D11VA 鍒濆鍖栧け璐ユ椂鍙潬鍥為€€杞В銆?
+
+
+- 鐜版湁閫昏緫鍦ㄥ儚绱犳牸寮忓崗鍟嗗け璐ュ満鏅笅浠呮棩蹇楁彁绀猴紝鏈樉寮忔洿鏂板悗绔姸鎬侊紝瀛樺湪鐘舵€佷笉涓€鑷撮闄┿€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `3.1.2` 要求 D3D11VA 初始化失败时可靠回退软解。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 现有逻辑在像素格式协商失败场景下仅日志提示，未显式更新后端状态，存在状态不一致风险。
+- `selectVideoPixelFormat` 鍦ㄥ崗鍟嗕笉鍒?D3D11VA 鏍煎紡鏃朵細杩斿洖杞欢鏍煎紡锛?
+
+
+- 浣嗘鍓嶆病鏈夊悓姝ュ垏鎹?`video_decoder_backend_` 涓庣‖浠跺儚绱犳牸寮忕姸鎬併€?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- `selectVideoPixelFormat` 在协商不到 D3D11VA 格式时会返回软件格式；
+### 瑙ｅ喅鏂规
 
 
 
-- 但此前没有同步切换 `video_decoder_backend_` 与硬件像素格式状态。
+- 鍦?`PlayerCore::selectVideoPixelFormat` 涓ˉ鍏呮樉寮忚蒋瑙ｉ檷绾э細
 
 
 
+  - `video_hw_pixel_fmt_ = AV_PIX_FMT_NONE`锛?
 
 
+  - `video_decoder_backend_ = Software`銆?
 
 
-### 解决方案
+- 鍦?`initDecoders` 鍚庣灏濊瘯閾捐矾涓ˉ鍏呪€淒3D11VA 鍗忓晢闃舵闄嶇骇杞В鈥濇棩蹇椼€?
 
 
-
-- 在 `PlayerCore::selectVideoPixelFormat` 中补充显式软解降级：
-
-
-
-  - `video_hw_pixel_fmt_ = AV_PIX_FMT_NONE`；
-
-
-
-  - `video_decoder_backend_ = Software`。
-
-
-
-- 在 `initDecoders` 后端尝试链路中补充“D3D11VA 协商阶段降级软解”日志。
-
-
-
-- 更新任务清单，标记 `3.1.2` 完成。
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`3.1.2` 瀹屾垚銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -8208,7 +7716,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 37: M3 3.2.1（D3D11 渲染最小可用链路）
+## 闂 37: M3 3.2.1锛圖3D11 娓叉煋鏈€灏忓彲鐢ㄩ摼璺級
 
 
 
@@ -8216,7 +7724,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -8224,83 +7732,75 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `3.2.1` 要求 D3D11 渲染具备最小可用能力（`init/upload/present`）。
+- 浠诲姟娓呭崟 `3.2.1` 瑕佹眰 D3D11 娓叉煋鍏峰鏈€灏忓彲鐢ㄨ兘鍔涳紙`init/upload/present`锛夈€?
 
 
+- 鐜版湁 `D3D11VideoRenderer` 涓烘々瀹炵幇锛屾棤娉曞垵濮嬪寲銆佹棤娉曟秷璐瑰抚锛屼篃鏃犳硶鍛堢幇銆?
 
-- 现有 `D3D11VideoRenderer` 为桩实现，无法初始化、无法消费帧，也无法呈现。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- 娓叉煋鍚庣鎺ュ彛宸插畾涔夛紝浣?D3D11 鍚庣鏈帴鍏ュ疄闄呮覆鏌撻摼璺紱
 
 
-- 渲染后端接口已定义，但 D3D11 后端未接入实际渲染链路；
 
+- 缂哄皯鈥滃綋鍓?SDL renderer 瀹為檯鍚庣鈥濈殑鍙娴嬭兘鍔涳紝鏃犳硶鍒ゅ畾鏄惁鐪熺殑璺戝湪 D3D11銆?
 
 
-- 缺少“当前 SDL renderer 实际后端”的可观测能力，无法判定是否真的跑在 D3D11。
 
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
-### 解决方案
+- 鍦?`Display` 涓柊澧烇細
 
 
 
-- 在 `Display` 中新增：
+  - 娓叉煋椹卞姩鍋忓ソ璁剧疆锛坄setPreferredRendererDriver`锛夛紱
 
 
 
-  - 渲染驱动偏好设置（`setPreferredRendererDriver`）；
+  - 褰撳墠娓叉煋鍚庣瑙傛祴锛坄currentRendererDriver` / `isUsingRendererDriver`锛夈€?
 
 
+- 瀹屾暣瀹炵幇 `D3D11VideoRenderer` 鏈€灏忓姛鑳斤細
 
-  - 当前渲染后端观测（`currentRendererDriver` / `isUsingRendererDriver`）。
 
 
+  - `init` 鏃惰姹?`direct3d11` 椹卞姩骞跺垱寤烘覆鏌撻摼璺紱
 
-- 完整实现 `D3D11VideoRenderer` 最小功能：
 
 
+  - 鎺ラ€?`renderFrame`锛堜笂浼狅級銆乣present`锛堝憟鐜帮級銆乣clear`銆佷簨浠朵笌鎺у埗璇锋眰閫忎紶銆?
 
-  - `init` 时请求 `direct3d11` 驱动并创建渲染链路；
 
+- 鍒濆鍖栧悗鏍￠獙瀹為檯鍚庣锛?
 
 
-  - 接通 `renderFrame`（上传）、`present`（呈现）、`clear`、事件与控制请求透传。
+  - 鑻ラ潪 `direct3d11/d3d11`锛宍init` 澶辫触骞惰褰曟棩蹇楋紝浜ょ敱涓婂眰鍥為€€ `SoftwareSDL`銆?
 
 
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`3.2.1` 瀹屾垚銆?
 
-- 初始化后校验实际后端：
 
 
 
-  - 若非 `direct3d11/d3d11`，`init` 失败并记录日志，交由上层回退 `SoftwareSDL`。
 
 
-
-- 更新任务清单，标记 `3.2.1` 完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -8348,95 +7848,83 @@ void VideoPlayer::play() {
 
 
 
-## 问题 38: M3 3.3.2（渲染失败降级不中断播放）
+## 闂 38: M3 3.3.2锛堟覆鏌撳け璐ラ檷绾т笉涓柇鎾斁锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `3.3.2` 瑕佹眰娓叉煋澶辫触鏃惰嚜鍔ㄩ檷绾т笖涓嶄腑鏂挱鏀俱€?
 
-- 任务清单 `3.3.2` 要求渲染失败时自动降级且不中断播放。
 
+- 鐜版湁瀹炵幇缂哄皯鍙噸澶嶆墽琛岀殑鑷姩鍖栭獙鏀跺叆鍙ｏ紝闅句互绋冲畾楠岃瘉鍥為€€閾捐矾銆?
 
 
-- 现有实现缺少可重复执行的自动化验收入口，难以稳定验证回退链路。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- D3D11 鍒濆鍖栧け璐ュ満鏅鍓嶄富瑕佷緷璧栦汉宸ヨЕ鍙戯紝鏃犳硶浣滀负绋冲畾鍥炲綊椤广€?
 
 
+- 缂哄皯娓叉煋鍚庣/瑙ｇ爜鍚庣鐨勮繍琛屾椂鍙娴嬪瓧娈碉紝涓嶄究浜庡懡浠ゅ寲楠岃瘉銆?
 
-- D3D11 初始化失败场景此前主要依赖人工触发，无法作为稳定回归项。
 
 
 
-- 缺少渲染后端/解码后端的运行时可观测字段，不便于命令化验证。
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鎵╁睍娓叉煋鎺ュ彛锛屽鍔犲悗绔悕绉版煡璇紙`rendererBackendName`锛夈€?
 
 
-### 解决方案
+- 鎵╁睍鎾斁鍣ㄥ澶栨帴鍙ｏ紝鏆撮湶褰撳墠娓叉煋鍚庣鍜岃В鐮佸悗绔悕绉般€?
 
 
+- 鏂板鍛戒护 `--renderer-fallback-check <media_file>`锛?
 
-- 扩展渲染接口，增加后端名称查询（`rendererBackendName`）。
 
+  - 閫氳繃鐜鍙橀噺 `MVP_D3D11_DRIVER_HINT=software` 寮哄埗 D3D11 娓叉煋鍒濆鍖栧け璐ワ紱
 
 
-- 扩展播放器对外接口，暴露当前渲染后端和解码后端名称。
 
+  - 楠岃瘉涓婚摼璺槸鍚﹁嚜鍔ㄥ洖閫€鍒?`SoftwareSDL` 骞惰兘杩涘叆鎾斁寰幆锛?
 
 
-- 新增命令 `--renderer-fallback-check <media_file>`：
+  - 杈撳嚭 `renderer-fallback-check.*` 瀛楁鍜?`PASS/FAIL`銆?
 
 
+- 鏂板鏈湴鍥炲綊鎶ュ憡 `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`銆?
 
-  - 通过环境变量 `MVP_D3D11_DRIVER_HINT=software` 强制 D3D11 渲染初始化失败；
 
+- 浠诲姟娓呭崟 `3.3.2` 鏍囪瀹屾垚銆?
 
 
-  - 验证主链路是否自动回退到 `SoftwareSDL` 并能进入播放循环；
 
 
 
-  - 输出 `renderer-fallback-check.*` 字段和 `PASS/FAIL`。
 
-
-
-- 新增本地回归报告 `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`。
-
-
-
-- 任务清单 `3.3.2` 标记完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -8520,27 +8008,10 @@ void VideoPlayer::play() {
 
 
 
-## 问题 39: M3 3.3.1（Windows 软解+硬解主力样本可播）
+## 闂 39: M3 3.3.1锛圵indows 杞В+纭В涓诲姏鏍锋湰鍙挱锛?
 
 
-
-**日期**: 2026-03-08
-
-
-
-
-
-
-
-### 问题描述
-
-
-
-- 任务清单 `3.3.1` 要求 Windows 下硬解与软解主力样本均可稳定进入播放链路。
-
-
-
-- 现有检查路径缺少统一聚合命令，且同进程连续会话在部分场景存在停止阶段卡死风险。
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -8548,51 +8019,58 @@ void VideoPlayer::play() {
 
 
 
-### 原因分析
+### 闂鎻忚堪
 
 
 
-- 之前的 `--windows-backend-check` 在同进程顺序执行硬解+软解，会触发二次会话资源回收不稳定。
+- 浠诲姟娓呭崟 `3.3.1` 瑕佹眰 Windows 涓嬬‖瑙ｄ笌杞В涓诲姏鏍锋湰鍧囧彲绋冲畾杩涘叆鎾斁閾捐矾銆?
 
 
-
-- 缺少可复用的会话级诊断输出，不利于回归报告自动化采集。
-
-
-
-
-
-
-
-### 解决方案
-
-
-
-- 新增会话级命令 `--windows-backend-session-check <media_file> <hard|soft>`，输出结构化字段并返回模式结果。
-
-
-
-- 将聚合命令 `--windows-backend-check <media_file>` 改为父进程拉起两个子进程（hard/soft）并汇总结果，隔离会话状态。
-
-
-
-- 在 Windows 下使用 `CreateProcess` 重定向输出，避免 shell 重定向解析不稳定。
-
-
-
-- 新增本地回归报告 `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`。
-
-
-
-- 完成任务清单同步：`3.3.1`、`3.3.3` 标记完成。
+- 鐜版湁妫€鏌ヨ矾寰勭己灏戠粺涓€鑱氬悎鍛戒护锛屼笖鍚岃繘绋嬭繛缁細璇濆湪閮ㄥ垎鍦烘櫙瀛樺湪鍋滄闃舵鍗℃椋庨櫓銆?
 
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
-### 修改文件
+
+
+- 涔嬪墠鐨?`--windows-backend-check` 鍦ㄥ悓杩涚▼椤哄簭鎵ц纭В+杞В锛屼細瑙﹀彂浜屾浼氳瘽璧勬簮鍥炴敹涓嶇ǔ瀹氥€?
+
+
+- 缂哄皯鍙鐢ㄧ殑浼氳瘽绾ц瘖鏂緭鍑猴紝涓嶅埄浜庡洖褰掓姤鍛婅嚜鍔ㄥ寲閲囬泦銆?
+
+
+
+
+
+
+### 瑙ｅ喅鏂规
+
+
+
+- 鏂板浼氳瘽绾у懡浠?`--windows-backend-session-check <media_file> <hard|soft>`锛岃緭鍑虹粨鏋勫寲瀛楁骞惰繑鍥炴ā寮忕粨鏋溿€?
+
+
+- 灏嗚仛鍚堝懡浠?`--windows-backend-check <media_file>` 鏀逛负鐖惰繘绋嬫媺璧蜂袱涓瓙杩涚▼锛坔ard/soft锛夊苟姹囨€荤粨鏋滐紝闅旂浼氳瘽鐘舵€併€?
+
+
+- 鍦?Windows 涓嬩娇鐢?`CreateProcess` 閲嶅畾鍚戣緭鍑猴紝閬垮厤 shell 閲嶅畾鍚戣В鏋愪笉绋冲畾銆?
+
+
+- 鏂板鏈湴鍥炲綊鎶ュ憡 `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`銆?
+
+
+- 瀹屾垚浠诲姟娓呭崟鍚屾锛歚3.3.1`銆乣3.3.3` 鏍囪瀹屾垚銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -8632,7 +8110,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 40: M4 4.1（章节导航：上一章/下一章）
+## 闂 40: M4 4.1锛堢珷鑺傚鑸細涓婁竴绔?涓嬩竴绔狅級
 
 
 
@@ -8640,7 +8118,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -8648,95 +8126,81 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `4.1` 需要支持章节导航（上一章/下一章）。
+- 浠诲姟娓呭崟 `4.1` 闇€瑕佹敮鎸佺珷鑺傚鑸紙涓婁竴绔?涓嬩竴绔狅級銆?
 
 
+- 褰撳墠鎾斁閾捐矾缂哄皯绔犺妭鍏冩暟鎹秷璐逛笌绔犺妭璺宠浆鍏ュ彛锛屾棤娉曢€氳繃蹇嵎閿洿鎺ヨ烦绔犮€?
 
-- 当前播放链路缺少章节元数据消费与章节跳转入口，无法通过快捷键直接跳章。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- `Demuxer` 铏借兘璇诲彇濯掍綋鍩烘湰淇℃伅锛屼絾鏈彁鍙?`AVChapter` 鏁版嵁銆?
 
 
-- `Demuxer` 虽能读取媒体基本信息，但未提取 `AVChapter` 数据。
+- 杈撳叆閾捐矾缂哄皯绔犺妭鍔ㄤ綔璇锋眰锛坄Display -> Renderer -> PlayerCore`锛夈€?
 
 
+- 涓绘祦绋嬬己灏戝彲閲嶅鎵ц鐨勭珷鑺傚鑸獙鏀跺懡浠ゃ€?
 
-- 输入链路缺少章节动作请求（`Display -> Renderer -> PlayerCore`）。
 
 
 
-- 主流程缺少可重复执行的章节导航验收命令。
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`Demuxer` 涓В鏋愮珷鑺傚厓鏁版嵁锛屾柊澧?`ChapterInfo` 涓?`MediaInfo::chapters`銆?
 
 
-### 解决方案
+- 鏂板绔犺妭瀵艰埅鍔ㄤ綔涓庤姹傞摼璺細
 
 
 
-- 在 `Demuxer` 中解析章节元数据，新增 `ChapterInfo` 与 `MediaInfo::chapters`。
+  - `HotkeyManager` 澧炲姞 `PreviousChapter/NextChapter`锛?
 
 
+  - 榛樿閿綅缁戝畾 `HOME/END`锛?
 
-- 新增章节导航动作与请求链路：
 
+  - `Display`銆佹覆鏌撳櫒鎺ュ彛銆乣PlayerCore`銆乣VideoPlayer` 鍏ㄩ摼璺€忎紶绔犺妭璇锋眰銆?
 
 
-  - `HotkeyManager` 增加 `PreviousChapter/NextChapter`；
+- 鍦?`PlayerCore` 涓柊澧炵珷鑺傝烦杞兘鍔涳細
 
 
 
-  - 默认键位绑定 `HOME/END`；
+  - 鎵撳紑濯掍綋鏃舵瀯寤虹珷鑺傛椂闂寸偣锛?
 
 
+  - `seekToNextChapter()` / `seekToPreviousChapter()` 鎵ц璺崇珷銆?
 
-  - `Display`、渲染器接口、`PlayerCore`、`VideoPlayer` 全链路透传章节请求。
 
+- 鍦?`main` 鏂板 `--chapter-nav-check <media_file>` 鑷鍛戒护锛屽苟鏇存柊甯姪杈撳嚭銆?
 
 
-- 在 `PlayerCore` 中新增章节跳转能力：
+- 鏂板鏈湴鎶ュ憡 `docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`锛岃褰曠珷鑺傛牱鏈笌 PASS 缁撴灉銆?
 
 
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`4.1` 宸插畬鎴愩€?
 
-  - 打开媒体时构建章节时间点；
 
 
 
-  - `seekToNextChapter()` / `seekToPreviousChapter()` 执行跳章。
 
 
-
-- 在 `main` 新增 `--chapter-nav-check <media_file>` 自检命令，并更新帮助输出。
-
-
-
-- 新增本地报告 `docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`，记录章节样本与 PASS 结果。
-
-
-
-- 更新任务清单，标记 `4.1` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -8844,135 +8308,115 @@ void VideoPlayer::play() {
 
 
 
-## 问题 41: M4 4.2（A-B Repeat）
+## 闂 41: M4 4.2锛圓-B Repeat锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `4.2` 闇€瑕佹敮鎸?A-B Repeat銆?
 
-- 任务清单 `4.2` 需要支持 A-B Repeat。
 
+- 褰撳墠鎾斁鍣ㄧ己灏?A/B/C 蹇嵎閿姩浣滀笌寰幆鍖洪棿鎺у埗閫昏緫锛屾棤娉曞湪鎾斁涓繘琛屽尯闂撮噸澶嶃€?
 
 
-- 当前播放器缺少 A/B/C 快捷键动作与循环区间控制逻辑，无法在播放中进行区间重复。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 杈撳叆閾捐矾鏈畾涔?A-B Repeat 璇锋眰鍔ㄤ綔銆?
 
 
+- `PlayerCore` 缂哄皯 A 鐐?B 鐐圭姸鎬佺鐞嗕笌寰幆瑙﹀彂閫昏緫銆?
 
-- 输入链路未定义 A-B Repeat 请求动作。
 
+- 缂哄皯鍙噸澶嶆墽琛岀殑 A-B Repeat 楠屾敹鍛戒护銆?
 
 
-- `PlayerCore` 缺少 A 点/B 点状态管理与循环触发逻辑。
 
 
 
-- 缺少可重复执行的 A-B Repeat 验收命令。
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鎵╁睍鐑敭鍔ㄤ綔锛?
 
 
+  - 鏂板 `SetABRepeatStart` / `SetABRepeatEnd` / `ClearABRepeat`锛?
 
-### 解决方案
 
+  - 榛樿閿綅缁戝畾 `A/B/C`銆?
 
 
-- 扩展热键动作：
+- 鎵╁睍璇锋眰閾捐矾锛?
 
 
+  - `Display` 澧炲姞 A-B Repeat 璇锋眰鏍囪涓庢秷璐规帴鍙ｏ紱
 
-  - 新增 `SetABRepeatStart` / `SetABRepeatEnd` / `ClearABRepeat`；
 
 
+  - `IVideoRenderer` 涓庡悇娓叉煋鍣ㄥ疄鐜板鍔犻€忎紶鎺ュ彛銆?
 
-  - 默认键位绑定 `A/B/C`。
 
+- `PlayerCore` 鏂板 A-B Repeat 鐘舵€佷笌鎺у埗锛?
 
 
-- 扩展请求链路：
+  - `setABRepeatStart()` 璁剧疆 A 鐐瑰苟娓呯┖鏃?B 鐐癸紱
 
 
 
-  - `Display` 增加 A-B Repeat 请求标记与消费接口；
+  - `setABRepeatEnd()` 璁剧疆 B 鐐瑰苟鍚敤寰幆锛?
 
 
+  - `clearABRepeat()` 娓呴櫎寰幆锛?
 
-  - `IVideoRenderer` 与各渲染器实现增加透传接口。
 
+  - `handleABRepeatLoop()` 鍦ㄦ挱鏀句腑妫€娴嬪埌杈?B 鐐瑰悗鑷姩 seek 鍥?A 鐐广€?
 
 
-- `PlayerCore` 新增 A-B Repeat 状态与控制：
+- `VideoPlayer` 鏆撮湶 A-B Repeat API 渚涗富娴佺▼涓庨獙鏀跺懡浠よ皟鐢ㄣ€?
 
 
+- 鏂板 `--ab-repeat-check <media_file>` 鍛戒护锛岃緭鍑?`ab-repeat-check.*` 瀛楁鍜?`PASS/FAIL`銆?
 
-  - `setABRepeatStart()` 设置 A 点并清空旧 B 点；
 
+- 淇鍥炲綊妫€鏌ュ啿绐侊細
 
 
-  - `setABRepeatEnd()` 设置 B 点并启用循环；
 
+  - `--settings-persistence-check` 鐨勬祴璇曢敭浣嶇敱 `b` 璋冩暣涓?`x`锛岄伩鍏嶄笌鏂伴粯璁ょ儹閿啿绐併€?
 
 
-  - `clearABRepeat()` 清除循环；
+- 鏂板鏈湴鎶ュ憡 `docs/reports/AB_REPEAT_LOCAL_CHECK.md`銆?
 
 
+- 鏇存柊浠诲姟娓呭崟锛屾爣璁?`4.2` 宸插畬鎴愩€?
 
-  - `handleABRepeatLoop()` 在播放中检测到达 B 点后自动 seek 回 A 点。
 
 
 
-- `VideoPlayer` 暴露 A-B Repeat API 供主流程与验收命令调用。
 
 
-
-- 新增 `--ab-repeat-check <media_file>` 命令，输出 `ab-repeat-check.*` 字段和 `PASS/FAIL`。
-
-
-
-- 修复回归检查冲突：
-
-
-
-  - `--settings-persistence-check` 的测试键位由 `b` 调整为 `x`，避免与新默认热键冲突。
-
-
-
-- 新增本地报告 `docs/reports/AB_REPEAT_LOCAL_CHECK.md`。
-
-
-
-- 更新任务清单，标记 `4.2` 已完成。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -9072,7 +8516,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 42: M4 4.3（截图）
+## 闂 42: M4 4.3锛堟埅鍥撅級
 
 
 
@@ -9080,7 +8524,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9088,63 +8532,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `4.3` 需要支持截图。
+- 浠诲姟娓呭崟 `4.3` 闇€瑕佹敮鎸佹埅鍥俱€?
 
 
-
-- 当前实现虽然已经接入截图热键和 `--screenshot-check`，但暂停态没有缓存最近一帧，截图请求无法稳定保存当前画面。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 截图落盘逻辑只绑定在渲染线程的新帧处理路径上。
-
-
-
-- 播放暂停后，调度器不再继续送帧，导致暂停态截图没有可消费的图像数据源。
+- 褰撳墠瀹炵幇铏界劧宸茬粡鎺ュ叆鎴浘鐑敭鍜?`--screenshot-check`锛屼絾鏆傚仠鎬佹病鏈夌紦瀛樻渶杩戜竴甯э紝鎴浘璇锋眰鏃犳硶绋冲畾淇濆瓨褰撳墠鐢婚潰銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- `PlayerCore` 新增最近渲染帧缓存，并支持从缓存帧直接落盘截图。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- `requestScreenshot()` 调整为：播放中异步排队，暂停态直接使用缓存帧保存。
+- 鎴浘钀界洏閫昏緫鍙粦瀹氬湪娓叉煋绾跨▼鐨勬柊甯у鐞嗚矾寰勪笂銆?
 
 
-
-- `--screenshot-check` 升级为暂停态截图验收，覆盖这次修复的核心场景。
-
-
-
-- 更新快捷键文档，补充 `S` 截图、章节导航、A-B Repeat、字幕开关等现有能力说明。
+- 鎾斁鏆傚仠鍚庯紝璋冨害鍣ㄤ笉鍐嶇户缁€佸抚锛屽鑷存殏鍋滄€佹埅鍥炬病鏈夊彲娑堣垂鐨勫浘鍍忔暟鎹簮銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- `PlayerCore` 鏂板鏈€杩戞覆鏌撳抚缂撳瓨锛屽苟鏀寔浠庣紦瀛樺抚鐩存帴钀界洏鎴浘銆?
+
+
+- `requestScreenshot()` 璋冩暣涓猴細鎾斁涓紓姝ユ帓闃燂紝鏆傚仠鎬佺洿鎺ヤ娇鐢ㄧ紦瀛樺抚淇濆瓨銆?
+
+
+- `--screenshot-check` 鍗囩骇涓烘殏鍋滄€佹埅鍥鹃獙鏀讹紝瑕嗙洊杩欐淇鐨勬牳蹇冨満鏅€?
+
+
+- 鏇存柊蹇嵎閿枃妗ｏ紝琛ュ厖 `S` 鎴浘銆佺珷鑺傚鑸€丄-B Repeat銆佸瓧骞曞紑鍏崇瓑鐜版湁鑳藉姏璇存槑銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9200,7 +8636,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 43: `MPC_HC_GAP_ANALYSIS` 评估结论过期
+## 闂 43: `MPC_HC_GAP_ANALYSIS` 璇勪及缁撹杩囨湡
 
 
 
@@ -9208,7 +8644,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9216,63 +8652,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 仍保留旧结论，把多项已接入主流程的能力写成“骨架/未接入”。
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 浠嶄繚鐣欐棫缁撹锛屾妸澶氶」宸叉帴鍏ヤ富娴佺▼鐨勮兘鍔涘啓鎴愨€滈鏋?鏈帴鍏モ€濄€?
 
 
-
-- 这会影响后续迭代优先级判断，也会让文档读者对当前实现进度形成错误认知。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 里程碑文档、开发日志和本地报告持续更新，但差距评估文档没有同步维护。
-
-
-
-- 旧评估主要依据“代码骨架是否存在”，没有吸收后续 `docs/reports/*` 验收结果。
+- 杩欎細褰卞搷鍚庣画杩唬浼樺厛绾у垽鏂紝涔熶細璁╂枃妗ｈ鑰呭褰撳墠瀹炵幇杩涘害褰㈡垚閿欒璁ょ煡銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 将 `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 更新到 2026-03-08 口径。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 重写“当前已具备能力”“差距总览”“关键未实现功能清单”“代码层证据摘要”“建议里程碑”。
+- 閲岀▼纰戞枃妗ｃ€佸紑鍙戞棩蹇楀拰鏈湴鎶ュ憡鎸佺画鏇存柊锛屼絾宸窛璇勪及鏂囨。娌℃湁鍚屾缁存姢銆?
 
 
-
-- 新增“验收与报告证据”章节，把字幕、播放列表、设置、快捷键、D3D11/回退、章节导航、A-B Repeat、截图、格式矩阵的本地报告纳入评估依据。
-
-
-
-- 更新 `docs/README.md`，补充本次文档对齐说明。
+- 鏃ц瘎浼颁富瑕佷緷鎹€滀唬鐮侀鏋舵槸鍚﹀瓨鍦ㄢ€濓紝娌℃湁鍚告敹鍚庣画 `docs/reports/*` 楠屾敹缁撴灉銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 灏?`docs/analysis/MPC_HC_GAP_ANALYSIS.md` 鏇存柊鍒?2026-03-08 鍙ｅ緞銆?
+
+
+- 閲嶅啓鈥滃綋鍓嶅凡鍏峰鑳藉姏鈥濃€滃樊璺濇€昏鈥濃€滃叧閿湭瀹炵幇鍔熻兘娓呭崟鈥濃€滀唬鐮佸眰璇佹嵁鎽樿鈥濃€滃缓璁噷绋嬬鈥濄€?
+
+
+- 鏂板鈥滈獙鏀朵笌鎶ュ憡璇佹嵁鈥濈珷鑺傦紝鎶婂瓧骞曘€佹挱鏀惧垪琛ㄣ€佽缃€佸揩鎹烽敭銆丏3D11/鍥為€€銆佺珷鑺傚鑸€丄-B Repeat銆佹埅鍥俱€佹牸寮忕煩闃电殑鏈湴鎶ュ憡绾冲叆璇勪及渚濇嵁銆?
+
+
+- 鏇存柊 `docs/README.md`锛岃ˉ鍏呮湰娆℃枃妗ｅ榻愯鏄庛€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9308,7 +8736,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 44: `docs/records/VERSION.md` 历史路径描述过期
+## 闂 44: `docs/records/VERSION.md` 鍘嗗彶璺緞鎻忚堪杩囨湡
 
 
 
@@ -9316,7 +8744,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9324,63 +8752,55 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- `docs/records/VERSION.md` 的“阶段一”历史章节仍把早期 decoder/thread/test 文件名写成当前仓库结构说明。
+- `docs/records/VERSION.md` 鐨勨€滈樁娈典竴鈥濆巻鍙茬珷鑺備粛鎶婃棭鏈?decoder/thread/test 鏂囦欢鍚嶅啓鎴愬綋鍓嶄粨搴撶粨鏋勮鏄庛€?
 
 
-
-- 在基于文档遍历仓库时，容易把已移除的旧实现与当前 `PlayerCore + Scheduler + core/*` 主链混淆。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- `2026-03-06` 之后架构已经收敛，但版本文档保留了早期文件级描述。
-
-
-
-- 后续功能持续追加新记录，未回头清理“当前阶段”“下一步计划”这类已过时口径。
+- 鍦ㄥ熀浜庢枃妗ｉ亶鍘嗕粨搴撴椂锛屽鏄撴妸宸茬Щ闄ょ殑鏃у疄鐜颁笌褰撳墠 `PlayerCore + Scheduler + core/*` 涓婚摼娣锋穯銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 将阶段一标题改为“历史起点”，并补充这是早期实现基线的说明。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 将 `video_decoder` / `audio_decoder`、`VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 等旧路径改写为能力级历史记录，并映射到当前 `core/*` 主链。
+- `2026-03-06` 涔嬪悗鏋舵瀯宸茬粡鏀舵暃锛屼絾鐗堟湰鏂囨。淇濈暀浜嗘棭鏈熸枃浠剁骇鎻忚堪銆?
 
 
-
-- 将“下一步计划”、`USE_NEW_PLAYER_CORE`、临时 `tests/core_*` 等表述改写为历史说明，避免误导当前进度判断。
-
-
-
-- 同步补写版本文档的更新日志条目。
+- 鍚庣画鍔熻兘鎸佺画杩藉姞鏂拌褰曪紝鏈洖澶存竻鐞嗏€滃綋鍓嶉樁娈碘€濃€滀笅涓€姝ヨ鍒掆€濊繖绫诲凡杩囨椂鍙ｅ緞銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 灏嗛樁娈典竴鏍囬鏀逛负鈥滃巻鍙茶捣鐐光€濓紝骞惰ˉ鍏呰繖鏄棭鏈熷疄鐜板熀绾跨殑璇存槑銆?
+
+
+- 灏?`video_decoder` / `audio_decoder`銆乣VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 绛夋棫璺緞鏀瑰啓涓鸿兘鍔涚骇鍘嗗彶璁板綍锛屽苟鏄犲皠鍒板綋鍓?`core/*` 涓婚摼銆?
+
+
+- 灏嗏€滀笅涓€姝ヨ鍒掆€濄€乣USE_NEW_PLAYER_CORE`銆佷复鏃?`tests/core_*` 绛夎〃杩版敼鍐欎负鍘嗗彶璇存槑锛岄伩鍏嶈瀵煎綋鍓嶈繘搴﹀垽鏂€?
+
+
+- 鍚屾琛ュ啓鐗堟湰鏂囨。鐨勬洿鏂版棩蹇楁潯鐩€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9408,7 +8828,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 45: README 与架构文档仍混用旧主链表述
+## 闂 45: README 涓庢灦鏋勬枃妗ｄ粛娣风敤鏃т富閾捐〃杩?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9416,71 +8843,55 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- `README.md`銆乣README_ZH.md` 鐨勯」鐩粨鏋勫拰鏋舵瀯绀烘剰浠嶅睍绀?`video_decoder` / `audio_decoder` 绛夋棫璺緞銆?
+
+
+- `docs/design/ARCHITECTURE.md` 涔熷惈鏈夆€滃綋鍓嶅疄鐜扳€濆瓧鏍峰拰鏃фā鍧楀懡鍚嶏紝瀹规槗涓庣幇琛?`PlayerCore + Scheduler + core/*` 涓婚摼娣锋穯銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- `README.md`、`README_ZH.md` 的项目结构和架构示意仍展示 `video_decoder` / `audio_decoder` 等旧路径。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- `docs/design/ARCHITECTURE.md` 也含有“当前实现”字样和旧模块命名，容易与现行 `PlayerCore + Scheduler + core/*` 主链混淆。
+- 鏍圭洰褰?README 鐨勭洰褰曟爲鍜屾灦鏋勫浘鏉ヨ嚜鏃╂湡鍗曚綋/鏃у绾跨▼瀹炵幇闃舵锛屽悗缁湭闅忛噸鏋勫悓姝ュ埛鏂般€?
+
+
+- `docs/design/ARCHITECTURE.md` 淇濈暀浜嗗ぇ閲忓巻鍙茶璁″唴瀹癸紝浣嗙己灏戞竻鏅扮殑鈥滃巻鍙?褰撳墠鈥濊竟鐣屾彁绀恒€?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 根目录 README 的目录树和架构图来自早期单体/旧多线程实现阶段，后续未随重构同步刷新。
+### 瑙ｅ喅鏂规
 
 
 
-- `docs/design/ARCHITECTURE.md` 保留了大量历史设计内容，但缺少清晰的“历史/当前”边界提示。
+- 鏇存柊 `README.md` 涓?`README_ZH.md` 鐨勯」鐩粨鏋勩€佹灦鏋勭ず鎰忓拰鏂囨。閾炬帴锛岀粺涓€鎸囧悜褰撳墠涓婚摼銆?
 
 
+- 鍦?`docs/design/ARCHITECTURE.md` 椤堕儴澧炲姞鐘舵€佽鏄庯紝骞跺皢鏃фā鍧楃珷鑺傛樉寮忔爣璁颁负鈥滃巻鍙插疄鐜扳€濄€?
 
 
+- 灏嗘棩蹇楃ず渚嬩粠 `spdlog` 鏀逛负褰撳墠椤圭洰浣跨敤鐨?`Quill` 瀹忔帴鍙ｃ€?
 
 
-
-### 解决方案
-
-
-
-- 更新 `README.md` 与 `README_ZH.md` 的项目结构、架构示意和文档链接，统一指向当前主链。
-
-
-
-- 在 `docs/design/ARCHITECTURE.md` 顶部增加状态说明，并将旧模块章节显式标记为“历史实现”。
-
-
-
-- 将日志示例从 `spdlog` 改为当前项目使用的 `Quill` 宏接口。
-
-
-
-- 更新 `docs/README.md`，区分历史架构基线与当前重构说明。
+- 鏇存柊 `docs/README.md`锛屽尯鍒嗗巻鍙叉灦鏋勫熀绾夸笌褰撳墠閲嶆瀯璇存槑銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -9520,7 +8931,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 46: 实现教程与迭代计划缺少历史/当前边界说明
+## 闂 46: 瀹炵幇鏁欑▼涓庤凯浠ｈ鍒掔己灏戝巻鍙?褰撳墠杈圭晫璇存槑
 
 
 
@@ -9528,7 +8939,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9536,59 +8947,52 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- `docs/guides/IMPLEMENTATION.md` 仍以早期 `video_decoder/audio_decoder/playLoop` 原型路径讲解实现步骤，容易被误读为当前仓库的逐文件开发指南。
+- `docs/guides/IMPLEMENTATION.md` 浠嶄互鏃╂湡 `video_decoder/audio_decoder/playLoop` 鍘熷瀷璺緞璁茶В瀹炵幇姝ラ锛屽鏄撹璇涓哄綋鍓嶄粨搴撶殑閫愭枃浠跺紑鍙戞寚鍗椼€?
 
 
-
-- `docs/plans/MPC_HC_ITERATION_PLAN.md` 是 `2026-03-07` 的规划快照，但未明确说明部分计划项已在 `2026-03-08` 前后落地。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 这两份文档本身仍有参考价值，但缺少“历史教程 / 计划快照 / 当前进度”之间的边界说明。
-
-
-
-- 当用户按文档遍历仓库时，会把教程示例和规划文字误当作现行结构与当前待办。
+- `docs/plans/MPC_HC_ITERATION_PLAN.md` 鏄?`2026-03-07` 鐨勮鍒掑揩鐓э紝浣嗘湭鏄庣‘璇存槑閮ㄥ垎璁″垝椤瑰凡鍦?`2026-03-08` 鍓嶅悗钀藉湴銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 为 `docs/guides/IMPLEMENTATION.md` 增加状态说明，明确其属于早期原型教程，并指向当前主链参考文档。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 为 `docs/plans/MPC_HC_ITERATION_PLAN.md` 增加状态说明，明确其属于 `2026-03-07` 的计划快照，并补充当前进度参考入口。
+- 杩欎袱浠芥枃妗ｆ湰韬粛鏈夊弬鑰冧环鍊硷紝浣嗙己灏戔€滃巻鍙叉暀绋?/ 璁″垝蹇収 / 褰撳墠杩涘害鈥濅箣闂寸殑杈圭晫璇存槑銆?
 
 
-
-- 更新 `docs/README.md`、`README.md`、`README_ZH.md` 的文档说明，统一区分历史教程、规划快照与当前实现说明。
+- 褰撶敤鎴锋寜鏂囨。閬嶅巻浠撳簱鏃讹紝浼氭妸鏁欑▼绀轰緥鍜岃鍒掓枃瀛楄褰撲綔鐜拌缁撴瀯涓庡綋鍓嶅緟鍔炪€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 涓?`docs/guides/IMPLEMENTATION.md` 澧炲姞鐘舵€佽鏄庯紝鏄庣‘鍏跺睘浜庢棭鏈熷師鍨嬫暀绋嬶紝骞舵寚鍚戝綋鍓嶄富閾惧弬鑰冩枃妗ｃ€?
+
+
+- 涓?`docs/plans/MPC_HC_ITERATION_PLAN.md` 澧炲姞鐘舵€佽鏄庯紝鏄庣‘鍏跺睘浜?`2026-03-07` 鐨勮鍒掑揩鐓э紝骞惰ˉ鍏呭綋鍓嶈繘搴﹀弬鑰冨叆鍙ｃ€?
+
+
+- 鏇存柊 `docs/README.md`銆乣README.md`銆乣README_ZH.md` 鐨勬枃妗ｈ鏄庯紝缁熶竴鍖哄垎鍘嗗彶鏁欑▼銆佽鍒掑揩鐓т笌褰撳墠瀹炵幇璇存槑銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9632,7 +9036,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 47: 辅助说明文档仍缺少当前入口与状态边界
+## 闂 47: 杈呭姪璇存槑鏂囨。浠嶇己灏戝綋鍓嶅叆鍙ｄ笌鐘舵€佽竟鐣?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9640,71 +9051,55 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- `docs/design/FILTERS.md`銆乣docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`銆乣docs/guides/WINDOWS_SETUP.md` 铏界劧鍐呭浠嶆湁鍙傝€冧环鍊硷紝浣嗙己灏戝鈥滃綋鍓嶄富娴佺▼鍏ュ彛鈥濆拰鈥滄枃妗ｉ€傜敤鑼冨洿鈥濈殑鏄庣‘璇存槑銆?
+
+
+- 鍏朵腑 `docs/guides/WINDOWS_SETUP.md` 杩樹繚鐣欎簡涓庡綋鍓?`CMakeLists.txt` 涓嶅畬鍏ㄤ竴鑷寸殑鎵嬪姩閰嶇疆绀轰緥锛屽鏄撹瀵?Windows 鏋勫缓璺緞銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- `docs/design/FILTERS.md`、`docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`docs/guides/WINDOWS_SETUP.md` 虽然内容仍有参考价值，但缺少对“当前主流程入口”和“文档适用范围”的明确说明。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 其中 `docs/guides/WINDOWS_SETUP.md` 还保留了与当前 `CMakeLists.txt` 不完全一致的手动配置示例，容易误导 Windows 构建路径。
+- 杩欏嚑浠芥枃妗ｅ垎鍒湇鍔′簬婊ら暅銆佽兘鍔涘弬鑰冦€乄indows 鐜閰嶇疆锛岄暱鏈熻凯浠ｅ悗鍐呭娌℃湁缁熶竴琛ラ綈鈥滃綋鍓嶅彛寰勨€濊鏄庛€?
+
+
+- 鏂囨。璇昏€呭鏋滅洿鎺ユ寜鏃ф弿杩版墽琛岋紝鍙兘浼氭妸鍙傝€冩€у唴瀹硅褰撴垚褰撳墠鍞竴鍏ュ彛锛屾垨娌跨敤杩囨椂鐨勫弬鏁颁紶閫掓柟寮忋€?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 这几份文档分别服务于滤镜、能力参考、Windows 环境配置，长期迭代后内容没有统一补齐“当前口径”说明。
+### 瑙ｅ喅鏂规
 
 
 
-- 文档读者如果直接按旧描述执行，可能会把参考性内容误当成当前唯一入口，或沿用过时的参数传递方式。
+- 涓?`docs/design/FILTERS.md` 澧炲姞鐘舵€佽鏄庯紝鍖哄垎褰撳墠鐢熸晥鐨?`FilterPipeline` 涓婚摼涓庨鐣欓摼寮忓皝瑁呫€?
 
 
+- 涓?`docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 澧炲姞閫傜敤鑼冨洿璇存槑锛屽苟灏嗘€昏繘搴﹀弬鑰冨叆鍙ｆ寚鍚戝樊璺濊瘎浼般€佺増鏈褰曞拰鍙樻洿鏃ュ織銆?
 
 
+- 涓?`docs/guides/WINDOWS_SETUP.md` 澧炲姞褰撳墠渚濊禆鎺㈡祴椤哄簭璇存槑锛岀Щ闄よ瀵兼€х殑 `SDL2_DIR` / `FFMPEG_DIR` 浼犲弬绀轰緥锛屾敼涓轰笌鐜版湁 `CMakeLists.txt` 涓€鑷寸殑浠撳簱鍐?`external/*` 鍥為€€鍙ｅ緞銆?
 
 
-
-### 解决方案
-
-
-
-- 为 `docs/design/FILTERS.md` 增加状态说明，区分当前生效的 `FilterPipeline` 主链与预留链式封装。
-
-
-
-- 为 `docs/reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md` 增加适用范围说明，并将总进度参考入口指向差距评估、版本记录和变更日志。
-
-
-
-- 为 `docs/guides/WINDOWS_SETUP.md` 增加当前依赖探测顺序说明，移除误导性的 `SDL2_DIR` / `FFMPEG_DIR` 传参示例，改为与现有 `CMakeLists.txt` 一致的仓库内 `external/*` 回退口径。
-
-
-
-- 更新 `docs/README.md` 索引与本轮文档更新记录。
+- 鏇存柊 `docs/README.md` 绱㈠紩涓庢湰杞枃妗ｆ洿鏂拌褰曘€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -9744,7 +9139,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 48: 根 README 故障排除与历史问题归档仍有旧口径
+## 闂 48: 鏍?README 鏁呴殰鎺掗櫎涓庡巻鍙查棶棰樺綊妗ｄ粛鏈夋棫鍙ｅ緞
 
 
 
@@ -9752,7 +9147,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9760,59 +9155,52 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 根目录 `README.md` / `README_ZH.md` 的 Windows 故障排除仍建议使用 `FFMPEG_DIR` 传参，和当前 `CMakeLists.txt` 的依赖探测方式不一致。
+- 鏍圭洰褰?`README.md` / `README_ZH.md` 鐨?Windows 鏁呴殰鎺掗櫎浠嶅缓璁娇鐢?`FFMPEG_DIR` 浼犲弬锛屽拰褰撳墠 `CMakeLists.txt` 鐨勪緷璧栨帰娴嬫柟寮忎笉涓€鑷淬€?
 
 
-
-- `docs/analysis/video-stream-index-fix.md` 是早期原型阶段的问题分析，但缺少“历史归档”说明，容易让读者误以为其中的 `playLoop` / `video_decoder.cpp` 仍属当前主链。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- README 的故障排除段落保留了旧手动依赖用法，没有跟随 Windows 构建入口一起更新。
-
-
-
-- 历史问题分析文档内容本身有价值，但需要显式说明其适用阶段。
+- `docs/analysis/video-stream-index-fix.md` 鏄棭鏈熷師鍨嬮樁娈电殑闂鍒嗘瀽锛屼絾缂哄皯鈥滃巻鍙插綊妗ｂ€濊鏄庯紝瀹规槗璁╄鑰呰浠ヤ负鍏朵腑鐨?`playLoop` / `video_decoder.cpp` 浠嶅睘褰撳墠涓婚摼銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 将 README 中 FFmpeg 故障排除改为当前推荐口径：优先说明 `vcpkg` toolchain，手动安装则使用仓库内 `external/ffmpeg/` 回退布局。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 为 `docs/analysis/video-stream-index-fix.md` 增加状态说明，标记为早期原型问题分析归档。
+- README 鐨勬晠闅滄帓闄ゆ钀戒繚鐣欎簡鏃ф墜鍔ㄤ緷璧栫敤娉曪紝娌℃湁璺熼殢 Windows 鏋勫缓鍏ュ彛涓€璧锋洿鏂般€?
 
 
-
-- 在 `docs/README.md` 中补充该历史分析文档的索引与本轮更新记录。
+- 鍘嗗彶闂鍒嗘瀽鏂囨。鍐呭鏈韩鏈変环鍊硷紝浣嗛渶瑕佹樉寮忚鏄庡叾閫傜敤闃舵銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 灏?README 涓?FFmpeg 鏁呴殰鎺掗櫎鏀逛负褰撳墠鎺ㄨ崘鍙ｅ緞锛氫紭鍏堣鏄?`vcpkg` toolchain锛屾墜鍔ㄥ畨瑁呭垯浣跨敤浠撳簱鍐?`external/ffmpeg/` 鍥為€€甯冨眬銆?
+
+
+- 涓?`docs/analysis/video-stream-index-fix.md` 澧炲姞鐘舵€佽鏄庯紝鏍囪涓烘棭鏈熷師鍨嬮棶棰樺垎鏋愬綊妗ｃ€?
+
+
+- 鍦?`docs/README.md` 涓ˉ鍏呰鍘嗗彶鍒嗘瀽鏂囨。鐨勭储寮曚笌鏈疆鏇存柊璁板綍銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9852,7 +9240,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 49: 缺少独立的文档巡检总表
+## 闂 49: 缂哄皯鐙珛鐨勬枃妗ｅ贰妫€鎬昏〃
 
 
 
@@ -9860,7 +9248,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -9868,55 +9256,49 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 前几轮文档整理已经完成，但巡检结果分散在对话、日志和多个提交中，缺少一份独立的总表文档。
+- 鍓嶅嚑杞枃妗ｆ暣鐞嗗凡缁忓畬鎴愶紝浣嗗贰妫€缁撴灉鍒嗘暎鍦ㄥ璇濄€佹棩蹇楀拰澶氫釜鎻愪氦涓紝缂哄皯涓€浠界嫭绔嬬殑鎬昏〃鏂囨。銆?
 
 
-
-- 后续维护者如果想快速了解“哪些文档已收敛、哪些内容属于历史保留、为什么要保留”，需要来回翻阅多个文件。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 现有 `CHANGELOG.md` / `DEVELOP_LOG.md` 适合记录过程，但不适合作为面向后续维护的摘要报告。
-
-
-
-- `docs/README.md` 虽然是索引入口，但没有独立承载本轮巡检结论的专题文档。
+- 鍚庣画缁存姢鑰呭鏋滄兂蹇€熶簡瑙ｂ€滃摢浜涙枃妗ｅ凡鏀舵暃銆佸摢浜涘唴瀹瑰睘浜庡巻鍙蹭繚鐣欍€佷负浠€涔堣淇濈暀鈥濓紝闇€瑕佹潵鍥炵炕闃呭涓枃浠躲€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增 `docs/analysis/DOC_AUDIT_2026-03-08.md`，集中归档本轮文档巡检的范围、方法、已完成对齐项、保留历史内容、后续维护建议与关联提交。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 更新 `docs/README.md`，把该报告加入索引，并补一条本轮更新记录。
+- 鐜版湁 `CHANGELOG.md` / `DEVELOP_LOG.md` 閫傚悎璁板綍杩囩▼锛屼絾涓嶉€傚悎浣滀负闈㈠悜鍚庣画缁存姢鐨勬憳瑕佹姤鍛娿€?
+
+
+- `docs/README.md` 铏界劧鏄储寮曞叆鍙ｏ紝浣嗘病鏈夌嫭绔嬫壙杞芥湰杞贰妫€缁撹鐨勪笓棰樻枃妗ｃ€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鏂板 `docs/analysis/DOC_AUDIT_2026-03-08.md`锛岄泦涓綊妗ｆ湰杞枃妗ｅ贰妫€鐨勮寖鍥淬€佹柟娉曘€佸凡瀹屾垚瀵归綈椤广€佷繚鐣欏巻鍙插唴瀹广€佸悗缁淮鎶ゅ缓璁笌鍏宠仈鎻愪氦銆?
+
+
+- 鏇存柊 `docs/README.md`锛屾妸璇ユ姤鍛婂姞鍏ョ储寮曪紝骞惰ˉ涓€鏉℃湰杞洿鏂拌褰曘€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -9952,99 +9334,86 @@ void VideoPlayer::play() {
 
 
 
-## 问题 50: M4 4.4：暂停态帧步进接入与验收
+## 闂 50: M4 4.4锛氭殏鍋滄€佸抚姝ヨ繘鎺ュ叆涓庨獙鏀?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `4.4` 瑕佹眰鏀寔鏆傚仠鎬佸抚姝ヨ繘銆?
 
-- 任务清单 `4.4` 要求支持暂停态帧步进。
 
+- 褰撳墠鎾斁鍣ㄨ櫧鐒跺凡鏈夋殏鍋溿€佹埅鍥俱€佺珷鑺傚鑸拰 A-B Repeat锛屼絾缂哄皯鍙洿鎺ラ€愬抚妫€鏌ョ敾闈㈢殑浜や簰鍏ュ彛銆?
 
 
-- 当前播放器虽然已有暂停、截图、章节导航和 A-B Repeat，但缺少可直接逐帧检查画面的交互入口。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- 杈撳叆灞傛病鏈夊崟鐙殑甯ф杩涘姩浣滐紝涔熸病鏈夊搴旂殑榛樿閿綅銆?
 
 
+- `PlayerCore` 鐨勬殏鍋滄€佸彧浼氬喕缁撹皟搴﹀櫒锛岀己灏戔€渟eek 鍚庡埛鏂扮洰鏍囧抚鈥濈殑鍗曞抚娓叉煋璺緞銆?
 
-- 输入层没有单独的帧步进动作，也没有对应的默认键位。
 
+- 闊抽娑堣垂绾跨▼鍦ㄦ殏鍋滄€佷粛浼氫緷鎹棫 `playback_pts` 鍥炲啓浣嶇疆锛屽鑷村崟甯ф杩涘悗鐨勬椂闂寸偣鍙兘琚煶棰戞椂閽熻鐩栥€?
 
 
-- `PlayerCore` 的暂停态只会冻结调度器，缺少“seek 后刷新目标帧”的单帧渲染路径。
 
 
 
-- 音频消费线程在暂停态仍会依据旧 `playback_pts` 回写位置，导致单帧步进后的时间点可能被音频时钟覆盖。
 
+### 瑙ｅ喅鏂规
 
 
 
+- 涓虹儹閿郴缁熸柊澧?`step_frame_backward` / `step_frame_forward` 鍔ㄤ綔锛岄粯璁ょ粦瀹?`,` / `.`銆?
 
 
+- 鍦?`Display -> Renderer -> PlayerCore` 閾捐矾鏂板甯ф杩涜姹傞€氶亾銆?
 
-### 解决方案
 
+- `PlayerCore` 鏂板鏆傚仠鎬佸抚姝ヨ繘鑳藉姏锛?
 
 
-- 为热键系统新增 `step_frame_backward` / `step_frame_forward` 动作，默认绑定 `,` / `.`。
+  - 浼扮畻鍗曞抚姝ラ暱锛?
 
 
+  - 閫氳繃 seek 鍒锋柊闊宠棰戠姸鎬侊紱
 
-- 在 `Display -> Renderer -> PlayerCore` 链路新增帧步进请求通道。
 
 
+  - 涓诲姩娓叉煋鐩爣鏃堕棿鐐圭殑棣栧抚骞朵繚鎸佹殏鍋溿€?
 
-- `PlayerCore` 新增暂停态帧步进能力：
 
+- 鏀剁揣闊抽娑堣垂绾跨▼鐨勪綅缃洖鍐欐潯浠讹紝閬垮厤鏆傚仠鎬佽鐩栨杩涚粨鏋溿€?
 
 
-  - 估算单帧步长；
+- 鍦?`main` 鏂板 `--frame-step-check <media_file>` 楠屾敹鍛戒护锛屽苟鍚屾 README / 鐗堟湰鏂囨。 / 宸窛璇勪及 / 浠诲姟娓呭崟銆?
 
 
 
-  - 通过 seek 刷新音视频状态；
 
 
 
-  - 主动渲染目标时间点的首帧并保持暂停。
-
-
-
-- 收紧音频消费线程的位置回写条件，避免暂停态覆盖步进结果。
-
-
-
-- 在 `main` 新增 `--frame-step-check <media_file>` 验收命令，并同步 README / 版本文档 / 差距评估 / 任务清单。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -10504,95 +9873,82 @@ void VideoPlayer::play() {
 
 
 
-## 问题 53: M2 2.2.4：输出播放性能日志（掉帧/队列/CPU/GPU）
+## 闂 53: M2 2.2.4锛氳緭鍑烘挱鏀炬€ц兘鏃ュ織锛堟帀甯?闃熷垪/CPU/GPU锛?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-08
 
-**日期**: 2026-03-08
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 浠诲姟娓呭崟 `2.2.4` 瑕佹眰杈撳嚭鎾斁鎬ц兘鏃ュ織锛岀敤浜庤瘎浼伴珮鍒嗚鲸鐜囥€侀珮鐮佺巼鏍锋湰鐨勬帀甯с€侀槦鍒椾笌璧勬簮鍗犵敤琛ㄧ幇銆?
 
-- 任务清单 `2.2.4` 要求输出播放性能日志，用于评估高分辨率、高码率样本的掉帧、队列与资源占用表现。
 
+- 褰撳墠涓婚摼铏界劧鍐呴儴宸茬粡绱浜嗚В灏佽銆佽В鐮併€佹覆鏌撳拰璋冨害缁熻锛屼絾缂哄皯涓€涓彲澶嶇敤銆佸彲瀵规瘮銆佸彲鐩存帴楠屾敹鐨勭粺涓€杈撳嚭鍏ュ彛銆?
 
 
-- 当前主链虽然内部已经累计了解封装、解码、渲染和调度统计，但缺少一个可复用、可对比、可直接验收的统一输出入口。
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
-### 原因分析
+- `PlayerCore` 鍐呯殑璇婃柇璁℃暟鍣ㄥ拰 `Scheduler` 缁熻鍒嗘暎鍦ㄥ唴閮ㄥ疄鐜颁腑锛屽閮ㄨ皟鐢ㄦ柟鏃犳硶涓€娆℃€ц幏鍙栧畬鏁村揩鐓с€?
 
 
+- 鍛戒护琛岃嚜妫€鍏ュ彛灏氭湭瑕嗙洊鎬ц兘瑙傛祴鍦烘櫙锛屽鑷?`1080p60 / 4K / 楂樼爜鐜嘸 鏍锋湰鍙兘渚濊禆闆舵暎鏃ュ織锛岄毦浠ュ舰鎴愮ǔ瀹氶棬绂併€?
 
-- `PlayerCore` 内的诊断计数器和 `Scheduler` 统计分散在内部实现中，外部调用方无法一次性获取完整快照。
 
+- GPU 鍒╃敤鐜囪法骞冲彴鐩存帴閲囨牱鎴愭湰杈冮珮锛屽洜姝ゆ洿閫傚悎鍏堣緭鍑哄綋鍓嶆縺娲荤殑瑙ｇ爜/娓叉煋 backend锛屼綔涓?GPU 璺緞鏍囪瘑銆?
 
 
-- 命令行自检入口尚未覆盖性能观测场景，导致 `1080p60 / 4K / 高码率` 样本只能依赖零散日志，难以形成稳定门禁。
 
 
 
-- GPU 利用率跨平台直接采样成本较高，因此更适合先输出当前激活的解码/渲染 backend，作为 GPU 路径标识。
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`PlayerCore` 涓柊澧?`DiagnosticsSnapshot`锛岀粺涓€瀵煎嚭 demux銆乨ecode銆乺ender銆乻cheduler 涓庨槦鍒楁寚鏍囥€?
 
 
+- 鍦?`VideoPlayer` 涓€忎紶 `getInfo()` / `getDiagnosticsSnapshot()`锛岄伩鍏嶉獙鏀堕€昏緫鐩存帴鑰﹀悎鍐呴儴瀹炵幇銆?
 
-### 解决方案
 
+- 鍦?`main` 涓柊澧?`--performance-log-check <media_file> [sample_ms]`锛?
 
 
-- 在 `PlayerCore` 中新增 `DiagnosticsSnapshot`，统一导出 demux、decode、render、scheduler 与队列指标。
+  - 閲囨牱鎾斁鏈熼棿鐨勫钩鍧?CPU 鍗犵敤锛?
 
 
+  - 杈撳嚭 renderer / decoder backend锛?
 
-- 在 `VideoPlayer` 中透传 `getInfo()` / `getDiagnosticsSnapshot()`，避免验收逻辑直接耦合内部实现。
 
+  - 杈撳嚭鎺夊抚銆侀槦鍒椼€佽В鐮佸抚鏁般€佹覆鏌撳抚鏁扮瓑缁撴瀯鍖栨寚鏍囥€?
 
 
-- 在 `main` 中新增 `--performance-log-check <media_file> [sample_ms]`：
+- 鍚屾琛ラ綈浠诲姟娓呭崟銆侀獙鏀舵姤鍛娿€佸樊璺濊瘎浼般€佺増鏈褰曚笌寮€鍙戞棩蹇椼€?
 
 
 
-  - 采样播放期间的平均 CPU 占用；
 
 
 
-  - 输出 renderer / decoder backend；
-
-
-
-  - 输出掉帧、队列、解码帧数、渲染帧数等结构化指标。
-
-
-
-- 同步补齐任务清单、验收报告、差距评估、版本记录与开发日志。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -10660,7 +10016,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 54: M2 2.2.1 / 2.3.2：1080p60 稳定播放验收
+## 闂 54: M2 2.2.1 / 2.3.2锛?080p60 绋冲畾鎾斁楠屾敹
 
 
 
@@ -10668,7 +10024,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -10676,75 +10032,66 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `2.2.1` 与 `2.3.2` 需要确认 `1080p60` 样本能够连续稳定播放。
+- 浠诲姟娓呭崟 `2.2.1` 涓?`2.3.2` 闇€瑕佺‘璁?`1080p60` 鏍锋湰鑳藉杩炵画绋冲畾鎾斁銆?
 
 
+- 褰撳墠涓婚摼铏界劧宸叉湁鎬ц兘鏃ュ織鍏ュ彛锛屼絾缂哄皯涓€涓洿鎺ラ潰鍚?`1080p60` 闂ㄧ鐨勭ǔ瀹氭€ч獙鏀跺懡浠ゅ拰閰嶅鏍锋湰鍏ュ彛銆?
 
-- 当前主链虽然已有性能日志入口，但缺少一个直接面向 `1080p60` 门禁的稳定性验收命令和配套样本入口。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- 鐜版湁 `--performance-log-check` 鏇村亸鍚戣娴嬫寚鏍囧鍑猴紝涓嶇洿鎺ュ垽鏂椂闂存帹杩涖€佽繛缁挱鏀剧獥鍙ｄ笌鎺夊抚闂ㄧ鏄惁杈炬爣銆?
 
 
-- 现有 `--performance-log-check` 更偏向观测指标导出，不直接判断时间推进、连续播放窗口与掉帧门禁是否达标。
+- 浠撳簱鐜版湁鏍锋湰闆嗕腑鍦?`1080p30` 涓?`4K60`锛岀己灏戞槑纭殑 `1080p60` 绋冲畾鎬ф牱鏈敓鎴愬叆鍙ｃ€?
 
 
 
-- 仓库现有样本集中在 `1080p30` 与 `4K60`，缺少明确的 `1080p60` 稳定性样本生成入口。
 
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`main` 涓柊澧?`--1080p60-check <media_file> [sample_ms]`锛岃仈鍚?`collectFileProbeReport()` 涓?`DiagnosticsSnapshot` 杈撳嚭绋冲畾鎬ч棬绂佺粨鏋溿€?
 
-### 解决方案
 
+- 楠屾敹閫昏緫閲嶇偣妫€鏌ワ細
 
 
-- 在 `main` 中新增 `--1080p60-check <media_file> [sample_ms]`，联合 `collectFileProbeReport()` 与 `DiagnosticsSnapshot` 输出稳定性门禁结果。
 
+  - 鏍锋湰鏄惁涓?`1920x1080 @ 60fps`锛?
 
 
-- 验收逻辑重点检查：
+  - `5s` 杩炵画鎾斁绐楀彛鍐呮椂闂存槸鍚︾ǔ瀹氭帹杩涳紱
 
 
 
-  - 样本是否为 `1920x1080 @ 60fps`；
+  - `scheduler_late_drops` 涓?`demux_dropped_packets` 鏄惁涓?`0`銆?
 
 
+- 鍦?`tools/download_test_samples.ps1` 涓ˉ鍏?`1080p60 AAC 2ch` 鏍锋湰鐢熸垚锛屽苟鍦?`samples/README.md` 涓褰曠敤閫斻€?
 
-  - `5s` 连续播放窗口内时间是否稳定推进；
 
+- 鍚屾琛ラ綈浠诲姟娓呭崟銆佹姤鍛娿€佸樊璺濊瘎浼般€佺増鏈枃妗ｄ笌寮€鍙戞棩蹇椼€?
 
 
-  - `scheduler_late_drops` 与 `demux_dropped_packets` 是否为 `0`。
 
 
 
-- 在 `tools/download_test_samples.ps1` 中补充 `1080p60 AAC 2ch` 样本生成，并在 `samples/README.md` 中记录用途。
 
-
-
-- 同步补齐任务清单、报告、差距评估、版本文档与开发日志。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -10804,7 +10151,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 55: M2 2.2.2 / 2.3.3：4K 播放与降级验收
+## 闂 55: M2 2.2.2 / 2.3.3锛?K 鎾斁涓庨檷绾ч獙鏀?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -10812,67 +10166,52 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `2.2.2` 涓?`2.3.3` 瑕佹眰纭 `4K` 鏍锋湰鍙互鎾斁锛屽苟涓斿湪纭В涓嶅彲鐢ㄦ椂鑳藉闄嶇骇鍒拌蒋瑙ｇ户缁挱鏀俱€?
+
+
+- 褰撳墠浠撳簱宸叉湁鎬ц兘鏃ュ織鍏ュ彛鍜?Windows 鍚庣鍥為€€鏍￠獙锛屼絾缂哄皯涓€涓洿鎺ラ潰鍚?`4K` 闂ㄧ鐨勮仛鍚堥獙鏀跺懡浠ゃ€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `2.2.2` 与 `2.3.3` 要求确认 `4K` 样本可以播放，并且在硬解不可用时能够降级到软解继续播放。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 当前仓库已有性能日志入口和 Windows 后端回退校验，但缺少一个直接面向 `4K` 门禁的聚合验收命令。
+- `--performance-log-check` 鍙互璇存槑 4K 鏍锋湰鑳借繘鍏ユ挱鏀鹃摼璺紝浣嗕笉鐩存帴瑕嗙洊鈥滆蒋瑙ｉ檷绾ф槸鍚︽垚鍔熲€濄€?
+
+
+- `--windows-backend-check` 鍙獙璇?hard / soft 涓や釜鍚庣妯″紡锛屼絾涓嶆惡甯?`4K` 杩炵画鎾斁绐楀彛鍜屾椂闂存帹杩涢棬绂併€?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- `--performance-log-check` 可以说明 4K 样本能进入播放链路，但不直接覆盖“软解降级是否成功”。
+### 瑙ｅ喅鏂规
 
 
 
-- `--windows-backend-check` 可验证 hard / soft 两个后端模式，但不携带 `4K` 连续播放窗口和时间推进门禁。
+- 鍦?`main` 涓柊澧?`--4k-playback-check <media_file> [sample_ms]`锛屼富杩涚▼楠岃瘉 `4K` 鏍锋湰鐪熷疄鎺ㄨ繘涓?`late_drop`锛屽瓙杩涚▼澶嶇敤 hard / soft backend session 楠岃瘉鍙檷绾с€?
 
 
+- 杈撳嚭 probe 瀹介珮/FPS銆佹椂闂存帹杩涙瘮鐜囥€佸綋鍓?backend銆乭ard / soft 浼氳瘽缁撴灉绛夌粨鏋勫寲瀛楁銆?
 
 
-
-
-
-### 解决方案
-
-
-
-- 在 `main` 中新增 `--4k-playback-check <media_file> [sample_ms]`，主进程验证 `4K` 样本真实推进与 `late_drop`，子进程复用 hard / soft backend session 验证可降级。
-
-
-
-- 输出 probe 宽高/FPS、时间推进比率、当前 backend、hard / soft 会话结果等结构化字段。
-
-
-
-- 同步补齐任务清单、报告、差距评估、版本记录与开发日志。
+- 鍚屾琛ラ綈浠诲姟娓呭崟銆佹姤鍛娿€佸樊璺濊瘎浼般€佺増鏈褰曚笌寮€鍙戞棩蹇椼€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -10924,7 +10263,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 56: M2 2.2.3：>80Mbps 高码率样本验收
+## 闂 56: M2 2.2.3锛?80Mbps 楂樼爜鐜囨牱鏈獙鏀?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -10932,67 +10278,52 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `2.2.3` 瑕佹眰鑷冲皯楠岃瘉涓€涓?`>80Mbps` 鏍锋湰鑳藉鎾斁銆?
+
+
+- 褰撳墠浠撳簱铏藉凡瀹屾垚 `1080p60`銆乣4K` 涓庢€ц兘鏃ュ織闂ㄧ锛屼絾缂哄皯鏄庣‘鐨勯珮鐮佺巼鏍锋湰鍜屼笓鐢ㄩ獙鏀跺叆鍙ｃ€?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `2.2.3` 要求至少验证一个 `>80Mbps` 样本能够播放。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 当前仓库虽已完成 `1080p60`、`4K` 与性能日志门禁，但缺少明确的高码率样本和专用验收入口。
+- 鐜版湁鏍锋湰鏅亶鍙湁 `3~4Mbps` 绾у埆锛屾棤娉曡瘉鏄庢挱鏀惧櫒鍦ㄩ珮鐮佺巼鍦烘櫙涓嬬殑瑙ｅ皝瑁呫€佽В鐮佷笌娓叉煋閾捐矾绋冲畾鎬с€?
+
+
+- 鐜版湁楠屾敹鍛戒护鏈鈥滄牸寮忕爜鐜囨槸鍚﹁秴杩?80Mbps鈥濆仛鍓嶇疆鍒ゆ柇銆?
 
 
 
 
 
 
-
-### 原因分析
-
-
-
-- 现有样本普遍只有 `3~4Mbps` 级别，无法证明播放器在高码率场景下的解封装、解码与渲染链路稳定性。
+### 瑙ｅ喅鏂规
 
 
 
-- 现有验收命令未对“格式码率是否超过 80Mbps”做前置判断。
+- 鏂板 `--high-bitrate-check <media_file> [sample_ms]`锛屽厛璇诲彇鏍煎紡鐮佺巼锛屽啀鎵ц杩炵画鎾斁绐楀彛鏍￠獙銆?
 
 
+- 鍦?`tools/download_test_samples.ps1` 涓柊澧?`stress100m__h264_aac__1920x1080__60fps__2ch.mp4` 鐢熸垚鍏ュ彛锛屼繚璇佹湰鍦板彲澶嶇幇瀹為獙鏍锋湰銆?
 
 
-
-
-
-### 解决方案
-
-
-
-- 新增 `--high-bitrate-check <media_file> [sample_ms]`，先读取格式码率，再执行连续播放窗口校验。
-
-
-
-- 在 `tools/download_test_samples.ps1` 中新增 `stress100m__h264_aac__1920x1080__60fps__2ch.mp4` 生成入口，保证本地可复现实验样本。
-
-
-
-- 同步补齐任务清单、报告、差距评估、版本记录与开发日志。
+- 鍚屾琛ラ綈浠诲姟娓呭崟銆佹姤鍛娿€佸樊璺濊瘎浼般€佺増鏈褰曚笌寮€鍙戞棩蹇椼€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11052,7 +10383,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 57: 发布门禁 6.5：长时播放稳定性验收
+## 闂 57: 鍙戝竷闂ㄧ 6.5锛氶暱鏃舵挱鏀剧ǔ瀹氭€ч獙鏀?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11060,59 +10398,46 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `6.5` 瑕佹眰纭鎾斁鍣ㄥ湪鎸佺画鎾斁绐楀彛鍐呮棤 crash 涓旇兘鎸佺画鎺ㄨ繘銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `6.5` 要求确认播放器在持续播放窗口内无 crash 且能持续推进。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鐜版湁 `1080p60`銆乣4K`銆侀珮鐮佺巼涓庢€ц兘鏃ュ織闂ㄧ瑕嗙洊浜嗙煭绐楀彛绋冲畾鎬т笌鍙娴嬫€э紝浣嗙己灏戜竴涓洿鎺ラ潰鍚戔€滈暱鏃舵挱鏀炬棤 crash鈥濈殑鍥哄畾 smoke 鍛戒护銆?
 
 
-
-
-### 原因分析
-
-
-
-- 现有 `1080p60`、`4K`、高码率与性能日志门禁覆盖了短窗口稳定性与可观测性，但缺少一个直接面向“长时播放无 crash”的固定 smoke 命令。
-
-
-
-- 发布门禁 `6.1 ~ 6.6` 的最后缺口是稳定性证据，缺少单独报告就无法收口 DoD。
+- 鍙戝竷闂ㄧ `6.1 ~ 6.6` 鐨勬渶鍚庣己鍙ｆ槸绋冲畾鎬ц瘉鎹紝缂哄皯鍗曠嫭鎶ュ憡灏辨棤娉曟敹鍙?DoD銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 在 `main` 中新增 `--long-playback-check <media_file> [sample_ms]`，要求最短采样窗口 `5000ms`，并输出 `open_ok`、是否进入播放循环、窗口结束后是否仍在播放、时间推进比率、`late_drop`、demux 丢包与 backend 信息。
+### 瑙ｅ喅鏂规
 
 
 
-- 新增 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`，记录 `./juren-30s.mp4` 上 `10000ms` 连续播放 smoke 结果，并同步任务清单、差距评估、版本记录与开发日志。
+- 鍦?`main` 涓柊澧?`--long-playback-check <media_file> [sample_ms]`锛岃姹傛渶鐭噰鏍风獥鍙?`5000ms`锛屽苟杈撳嚭 `open_ok`銆佹槸鍚﹁繘鍏ユ挱鏀惧惊鐜€佺獥鍙ｇ粨鏉熷悗鏄惁浠嶅湪鎾斁銆佹椂闂存帹杩涙瘮鐜囥€乣late_drop`銆乨emux 涓㈠寘涓?backend 淇℃伅銆?
+
+
+- 鏂板 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`锛岃褰?`./juren-30s.mp4` 涓?`10000ms` 杩炵画鎾斁 smoke 缁撴灉锛屽苟鍚屾浠诲姟娓呭崟銆佸樊璺濊瘎浼般€佺増鏈褰曚笌寮€鍙戞棩蹇椼€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11160,7 +10485,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 58: 7.1 插件系统（动态加载与生命周期闭环）
+## 闂 58: 7.1 鎻掍欢绯荤粺锛堝姩鎬佸姞杞戒笌鐢熷懡鍛ㄦ湡闂幆锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11168,63 +10500,49 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `7.1` 闇€瑕佹妸鐜版湁浠呮敮鎸佸唴瀛樻敞鍐?鍚仠鐘舵€佺殑鎻掍欢楠ㄦ灦锛岃ˉ鎴愬彲瀹為檯鍔犺浇鍜岄獙鏀剁殑鎻掍欢绯荤粺銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `7.1` 需要把现有仅支持内存注册/启停状态的插件骨架，补成可实际加载和验收的插件系统。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- `PluginManager` 涔嬪墠鍙淮鎶ゅ厓鏁版嵁鍒楄〃锛屾病鏈?`DLL` 鍔ㄦ€佸姞杞姐€佺増鏈吋瀹规牎楠屻€佺敓鍛藉懆鏈熷洖璋冨拰鍗歌浇娓呯悊鑳藉姏銆?
 
 
-
-
-### 原因分析
-
-
-
-- `PluginManager` 之前只维护元数据列表，没有 `DLL` 动态加载、版本兼容校验、生命周期回调和卸载清理能力。
-
-
-
-- `FilterRegistry` 缺少注销接口，导致即使插件能注册滤镜，也无法在卸载时安全回收扩展点。
+- `FilterRegistry` 缂哄皯娉ㄩ攢鎺ュ彛锛屽鑷村嵆浣挎彃浠惰兘娉ㄥ唽婊ら暅锛屼篃鏃犳硶鍦ㄥ嵏杞芥椂瀹夊叏鍥炴敹鎵╁睍鐐广€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增 `include/plugin/plugin_api.h`，定义插件宿主接口、`API` 版本常量和导出符号约定。
+### 瑙ｅ喅鏂规
 
 
 
-- 重写 `PluginManager`：支持按文件/目录加载插件、校验 `API` 版本、调用 `initialize/shutdown`、捕获插件异常，并在卸载时注销插件注册的滤镜工厂。
+- 鏂板 `include/plugin/plugin_api.h`锛屽畾涔夋彃浠跺涓绘帴鍙ｃ€乣API` 鐗堟湰甯搁噺鍜屽鍑虹鍙风害瀹氥€?
 
 
+- 閲嶅啓 `PluginManager`锛氭敮鎸佹寜鏂囦欢/鐩綍鍔犺浇鎻掍欢銆佹牎楠?`API` 鐗堟湰銆佽皟鐢?`initialize/shutdown`銆佹崟鑾锋彃浠跺紓甯革紝骞跺湪鍗歌浇鏃舵敞閿€鎻掍欢娉ㄥ唽鐨勬护闀滃伐鍘傘€?
 
-- 新增 `sample_logger_plugin` 示例 `DLL` 与 `--plugin-check [plugin_dir_or_file]` 命令，验证 `sample_identity` 视频滤镜的注册与卸载清理闭环。
+
+- 鏂板 `sample_logger_plugin` 绀轰緥 `DLL` 涓?`--plugin-check [plugin_dir_or_file]` 鍛戒护锛岄獙璇?`sample_identity` 瑙嗛婊ら暅鐨勬敞鍐屼笌鍗歌浇娓呯悊闂幆銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11300,7 +10618,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 59: 7.2 流媒体（真实 HTTP 分片与缓冲）
+## 闂 59: 7.2 娴佸獟浣擄紙鐪熷疄 HTTP 鍒嗙墖涓庣紦鍐诧級
 
 
 
@@ -11308,7 +10626,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11316,55 +10634,49 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `7.2` 要求把流媒体能力从“解析器骨架”推进到真实 HTTP 分片下载与缓冲闭环。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- `HttpStreamDownloader` 之前只保存 URL，不做任何真实网络读取，也没有内部缓冲与 EOF/错误状态。
-
-
-
-- 现有 HLS/DASH 解析器只能处理文本，缺少一套可重复执行的本地 HTTP 夹具来验证分片下载链路。
+- 浠诲姟娓呭崟 `7.2` 瑕佹眰鎶婃祦濯掍綋鑳藉姏浠庘€滆В鏋愬櫒楠ㄦ灦鈥濇帹杩涘埌鐪熷疄 HTTP 鍒嗙墖涓嬭浇涓庣紦鍐查棴鐜€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 重写 `HttpStreamDownloader`，基于 FFmpeg `avio` 支持真实 HTTP 打开、分块读取、内部缓冲、EOF 状态与错误透传。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 在 `main` 中新增 `--streaming-buffer-check`，下载 HLS 媒体清单、解析并抓取前 N 个分片，验证缓冲字节数与下载结果。
+- `HttpStreamDownloader` 涔嬪墠鍙繚瀛?URL锛屼笉鍋氫换浣曠湡瀹炵綉缁滆鍙栵紝涔熸病鏈夊唴閮ㄧ紦鍐蹭笌 EOF/閿欒鐘舵€併€?
 
 
-
-- 新增 `samples/streaming/hls_local/*` 本地夹具与 `tools/start_streaming_fixture_server.ps1`，通过本机 HTTP 服务复现实验。
+- 鐜版湁 HLS/DASH 瑙ｆ瀽鍣ㄥ彧鑳藉鐞嗘枃鏈紝缂哄皯涓€濂楀彲閲嶅鎵ц鐨勬湰鍦?HTTP 澶瑰叿鏉ラ獙璇佸垎鐗囦笅杞介摼璺€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 閲嶅啓 `HttpStreamDownloader`锛屽熀浜?FFmpeg `avio` 鏀寔鐪熷疄 HTTP 鎵撳紑銆佸垎鍧楄鍙栥€佸唴閮ㄧ紦鍐层€丒OF 鐘舵€佷笌閿欒閫忎紶銆?
+
+
+- 鍦?`main` 涓柊澧?`--streaming-buffer-check`锛屼笅杞?HLS 濯掍綋娓呭崟銆佽В鏋愬苟鎶撳彇鍓?N 涓垎鐗囷紝楠岃瘉缂撳啿瀛楄妭鏁颁笌涓嬭浇缁撴灉銆?
+
+
+- 鏂板 `samples/streaming/hls_local/*` 鏈湴澶瑰叿涓?`tools/start_streaming_fixture_server.ps1`锛岄€氳繃鏈満 HTTP 鏈嶅姟澶嶇幇瀹為獙銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -11456,7 +10768,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 60: 7.3 HLS/DASH 自适应码率
+## 闂 60: 7.3 HLS/DASH 鑷€傚簲鐮佺巼
 
 
 
@@ -11464,7 +10776,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11472,59 +10784,52 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 任务清单 `7.3` 要求把流媒体能力从“固定清单 smoke”推进到 HLS/DASH 多码率解析、档位选择与可重复回归。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- `HlsManifestParser` 只能读取媒体播放列表，无法识别 `master playlist` 的 variant 信息。
-
-
-
-- `DashManifestParser` 之前只提取 `Representation` 带宽，缺少 `BaseURL`、初始化分片与媒体分片明细。
-
-
-
-- 主程序缺少统一的 ABR 选择逻辑和本地验收入口，无法验证升码率/降码率切换路径。
+- 浠诲姟娓呭崟 `7.3` 瑕佹眰鎶婃祦濯掍綋鑳藉姏浠庘€滃浐瀹氭竻鍗?smoke鈥濇帹杩涘埌 HLS/DASH 澶氱爜鐜囪В鏋愩€佹。浣嶉€夋嫨涓庡彲閲嶅鍥炲綊銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 扩展 HLS/DASH 解析器，补齐多码率清单、表示集与分片明细。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 新增 `AdaptiveBitrateSelector`，按估算带宽选择最匹配的档位，并在 `main` 中增加 `--adaptive-bitrate-check`。
+- `HlsManifestParser` 鍙兘璇诲彇濯掍綋鎾斁鍒楄〃锛屾棤娉曡瘑鍒?`master playlist` 鐨?variant 淇℃伅銆?
 
 
+- `DashManifestParser` 涔嬪墠鍙彁鍙?`Representation` 甯﹀锛岀己灏?`BaseURL`銆佸垵濮嬪寲鍒嗙墖涓庡獟浣撳垎鐗囨槑缁嗐€?
 
-- 新增 `samples/streaming/abr_local/{hls,dash}` 夹具，复用本地 HTTP 服务验证 HLS/DASH 的升降档与分片下载。
+
+- 涓荤▼搴忕己灏戠粺涓€鐨?ABR 閫夋嫨閫昏緫鍜屾湰鍦伴獙鏀跺叆鍙ｏ紝鏃犳硶楠岃瘉鍗囩爜鐜?闄嶇爜鐜囧垏鎹㈣矾寰勩€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鎵╁睍 HLS/DASH 瑙ｆ瀽鍣紝琛ラ綈澶氱爜鐜囨竻鍗曘€佽〃绀洪泦涓庡垎鐗囨槑缁嗐€?
+
+
+- 鏂板 `AdaptiveBitrateSelector`锛屾寜浼扮畻甯﹀閫夋嫨鏈€鍖归厤鐨勬。浣嶏紝骞跺湪 `main` 涓鍔?`--adaptive-bitrate-check`銆?
+
+
+- 鏂板 `samples/streaming/abr_local/{hls,dash}` 澶瑰叿锛屽鐢ㄦ湰鍦?HTTP 鏈嶅姟楠岃瘉 HLS/DASH 鐨勫崌闄嶆。涓庡垎鐗囦笅杞姐€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -11684,7 +10989,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 61: 建立里程碑标签（v0.2.0-rc1 / v0.2.0）
+## 闂 61: 寤虹珛閲岀▼纰戞爣绛撅紙v0.2.0-rc1 / v0.2.0锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11692,63 +11004,49 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟 `0.4` 瑕佹眰涓哄綋鍓嶉樁娈靛缓绔?`v0.2.0-rc1` 涓?`v0.2.0` 閲岀▼纰戞爣绛撅紝浣嗕粨搴撲腑姝ゅ墠娌℃湁浠讳綍 Git 鏍囩銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单 `0.4` 要求为当前阶段建立 `v0.2.0-rc1` 与 `v0.2.0` 里程碑标签，但仓库中此前没有任何 Git 标签。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鍙戝竷闂ㄧ鍜岄樁娈垫€ц兘鍔涘凡缁忔敹鍙ｏ紝浣嗙増鏈噷绋嬬缂哄皯鍙拷婧殑 Git 鏍囪銆?
 
 
-
-
-### 原因分析
-
-
-
-- 发布门禁和阶段性能力已经收口，但版本里程碑缺少可追溯的 Git 标记。
-
-
-
-- 差距评估与任务清单仍保留“只差标签操作”的旧口径，需要与实际仓库状态同步。
+- 宸窛璇勪及涓庝换鍔℃竻鍗曚粛淇濈暀鈥滃彧宸爣绛炬搷浣溾€濈殑鏃у彛寰勶紝闇€瑕佷笌瀹為檯浠撳簱鐘舵€佸悓姝ャ€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 在主线稳定快照上建立 `v0.2.0-rc1` 与 `v0.2.0` 两个里程碑标签。
+### 瑙ｅ喅鏂规
 
 
 
-- 同步更新 `VERSION / DEVELOP_LOG / MPC_HC_GAP_ANALYSIS / tasklist`，记录标签已建立。
+- 鍦ㄤ富绾跨ǔ瀹氬揩鐓т笂寤虹珛 `v0.2.0-rc1` 涓?`v0.2.0` 涓や釜閲岀▼纰戞爣绛俱€?
 
 
+- 鍚屾鏇存柊 `VERSION / DEVELOP_LOG / MPC_HC_GAP_ANALYSIS / tasklist`锛岃褰曟爣绛惧凡寤虹珛銆?
 
-- 基于 `v0.2.0-rc1` 已成功建立这一事实，同步勾选执行约束 `5.3 每个里程碑结束前必须可打 RC 标签`。
+
+- 鍩轰簬 `v0.2.0-rc1` 宸叉垚鍔熷缓绔嬭繖涓€浜嬪疄锛屽悓姝ュ嬀閫夋墽琛岀害鏉?`5.3 姣忎釜閲岀▼纰戠粨鏉熷墠蹇呴』鍙墦 RC 鏍囩`銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11780,7 +11078,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 62: 执行守则口径同步（5.1 / 5.2）
+## 闂 62: 鎵ц瀹堝垯鍙ｅ緞鍚屾锛?.1 / 5.2锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11788,59 +11093,46 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟涓殑鎵ц瀹堝垯 `5.1 / 5.2` 浠嶆湭鏇存柊锛屼絾褰撳墠浠撳簱鐘舵€佸凡缁忚冻浠ュ垽鏂叾涓竴閮ㄥ垎绾︽潫鏄惁婊¤冻銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单中的执行守则 `5.1 / 5.2` 仍未更新，但当前仓库状态已经足以判断其中一部分约束是否满足。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- `5.1` 鍏虫敞鐨勬槸鏈疆骞惰宸ヤ綔閲忔帶鍒讹紝鑳戒粠瀹為檯浠诲姟鎺ㄨ繘椤哄簭涓緱鍒拌瘉鎹€?
 
 
-
-
-### 原因分析
-
-
-
-- `5.1` 关注的是本轮并行工作量控制，能从实际任务推进顺序中得到证据。
-
-
-
-- `5.2` 关注的是按周节奏执行“只做收敛”，需要跨周、重复性的过程证据，不能仅凭一次交付收口直接勾选。
+- `5.2` 鍏虫敞鐨勬槸鎸夊懆鑺傚鎵ц鈥滃彧鍋氭敹鏁涒€濓紝闇€瑕佽法鍛ㄣ€侀噸澶嶆€х殑杩囩▼璇佹嵁锛屼笉鑳戒粎鍑竴娆′氦浠樻敹鍙ｇ洿鎺ュ嬀閫夈€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 勾选 `5.1 WIP 限制：同时进行任务不超过 2 个`。
+### 瑙ｅ喅鏂规
 
 
 
-- 保留 `5.2 每周五只做收敛（修复、回归、文档）` 为待完成，并在文档中明确原因。
+- 鍕鹃€?`5.1 WIP 闄愬埗锛氬悓鏃惰繘琛屼换鍔′笉瓒呰繃 2 涓猔銆?
+
+
+- 淇濈暀 `5.2 姣忓懆浜斿彧鍋氭敹鏁涳紙淇銆佸洖褰掋€佹枃妗ｏ級` 涓哄緟瀹屾垚锛屽苟鍦ㄦ枃妗ｄ腑鏄庣‘鍘熷洜銆?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11876,7 +11168,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 63: 落地 5.2 周五收敛日执行手册
+## 闂 63: 钀藉湴 5.2 鍛ㄤ簲鏀舵暃鏃ユ墽琛屾墜鍐?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11884,59 +11183,46 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- 浠诲姟娓呭崟涓殑 `5.2 姣忓懆浜斿彧鍋氭敹鏁涳紙淇銆佸洖褰掋€佹枃妗ｏ級` 浠嶅仠鐣欏湪鍘熷垯鍙ｅ緞锛岀己灏戝彲鎵ц鐨勫懆鑺傚涓庢敹鏁涙棩绾︽潫銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- 任务清单中的 `5.2 每周五只做收敛（修复、回归、文档）` 仍停留在原则口径，缺少可执行的周节奏与收敛日约束。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鐜版湁鏂囨。宸茬粡瑕嗙洊鍥炲綊鍛戒护鍜岄樁娈佃鍒掞紝浣嗚繕娌℃湁鎶娾€滃懆浜斿厑璁镐粈涔堛€佺姝粈涔堛€佺粨鏉熸椂瑕佷骇鍑轰粈涔堚€濆啓鎴愬浐瀹氭祦绋嬨€?
 
 
-
-
-### 原因分析
-
-
-
-- 现有文档已经覆盖回归命令和阶段计划，但还没有把“周五允许什么、禁止什么、结束时要产出什么”写成固定流程。
-
-
-
-- 如果没有这层流程约束，即使当前口径正确，后续也很难稳定积累跨周执行证据。
+- 濡傛灉娌℃湁杩欏眰娴佺▼绾︽潫锛屽嵆浣垮綋鍓嶅彛寰勬纭紝鍚庣画涔熷緢闅剧ǔ瀹氱Н绱法鍛ㄦ墽琛岃瘉鎹€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`，把 `5.2` 固化为可直接执行的周节奏说明与周五收敛手册。
+### 瑙ｅ喅鏂规
 
 
 
-- 更新 `docs/README.md` 与记录文档，明确 `5.2` 现阶段完成的是“流程落地”，而不是“任务勾选完成”。
+- 鏂板 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`锛屾妸 `5.2` 鍥哄寲涓哄彲鐩存帴鎵ц鐨勫懆鑺傚璇存槑涓庡懆浜旀敹鏁涙墜鍐屻€?
+
+
+- 鏇存柊 `docs/README.md` 涓庤褰曟枃妗ｏ紝鏄庣‘ `5.2` 鐜伴樁娈靛畬鎴愮殑鏄€滄祦绋嬭惤鍦扳€濓紝鑰屼笉鏄€滀换鍔″嬀閫夊畬鎴愨€濄€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -11976,7 +11262,14 @@ void VideoPlayer::play() {
 
 
 
-## 问题 64: 补齐 5.2 留痕模板（daily_board / 周报）
+## 闂 64: 琛ラ綈 5.2 鐣欑棔妯℃澘锛坉aily_board / 鍛ㄦ姤锛?
+
+
+
+
+
+
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -11984,63 +11277,49 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+### 闂鎻忚堪
+
+
+
+- `5.2` 鐨勬墽琛屾墜鍐屽凡缁忚惤鍦帮紝浣?`daily_board` 鍜屽懆鎶ュ眰闈粛缂哄皯鍥哄畾妯℃澘锛屽鑷村悗缁法鍛ㄨ瘉鎹笉鏄撶粺涓€鐣欏瓨銆?
 
 
 
 
 
 
-
-### 问题描述
-
-
-
-- `5.2` 的执行手册已经落地，但 `daily_board` 和周报层面仍缺少固定模板，导致后续跨周证据不易统一留存。
+### 鍘熷洜鍒嗘瀽
 
 
 
+- 鍙湁娴佺▼璇存槑锛屾病鏈変綆鎴愭湰銆佸浐瀹氭牸寮忕殑濉啓妯℃澘锛屾墽琛屾椂瀹规槗鍙ｅ緞婕傜Щ銆?
 
 
-
-
-### 原因分析
-
-
-
-- 只有流程说明，没有低成本、固定格式的填写模板，执行时容易口径漂移。
-
-
-
-- `5.2` 是否勾选取决于跨周证据，因此模板本身也是守则落地的一部分。
+- `5.2` 鏄惁鍕鹃€夊彇鍐充簬璺ㄥ懆璇佹嵁锛屽洜姝ゆā鏉挎湰韬篃鏄畧鍒欒惤鍦扮殑涓€閮ㄥ垎銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 给 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md` 的两个周五补上收敛日记录卡。
+### 瑙ｅ喅鏂规
 
 
 
-- 新增 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md` 作为每周收敛/周报模板。
+- 缁?`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md` 鐨勪袱涓懆浜旇ˉ涓婃敹鏁涙棩璁板綍鍗°€?
 
 
+- 鏂板 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md` 浣滀负姣忓懆鏀舵暃/鍛ㄦ姤妯℃澘銆?
 
-- 同步更新 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md` 和 `docs/README.md` 的入口说明。
+
+- 鍚屾鏇存柊 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md` 鍜?`docs/README.md` 鐨勫叆鍙ｈ鏄庛€?
 
 
 
 
 
 
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -12092,7 +11371,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 65: 汇总当前功能、使用方式与验证入口
+## 闂 65: 姹囨€诲綋鍓嶅姛鑳姐€佷娇鐢ㄦ柟寮忎笌楠岃瘉鍏ュ彛
 
 
 
@@ -12100,7 +11379,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-08
+**鏃ユ湡**: 2026-03-08
 
 
 
@@ -12108,51 +11387,46 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 需要把程序当前已经实现的功能、可用的使用方式，以及现有验证路径集中写成一份可查文档，避免信息散落。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 当前能力已经横跨“正常播放、诊断命令、专项验收、插件/流媒体基础设施”，但入口分散在多个文档与源码帮助输出中。
-
-
-
-- 如果没有统一总览，后续继续维护文档时容易遗漏“功能”和“验证”之间的对应关系。
+- 闇€瑕佹妸绋嬪簭褰撳墠宸茬粡瀹炵幇鐨勫姛鑳姐€佸彲鐢ㄧ殑浣跨敤鏂瑰紡锛屼互鍙婄幇鏈夐獙璇佽矾寰勯泦涓啓鎴愪竴浠藉彲鏌ユ枃妗ｏ紝閬垮厤淇℃伅鏁ｈ惤銆?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 新增 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`，统一记录当前功能、使用方式、配置入口、专项验收命令与报告映射。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 更新 `docs/README.md` 和根 `README.md`，增加该总览文档的入口。
+- 褰撳墠鑳藉姏宸茬粡妯法鈥滄甯告挱鏀俱€佽瘖鏂懡浠ゃ€佷笓椤归獙鏀躲€佹彃浠?娴佸獟浣撳熀纭€璁炬柦鈥濓紝浣嗗叆鍙ｅ垎鏁ｅ湪澶氫釜鏂囨。涓庢簮鐮佸府鍔╄緭鍑轰腑銆?
+
+
+- 濡傛灉娌℃湁缁熶竴鎬昏锛屽悗缁户缁淮鎶ゆ枃妗ｆ椂瀹规槗閬楁紡鈥滃姛鑳解€濆拰鈥滈獙璇佲€濅箣闂寸殑瀵瑰簲鍏崇郴銆?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 鏂板 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`锛岀粺涓€璁板綍褰撳墠鍔熻兘銆佷娇鐢ㄦ柟寮忋€侀厤缃叆鍙ｃ€佷笓椤归獙鏀跺懡浠や笌鎶ュ憡鏄犲皠銆?
+
+
+- 鏇存柊 `docs/README.md` 鍜屾牴 `README.md`锛屽鍔犺鎬昏鏂囨。鐨勫叆鍙ｃ€?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -12200,7 +11474,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 69: 播放链诊断分层与 decoder drain / scheduler 容错补强
+## 闂 69: 鎾斁閾捐瘖鏂垎灞備笌 decoder drain / scheduler 瀹归敊琛ュ己
 
 
 
@@ -12208,7 +11482,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-19
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -12216,67 +11490,58 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- 高码率播放稳定性排查需要明确区分“真正的背压/入队失败”和“非目标流包被忽略”，并补齐 decoder drain、native path 命中率与 scheduler 容错边界的可观测性。
+- 楂樼爜鐜囨挱鏀剧ǔ瀹氭€ф帓鏌ラ渶瑕佹槑纭尯鍒嗏€滅湡姝ｇ殑鑳屽帇/鍏ラ槦澶辫触鈥濆拰鈥滈潪鐩爣娴佸寘琚拷鐣モ€濓紝骞惰ˉ榻?decoder drain銆乶ative path 鍛戒腑鐜囦笌 scheduler 瀹归敊杈圭晫鐨勫彲瑙傛祴鎬с€?
 
 
-
-- 旧实现中 packet queue EOF 后没有向 codec 发送 `nullptr` drain，且 send 后只做一次 receive，容易把“暂时无输出”和“真正失败”混在一起。
-
-
-
-
-
-
-
-### 原因分析
-
-
-
-- 诊断快照此前只有 `demux_dropped_packets` 总量，没有细分 drop 原因。
-
-
-
-- scheduler 只保护了解码线程，render thread 没有同样的异常保护；restart 次数和背压频率也没有结构化导出。
-
-
-
-- 即使主链已具备条件式 D3D11 native path，运行时也缺少 `native / copy-back / swscale` 路径计数，难以直接验证当前热点。
+- 鏃у疄鐜颁腑 packet queue EOF 鍚庢病鏈夊悜 codec 鍙戦€?`nullptr` drain锛屼笖 send 鍚庡彧鍋氫竴娆?receive锛屽鏄撴妸鈥滄殏鏃舵棤杈撳嚭鈥濆拰鈥滅湡姝ｅけ璐モ€濇贩鍦ㄤ竴璧枫€?
 
 
 
 
 
 
-
-### 解决方案
-
-
-
-- 重写 video/audio decoder 的 drain/feed 循环，并在 packet EOF 后对 codec 发送 `nullptr` 触发 drain。
+### 鍘熷洜鍒嗘瀽
 
 
 
-- 在 `PlayerCore` 中增加 demux drop 分类、decoder `send_packet(EAGAIN)`、drain 次数和视频输出路径计数。
+- 璇婃柇蹇収姝ゅ墠鍙湁 `demux_dropped_packets` 鎬婚噺锛屾病鏈夌粏鍒?drop 鍘熷洜銆?
 
 
-
-- 在 `Scheduler` 中增加背压与 restart 统计，并把 render thread 纳入 `runProtectedLoop()`；restart 上限放宽为有限的多次尝试。
-
+- scheduler 鍙繚鎶や簡瑙ｇ爜绾跨▼锛宺ender thread 娌℃湁鍚屾牱鐨勫紓甯镐繚鎶わ紱restart 娆℃暟鍜岃儗鍘嬮鐜囦篃娌℃湁缁撴瀯鍖栧鍑恒€?
 
 
-- 扩展 `--performance-log-check` 输出，导出新的结构化诊断字段。
+- 鍗充娇涓婚摼宸插叿澶囨潯浠跺紡 D3D11 native path锛岃繍琛屾椂涔熺己灏?`native / copy-back / swscale` 璺緞璁℃暟锛岄毦浠ョ洿鎺ラ獙璇佸綋鍓嶇儹鐐广€?
 
 
 
 
 
 
+### 瑙ｅ喅鏂规
 
-### 修改文件
+
+
+- 閲嶅啓 video/audio decoder 鐨?drain/feed 寰幆锛屽苟鍦?packet EOF 鍚庡 codec 鍙戦€?`nullptr` 瑙﹀彂 drain銆?
+
+
+- 鍦?`PlayerCore` 涓鍔?demux drop 鍒嗙被銆乨ecoder `send_packet(EAGAIN)`銆乨rain 娆℃暟鍜岃棰戣緭鍑鸿矾寰勮鏁般€?
+
+
+- 鍦?`Scheduler` 涓鍔犺儗鍘嬩笌 restart 缁熻锛屽苟鎶?render thread 绾冲叆 `runProtectedLoop()`锛況estart 涓婇檺鏀惧涓烘湁闄愮殑澶氭灏濊瘯銆?
+
+
+- 鎵╁睍 `--performance-log-check` 杈撳嚭锛屽鍑烘柊鐨勭粨鏋勫寲璇婃柇瀛楁銆?
+
+
+
+
+
+
+### 淇敼鏂囦欢
 
 
 
@@ -12328,7 +11593,7 @@ void VideoPlayer::play() {
 
 
 
-## 问题 70: PlayerCore 状态机重设计第一阶段
+## 闂 70: PlayerCore 鐘舵€佹満閲嶈璁＄涓€闃舵
 
 
 
@@ -12336,7 +11601,7 @@ void VideoPlayer::play() {
 
 
 
-**日期**: 2026-03-19
+**鏃ユ湡**: 2026-03-19
 
 
 
@@ -12344,79 +11609,69 @@ void VideoPlayer::play() {
 
 
 
-### 问题描述
+### 闂鎻忚堪
 
 
 
-- `PlayerCore` 之前只有对外 `PlaybackState::Stopped / Playing / Paused` 三态，但内核实际还隐含了会话态、运行态、流水线过程态和 deferred stop 旁路语义。
+- `PlayerCore` 涔嬪墠鍙湁瀵瑰 `PlaybackState::Stopped / Playing / Paused` 涓夋€侊紝浣嗗唴鏍稿疄闄呰繕闅愬惈浜嗕細璇濇€併€佽繍琛屾€併€佹祦姘寸嚎杩囩▼鎬佸拰 deferred stop 鏃佽矾璇箟銆?
 
 
+- `open / close / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 鐩存帴鏁ｇ偣鏀?`state_`锛屽鑷寸姸鎬佸彉鍖栨病鏈夌粺涓€鍏ュ彛锛屼篃缂哄皯闈炴硶杩佺Щ淇濇姢涓庣粺涓€鏃ュ織銆?
 
-- `open / close / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 直接散点改 `state_`，导致状态变化没有统一入口，也缺少非法迁移保护与统一日志。
 
 
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
-### 原因分析
 
+- UI 鎾斁鎬佸拰鍐呮牳杩愯璇箟闀挎湡娣峰湪涓€涓灇涓鹃噷锛屽鑷?`PlaybackState` 琚揩鎵胯浇杩囧鍚箟銆?
 
 
-- UI 播放态和内核运行语义长期混在一个枚举里，导致 `PlaybackState` 被迫承载过多含义。
+- `deferred stop` 涔嬪墠鏄嫭绔嬪竷灏斾綅锛屼笉鍦ㄧ粺涓€鐘舵€佹満鍐咃紝鐘舵€佽瀵熻鍚屾椂鎷兼帴 `state_` 鍜屾梺璺爣蹇椼€?
 
 
+- `Scheduler` 褰撳墠鍙悊瑙?`running_ / paused_`锛屽洜姝ょ涓€闃舵搴斿厛鎶婁笟鍔＄姸鎬佹潈濞佹潵婧愭敹鍥?`PlayerCore`锛岃€屼笉鏄彁鍓嶆敼 `Scheduler` 濂戠害銆?
 
-- `deferred stop` 之前是独立布尔位，不在统一状态机内，状态观察要同时拼接 `state_` 和旁路标志。
 
 
 
-- `Scheduler` 当前只理解 `running_ / paused_`，因此第一阶段应先把业务状态权威来源收回 `PlayerCore`，而不是提前改 `Scheduler` 契约。
 
 
+### 瑙ｅ喅鏂规
 
 
 
+- 鍦?`PlayerCore` 鍐呴儴鏂板 `SessionState / RunState / PipelinePhase` 鍜?`CoreStateSnapshot`锛屾妸浼氳瘽鎬併€佽繍琛屾€併€佹祦姘寸嚎鎬佹媶寮€寤烘ā銆?
 
 
-### 解决方案
+- 鏂板 `transitionSessionState / transitionRunState / transitionPipelinePhase / publishPlaybackStateFromInternalState`锛屾敹鍙ｅ澶?`PlaybackState` 鍙樻洿銆?
 
 
+- 鎶?`eof_reached / pending_seek / deferred_stop_pending` 绾冲叆缁熶竴蹇収绠＄悊锛屽苟涓虹姸鎬佽縼绉昏緭鍑烘棩蹇楀拰闈炴硶杩佺Щ warning銆?
 
-- 在 `PlayerCore` 内部新增 `SessionState / RunState / PipelinePhase` 和 `CoreStateSnapshot`，把会话态、运行态、流水线态拆开建模。
 
+- 鏈疆淇濇寔澶栭儴 `PlaybackState` 鎺ュ彛鍏煎锛屼笉寮曞叆 timeline serial锛屼笉鎻愬墠鎶?EOF 鏀规垚 `Ended`銆?
 
 
-- 新增 `transitionSessionState / transitionRunState / transitionPipelinePhase / publishPlaybackStateFromInternalState`，收口对外 `PlaybackState` 变更。
 
 
 
-- 把 `eof_reached / pending_seek / deferred_stop_pending` 纳入统一快照管理，并为状态迁移输出日志和非法迁移 warning。
 
+### 鏈湴楠屾敹缁撴灉
 
 
-- 本轮保持外部 `PlaybackState` 接口兼容，不引入 timeline serial，不提前把 EOF 改成 `Ended`。
 
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃銆?
 
 
 
 
 
 
-### 本地验收结果
-
-
-
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`：通过。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -12456,107 +11711,93 @@ void VideoPlayer::play() {
 
 
 
-## 问题 81: PlayerCore seek/flush timeline serial 化第二阶段
+## 闂 81: PlayerCore seek/flush timeline serial 鍖栫浜岄樁娈?
 
 
 
 
 
 
+**鏃ユ湡**: 2026-03-20
 
-**日期**: 2026-03-20
 
 
 
 
 
 
+### 闂鎻忚堪
 
-### 问题描述
 
 
+- 绗竴闃舵瀹屾垚鍚庯紝`PlayerCore` 宸茬粡鎶?UI 鎾斁鎬佸拰鍐呮牳鐘舵€佹媶灞傦紝浣?seek/flush 浠嶄富瑕佷緷璧?`scheduler pause -> stopDemuxThread -> flushPipelines -> avcodec_flush_buffers() -> audio_player_->stop() -> 浜屾 flush` 杩欑被杞竻鐞嗚矾寰勩€?
 
-- 第一阶段完成后，`PlayerCore` 已经把 UI 播放态和内核状态拆层，但 seek/flush 仍主要依赖 `scheduler pause -> stopDemuxThread -> flushPipelines -> avcodec_flush_buffers() -> audio_player_->stop() -> 二次 flush` 这类软清理路径。
 
+- `ThreadSafeQueue` 鍙湁 `stop/start/eof/clear`锛宍FrameQueue` 鍙湁 `flush()`锛宲acket/frame 閮芥病鏈?timeline serial锛屽鑷存棫鏃堕棿绾挎暟鎹嵆浣跨┛杩?seek/stop 杈圭晫锛屼篃鍙兘闈犫€滅宸ц娓呯┖鈥濇潵澶辨晥銆?
 
 
-- `ThreadSafeQueue` 只有 `stop/start/eof/clear`，`FrameQueue` 只有 `flush()`，packet/frame 都没有 timeline serial，导致旧时间线数据即使穿过 seek/stop 边界，也只能靠“碰巧被清空”来失效。
+- audio consumer 绾跨▼鍜?render 璺緞鍦ㄨ繖涔嬪墠閮芥病鏈?serial 闃茬嚎锛岃繛缁?seek銆佹殏鍋滄€?seek銆乴ate worker 鏀跺熬鏃朵粛鍙兘鍑虹幇鏃ф畫闊炽€佹棫娈嬪抚鎴栦吉 EOF銆?
 
 
 
-- audio consumer 线程和 render 路径在这之前都没有 serial 防线，连续 seek、暂停态 seek、late worker 收尾时仍可能出现旧残音、旧残帧或伪 EOF。
 
 
 
+### 鍘熷洜鍒嗘瀽
 
 
 
+- seek/flush 涔嬪墠鍙湁鐗╃悊娓呮壂锛屾病鏈夆€滆繖鏉℃暟鎹睘浜庡摢鏉℃椂闂寸嚎鈥濈殑鏄惧紡韬唤锛宒ecoder銆乺enderer銆乤udio consumer 鏃犳硶纭垽瀹氭暟鎹槸鍚﹁繃鏈熴€?
 
-### 原因分析
 
+- 鏃?demux 宸ヤ綔銆佹棫 codec 鍐呯紦瀛樺抚銆佹棫 frame queue 鏁版嵁鍜屾棫 audio submit 閮界己灏戠粺涓€鐨勬椂闂寸嚎杈圭晫銆?
 
 
-- seek/flush 之前只有物理清扫，没有“这条数据属于哪条时间线”的显式身份，decoder、renderer、audio consumer 无法硬判定数据是否过期。
+- `flush` 鏈韩鍙兘灏介噺闄嶄綆娉勬紡姒傜巼锛屼笉鑳藉畾涔夌粷瀵圭殑搴熷純瑙勫垯銆?
 
 
 
-- 旧 demux 工作、旧 codec 内缓存帧、旧 frame queue 数据和旧 audio submit 都缺少统一的时间线边界。
 
 
 
-- `flush` 本身只能尽量降低泄漏概率，不能定义绝对的废弃规则。
+### 瑙ｅ喅鏂规
 
 
 
+- 鏂板 `TimelineSerial`锛屽苟璁?packet/frame 閮芥樉寮忔惡甯?serial锛歚DemuxPacket { PacketPtr packet; TimelineSerial serial; }`銆乣VideoFrame::serial`銆乣AudioFrame::serial`銆?
 
 
+- 鍦?`PlayerCore` 鍐呴儴鏂板 `timeline_serial / pending_seek_serial`锛屼互鍙婄粺涓€鐨?`allocateNextTimelineSerial / activateTimelineSerial / setPendingSeekSerial / isAcceptedTimelineSerial` 鍏ュ彛銆?
 
 
-### 解决方案
+- `open` 鎴愬姛鏃跺缓绔嬮涓?serial锛沗seek` 鍏堝垎閰?`pending_seek_serial`锛宻eek 鎴愬姛鍚庡啀婵€娲伙紱`stop / requestDeferredStop` 鐩存帴鎺ㄨ繘 serial锛屼娇鏃?worker 鏅氬埌鏃朵篃鍙兘浜у嚭搴熸暟鎹€?
 
 
+- demux 绾跨▼鍚姩鏃舵崟鑾峰綋鍓?serial锛岄伩鍏嶆棫 demux 宸ヤ綔琚鏍囨垚鏂版椂闂寸嚎銆?
 
-- 新增 `TimelineSerial`，并让 packet/frame 都显式携带 serial：`DemuxPacket { PacketPtr packet; TimelineSerial serial; }`、`VideoFrame::serial`、`AudioFrame::serial`。
 
+- `decodeVideoFrame / decodeAudioFrame / renderFrame / renderPausedFrameAtOrAfter / audio consumer` 鍏ㄩ摼璺帴鍏?serial 鍒ゅ畾锛屾棫 serial 鐩存帴涓㈠純锛沗flush` 淇濈暀锛屼絾闄嶇骇涓鸿緟鍔╂竻鎵€?
 
 
-- 在 `PlayerCore` 内部新增 `timeline_serial / pending_seek_serial`，以及统一的 `allocateNextTimelineSerial / activateTimelineSerial / setPendingSeekSerial / isAcceptedTimelineSerial` 入口。
+- `DiagnosticsSnapshot`銆佺姸鎬佹棩蹇楀拰涓撻」妫€鏌ュ懡浠ゆ柊澧?`timeline_serial / pending_seek_serial` 瑙傛祴瀛楁銆?
 
 
 
-- `open` 成功时建立首个 serial；`seek` 先分配 `pending_seek_serial`，seek 成功后再激活；`stop / requestDeferredStop` 直接推进 serial，使旧 worker 晚到时也只能产出废数据。
 
 
 
-- demux 线程启动时捕获当前 serial，避免旧 demux 工作被误标成新时间线。
+### 鏈湴楠屾敹缁撴灉
 
 
 
-- `decodeVideoFrame / decodeAudioFrame / renderFrame / renderPausedFrameAtOrAfter / audio consumer` 全链路接入 serial 判定，旧 serial 直接丢弃；`flush` 保留，但降级为辅助清扫。
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃銆?
 
 
 
-- `DiagnosticsSnapshot`、状态日志和专项检查命令新增 `timeline_serial / pending_seek_serial` 观测字段。
 
 
 
-
-
-
-
-### 本地验收结果
-
-
-
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`：通过。
-
-
-
-
-
-
-
-### 修改文件
+### 淇敼鏂囦欢
 
 
 
@@ -12717,31 +11958,19 @@ void VideoPlayer::play() {
 
 ---
 
-## 问题 84: PlayerCore 副作用集中化与 runtime failure/recovery policy 收口
+## 闂 84: PlayerCore 鍓綔鐢ㄩ泦涓寲涓?runtime failure/recovery policy 鏀跺彛
 
-**日期**: 2026-03-20
+**鏃ユ湡**: 2026-03-20
 
-### 问题描述
-- timeline serial 和 queue generation 已经把 seek/flush 边界硬化，但 `play / pause / stop / seek / close / requestDeferredStop / serviceDeferredStop` 入口里仍然混着线程、设备、队列和时钟副作用。
-- `SchedulerControlSnapshot` 之前只覆盖 `run_state / pipeline_phase / accepted_timeline_serial`，scheduler 仍需要从外部语境猜 `clock_source`、audio-master 是否真的有效，以及 `Ended` 时是否允许保最后一帧。
-- decode/resample/output 的 fatal 点仍容易长出各自的 `emitError + return false` 路径，恢复策略缺少统一入口。
-
-### 原因分析
-- 第一阶段收口的是“状态迁移写入点”，但还没有把“状态迁移触发的动作”抽离成统一副作用模型。
-- `deferred stop` 的本质是异步完成 stop，而不是另一套停机业务语义；如果 request/completion 逻辑不统一，后续很容易再次分叉。
-- scheduler 若继续靠零散布尔位拼业务语义，就会把 `clock_source`、audio-master 与 ended policy 继续散落在 loop 内部。
-- runtime failure 若不先统一成 policy，对应的 recovery path 会随着更多 fatal 点继续扩散。
-
-### 解决方案
-- 扩 `SchedulerControlSnapshot`：新增 `clock_source`、`audio_output_initialized`、`audio_master_sync_active`、`ended_policy`，并让 scheduler 直接消费这些结构化约束。
-- 在 `PlayerCore` 新增统一 helper：`applyStartPlaybackSideEffects`、`applyResumePlaybackSideEffects`、`applyPausePlaybackSideEffects`、`applyStopRequestSideEffects`、`applyStopCompletionSideEffects`、`applySeekSideEffects`、`applySessionReleaseSideEffects`。
-- `requestDeferredStop()` 与 `serviceDeferredStop()` 改为复用同一套 stop-request / stop-completion helpers，把 deferred stop 并回统一 stopping 路径。
-- 新增 `FailureRecoveryPolicy` 和 `handleRuntimeFailure()`，把 decode/resample/output 关键 fatal 点统一收口到 `EmitOnly / StopPlayback / FailSession` 策略入口。
-
-### 本地验收结果
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`：通过，`0 warnings / 0 errors`。
-
-### 修改文件
+### 闂鎻忚堪
+- timeline serial 鍜?queue generation 宸茬粡鎶?seek/flush 杈圭晫纭寲锛屼絾 `play / pause / stop / seek / close / requestDeferredStop / serviceDeferredStop` 鍏ュ彛閲屼粛鐒舵贩鐫€绾跨▼銆佽澶囥€侀槦鍒楀拰鏃堕挓鍓綔鐢ㄣ€?- `SchedulerControlSnapshot` 涔嬪墠鍙鐩?`run_state / pipeline_phase / accepted_timeline_serial`锛宻cheduler 浠嶉渶瑕佷粠澶栭儴璇鐚?`clock_source`銆乤udio-master 鏄惁鐪熺殑鏈夋晥锛屼互鍙?`Ended` 鏃舵槸鍚﹀厑璁镐繚鏈€鍚庝竴甯с€?- decode/resample/output 鐨?fatal 鐐逛粛瀹规槗闀垮嚭鍚勮嚜鐨?`emitError + return false` 璺緞锛屾仮澶嶇瓥鐣ョ己灏戠粺涓€鍏ュ彛銆?
+### 鍘熷洜鍒嗘瀽
+- 绗竴闃舵鏀跺彛鐨勬槸鈥滅姸鎬佽縼绉诲啓鍏ョ偣鈥濓紝浣嗚繕娌℃湁鎶娾€滅姸鎬佽縼绉昏Е鍙戠殑鍔ㄤ綔鈥濇娊绂绘垚缁熶竴鍓綔鐢ㄦā鍨嬨€?- `deferred stop` 鐨勬湰璐ㄦ槸寮傛瀹屾垚 stop锛岃€屼笉鏄彟涓€濂楀仠鏈轰笟鍔¤涔夛紱濡傛灉 request/completion 閫昏緫涓嶇粺涓€锛屽悗缁緢瀹规槗鍐嶆鍒嗗弶銆?- scheduler 鑻ョ户缁潬闆舵暎甯冨皵浣嶆嫾涓氬姟璇箟锛屽氨浼氭妸 `clock_source`銆乤udio-master 涓?ended policy 缁х画鏁ｈ惤鍦?loop 鍐呴儴銆?- runtime failure 鑻ヤ笉鍏堢粺涓€鎴?policy锛屽搴旂殑 recovery path 浼氶殢鐫€鏇村 fatal 鐐圭户缁墿鏁ｃ€?
+### 瑙ｅ喅鏂规
+- 鎵?`SchedulerControlSnapshot`锛氭柊澧?`clock_source`銆乣audio_output_initialized`銆乣audio_master_sync_active`銆乣ended_policy`锛屽苟璁?scheduler 鐩存帴娑堣垂杩欎簺缁撴瀯鍖栫害鏉熴€?- 鍦?`PlayerCore` 鏂板缁熶竴 helper锛歚applyStartPlaybackSideEffects`銆乣applyResumePlaybackSideEffects`銆乣applyPausePlaybackSideEffects`銆乣applyStopRequestSideEffects`銆乣applyStopCompletionSideEffects`銆乣applySeekSideEffects`銆乣applySessionReleaseSideEffects`銆?- `requestDeferredStop()` 涓?`serviceDeferredStop()` 鏀逛负澶嶇敤鍚屼竴濂?stop-request / stop-completion helpers锛屾妸 deferred stop 骞跺洖缁熶竴 stopping 璺緞銆?- 鏂板 `FailureRecoveryPolicy` 鍜?`handleRuntimeFailure()`锛屾妸 decode/resample/output 鍏抽敭 fatal 鐐圭粺涓€鏀跺彛鍒?`EmitOnly / StopPlayback / FailSession` 绛栫暐鍏ュ彛銆?
+### 鏈湴楠屾敹缁撴灉
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃锛宍0 warnings / 0 errors`銆?
+### 淇敼鏂囦欢
 - include/core/player_core.h
 - src/core/player_core.cpp
 - include/core/scheduler.h
@@ -12752,30 +11981,19 @@ void VideoPlayer::play() {
 - docs/records/DEVELOP_LOG.md
 ---
 
-## 问题 85: PlayerCore 剩余风险收敛：Scheduler 终版策略、FailSession 实化与 serial/generation 观测强化
+## 闂 85: PlayerCore 鍓╀綑椋庨櫓鏀舵暃锛歋cheduler 缁堢増绛栫暐銆丗ailSession 瀹炲寲涓?serial/generation 瑙傛祴寮哄寲
 
-**日期**: 2026-03-20
+**鏃ユ湡**: 2026-03-20
 
-### 问题描述
-- `SchedulerControlSnapshot` 仍未形成终版策略表达，clock/audio-master/ended 语义还有隐式推导。
-- `FailSession` 虽有统一入口，但关键失败点尚未进入实际覆盖。
-- queue generation 与 item-level serial 的职责边界缺少可观测佐证。
-
-### 原因分析
-- scheduler 之前仍主要消费 `clock_source + bool`，导致策略意图不够显式。
-- `FailSession` 调用点不足，恢复路径在真实高风险错误上仍偏向 `StopPlayback`。
-- diagnostics 缺少 stale serial 丢弃计数，难以直接证明硬失效主判定来自 serial。
-
-### 解决方案
-- 扩 `SchedulerControlSnapshot`：新增 `SchedulerClockPolicy`、`SchedulerAudioMasterPolicy`、`audio_buffered_seconds`，并扩展 `SchedulerEndedPolicy`。
-- `Scheduler` 增加策略消费函数 `isAudioMasterActive / isVideoMasterActive / shouldApplyClockSync`，并补 `Scheduler::stop()` self-join 防线。
-- `handleRuntimeFailure()` 收口增强：`StopPlayback`/`FailSession` 均统一走 stop request side effects；`FailSession` 覆盖关键不可恢复失败点。
-- 新增 stale serial 丢弃计数并接入 `DiagnosticsSnapshot`、低频日志、`--performance-log-check` 与 `--software-video-decode-check`。
-
-### 本地验收结果
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`：通过，`0 warnings / 0 errors`。
-
-### 修改文件
+### 闂鎻忚堪
+- `SchedulerControlSnapshot` 浠嶆湭褰㈡垚缁堢増绛栫暐琛ㄨ揪锛宑lock/audio-master/ended 璇箟杩樻湁闅愬紡鎺ㄥ銆?- `FailSession` 铏芥湁缁熶竴鍏ュ彛锛屼絾鍏抽敭澶辫触鐐瑰皻鏈繘鍏ュ疄闄呰鐩栥€?- queue generation 涓?item-level serial 鐨勮亴璐ｈ竟鐣岀己灏戝彲瑙傛祴浣愯瘉銆?
+### 鍘熷洜鍒嗘瀽
+- scheduler 涔嬪墠浠嶄富瑕佹秷璐?`clock_source + bool`锛屽鑷寸瓥鐣ユ剰鍥句笉澶熸樉寮忋€?- `FailSession` 璋冪敤鐐逛笉瓒筹紝鎭㈠璺緞鍦ㄧ湡瀹為珮椋庨櫓閿欒涓婁粛鍋忓悜 `StopPlayback`銆?- diagnostics 缂哄皯 stale serial 涓㈠純璁℃暟锛岄毦浠ョ洿鎺ヨ瘉鏄庣‖澶辨晥涓诲垽瀹氭潵鑷?serial銆?
+### 瑙ｅ喅鏂规
+- 鎵?`SchedulerControlSnapshot`锛氭柊澧?`SchedulerClockPolicy`銆乣SchedulerAudioMasterPolicy`銆乣audio_buffered_seconds`锛屽苟鎵╁睍 `SchedulerEndedPolicy`銆?- `Scheduler` 澧炲姞绛栫暐娑堣垂鍑芥暟 `isAudioMasterActive / isVideoMasterActive / shouldApplyClockSync`锛屽苟琛?`Scheduler::stop()` self-join 闃茬嚎銆?- `handleRuntimeFailure()` 鏀跺彛澧炲己锛歚StopPlayback`/`FailSession` 鍧囩粺涓€璧?stop request side effects锛沗FailSession` 瑕嗙洊鍏抽敭涓嶅彲鎭㈠澶辫触鐐广€?- 鏂板 stale serial 涓㈠純璁℃暟骞舵帴鍏?`DiagnosticsSnapshot`銆佷綆棰戞棩蹇椼€乣--performance-log-check` 涓?`--software-video-decode-check`銆?
+### 鏈湴楠屾敹缁撴灉
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃锛宍0 warnings / 0 errors`銆?
+### 淇敼鏂囦欢
 - include/core/scheduler.h
 - src/core/scheduler.cpp
 - include/core/player_core.h
@@ -12787,49 +12005,38 @@ void VideoPlayer::play() {
 - docs/records/DEVELOP_LOG.md
 ---
 
-## 问题 86: 增补 serial/failsession 回归探针（连续 seek、暂停态 seek、close/reopen）
+## 闂 86: 澧炶ˉ serial/failsession 鍥炲綊鎺㈤拡锛堣繛缁?seek銆佹殏鍋滄€?seek銆乧lose/reopen锛?
+**鏃ユ湡**: 2026-03-20
 
-**日期**: 2026-03-20
-
-### 问题描述
-- 需要为 `FailSession + timeline serial` 收敛阶段补充机器可读回归检查，覆盖：
-  1. 连续 seek
-  2. 暂停态 seek
+### 闂鎻忚堪
+- 闇€瑕佷负 `FailSession + timeline serial` 鏀舵暃闃舵琛ュ厖鏈哄櫒鍙鍥炲綊妫€鏌ワ紝瑕嗙洊锛?  1. 杩炵画 seek
+  2. 鏆傚仠鎬?seek
   3. close/reopen
-- 现有检查项虽然能输出 diagnostics，但尚未把这三类边界场景聚合成可直接 gate 的 `key=value + result=PASS/FAIL`。
-
-### 原因分析
-- 现有 `--performance-log-check` / `--software-video-decode-check` 偏向链路健康快照，不直接表达“边界前后 stale 增量 + serial 迁移 + FailSession 非法跳转约束”。
-- `PlayerCore` 内部非法迁移此前仅日志告警，没有 diagnostics 计数字段，CLI 不易机器判定。
-
-### 解决方案
-- 在 `DiagnosticsSnapshot` 增加并映射非法迁移计数：
+- 鐜版湁妫€鏌ラ」铏界劧鑳借緭鍑?diagnostics锛屼絾灏氭湭鎶婅繖涓夌被杈圭晫鍦烘櫙鑱氬悎鎴愬彲鐩存帴 gate 鐨?`key=value + result=PASS/FAIL`銆?
+### 鍘熷洜鍒嗘瀽
+- 鐜版湁 `--performance-log-check` / `--software-video-decode-check` 鍋忓悜閾捐矾鍋ュ悍蹇収锛屼笉鐩存帴琛ㄨ揪鈥滆竟鐣屽墠鍚?stale 澧為噺 + serial 杩佺Щ + FailSession 闈炴硶璺宠浆绾︽潫鈥濄€?- `PlayerCore` 鍐呴儴闈炴硶杩佺Щ姝ゅ墠浠呮棩蹇楀憡璀︼紝娌℃湁 diagnostics 璁℃暟瀛楁锛孋LI 涓嶆槗鏈哄櫒鍒ゅ畾銆?
+### 瑙ｅ喅鏂规
+- 鍦?`DiagnosticsSnapshot` 澧炲姞骞舵槧灏勯潪娉曡縼绉昏鏁帮細
   - `illegal_session_transitions`
   - `illegal_run_transitions`
   - `illegal_pipeline_transitions`
-- 在 `PlayerCore` 的 `transitionSessionState / transitionRunState / transitionPipelinePhase` 里对非法迁移计数，并在 diagnostics reset/日志中接入。
-- 在 `src/main.cpp` 新增三个 CLI 回归命令：
-  - `--seek-burst-serial-check <media_file> [seek_count]`
+- 鍦?`PlayerCore` 鐨?`transitionSessionState / transitionRunState / transitionPipelinePhase` 閲屽闈炴硶杩佺Щ璁℃暟锛屽苟鍦?diagnostics reset/鏃ュ織涓帴鍏ャ€?- 鍦?`src/main.cpp` 鏂板涓変釜 CLI 鍥炲綊鍛戒护锛?  - `--seek-burst-serial-check <media_file> [seek_count]`
   - `--paused-seek-serial-check <media_file> [seek_count]`
   - `--close-reopen-serial-check <media_file> [sample_ms]`
-- 每个命令输出统一 `key=value`，并给出 `result=PASS/FAIL`；判定核心覆盖：
-  - serial 迁移是否持续推进
-  - stale 是否仅在边界窗口出现、稳定窗口是否收敛
-  - `FailSession` 触发时是否存在非法迁移（`fail_session_transition_ok`）
-- 同步把非法迁移计数导出到：
-  - `--performance-log-check`
+- 姣忎釜鍛戒护杈撳嚭缁熶竴 `key=value`锛屽苟缁欏嚭 `result=PASS/FAIL`锛涘垽瀹氭牳蹇冭鐩栵細
+  - serial 杩佺Щ鏄惁鎸佺画鎺ㄨ繘
+  - stale 鏄惁浠呭湪杈圭晫绐楀彛鍑虹幇銆佺ǔ瀹氱獥鍙ｆ槸鍚︽敹鏁?  - `FailSession` 瑙﹀彂鏃舵槸鍚﹀瓨鍦ㄩ潪娉曡縼绉伙紙`fail_session_transition_ok`锛?- 鍚屾鎶婇潪娉曡縼绉昏鏁板鍑哄埌锛?  - `--performance-log-check`
   - `--software-video-decode-check`
 
-### 本地验收结果
-- Debug 构建：
-  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
-  - 结果：通过，`0 warnings / 0 errors`
-- 新增检查命令（样本：`juren-30s.mp4`）：
-  - `build\Debug\modern-video-player.exe --seek-burst-serial-check .\juren-30s.mp4`：`PASS`
-  - `build\Debug\modern-video-player.exe --paused-seek-serial-check .\juren-30s.mp4`：`PASS`
-  - `build\Debug\modern-video-player.exe --close-reopen-serial-check .\juren-30s.mp4`：`PASS`
+### 鏈湴楠屾敹缁撴灉
+- Debug 鏋勫缓锛?  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
+  - 缁撴灉锛氶€氳繃锛宍0 warnings / 0 errors`
+- 鏂板妫€鏌ュ懡浠わ紙鏍锋湰锛歚juren-30s.mp4`锛夛細
+  - `build\Debug\modern-video-player.exe --seek-burst-serial-check .\juren-30s.mp4`锛歚PASS`
+  - `build\Debug\modern-video-player.exe --paused-seek-serial-check .\juren-30s.mp4`锛歚PASS`
+  - `build\Debug\modern-video-player.exe --close-reopen-serial-check .\juren-30s.mp4`锛歚PASS`
 
-### 修改文件
+### 淇敼鏂囦欢
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
@@ -12839,22 +12046,17 @@ void VideoPlayer::play() {
 - docs/records/DEVELOP_LOG.md
 ---
 
-## 问题 87: serial/failsession 回归增加一键聚合 gate（降低漏跑风险）
+## 闂 87: serial/failsession 鍥炲綊澧炲姞涓€閿仛鍚?gate锛堥檷浣庢紡璺戦闄╋級
 
-**日期**: 2026-03-20
+**鏃ユ湡**: 2026-03-20
 
-### 问题描述
-- 已有 `--seek-burst-serial-check`、`--paused-seek-serial-check`、`--close-reopen-serial-check` 三个探针，但执行时仍需人工串行调用。
-- 在高频迭代阶段，人工串行执行存在漏跑某一项的风险，不利于稳定 gate。
-
-### 原因分析
-- 三个探针的判定口径已经统一为 `key=value + result=PASS/FAIL`，但缺少统一聚合入口。
-- 若没有聚合入口，调用方需要自行维护顺序、参数和总结果，容易出现脚本不一致。
-
-### 解决方案
-- 在 `src/main.cpp` 新增聚合命令：
-  - `--serial-failsession-regression-check <media_file> [seek_count] [paused_seek_count] [sample_ms]`
-- 聚合命令内部顺序执行三条现有探针，并输出统一总结果字段：
+### 闂鎻忚堪
+- 宸叉湁 `--seek-burst-serial-check`銆乣--paused-seek-serial-check`銆乣--close-reopen-serial-check` 涓変釜鎺㈤拡锛屼絾鎵ц鏃朵粛闇€浜哄伐涓茶璋冪敤銆?- 鍦ㄩ珮棰戣凯浠ｉ樁娈碉紝浜哄伐涓茶鎵ц瀛樺湪婕忚窇鏌愪竴椤圭殑椋庨櫓锛屼笉鍒╀簬绋冲畾 gate銆?
+### 鍘熷洜鍒嗘瀽
+- 涓変釜鎺㈤拡鐨勫垽瀹氬彛寰勫凡缁忕粺涓€涓?`key=value + result=PASS/FAIL`锛屼絾缂哄皯缁熶竴鑱氬悎鍏ュ彛銆?- 鑻ユ病鏈夎仛鍚堝叆鍙ｏ紝璋冪敤鏂归渶瑕佽嚜琛岀淮鎶ら『搴忋€佸弬鏁板拰鎬荤粨鏋滐紝瀹规槗鍑虹幇鑴氭湰涓嶄竴鑷淬€?
+### 瑙ｅ喅鏂规
+- 鍦?`src/main.cpp` 鏂板鑱氬悎鍛戒护锛?  - `--serial-failsession-regression-check <media_file> [seek_count] [paused_seek_count] [sample_ms]`
+- 鑱氬悎鍛戒护鍐呴儴椤哄簭鎵ц涓夋潯鐜版湁鎺㈤拡锛屽苟杈撳嚭缁熶竴鎬荤粨鏋滃瓧娈碉細
   - `serial-failsession-regression-check.seek_burst_ok`
   - `serial-failsession-regression-check.paused_seek_ok`
   - `serial-failsession-regression-check.close_reopen_ok`
@@ -12862,15 +12064,14 @@ void VideoPlayer::play() {
   - `serial-failsession-regression-check.total_count`
   - `serial-failsession-regression-check.result`
 
-### 本地验收结果
-- Debug 构建：
-  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
-  - 结果：通过，`0 warnings / 0 errors`
-- 聚合命令样本验证（`juren-30s.mp4`）：
+### 鏈湴楠屾敹缁撴灉
+- Debug 鏋勫缓锛?  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
+  - 缁撴灉锛氶€氳繃锛宍0 warnings / 0 errors`
+- 鑱氬悎鍛戒护鏍锋湰楠岃瘉锛坄juren-30s.mp4`锛夛細
   - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`
-  - 结果：`serial-failsession-regression-check.pass_count=3`、`serial-failsession-regression-check.total_count=3`、`serial-failsession-regression-check.result=PASS`
+  - 缁撴灉锛歚serial-failsession-regression-check.pass_count=3`銆乣serial-failsession-regression-check.total_count=3`銆乣serial-failsession-regression-check.result=PASS`
 
-### 修改文件
+### 淇敼鏂囦欢
 - src/main.cpp
 - docs/analysis/PLAYERCORE_DAY23_SERIAL_FAILSESSION_AGGREGATE_GATE.md
 - docs/records/CHANGELOG.md
@@ -12878,40 +12079,27 @@ void VideoPlayer::play() {
 - docs/records/DEVELOP_LOG.md
 ---
 
-## 问题 88: 强制 FailSession 回归探针与 codec 锁重入崩溃修复
+## 闂 88: 寮哄埗 FailSession 鍥炲綊鎺㈤拡涓?codec 閿侀噸鍏ュ穿婧冧慨澶?
+**鏃ユ湡**: 2026-03-20
 
-**日期**: 2026-03-20
+### 闂鎻忚堪
+- 鐜版湁 serial/failsession 鍥炲綊涓昏瑕嗙洊姝ｅ父閾捐矾鍜岃竟鐣屽垏鎹紝浣?`FailSession` 浠嶄緷璧栫湡瀹炲紓甯歌Е鍙戯紝缂哄皯绋冲畾鍙噸澶嶇殑寮哄埗瑕嗙洊銆?- 鍦ㄦ柊澧炲己鍒惰矾寰勬帰閽堣繃绋嬩腑锛屾毚闇插嚭 `FailSession` 浠庤В鐮佺嚎绋嬭繘鍏ユ椂鐨勮祫婧愬洖鏀跺紓甯革細`device or resource busy`銆?
+### 鍘熷洜鍒嗘瀽
+- 缂哄皯鈥滄祴璇曚笓鐢ㄣ€佸彲鎺цЕ鍙戔€濈殑 `FailSession` 娉ㄥ叆鐐癸紝瀵艰嚧璇ヨ矾寰勫緢闅剧ǔ瀹?gate銆?- `FailSession` 閲婃斁璧勬簮鏃朵細杩涘叆 decoder 閲婃斁閫昏緫锛岃€岃璺緞鍙兘涓庤В鐮佺嚎绋嬪凡鎸佹湁鐨?codec 閿佸彂鐢熷悓绾跨▼閲嶅叆鍐茬獊銆?
+### 瑙ｅ喅鏂规
+- `PlayerCore::decodeVideoFrame` 澧炲姞娴嬭瘯娉ㄥ叆寮€鍏筹細
+  - `MVP_FORCE_FAIL_SESSION_ON_VIDEO_DECODE=1` 鏃跺湪瑙嗛瑙ｇ爜杈圭晫瑙﹀彂涓€娆?`FailureRecoveryPolicy::FailSession`銆?- `main` 鏂板涓撻」鍛戒护锛?  - `--forced-failsession-check <media_file> [sample_ms]`
+  - 杈撳嚭 `runtime_failure_*`銆乣illegal_*` 鍜?`result=PASS/FAIL`銆?- 淇 codec 閿侀噸鍏ュ紓甯革細
+  - `video_codec_mutex_`銆乣audio_codec_mutex_` 鏀逛负 `std::recursive_mutex`锛?  - `decodeVideoFrame/decodeAudioFrame` 鐨?`lock_guard` 鍚屾鏀逛负 `std::recursive_mutex` 鐗堟湰銆?
+### 鏈湴楠屾敹缁撴灉
+- Debug 鏋勫缓锛?  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
+  - 缁撴灉锛氶€氳繃锛宍0 warnings / 0 errors`
+- 寮哄埗 FailSession 鎺㈤拡锛?  - `build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200`
+  - 缁撴灉锛歚runtime_failure_stop_requests=1`銆乣runtime_failure_fail_sessions=1`銆乣illegal_transition_total=0`銆乣result=PASS`
+- serial 鑱氬悎澶嶆祴锛?  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`
+  - 缁撴灉锛歚result=PASS`
 
-### 问题描述
-- 现有 serial/failsession 回归主要覆盖正常链路和边界切换，但 `FailSession` 仍依赖真实异常触发，缺少稳定可重复的强制覆盖。
-- 在新增强制路径探针过程中，暴露出 `FailSession` 从解码线程进入时的资源回收异常：`device or resource busy`。
-
-### 原因分析
-- 缺少“测试专用、可控触发”的 `FailSession` 注入点，导致该路径很难稳定 gate。
-- `FailSession` 释放资源时会进入 decoder 释放逻辑，而该路径可能与解码线程已持有的 codec 锁发生同线程重入冲突。
-
-### 解决方案
-- `PlayerCore::decodeVideoFrame` 增加测试注入开关：
-  - `MVP_FORCE_FAIL_SESSION_ON_VIDEO_DECODE=1` 时在视频解码边界触发一次 `FailureRecoveryPolicy::FailSession`。
-- `main` 新增专项命令：
-  - `--forced-failsession-check <media_file> [sample_ms]`
-  - 输出 `runtime_failure_*`、`illegal_*` 和 `result=PASS/FAIL`。
-- 修复 codec 锁重入异常：
-  - `video_codec_mutex_`、`audio_codec_mutex_` 改为 `std::recursive_mutex`；
-  - `decodeVideoFrame/decodeAudioFrame` 的 `lock_guard` 同步改为 `std::recursive_mutex` 版本。
-
-### 本地验收结果
-- Debug 构建：
-  - `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
-  - 结果：通过，`0 warnings / 0 errors`
-- 强制 FailSession 探针：
-  - `build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200`
-  - 结果：`runtime_failure_stop_requests=1`、`runtime_failure_fail_sessions=1`、`illegal_transition_total=0`、`result=PASS`
-- serial 聚合复测：
-  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`
-  - 结果：`result=PASS`
-
-### 修改文件
+### 淇敼鏂囦欢
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
@@ -12921,42 +12109,70 @@ void VideoPlayer::play() {
 - docs/records/DEVELOP_LOG.md
 ---
 
-## 问题 89: run_all_checks 接入 forced-failsession 一键 gate
+## 闂 89: run_all_checks 鎺ュ叆 forced-failsession 涓€閿?gate
 
-**日期**: 2026-03-20
+**鏃ユ湡**: 2026-03-20
 
-### 问题描述
-- `tools/run_all_checks.ps1` 原流程仅覆盖 `probe + format regression`，未默认覆盖 `FailSession` 恢复链路。
-- 这会导致“日常一键回归只验证常规链路，遗漏失败恢复路径”的残余风险。
-
-### 原因分析
-- `--forced-failsession-check` 已存在且稳定，但未纳入批处理脚本默认流程。
-- 缺少硬 gate 会使 FailSession 回归执行依赖人工自觉，长期容易漏跑。
-
-### 解决方案
-- 扩展 `tools/run_all_checks.ps1` 参数：
-  - `ForcedFailSessionFile`（默认空，回落复用 `ProbeFile`）
-  - `ForcedFailSessionSampleMs`（默认 `2200`）
-- 将执行流程升级为三步：
-  1. `[1/3]` `--probe-file --json`
+### 闂鎻忚堪
+- `tools/run_all_checks.ps1` 鍘熸祦绋嬩粎瑕嗙洊 `probe + format regression`锛屾湭榛樿瑕嗙洊 `FailSession` 鎭㈠閾捐矾銆?- 杩欎細瀵艰嚧鈥滄棩甯镐竴閿洖褰掑彧楠岃瘉甯歌閾捐矾锛岄仐婕忓け璐ユ仮澶嶈矾寰勨€濈殑娈嬩綑椋庨櫓銆?
+### 鍘熷洜鍒嗘瀽
+- `--forced-failsession-check` 宸插瓨鍦ㄤ笖绋冲畾锛屼絾鏈撼鍏ユ壒澶勭悊鑴氭湰榛樿娴佺▼銆?- 缂哄皯纭?gate 浼氫娇 FailSession 鍥炲綊鎵ц渚濊禆浜哄伐鑷锛岄暱鏈熷鏄撴紡璺戙€?
+### 瑙ｅ喅鏂规
+- 鎵╁睍 `tools/run_all_checks.ps1` 鍙傛暟锛?  - `ForcedFailSessionFile`锛堥粯璁ょ┖锛屽洖钀藉鐢?`ProbeFile`锛?  - `ForcedFailSessionSampleMs`锛堥粯璁?`2200`锛?- 灏嗘墽琛屾祦绋嬪崌绾т负涓夋锛?  1. `[1/3]` `--probe-file --json`
   2. `[2/3]` `--forced-failsession-check`
   3. `[3/3]` `run_format_regression.ps1`
-- gate 规则：
-  - probe 非零：直接退出；
-  - forced-failsession 非零：直接退出并跳过 format regression。
-
-### 本地验收结果
-- 执行命令：
-  - `powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath "build/Debug/modern-video-player.exe" -ProbeFile "juren-30s.mp4" -ForcedFailSessionSampleMs 2200`
-- 结果：
-  - `probe exit code = 0`
+- gate 瑙勫垯锛?  - probe 闈為浂锛氱洿鎺ラ€€鍑猴紱
+  - forced-failsession 闈為浂锛氱洿鎺ラ€€鍑哄苟璺宠繃 format regression銆?
+### 鏈湴楠屾敹缁撴灉
+- 鎵ц鍛戒护锛?  - `powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath "build/Debug/modern-video-player.exe" -ProbeFile "juren-30s.mp4" -ForcedFailSessionSampleMs 2200`
+- 缁撴灉锛?  - `probe exit code = 0`
   - `forced-failsession exit code = 0`
   - `regression exit code = 0`
-  - 脚本总退出码：`0`
+  - 鑴氭湰鎬婚€€鍑虹爜锛歚0`
 
-### 修改文件
+### 淇敼鏂囦欢
 - tools/run_all_checks.ps1
 - docs/analysis/PLAYERCORE_DAY25_RUN_ALL_CHECKS_FORCED_FAILSESSION_GATE.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+
+
+## 问题 90: OpenGL 原生 D3D11 互操作停止期异常退出与低吞吐修复
+
+**日期**: 2026-03-24
+
+### 问题描述
+- `OpenGL` 原生硬解路径已经启动，但 `--performance-log-check` 在 stop/close 阶段异常退出，导致没有最终 `PASS/FAIL` 输出。
+- 原生路径吞吐明显异常，`juren-30s.mp4` 在 2 秒采样窗口内只能跑出约 3 帧，无法达到与 D3D11 主链接近的稳定度。
+
+### 原因分析
+- OpenGL 原生互操作链路里，FFmpeg 的 `D3D11VA` 解码与 OpenGL 渲染线程共享同一个 renderer-owned D3D11 device/context。
+- 该 D3D11 immediate context 未开启 `ID3D11Multithread::SetMultithreadProtected(TRUE)`，导致跨线程访问设备时出现不稳定和低吞吐。
+- `PlayerCore` 关闭 session 时先释放 decoder/hw context、后关闭 renderer，native `AVFrame` 缓存和渲染线程的释放顺序不安全。
+
+### 解决方案
+- 在 `src/render/opengl_video_renderer.cpp` 中为 renderer-owned D3D11 context 启用 `ID3D11Multithread` 多线程保护。
+- 在 `src/core/player_core.cpp` 中调整 session release 顺序：先清理缓存 native frame 并关闭 renderer，再释放 decoder/hw context。
+- 保留当前成熟播放器风格的互操作实现：`D3D11VA decode surface -> D3D11 shader convert -> WGL_NV_DX_interop -> OpenGL draw`。
+
+### 本地验证
+- Release 构建通过：`cmake --build build --config Release`
+- 命令：`$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000`
+- 结果：`performance-log-check.renderer_backend=OpenGL`
+- 结果：`performance-log-check.decoder_backend=D3D11VA`
+- 结果：`performance-log-check.video_native_output_frames=62`
+- 结果：`performance-log-check.video_copy_back_frames=0`
+- 结果：`performance-log-check.render_frames=47`
+- 结果：`performance-log-check.result=PASS`
+- 结果：进程退出码 `0`
+
+### 修改文件
+- src/render/opengl_video_renderer.cpp
+- src/core/player_core.cpp
+- docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md
+- docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
