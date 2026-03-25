@@ -97,7 +97,9 @@ public:
     bool consumePreviousChapterRequest() override;
     bool consumeNextItemRequest() override;
     bool consumePreviousItemRequest() override;
+    bool consumeOpenFileRequest(std::string& path) override;
     void setOverlayState(double position, double duration, float volume, bool paused) override;
+    void setSubtitleClock(double subtitle_time_seconds) override;
     void setSubtitleText(const std::string& text) override;
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+﻿cmake_minimum_required(VERSION 3.15)
 set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
 
@@ -210,6 +210,8 @@ add_executable(${PROJECT_NAME}
     src/subtitle/subtitle_parser.cpp
     src/subtitle/srt_parser.cpp
     src/subtitle/ass_parser.cpp
+    src/subtitle/embedded_subtitle_loader.cpp
+    src/subtitle/subtitle_font_registry.cpp
     src/subtitle/subtitle_timeline.cpp
     src/playlist/playlist_manager.cpp
     src/config/settings_manager.cpp
@@ -268,6 +270,7 @@ if(WIN32)
         dwrite
         dxgi
         d3dcompiler
+        opengl32
     )
 
     if(SDL2_EXTERNAL_DIR)
@@ -359,6 +362,7 @@ message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
 
 include(CPack)
+
 
 
 

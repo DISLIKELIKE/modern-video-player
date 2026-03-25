@@ -40,6 +40,7 @@ public:
     bool consumeQuitRequest();
     bool consumeNextItemRequest();
     bool consumePreviousItemRequest();
+    bool consumeOpenFileRequest(std::string& path);
 
     bool isPlaying() const;
     bool isPaused() const;

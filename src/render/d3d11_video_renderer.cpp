@@ -1,6 +1,7 @@
 #include "render/d3d11_video_renderer.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -33,6 +34,7 @@
 #include <d2d1helper.h>
 #include <d3dcompiler.h>
 #include <dwrite.h>
+#include <dwrite_1.h>
 #include <dxgi1_2.h>
 #include <wrl/client.h>
 
@@ -42,6 +44,7 @@ extern "C" {
 }
 
 #include "logger.h"
+#include "subtitle/subtitle_font_registry.h"
 
 namespace vp::render {
 
@@ -846,6 +849,7 @@ subtitle::SubtitleStyle makePlainSubtitleStyle() {
     style.font_size = 36.0;
     style.bold = true;
     style.primary_color = subtitle::SubtitleColor(255, 255, 255, 250);
+    style.secondary_color = subtitle::SubtitleColor(255, 210, 64, 250);
     style.outline_color = subtitle::SubtitleColor(0, 0, 0, 255);
     style.background_color = subtitle::SubtitleColor(5, 5, 5, 148);
     style.alignment = 2;
@@ -855,6 +859,10 @@ subtitle::SubtitleStyle makePlainSubtitleStyle() {
     style.border_style = 3;
     style.outline = 0.0;
     style.shadow = 2.0;
+    style.outline_x = 0.0;
+    style.outline_y = 0.0;
+    style.shadow_x = 2.0;
+    style.shadow_y = 2.0;
     return style;
 }
 
@@ -888,6 +896,252 @@ D2D1_COLOR_F toD2DColor(const subtitle::SubtitleColor& color) {
                         static_cast<float>(color.a) / 255.0f);
 }
 
+subtitle::SubtitleColor applySubtitleOpacity(const subtitle::SubtitleColor& color, float opacity) {
+    subtitle::SubtitleColor adjusted = color;
+    const int scaled_alpha = static_cast<int>(std::lround(static_cast<double>(color.a) *
+                                                          std::clamp(opacity, 0.0f, 1.0f)));
+    adjusted.a = static_cast<uint8_t>(std::clamp(scaled_alpha, 0, 255));
+    return adjusted;
+}
+
+bool subtitleAnimationHasMotion(const subtitle::SubtitleStyleAnimation& animation) {
+    if (!animation.has_move) {
+        return false;
+    }
+    if (std::abs(animation.move_x2 - animation.move_x1) <= 0.001 &&
+        std::abs(animation.move_y2 - animation.move_y1) <= 0.001) {
+        return false;
+    }
+    return !animation.move_has_timing || animation.move_t2_seconds > animation.move_t1_seconds;
+}
+
+bool subtitleAnimationHasFade(const subtitle::SubtitleStyleAnimation& animation) {
+    switch (animation.fade_mode) {
+    case subtitle::SubtitleFadeMode::Simple:
+        return animation.fade_in_seconds > 0.0005 || animation.fade_out_seconds > 0.0005;
+    case subtitle::SubtitleFadeMode::Complex:
+        return animation.fade_alpha1 != animation.fade_alpha2 ||
+               animation.fade_alpha2 != animation.fade_alpha3 ||
+               animation.fade_t2_seconds > animation.fade_t1_seconds ||
+               animation.fade_t4_seconds > animation.fade_t3_seconds;
+    case subtitle::SubtitleFadeMode::None:
+    default:
+        return false;
+    }
+}
+
+bool subtitleAnimationHasStyleTransitions(const subtitle::SubtitleStyleAnimation& animation) {
+    return std::any_of(animation.style_transitions.begin(),
+                       animation.style_transitions.end(),
+                       [](const subtitle::SubtitleStyleTransition& transition) {
+                           return transition.property_mask != 0;
+                       });
+}
+
+struct SubtitleAnimationState {
+    bool has_position{false};
+    double position_x{0.0};
+    double position_y{0.0};
+    float opacity{1.0f};
+};
+
+float evaluateComplexFadeOpacity(const subtitle::SubtitleStyleAnimation& animation, double item_elapsed_seconds) {
+    const double a1 = static_cast<double>(animation.fade_alpha1);
+    const double a2 = static_cast<double>(animation.fade_alpha2);
+    const double a3 = static_cast<double>(animation.fade_alpha3);
+    double value = a3;
+    if (item_elapsed_seconds <= animation.fade_t1_seconds) {
+        value = a1;
+    } else if (item_elapsed_seconds < animation.fade_t2_seconds && animation.fade_t2_seconds > animation.fade_t1_seconds) {
+        const double progress = (item_elapsed_seconds - animation.fade_t1_seconds) /
+                                (animation.fade_t2_seconds - animation.fade_t1_seconds);
+        value = a1 + (a2 - a1) * std::clamp(progress, 0.0, 1.0);
+    } else if (item_elapsed_seconds <= animation.fade_t3_seconds) {
+        value = a2;
+    } else if (item_elapsed_seconds < animation.fade_t4_seconds && animation.fade_t4_seconds > animation.fade_t3_seconds) {
+        const double progress = (item_elapsed_seconds - animation.fade_t3_seconds) /
+                                (animation.fade_t4_seconds - animation.fade_t3_seconds);
+        value = a2 + (a3 - a2) * std::clamp(progress, 0.0, 1.0);
+    }
+    return static_cast<float>(std::clamp(value / 255.0, 0.0, 1.0));
+}
+
+float evaluateStyleTransitionProgress(const subtitle::SubtitleStyleTransition& transition,
+                                      double item_elapsed_seconds,
+                                      double item_duration_seconds) {
+    const double start_seconds = transition.has_timing ? transition.start_seconds : 0.0;
+    const double end_seconds = transition.has_timing ? transition.end_seconds : item_duration_seconds;
+    if (item_elapsed_seconds <= start_seconds) {
+        return 0.0f;
+    }
+    if (end_seconds <= start_seconds + 0.0005) {
+        return item_elapsed_seconds >= end_seconds ? 1.0f : 0.0f;
+    }
+    const double linear = std::clamp((item_elapsed_seconds - start_seconds) / (end_seconds - start_seconds), 0.0, 1.0);
+    return static_cast<float>(std::pow(linear, std::max(0.01, transition.accel)));
+}
+
+uint8_t lerpByte(uint8_t from, uint8_t to, float progress) {
+    const float blended = static_cast<float>(from) + (static_cast<float>(to) - static_cast<float>(from)) * progress;
+    long value = std::lround(blended);
+    value = std::max<long>(0, std::min<long>(255, value));
+    return static_cast<uint8_t>(value);
+}
+
+subtitle::SubtitleColor lerpSubtitleColor(const subtitle::SubtitleColor& from,
+                                          const subtitle::SubtitleColor& to,
+                                          float progress) {
+    return subtitle::SubtitleColor(
+        lerpByte(from.r, to.r, progress),
+        lerpByte(from.g, to.g, progress),
+        lerpByte(from.b, to.b, progress),
+        lerpByte(from.a, to.a, progress));
+}
+
+double lerpDouble(double from, double to, float progress) {
+    return from + (to - from) * static_cast<double>(progress);
+}
+
+void applyStyleTransition(subtitle::SubtitleStyle& style,
+                          const subtitle::SubtitleStyleTransition& transition,
+                          float progress) {
+    if (progress <= 0.0001f || transition.property_mask == 0) {
+        return;
+    }
+
+    const subtitle::SubtitleStyle& target = transition.target_style;
+    if ((transition.property_mask & subtitle::kSubtitleTransitionFontSize) != 0) {
+        style.font_size = lerpDouble(style.font_size, target.font_size, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionPrimaryColor) != 0) {
+        style.primary_color = lerpSubtitleColor(style.primary_color, target.primary_color, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionSecondaryColor) != 0) {
+        style.secondary_color = lerpSubtitleColor(style.secondary_color, target.secondary_color, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionOutlineColor) != 0) {
+        style.outline_color = lerpSubtitleColor(style.outline_color, target.outline_color, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionBackgroundColor) != 0) {
+        style.background_color = lerpSubtitleColor(style.background_color, target.background_color, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionOutlineX) != 0) {
+        style.outline_x = lerpDouble(style.outline_x, target.outline_x, progress);
+        style.outline = (style.outline_x + style.outline_y) * 0.5;
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionOutlineY) != 0) {
+        style.outline_y = lerpDouble(style.outline_y, target.outline_y, progress);
+        style.outline = (style.outline_x + style.outline_y) * 0.5;
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionShadowX) != 0) {
+        style.shadow_x = lerpDouble(style.shadow_x, target.shadow_x, progress);
+        style.shadow = (std::abs(style.shadow_x) + std::abs(style.shadow_y)) * 0.5;
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionShadowY) != 0) {
+        style.shadow_y = lerpDouble(style.shadow_y, target.shadow_y, progress);
+        style.shadow = (std::abs(style.shadow_x) + std::abs(style.shadow_y)) * 0.5;
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionSpacing) != 0) {
+        style.spacing = lerpDouble(style.spacing, target.spacing, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionScaleX) != 0) {
+        style.scale_x_percent = lerpDouble(style.scale_x_percent, target.scale_x_percent, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionScaleY) != 0) {
+        style.scale_y_percent = lerpDouble(style.scale_y_percent, target.scale_y_percent, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionRotationZ) != 0) {
+        style.rotation_degrees = lerpDouble(style.rotation_degrees, target.rotation_degrees, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionRotationX) != 0) {
+        style.rotation_x_degrees = lerpDouble(style.rotation_x_degrees, target.rotation_x_degrees, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionRotationY) != 0) {
+        style.rotation_y_degrees = lerpDouble(style.rotation_y_degrees, target.rotation_y_degrees, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionShearX) != 0) {
+        style.shear_x = lerpDouble(style.shear_x, target.shear_x, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionShearY) != 0) {
+        style.shear_y = lerpDouble(style.shear_y, target.shear_y, progress);
+    }
+    if ((transition.property_mask & subtitle::kSubtitleTransitionRotationOrigin) != 0) {
+        style.rotation_origin_x = lerpDouble(style.rotation_origin_x, target.rotation_origin_x, progress);
+        style.rotation_origin_y = lerpDouble(style.rotation_origin_y, target.rotation_origin_y, progress);
+        style.has_rotation_origin = style.has_rotation_origin || target.has_rotation_origin;
+        if (progress >= 0.999f) {
+            style.has_rotation_origin = target.has_rotation_origin;
+        }
+    }
+}
+
+subtitle::SubtitleStyle resolveAnimatedSubtitleStyle(const subtitle::SubtitleStyle& base_style,
+                                                     const subtitle::SubtitleStyleAnimation& animation,
+                                                     double item_elapsed_seconds,
+                                                     double item_duration_seconds) {
+    subtitle::SubtitleStyle style = base_style;
+    for (const subtitle::SubtitleStyleTransition& transition : animation.style_transitions) {
+        applyStyleTransition(style,
+                             transition,
+                             evaluateStyleTransitionProgress(transition, item_elapsed_seconds, item_duration_seconds));
+    }
+    return style;
+}
+
+SubtitleAnimationState resolveSubtitleAnimationState(const subtitle::SubtitleItem& item, double subtitle_clock_seconds) {
+    SubtitleAnimationState state;
+    const subtitle::SubtitleStyleAnimation& animation = item.animation;
+    const double item_elapsed_seconds = subtitle_clock_seconds - item.start_seconds;
+    const double item_duration_seconds = std::max(0.0, item.end_seconds - item.start_seconds);
+
+    if (animation.has_move) {
+        state.has_position = true;
+        const double start_seconds = animation.move_has_timing ? animation.move_t1_seconds : 0.0;
+        const double end_seconds = animation.move_has_timing ? animation.move_t2_seconds : item_duration_seconds;
+        double progress = 1.0;
+        if (item_elapsed_seconds <= start_seconds) {
+            progress = 0.0;
+        } else if (end_seconds > start_seconds + 0.0005) {
+            progress = std::clamp((item_elapsed_seconds - start_seconds) / (end_seconds - start_seconds), 0.0, 1.0);
+        }
+        state.position_x = animation.move_x1 + (animation.move_x2 - animation.move_x1) * progress;
+        state.position_y = animation.move_y1 + (animation.move_y2 - animation.move_y1) * progress;
+    } else if (item.style.has_position) {
+        state.has_position = true;
+        state.position_x = item.style.position_x;
+        state.position_y = item.style.position_y;
+    }
+
+    switch (animation.fade_mode) {
+    case subtitle::SubtitleFadeMode::Simple: {
+        const double fade_in = std::max(0.0, animation.fade_in_seconds);
+        const double fade_out = std::max(0.0, animation.fade_out_seconds);
+        float opacity = 1.0f;
+        if (fade_in > 0.0005) {
+            opacity = std::min(opacity,
+                               static_cast<float>(std::clamp(item_elapsed_seconds / fade_in, 0.0, 1.0)));
+        }
+        if (fade_out > 0.0005) {
+            opacity = std::min(opacity,
+                               static_cast<float>(std::clamp((item_duration_seconds - item_elapsed_seconds) / fade_out,
+                                                             0.0,
+                                                             1.0)));
+        }
+        state.opacity = std::clamp(opacity, 0.0f, 1.0f);
+        break;
+    }
+    case subtitle::SubtitleFadeMode::Complex:
+        state.opacity = evaluateComplexFadeOpacity(animation, item_elapsed_seconds);
+        break;
+    case subtitle::SubtitleFadeMode::None:
+    default:
+        state.opacity = 1.0f;
+        break;
+    }
+
+    return state;
+}
+
 float scaleSubtitleMetric(double value, int script_extent, float target_extent, float fallback) {
     if (script_extent > 0 && value > 0.0) {
         return static_cast<float>(value * static_cast<double>(target_extent) / static_cast<double>(script_extent));
@@ -896,6 +1150,731 @@ float scaleSubtitleMetric(double value, int script_extent, float target_extent, 
         return static_cast<float>(value);
     }
     return fallback;
+}
+
+float clampSubtitleCoordinate(float value, float lower, float upper) {
+    if (lower > upper) {
+        return (lower + upper) * 0.5f;
+    }
+    return std::clamp(value, lower, upper);
+}
+
+float subtitlePercentScale(double percent) {
+    if (percent <= 0.0) {
+        return 1.0f;
+    }
+    return std::max(0.01f, static_cast<float>(percent / 100.0));
+}
+
+DWRITE_WORD_WRAPPING toWordWrapping(int wrap_style) {
+    return wrap_style == 2 ? DWRITE_WORD_WRAPPING_NO_WRAP : DWRITE_WORD_WRAPPING_WRAP;
+}
+
+float subtitleAnchorLocalX(float layout_width, int alignment) {
+    switch (subtitleHorizontalGroup(alignment)) {
+    case 0:
+        return 0.0f;
+    case 2:
+        return layout_width;
+    default:
+        return layout_width * 0.5f;
+    }
+}
+
+float subtitleAnchorLocalY(float layout_height, int alignment) {
+    switch (subtitleVerticalGroup(alignment)) {
+    case 2:
+        return 0.0f;
+    case 1:
+        return layout_height * 0.5f;
+    default:
+        return layout_height;
+    }
+}
+
+struct SubtitleLocalBounds {
+    float left{0.0f};
+    float top{0.0f};
+    float right{0.0f};
+    float bottom{0.0f};
+    float width() const { return right - left; }
+    float height() const { return bottom - top; }
+    float centerY() const { return (top + bottom) * 0.5f; }
+};
+
+SubtitleLocalBounds computeTransformedSubtitleBounds(float rect_left,
+                                                    float rect_top,
+                                                    float rect_right,
+                                                    float rect_bottom,
+                                                    float anchor_local_x,
+                                                    float anchor_local_y,
+                                                    float scale_x,
+                                                    float scale_y,
+                                                    float rotation_degrees) {
+    const float radians = static_cast<float>(rotation_degrees * 3.14159265358979323846 / 180.0);
+    const float cosine = std::cos(radians);
+    const float sine = std::sin(radians);
+
+    const std::array<D2D1_POINT_2F, 4> corners = {{
+        D2D1::Point2F(rect_left, rect_top),
+        D2D1::Point2F(rect_right, rect_top),
+        D2D1::Point2F(rect_left, rect_bottom),
+        D2D1::Point2F(rect_right, rect_bottom),
+    }};
+
+    SubtitleLocalBounds bounds;
+    bool initialized = false;
+    for (const D2D1_POINT_2F& corner : corners) {
+        const float local_x = (corner.x - anchor_local_x) * scale_x;
+        const float local_y = (corner.y - anchor_local_y) * scale_y;
+        const float rotated_x = local_x * cosine - local_y * sine;
+        const float rotated_y = local_x * sine + local_y * cosine;
+        const float transformed_x = anchor_local_x + rotated_x;
+        const float transformed_y = anchor_local_y + rotated_y;
+        if (!initialized) {
+            bounds.left = bounds.right = transformed_x;
+            bounds.top = bounds.bottom = transformed_y;
+            initialized = true;
+            continue;
+        }
+        bounds.left = std::min(bounds.left, transformed_x);
+        bounds.right = std::max(bounds.right, transformed_x);
+        bounds.top = std::min(bounds.top, transformed_y);
+        bounds.bottom = std::max(bounds.bottom, transformed_y);
+    }
+    return bounds;
+}
+
+struct SubtitleAffineTransform {
+    float m11{1.0f};
+    float m12{0.0f};
+    float m21{0.0f};
+    float m22{1.0f};
+    D2D1_POINT_2F origin{D2D1::Point2F(0.0f, 0.0f)};
+};
+
+float subtitleProjectedScale(float base_scale, double rotation_degrees) {
+    float projection = static_cast<float>(std::cos(rotation_degrees * 3.14159265358979323846 / 180.0));
+    if (std::abs(projection) < 0.01f) {
+        projection = projection < 0.0f ? -0.01f : 0.01f;
+    }
+    return base_scale * projection;
+}
+
+SubtitleAffineTransform buildSubtitleAffineTransform(const subtitle::SubtitleStyle& style,
+                                                     float base_scale_x,
+                                                     float base_scale_y,
+                                                     float script_scale_x,
+                                                     float script_scale_y,
+                                                     const SDL_Rect& video_rect,
+                                                     const D2D1_POINT_2F& default_origin) {
+    SubtitleAffineTransform transform;
+    transform.origin = default_origin;
+    if (style.has_rotation_origin) {
+        transform.origin = D2D1::Point2F(
+            static_cast<float>(video_rect.x) + static_cast<float>(style.rotation_origin_x) * script_scale_x,
+            static_cast<float>(video_rect.y) + static_cast<float>(style.rotation_origin_y) * script_scale_y);
+    }
+
+    const float scale_x = subtitleProjectedScale(base_scale_x, style.rotation_y_degrees);
+    const float scale_y = subtitleProjectedScale(base_scale_y, style.rotation_x_degrees);
+    const float shear_x = static_cast<float>(style.shear_x);
+    const float shear_y = static_cast<float>(style.shear_y);
+    const float radians = static_cast<float>(style.rotation_degrees * 3.14159265358979323846 / 180.0);
+    const float cosine = std::cos(radians);
+    const float sine = std::sin(radians);
+
+    transform.m11 = scale_x * (cosine - sine * shear_y);
+    transform.m12 = scale_x * (sine + cosine * shear_y);
+    transform.m21 = scale_y * (cosine * shear_x - sine);
+    transform.m22 = scale_y * (sine * shear_x + cosine);
+    return transform;
+}
+
+D2D1_POINT_2F transformSubtitleWorldPoint(float x,
+                                          float y,
+                                          const SubtitleAffineTransform& transform) {
+    const float dx = x - transform.origin.x;
+    const float dy = y - transform.origin.y;
+    return D2D1::Point2F(transform.origin.x + transform.m11 * dx + transform.m21 * dy,
+                         transform.origin.y + transform.m12 * dx + transform.m22 * dy);
+}
+
+SubtitleLocalBounds computeTransformedSubtitleBounds(float rect_left,
+                                                    float rect_top,
+                                                    float rect_right,
+                                                    float rect_bottom,
+                                                    const SubtitleAffineTransform& transform) {
+    const std::array<D2D1_POINT_2F, 4> corners = {{
+        D2D1::Point2F(rect_left, rect_top),
+        D2D1::Point2F(rect_right, rect_top),
+        D2D1::Point2F(rect_left, rect_bottom),
+        D2D1::Point2F(rect_right, rect_bottom),
+    }};
+
+    SubtitleLocalBounds bounds;
+    bool initialized = false;
+    for (const D2D1_POINT_2F& corner : corners) {
+        const D2D1_POINT_2F transformed = transformSubtitleWorldPoint(corner.x, corner.y, transform);
+        if (!initialized) {
+            bounds.left = bounds.right = transformed.x;
+            bounds.top = bounds.bottom = transformed.y;
+            initialized = true;
+            continue;
+        }
+        bounds.left = std::min(bounds.left, transformed.x);
+        bounds.right = std::max(bounds.right, transformed.x);
+        bounds.top = std::min(bounds.top, transformed.y);
+        bounds.bottom = std::max(bounds.bottom, transformed.y);
+    }
+    return bounds;
+}
+
+D2D1_MATRIX_3X2_F subtitleTransformMatrix(const SubtitleAffineTransform& transform) {
+    return D2D1::Matrix3x2F(
+        transform.m11,
+        transform.m12,
+        transform.m21,
+        transform.m22,
+        transform.origin.x - (transform.m11 * transform.origin.x + transform.m21 * transform.origin.y),
+        transform.origin.y - (transform.m12 * transform.origin.x + transform.m22 * transform.origin.y));
+}
+
+float subtitleDrawingUnitScale(int drawing_scale) {
+    if (drawing_scale <= 1) {
+        return 1.0f;
+    }
+    const int shift = std::min(20, drawing_scale - 1);
+    return 1.0f / static_cast<float>(1u << shift);
+}
+
+enum class AssVectorOpType {
+    Move,
+    Line,
+    Bezier,
+    Close,
+};
+
+struct AssVectorOp {
+    AssVectorOpType type{AssVectorOpType::Move};
+    std::array<D2D1_POINT_2F, 3> points{};
+    size_t point_count{0};
+};
+
+struct ParsedAssVectorShape {
+    std::vector<AssVectorOp> ops;
+    SubtitleLocalBounds bounds{};
+    bool valid{false};
+};
+
+bool isAssVectorCommandToken(const std::string& token) {
+    return token.size() == 1 && std::isalpha(static_cast<unsigned char>(token[0])) != 0;
+}
+
+bool parseAssVectorFloat(const std::string& token, float& value) {
+    try {
+        value = std::stof(token);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+std::vector<std::string> tokenizeAssVectorCommands(const std::string& commands) {
+    std::vector<std::string> tokens;
+    std::string current;
+    const auto flush_current = [&]() {
+        if (!current.empty()) {
+            tokens.push_back(current);
+            current.clear();
+        }
+    };
+
+    for (char ch : commands) {
+        const unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalpha(uch) != 0) {
+            flush_current();
+            std::string token(1, static_cast<char>(std::tolower(uch)));
+            tokens.push_back(token);
+            continue;
+        }
+        if (std::isdigit(uch) != 0 || ch == '-' || ch == '+' || ch == '.') {
+            current.push_back(ch);
+            continue;
+        }
+        flush_current();
+    }
+    flush_current();
+    return tokens;
+}
+
+bool parseAssVectorShape(const std::string& commands,
+                         float unit_scale_x,
+                         float unit_scale_y,
+                         bool normalize_origin,
+                         ParsedAssVectorShape& shape_out) {
+    shape_out = {};
+    const std::vector<std::string> tokens = tokenizeAssVectorCommands(commands);
+    if (tokens.empty()) {
+        return false;
+    }
+
+    std::vector<AssVectorOp> ops;
+    SubtitleLocalBounds bounds;
+    bool bounds_initialized = false;
+    const auto update_bounds = [&](float x, float y) {
+        if (!bounds_initialized) {
+            bounds.left = bounds.right = x;
+            bounds.top = bounds.bottom = y;
+            bounds_initialized = true;
+            return;
+        }
+        bounds.left = std::min(bounds.left, x);
+        bounds.right = std::max(bounds.right, x);
+        bounds.top = std::min(bounds.top, y);
+        bounds.bottom = std::max(bounds.bottom, y);
+    };
+
+    char command = '\0';
+    size_t index = 0;
+    while (index < tokens.size()) {
+        if (isAssVectorCommandToken(tokens[index])) {
+            command = static_cast<char>(std::tolower(static_cast<unsigned char>(tokens[index][0])));
+            ++index;
+            if (command == 'c') {
+                ops.push_back(AssVectorOp{AssVectorOpType::Close, {}, 0});
+            }
+            continue;
+        }
+
+        if (command == '\0') {
+            ++index;
+            continue;
+        }
+
+        auto parse_point = [&](D2D1_POINT_2F& point) -> bool {
+            if (index + 1 >= tokens.size() || isAssVectorCommandToken(tokens[index]) || isAssVectorCommandToken(tokens[index + 1])) {
+                return false;
+            }
+            float x = 0.0f;
+            float y = 0.0f;
+            if (!parseAssVectorFloat(tokens[index], x) || !parseAssVectorFloat(tokens[index + 1], y)) {
+                return false;
+            }
+            index += 2;
+            point = D2D1::Point2F(x * unit_scale_x, y * unit_scale_y);
+            update_bounds(point.x, point.y);
+            return true;
+        };
+
+        if (command == 'm' || command == 'n') {
+            bool first_pair = true;
+            while (index < tokens.size() && !isAssVectorCommandToken(tokens[index])) {
+                D2D1_POINT_2F point{};
+                if (!parse_point(point)) {
+                    break;
+                }
+                AssVectorOp op{};
+                op.type = first_pair ? AssVectorOpType::Move : AssVectorOpType::Line;
+                op.points[0] = point;
+                op.point_count = 1;
+                ops.push_back(op);
+                first_pair = false;
+            }
+            continue;
+        }
+
+        if (command == 'l' || command == 's' || command == 'p') {
+            while (index < tokens.size() && !isAssVectorCommandToken(tokens[index])) {
+                D2D1_POINT_2F point{};
+                if (!parse_point(point)) {
+                    break;
+                }
+                AssVectorOp op{};
+                op.type = AssVectorOpType::Line;
+                op.points[0] = point;
+                op.point_count = 1;
+                ops.push_back(op);
+            }
+            continue;
+        }
+
+        if (command == 'b') {
+            while (index < tokens.size() && !isAssVectorCommandToken(tokens[index])) {
+                D2D1_POINT_2F p1{};
+                D2D1_POINT_2F p2{};
+                D2D1_POINT_2F p3{};
+                if (!parse_point(p1) || !parse_point(p2) || !parse_point(p3)) {
+                    break;
+                }
+                AssVectorOp op{};
+                op.type = AssVectorOpType::Bezier;
+                op.points[0] = p1;
+                op.points[1] = p2;
+                op.points[2] = p3;
+                op.point_count = 3;
+                ops.push_back(op);
+            }
+            continue;
+        }
+
+        ++index;
+    }
+
+    if (!bounds_initialized || ops.empty()) {
+        return false;
+    }
+
+    if (normalize_origin) {
+        for (AssVectorOp& op : ops) {
+            for (size_t i = 0; i < op.point_count; ++i) {
+                op.points[i].x -= bounds.left;
+                op.points[i].y -= bounds.top;
+            }
+        }
+        bounds.right -= bounds.left;
+        bounds.bottom -= bounds.top;
+        bounds.left = 0.0f;
+        bounds.top = 0.0f;
+    }
+
+    shape_out.ops = std::move(ops);
+    shape_out.bounds = bounds;
+    shape_out.valid = true;
+    return true;
+}
+
+bool buildAssVectorGeometry(ID2D1Factory* factory,
+                            const ParsedAssVectorShape& shape,
+                            float offset_x,
+                            float offset_y,
+                            ID2D1PathGeometry** geometry_out) {
+    if (!factory || !geometry_out || !shape.valid) {
+        return false;
+    }
+
+    *geometry_out = nullptr;
+    ComPtr<ID2D1PathGeometry> geometry;
+    if (FAILED(factory->CreatePathGeometry(geometry.GetAddressOf())) || !geometry) {
+        return false;
+    }
+
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(geometry->Open(sink.GetAddressOf())) || !sink) {
+        return false;
+    }
+
+    bool figure_open = false;
+    for (const AssVectorOp& op : shape.ops) {
+        switch (op.type) {
+        case AssVectorOpType::Move: {
+            if (figure_open) {
+                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+            }
+            const D2D1_POINT_2F point = D2D1::Point2F(offset_x + op.points[0].x, offset_y + op.points[0].y);
+            sink->BeginFigure(point, D2D1_FIGURE_BEGIN_FILLED);
+            figure_open = true;
+            break;
+        }
+        case AssVectorOpType::Line: {
+            const D2D1_POINT_2F point = D2D1::Point2F(offset_x + op.points[0].x, offset_y + op.points[0].y);
+            if (!figure_open) {
+                sink->BeginFigure(point, D2D1_FIGURE_BEGIN_FILLED);
+                figure_open = true;
+            } else {
+                sink->AddLine(point);
+            }
+            break;
+        }
+        case AssVectorOpType::Bezier: {
+            if (!figure_open) {
+                sink->BeginFigure(D2D1::Point2F(offset_x + op.points[2].x, offset_y + op.points[2].y),
+                                  D2D1_FIGURE_BEGIN_FILLED);
+                figure_open = true;
+            }
+            sink->AddBezier(D2D1::BezierSegment(
+                D2D1::Point2F(offset_x + op.points[0].x, offset_y + op.points[0].y),
+                D2D1::Point2F(offset_x + op.points[1].x, offset_y + op.points[1].y),
+                D2D1::Point2F(offset_x + op.points[2].x, offset_y + op.points[2].y)));
+            break;
+        }
+        case AssVectorOpType::Close:
+            if (figure_open) {
+                sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+                figure_open = false;
+            }
+            break;
+        }
+    }
+    if (figure_open) {
+        sink->EndFigure(D2D1_FIGURE_END_CLOSED);
+    }
+    sink->Close();
+
+    *geometry_out = geometry.Detach();
+    return true;
+}
+
+bool buildAssClipGeometry(ID2D1Factory* factory,
+                          const std::string& commands,
+                          int clip_scale,
+                          const SDL_Rect& video_rect,
+                          float script_scale_x,
+                          float script_scale_y,
+                          ID2D1PathGeometry** geometry_out) {
+    ParsedAssVectorShape shape;
+    const float unit_scale = subtitleDrawingUnitScale(clip_scale);
+    if (!parseAssVectorShape(commands, script_scale_x * unit_scale, script_scale_y * unit_scale, false, shape)) {
+        return false;
+    }
+    return buildAssVectorGeometry(factory,
+                                  shape,
+                                  static_cast<float>(video_rect.x),
+                                  static_cast<float>(video_rect.y),
+                                  geometry_out);
+}
+
+bool buildInverseClipGeometry(ID2D1Factory* factory,
+                              ID2D1Geometry* clip_geometry,
+                              const SDL_Rect& video_rect,
+                              ID2D1PathGeometry** geometry_out) {
+    if (!factory || !clip_geometry || !geometry_out) {
+        return false;
+    }
+
+    *geometry_out = nullptr;
+    ComPtr<ID2D1RectangleGeometry> full_rect_geometry;
+    if (FAILED(factory->CreateRectangleGeometry(
+            D2D1::RectF(static_cast<float>(video_rect.x),
+                        static_cast<float>(video_rect.y),
+                        static_cast<float>(video_rect.x + video_rect.w),
+                        static_cast<float>(video_rect.y + video_rect.h)),
+            full_rect_geometry.GetAddressOf())) || !full_rect_geometry) {
+        return false;
+    }
+
+    ComPtr<ID2D1PathGeometry> combined_geometry;
+    if (FAILED(factory->CreatePathGeometry(combined_geometry.GetAddressOf())) || !combined_geometry) {
+        return false;
+    }
+
+    ComPtr<ID2D1GeometrySink> sink;
+    if (FAILED(combined_geometry->Open(sink.GetAddressOf())) || !sink) {
+        return false;
+    }
+
+    const HRESULT hr = full_rect_geometry->CombineWithGeometry(
+        clip_geometry,
+        D2D1_COMBINE_MODE_EXCLUDE,
+        nullptr,
+        D2D1_DEFAULT_FLATTENING_TOLERANCE,
+        sink.Get());
+    if (FAILED(hr) || FAILED(sink->Close())) {
+        return false;
+    }
+
+    *geometry_out = combined_geometry.Detach();
+    return true;
+}
+
+bool subtitleItemHasAnimatedRuns(const subtitle::SubtitleItem& item) {
+    if (subtitleAnimationHasMotion(item.animation) ||
+        subtitleAnimationHasFade(item.animation) ||
+        subtitleAnimationHasStyleTransitions(item.animation)) {
+        return true;
+    }
+    return std::any_of(item.runs.begin(), item.runs.end(), [](const subtitle::SubtitleTextRun& run) {
+        return run.karaoke_mode != subtitle::SubtitleKaraokeMode::None &&
+               run.karaoke_end_centiseconds > run.karaoke_start_centiseconds;
+    });
+}
+
+bool subtitleItemsHaveAnimatedRuns(const std::vector<subtitle::SubtitleItem>& items) {
+    return std::any_of(items.begin(), items.end(), [](const subtitle::SubtitleItem& item) {
+        return subtitleItemHasAnimatedRuns(item);
+    });
+}
+
+struct KaraokeRunVisualState {
+    subtitle::SubtitleColor base_fill_color{};
+    bool has_highlight_overlay{false};
+    subtitle::SubtitleColor overlay_fill_color{};
+    float overlay_progress{0.0f};
+};
+
+KaraokeRunVisualState resolveKaraokeRunVisualState(const subtitle::SubtitleStyle& style,
+                                                   const subtitle::SubtitleTextRun& run,
+                                                   double item_elapsed_seconds) {
+    KaraokeRunVisualState state;
+    state.base_fill_color = style.primary_color;
+    if (run.karaoke_mode == subtitle::SubtitleKaraokeMode::None ||
+        run.karaoke_end_centiseconds <= run.karaoke_start_centiseconds) {
+        return state;
+    }
+
+    const double karaoke_start_seconds = static_cast<double>(run.karaoke_start_centiseconds) / 100.0;
+    const double karaoke_end_seconds = static_cast<double>(run.karaoke_end_centiseconds) / 100.0;
+    if (item_elapsed_seconds < karaoke_start_seconds) {
+        state.base_fill_color = style.secondary_color;
+        return state;
+    }
+    if (item_elapsed_seconds >= karaoke_end_seconds) {
+        state.base_fill_color = style.primary_color;
+        return state;
+    }
+
+    if (run.karaoke_mode == subtitle::SubtitleKaraokeMode::Sweep) {
+        state.base_fill_color = style.secondary_color;
+        state.has_highlight_overlay = true;
+        state.overlay_fill_color = style.primary_color;
+        const double duration = std::max(0.001, karaoke_end_seconds - karaoke_start_seconds);
+        state.overlay_progress = static_cast<float>(
+            std::clamp((item_elapsed_seconds - karaoke_start_seconds) / duration, 0.0, 1.0));
+        return state;
+    }
+
+    state.base_fill_color = style.primary_color;
+    return state;
+}
+
+struct KaraokeHighlightClip {
+    D2D1_RECT_F world_rect{};
+};
+
+std::vector<KaraokeHighlightClip> buildKaraokeHighlightClips(const std::vector<DWRITE_HIT_TEST_METRICS>& metrics,
+                                                             float progress,
+                                                             float draw_x,
+                                                             float draw_y,
+                                                             const SubtitleAffineTransform& transform);
+
+bool collectTextRangeMetrics(IDWriteTextLayout* text_layout,
+                             UINT32 start_index,
+                             UINT32 length,
+                             std::vector<DWRITE_HIT_TEST_METRICS>& metrics) {
+    metrics.clear();
+    if (!text_layout || length == 0) {
+        return false;
+    }
+
+    UINT32 actual_count = 0;
+    HRESULT hr = text_layout->HitTestTextRange(start_index, length, 0.0f, 0.0f, nullptr, 0, &actual_count);
+    if (FAILED(hr) || actual_count == 0) {
+        return false;
+    }
+
+    metrics.resize(actual_count);
+    hr = text_layout->HitTestTextRange(start_index,
+                                       length,
+                                       0.0f,
+                                       0.0f,
+                                       metrics.data(),
+                                       actual_count,
+                                       &actual_count);
+    if (FAILED(hr) || actual_count == 0) {
+        metrics.clear();
+        return false;
+    }
+    metrics.resize(actual_count);
+    return true;
+}
+
+std::vector<KaraokeHighlightClip> buildKaraokeHighlightClips(const std::vector<DWRITE_HIT_TEST_METRICS>& metrics,
+                                                             float progress,
+                                                             float draw_x,
+                                                             float draw_y,
+                                                             float anchor_local_x,
+                                                             float anchor_local_y,
+                                                             float glyph_scale_x,
+                                                             float glyph_scale_y,
+                                                             float rotation_degrees) {
+    const float radians = static_cast<float>(rotation_degrees * 3.14159265358979323846 / 180.0);
+    const float cosine = std::cos(radians);
+    const float sine = std::sin(radians);
+    SubtitleAffineTransform transform;
+    transform.origin = D2D1::Point2F(draw_x + anchor_local_x, draw_y + anchor_local_y);
+    transform.m11 = glyph_scale_x * cosine;
+    transform.m12 = glyph_scale_x * sine;
+    transform.m21 = -glyph_scale_y * sine;
+    transform.m22 = glyph_scale_y * cosine;
+    return buildKaraokeHighlightClips(metrics, progress, draw_x, draw_y, transform);
+}
+
+std::vector<KaraokeHighlightClip> buildKaraokeHighlightClips(const std::vector<DWRITE_HIT_TEST_METRICS>& metrics,
+                                                             float progress,
+                                                             float draw_x,
+                                                             float draw_y,
+                                                             const SubtitleAffineTransform& transform) {
+    std::vector<KaraokeHighlightClip> clips;
+    if (metrics.empty() || progress <= 0.0f) {
+        return clips;
+    }
+
+    float total_width = 0.0f;
+    for (const DWRITE_HIT_TEST_METRICS& metric : metrics) {
+        total_width += metric.width;
+    }
+    if (total_width <= 0.001f) {
+        return clips;
+    }
+
+    float remaining_width = total_width * std::clamp(progress, 0.0f, 1.0f);
+    for (const DWRITE_HIT_TEST_METRICS& metric : metrics) {
+        if (remaining_width <= 0.001f) {
+            break;
+        }
+        const float highlight_width = std::min(metric.width, remaining_width);
+        remaining_width -= highlight_width;
+
+        const SubtitleLocalBounds world_bounds = computeTransformedSubtitleBounds(
+            draw_x + metric.left,
+            draw_y + metric.top,
+            draw_x + metric.left + highlight_width,
+            draw_y + metric.top + metric.height,
+            transform);
+
+        KaraokeHighlightClip clip{};
+        clip.world_rect = D2D1::RectF(world_bounds.left, world_bounds.top, world_bounds.right, world_bounds.bottom);
+        clips.push_back(clip);
+    }
+    return clips;
+}
+
+std::vector<D2D1_RECT_F> buildSubtitleClipRegions(const SDL_Rect& video_rect,
+                                                  const D2D1_RECT_F& clip_rect,
+                                                  bool inverse_clip) {
+    std::vector<D2D1_RECT_F> regions;
+    const float video_left = static_cast<float>(video_rect.x);
+    const float video_top = static_cast<float>(video_rect.y);
+    const float video_right = static_cast<float>(video_rect.x + video_rect.w);
+    const float video_bottom = static_cast<float>(video_rect.y + video_rect.h);
+
+    const D2D1_RECT_F bounded_clip = D2D1::RectF(
+        std::clamp(clip_rect.left, video_left, video_right),
+        std::clamp(clip_rect.top, video_top, video_bottom),
+        std::clamp(clip_rect.right, video_left, video_right),
+        std::clamp(clip_rect.bottom, video_top, video_bottom));
+
+    const auto append_region = [&](float left, float top, float right, float bottom) {
+        if ((right - left) > 0.001f && (bottom - top) > 0.001f) {
+            regions.push_back(D2D1::RectF(left, top, right, bottom));
+        }
+    };
+
+    if (!inverse_clip) {
+        append_region(bounded_clip.left, bounded_clip.top, bounded_clip.right, bounded_clip.bottom);
+        return regions;
+    }
+
+    if (bounded_clip.right <= bounded_clip.left || bounded_clip.bottom <= bounded_clip.top) {
+        append_region(video_left, video_top, video_right, video_bottom);
+        return regions;
+    }
+
+    append_region(video_left, video_top, video_right, bounded_clip.top);
+    append_region(video_left, bounded_clip.top, bounded_clip.left, bounded_clip.bottom);
+    append_region(bounded_clip.right, bounded_clip.top, video_right, bounded_clip.bottom);
+    append_region(video_left, bounded_clip.bottom, video_right, video_bottom);
+    return regions;
 }
 
 }  // namespace
@@ -931,7 +1910,9 @@ public:
     bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
     bool consumePreviousItemRequest();
+    bool consumeOpenFileRequest(std::string& path);
     void setOverlayState(double position, double duration, float volume, bool paused);
+    void setSubtitleClock(double subtitle_time_seconds);
     void setSubtitleText(const std::string& text);
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
@@ -986,9 +1967,11 @@ private:
 
     std::atomic<double> overlay_position_{0.0};
     std::atomic<double> overlay_duration_{0.0};
+    std::atomic<double> subtitle_clock_seconds_{0.0};
     std::atomic<float> overlay_volume_{1.0f};
     std::atomic<bool> overlay_paused_{false};
     std::vector<subtitle::SubtitleItem> subtitle_items_;
+    std::atomic<bool> subtitle_has_animated_content_{false};
     input::HotkeyManager hotkey_manager_{};
 
     bool toggle_pause_requested_{false};
@@ -1016,6 +1999,8 @@ private:
     bool previous_chapter_requested_{false};
     bool next_item_requested_{false};
     bool previous_item_requested_{false};
+    bool open_file_requested_{false};
+    std::string open_file_path_;
     float last_nonzero_volume_{1.0f};
     bool dragging_seek_{false};
     bool dragging_volume_{false};
@@ -1113,6 +2098,7 @@ void D3D11VideoRenderer::Impl::close() {
     std::lock_guard<std::mutex> render_lock(render_mutex_);
     initialized_ = false;
     frame_available_ = false;
+    subtitle_has_animated_content_.store(false);
     native_texture_ptr_ = nullptr;
     native_texture_index_ = 0;
     native_texture_format_ = DXGI_FORMAT_UNKNOWN;
@@ -1757,6 +2743,7 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
     const float fallback_font_size = std::clamp(static_cast<float>(video_rect.h) * kSubtitleFontScale,
                                                 kMinSubtitleFontSize,
                                                 kMaxSubtitleFontSize);
+    const double subtitle_clock_seconds = subtitle_clock_seconds_.load();
 
     d2d_context_->SetTarget(d2d_target_bitmap_.Get());
     d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
@@ -1764,6 +2751,274 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
 
     bool recreate_target = false;
     for (const subtitle::SubtitleItem& item : subtitle_items) {
+        const double item_elapsed_seconds = subtitle_clock_seconds - item.start_seconds;
+        const double item_duration_seconds = std::max(0.0, item.end_seconds - item.start_seconds);
+        const subtitle::SubtitleStyle item_style = resolveAnimatedSubtitleStyle(item.style,
+                                                                                item.animation,
+                                                                                item_elapsed_seconds,
+                                                                                item_duration_seconds);
+        if (item.is_vector_drawing && !item.drawing_commands.empty()) {
+            const int alignment = clampSubtitleAlignment(item_style.alignment);
+            const float script_scale_x = item.play_res_x > 0 ? static_cast<float>(video_rect.w) / static_cast<float>(item.play_res_x) : 1.0f;
+            const float script_scale_y = item.play_res_y > 0 ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y) : 1.0f;
+            const SubtitleAnimationState animation_state = resolveSubtitleAnimationState(item, subtitle_clock_seconds);
+            if (animation_state.opacity <= 0.001f) {
+                continue;
+            }
+            const float glyph_scale_x = subtitlePercentScale(item_style.scale_x_percent);
+            const float glyph_scale_y = subtitlePercentScale(item_style.scale_y_percent);
+            const float margin_left = item.play_res_x > 0
+                ? std::max(4.0f, static_cast<float>(item_style.margin_l) * script_scale_x)
+                : std::max(fallback_margin_x, static_cast<float>(item_style.margin_l));
+            const float margin_right = item.play_res_x > 0
+                ? std::max(4.0f, static_cast<float>(item_style.margin_r) * script_scale_x)
+                : std::max(fallback_margin_x, static_cast<float>(item_style.margin_r));
+
+            float font_size = fallback_font_size;
+            if (item.play_res_y > 0 && item_style.font_size > 0.0) {
+                font_size = static_cast<float>(item_style.font_size) * script_scale_y;
+            } else if (item_style.font_size > 0.0) {
+                font_size = std::max(fallback_font_size, static_cast<float>(item_style.font_size));
+            }
+            font_size = std::clamp(font_size, 10.0f, std::max(36.0f, static_cast<float>(video_rect.h) * 0.35f));
+
+            ParsedAssVectorShape drawing_shape{};
+            const float unit_scale = subtitleDrawingUnitScale(item.drawing_scale);
+            if (!parseAssVectorShape(item.drawing_commands,
+                                     script_scale_x * unit_scale,
+                                     script_scale_y * unit_scale,
+                                     true,
+                                     drawing_shape) ||
+                !drawing_shape.valid) {
+                continue;
+            }
+
+            const float content_width = std::max(1.0f, drawing_shape.bounds.width());
+            const float content_height = std::max(1.0f, drawing_shape.bounds.height());
+            const float anchor_local_x = subtitleAnchorLocalX(content_width, alignment);
+            const float anchor_local_y = subtitleAnchorLocalY(content_height, alignment);
+            subtitle::SubtitleStyle preview_style = item_style;
+            preview_style.has_rotation_origin = false;
+            const SubtitleAffineTransform preview_transform = buildSubtitleAffineTransform(
+                preview_style,
+                glyph_scale_x,
+                glyph_scale_y,
+                script_scale_x,
+                script_scale_y,
+                video_rect,
+                D2D1::Point2F(anchor_local_x, anchor_local_y));
+            const SubtitleLocalBounds local_bounds = computeTransformedSubtitleBounds(
+                drawing_shape.bounds.left,
+                drawing_shape.bounds.top,
+                drawing_shape.bounds.right,
+                drawing_shape.bounds.bottom,
+                preview_transform);
+            const float transformed_height = std::max(1.0f, local_bounds.height());
+            const float gap = std::max(6.0f, std::max(font_size, content_height) * 0.22f * glyph_scale_y);
+
+            float draw_x = static_cast<float>(video_rect.x) + margin_left;
+            if (animation_state.has_position) {
+                const float anchor_x = static_cast<float>(video_rect.x) + static_cast<float>(animation_state.position_x) * script_scale_x;
+                draw_x = anchor_x - anchor_local_x;
+            } else {
+                switch (subtitleHorizontalGroup(alignment)) {
+                case 2:
+                    draw_x = static_cast<float>(video_rect.x + video_rect.w) - margin_right - content_width;
+                    break;
+                case 1:
+                    draw_x = static_cast<float>(video_rect.x) + (static_cast<float>(video_rect.w) - content_width) * 0.5f;
+                    break;
+                default:
+                    draw_x = static_cast<float>(video_rect.x) + margin_left;
+                    break;
+                }
+            }
+            draw_x = clampSubtitleCoordinate(draw_x,
+                                             static_cast<float>(video_rect.x) - local_bounds.left,
+                                             static_cast<float>(video_rect.x + video_rect.w) - local_bounds.right);
+
+            float draw_y = top_limit;
+            if (animation_state.has_position) {
+                const float anchor_y = static_cast<float>(video_rect.y) + static_cast<float>(animation_state.position_y) * script_scale_y;
+                draw_y = anchor_y - anchor_local_y;
+            } else {
+                switch (subtitleVerticalGroup(alignment)) {
+                case 2:
+                    draw_y = next_top_y - local_bounds.top;
+                    next_top_y += transformed_height + gap;
+                    break;
+                case 1:
+                    draw_y = next_middle_y - local_bounds.centerY();
+                    next_middle_y += transformed_height + gap;
+                    break;
+                default:
+                    draw_y = next_bottom_y - local_bounds.bottom;
+                    next_bottom_y = draw_y + local_bounds.top - gap;
+                    break;
+                }
+            }
+            draw_y = clampSubtitleCoordinate(draw_y, top_limit - local_bounds.top, bottom_limit - local_bounds.bottom);
+
+            const float outline_radius_x = std::max(0.0f, static_cast<float>(item_style.outline_x) * script_scale_x);
+            const float outline_radius_y = std::max(0.0f, static_cast<float>(item_style.outline_y) * script_scale_y);
+            const float shadow_offset_x = static_cast<float>(item_style.shadow_x) * script_scale_x;
+            const float shadow_offset_y = static_cast<float>(item_style.shadow_y) * script_scale_y;
+            const D2D1_POINT_2F anchor_point = D2D1::Point2F(draw_x + anchor_local_x, draw_y + anchor_local_y);
+            const SubtitleAffineTransform item_transform_state = buildSubtitleAffineTransform(
+                item_style,
+                glyph_scale_x,
+                glyph_scale_y,
+                script_scale_x,
+                script_scale_y,
+                video_rect,
+                anchor_point);
+            const D2D1_MATRIX_3X2_F item_transform = subtitleTransformMatrix(item_transform_state);
+            const D2D1_RECT_F item_clip_rect = D2D1::RectF(
+                static_cast<float>(video_rect.x) + static_cast<float>(item_style.clip_x1) * script_scale_x,
+                static_cast<float>(video_rect.y) + static_cast<float>(item_style.clip_y1) * script_scale_y,
+                static_cast<float>(video_rect.x) + static_cast<float>(item_style.clip_x2) * script_scale_x,
+                static_cast<float>(video_rect.y) + static_cast<float>(item_style.clip_y2) * script_scale_y);
+            const std::vector<D2D1_RECT_F> item_clip_regions = item_style.has_clip
+                ? buildSubtitleClipRegions(video_rect, item_clip_rect, item_style.inverse_clip)
+                : std::vector<D2D1_RECT_F>{};
+            const bool has_rect_item_clip = !item_clip_regions.empty();
+            if (item_style.has_clip && !has_rect_item_clip) {
+                continue;
+            }
+
+            ComPtr<ID2D1PathGeometry> vector_clip_path;
+            ComPtr<ID2D1PathGeometry> inverse_clip_path;
+            ID2D1Geometry* vector_clip_geometry = nullptr;
+            const bool wants_vector_clip = item_style.has_vector_clip && !item_style.vector_clip_commands.empty();
+            if (wants_vector_clip) {
+                if (!buildAssClipGeometry(d2d_factory_.Get(),
+                                          item_style.vector_clip_commands,
+                                          item_style.vector_clip_scale,
+                                          video_rect,
+                                          script_scale_x,
+                                          script_scale_y,
+                                          vector_clip_path.GetAddressOf()) ||
+                    !vector_clip_path) {
+                    continue;
+                }
+                if (item_style.inverse_clip) {
+                    if (!buildInverseClipGeometry(d2d_factory_.Get(),
+                                                  vector_clip_path.Get(),
+                                                  video_rect,
+                                                  inverse_clip_path.GetAddressOf()) ||
+                        !inverse_clip_path) {
+                        continue;
+                    }
+                    vector_clip_geometry = inverse_clip_path.Get();
+                } else {
+                    vector_clip_geometry = vector_clip_path.Get();
+                }
+            }
+            const bool has_vector_item_clip = vector_clip_geometry != nullptr;
+            ComPtr<ID2D1Layer> item_clip_layer;
+            if (has_vector_item_clip) {
+                const HRESULT clip_hr = d2d_context_->CreateLayer(item_clip_layer.GetAddressOf());
+                if (FAILED(clip_hr) || !item_clip_layer) {
+                    continue;
+                }
+            }
+
+            const auto push_vector_clip = [&]() {
+                if (!has_vector_item_clip) {
+                    return;
+                }
+                d2d_context_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), vector_clip_geometry), item_clip_layer.Get());
+            };
+            const auto pop_vector_clip = [&]() {
+                if (has_vector_item_clip) {
+                    d2d_context_->PopLayer();
+                }
+            };
+
+            ComPtr<ID2D1PathGeometry> drawing_geometry;
+            if (!buildAssVectorGeometry(d2d_factory_.Get(), drawing_shape, draw_x, draw_y, drawing_geometry.GetAddressOf()) || !drawing_geometry) {
+                continue;
+            }
+            ComPtr<ID2D1PathGeometry> shadow_geometry;
+            const bool has_shadow = std::abs(shadow_offset_x) > 0.001f || std::abs(shadow_offset_y) > 0.001f;
+            if (has_shadow &&
+                (!buildAssVectorGeometry(d2d_factory_.Get(),
+                                         drawing_shape,
+                                         draw_x + shadow_offset_x,
+                                         draw_y + shadow_offset_y,
+                                         shadow_geometry.GetAddressOf()) ||
+                 !shadow_geometry)) {
+                continue;
+            }
+
+            const auto create_color_brush = [&](const subtitle::SubtitleColor& color,
+                                                ComPtr<ID2D1SolidColorBrush>& out_brush) -> bool {
+                return SUCCEEDED(d2d_context_->CreateSolidColorBrush(
+                                     toD2DColor(applySubtitleOpacity(color, animation_state.opacity)),
+                                     out_brush.GetAddressOf())) &&
+                       out_brush;
+            };
+
+            const subtitle::SubtitleColor shadow_color = item_style.background_color.a > 0
+                ? item_style.background_color
+                : subtitle::SubtitleColor(0, 0, 0, 184);
+            ComPtr<ID2D1SolidColorBrush> fill_brush;
+            ComPtr<ID2D1SolidColorBrush> outline_brush;
+            ComPtr<ID2D1SolidColorBrush> shadow_brush;
+            if (!create_color_brush(item_style.primary_color, fill_brush) ||
+                !create_color_brush(item_style.outline_color, outline_brush) ||
+                !create_color_brush(shadow_color, shadow_brush)) {
+                continue;
+            }
+
+            const float outline_stroke_width = std::max(1.0f, std::max(outline_radius_x, outline_radius_y));
+            const auto draw_geometry_region = [&](ID2D1Geometry* geometry,
+                                                  ID2D1Brush* brush,
+                                                  bool fill_geometry,
+                                                  const D2D1_RECT_F* item_clip_region) {
+                d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                if (item_clip_region) {
+                    d2d_context_->PushAxisAlignedClip(*item_clip_region, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                }
+                push_vector_clip();
+                d2d_context_->SetTransform(item_transform);
+                if (fill_geometry) {
+                    d2d_context_->FillGeometry(geometry, brush);
+                } else {
+                    d2d_context_->DrawGeometry(geometry, brush, outline_stroke_width);
+                }
+                d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                pop_vector_clip();
+                if (item_clip_region) {
+                    d2d_context_->PopAxisAlignedClip();
+                }
+            };
+
+            const auto draw_geometry_all_regions = [&](ID2D1Geometry* geometry,
+                                                       ID2D1Brush* brush,
+                                                       bool fill_geometry) {
+                if (has_rect_item_clip) {
+                    for (const D2D1_RECT_F& item_clip_region : item_clip_regions) {
+                        draw_geometry_region(geometry, brush, fill_geometry, &item_clip_region);
+                    }
+                } else {
+                    draw_geometry_region(geometry, brush, fill_geometry, nullptr);
+                }
+            };
+
+            if (has_shadow && shadow_geometry) {
+                draw_geometry_all_regions(shadow_geometry.Get(), shadow_brush.Get(), true);
+                if (outline_stroke_width > 0.0f) {
+                    draw_geometry_all_regions(shadow_geometry.Get(), shadow_brush.Get(), false);
+                }
+            }
+            if (outline_stroke_width > 0.0f) {
+                draw_geometry_all_regions(drawing_geometry.Get(), outline_brush.Get(), false);
+            }
+            draw_geometry_all_regions(drawing_geometry.Get(), fill_brush.Get(), true);
+            continue;
+        }
+
         if (item.text.empty()) {
             continue;
         }
@@ -1773,38 +3028,47 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
             continue;
         }
 
-        const int alignment = clampSubtitleAlignment(item.style.alignment);
-        const float scale_x = item.play_res_x > 0 ? static_cast<float>(video_rect.w) / static_cast<float>(item.play_res_x) : 1.0f;
-        const float scale_y = item.play_res_y > 0 ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y) : 1.0f;
-        const float average_scale = (scale_x + scale_y) * 0.5f;
+        const int alignment = clampSubtitleAlignment(item_style.alignment);
+        const float script_scale_x = item.play_res_x > 0 ? static_cast<float>(video_rect.w) / static_cast<float>(item.play_res_x) : 1.0f;
+        const float script_scale_y = item.play_res_y > 0 ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y) : 1.0f;
+        const SubtitleAnimationState animation_state = resolveSubtitleAnimationState(item, subtitle_clock_seconds);
+        if (animation_state.opacity <= 0.001f) {
+            continue;
+        }
+        const bool has_anchor_position = animation_state.has_position || item_style.has_position;
+        const float glyph_scale_x = subtitlePercentScale(item_style.scale_x_percent);
+        const float glyph_scale_y = subtitlePercentScale(item_style.scale_y_percent);
 
         const float margin_left = item.play_res_x > 0
-            ? std::max(4.0f, static_cast<float>(item.style.margin_l) * scale_x)
-            : std::max(fallback_margin_x, static_cast<float>(item.style.margin_l));
+            ? std::max(4.0f, static_cast<float>(item_style.margin_l) * script_scale_x)
+            : std::max(fallback_margin_x, static_cast<float>(item_style.margin_l));
         const float margin_right = item.play_res_x > 0
-            ? std::max(4.0f, static_cast<float>(item.style.margin_r) * scale_x)
-            : std::max(fallback_margin_x, static_cast<float>(item.style.margin_r));
+            ? std::max(4.0f, static_cast<float>(item_style.margin_r) * script_scale_x)
+            : std::max(fallback_margin_x, static_cast<float>(item_style.margin_r));
 
         float font_size = fallback_font_size;
-        if (item.play_res_y > 0 && item.style.font_size > 0.0) {
-            font_size = static_cast<float>(item.style.font_size) * scale_y;
-        } else if (item.style.font_size > 0.0) {
-            font_size = std::max(fallback_font_size, static_cast<float>(item.style.font_size));
+        if (item.play_res_y > 0 && item_style.font_size > 0.0) {
+            font_size = static_cast<float>(item_style.font_size) * script_scale_y;
+        } else if (item_style.font_size > 0.0) {
+            font_size = std::max(fallback_font_size, static_cast<float>(item_style.font_size));
         }
         font_size = std::clamp(font_size, 10.0f, std::max(36.0f, static_cast<float>(video_rect.h) * 0.35f));
 
         const float available_width = std::max(48.0f, static_cast<float>(video_rect.w) - margin_left - margin_right);
-        float layout_width = available_width;
-        if (item.style.has_position) {
-            layout_width = std::min(available_width, std::max(font_size * 8.0f, available_width * 0.45f));
+        const float layout_height = std::max(24.0f, available_height / glyph_scale_y);
+        float layout_width = std::max(24.0f, available_width / glyph_scale_x);
+        if (has_anchor_position) {
+            layout_width = std::min(layout_width, std::max(font_size * 8.0f, (available_width * 0.45f) / glyph_scale_x));
         }
+
+        subtitle::ensureSubtitleFontsRegistered(item.source_path);
 
         ComPtr<IDWriteTextFormat> text_format;
         const auto create_text_format = [&](const wchar_t* font_family) -> HRESULT {
             return dwrite_factory_->CreateTextFormat(font_family,
                                                      nullptr,
-                                                     item.style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
-                                                     item.style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                                                     item_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                                                     item_style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
                                                      DWRITE_FONT_STRETCH_NORMAL,
                                                      font_size,
                                                      L"zh-CN",
@@ -1812,17 +3076,15 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
         };
 
         HRESULT hr = E_FAIL;
-        const std::wstring preferred_font = decodeSubtitleText(item.style.font_family);
-        if (!preferred_font.empty()) {
-            hr = create_text_format(preferred_font.c_str());
-        }
-        if (FAILED(hr)) {
+        for (const std::wstring& candidate_family : subtitle::buildSubtitleFontFallbackFamilies(item_style.font_family)) {
+            if (candidate_family.empty()) {
+                continue;
+            }
             text_format.Reset();
-            hr = create_text_format(L"Microsoft YaHei UI");
-        }
-        if (FAILED(hr)) {
-            text_format.Reset();
-            hr = create_text_format(L"Segoe UI");
+            hr = create_text_format(candidate_family.c_str());
+            if (SUCCEEDED(hr) && text_format) {
+                break;
+            }
         }
         if (FAILED(hr) || !text_format) {
             continue;
@@ -1830,24 +3092,37 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
 
         text_format->SetTextAlignment(toTextAlignment(alignment));
         text_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
-        text_format->SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
+        text_format->SetWordWrapping(toWordWrapping(item_style.wrap_style));
 
         ComPtr<IDWriteTextLayout> text_layout;
         hr = dwrite_factory_->CreateTextLayout(text.c_str(),
                                                static_cast<UINT32>(text.size()),
                                                text_format.Get(),
                                                layout_width,
-                                               available_height,
+                                               layout_height,
                                                text_layout.GetAddressOf());
         if (FAILED(hr) || !text_layout) {
             continue;
         }
 
         const DWRITE_TEXT_RANGE full_range{0, static_cast<UINT32>(text.size())};
-        text_layout->SetUnderline(item.style.underline, full_range);
-        text_layout->SetStrikethrough(item.style.strikeout, full_range);
+        text_layout->SetUnderline(item_style.underline, full_range);
+        text_layout->SetStrikethrough(item_style.strikeout, full_range);
+        ComPtr<IDWriteTextLayout1> text_layout1;
+        const bool has_text_layout1 = SUCCEEDED(text_layout.As(&text_layout1)) && text_layout1;
+        if (has_text_layout1) {
+            const float display_spacing = item.play_res_x > 0
+                ? static_cast<float>(item_style.spacing) * script_scale_x
+                : static_cast<float>(item_style.spacing);
+            const float layout_spacing = display_spacing / glyph_scale_x;
+            text_layout1->SetCharacterSpacing(layout_spacing * 0.5f, layout_spacing * 0.5f, 0.0f, full_range);
+        }
 
         for (const subtitle::SubtitleTextRun& run : item.runs) {
+            const subtitle::SubtitleStyle run_style = resolveAnimatedSubtitleStyle(run.style,
+                                                                                   item.animation,
+                                                                                   item_elapsed_seconds,
+                                                                                   item_duration_seconds);
             if (run.length == 0) {
                 continue;
             }
@@ -1857,24 +3132,35 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
                 continue;
             }
             const DWRITE_TEXT_RANGE range{start_index, length};
-            const std::wstring run_font = decodeSubtitleText(run.style.font_family);
-            if (!run_font.empty()) {
-                text_layout->SetFontFamilyName(run_font.c_str(), range);
+            for (const std::wstring& candidate_family : subtitle::buildSubtitleFontFallbackFamilies(run_style.font_family)) {
+                if (!candidate_family.empty() && SUCCEEDED(text_layout->SetFontFamilyName(candidate_family.c_str(), range))) {
+                    break;
+                }
             }
             float run_font_size = font_size;
-            if (run.style.font_size > 0.0) {
+            if (run_style.font_size > 0.0) {
                 run_font_size = item.play_res_y > 0
-                    ? static_cast<float>(run.style.font_size) * scale_y
-                    : static_cast<float>(run.style.font_size);
+                    ? static_cast<float>(run_style.font_size) * script_scale_y
+                    : static_cast<float>(run_style.font_size);
                 run_font_size = std::clamp(run_font_size,
                                            10.0f,
                                            std::max(36.0f, static_cast<float>(video_rect.h) * 0.35f));
             }
             text_layout->SetFontSize(run_font_size, range);
-            text_layout->SetFontWeight(run.style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, range);
-            text_layout->SetFontStyle(run.style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL, range);
-            text_layout->SetUnderline(run.style.underline, range);
-            text_layout->SetStrikethrough(run.style.strikeout, range);
+            text_layout->SetFontWeight(run_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL, range);
+            text_layout->SetFontStyle(run_style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL, range);
+            text_layout->SetUnderline(run_style.underline, range);
+            text_layout->SetStrikethrough(run_style.strikeout, range);
+            if (has_text_layout1 && std::abs(run_style.spacing - item_style.spacing) > 0.001) {
+                const float run_display_spacing = item.play_res_x > 0
+                    ? static_cast<float>(run_style.spacing) * script_scale_x
+                    : static_cast<float>(run_style.spacing);
+                const float run_layout_spacing = run_display_spacing / glyph_scale_x;
+                text_layout1->SetCharacterSpacing(run_layout_spacing * 0.5f,
+                                                  run_layout_spacing * 0.5f,
+                                                  0.0f,
+                                                  range);
+            }
         }
 
         DWRITE_TEXT_METRICS metrics{};
@@ -1883,22 +3169,31 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
         }
 
         const float text_height = std::max(1.0f, metrics.height);
-        const float gap = std::max(6.0f, font_size * 0.22f);
+        const float anchor_local_x = subtitleAnchorLocalX(layout_width, alignment);
+        const float anchor_local_y = subtitleAnchorLocalY(text_height, alignment);
+        subtitle::SubtitleStyle preview_style = item_style;
+        preview_style.has_rotation_origin = false;
+        const SubtitleAffineTransform preview_transform = buildSubtitleAffineTransform(
+            preview_style,
+            glyph_scale_x,
+            glyph_scale_y,
+            script_scale_x,
+            script_scale_y,
+            video_rect,
+            D2D1::Point2F(anchor_local_x, anchor_local_y));
+        const SubtitleLocalBounds local_bounds = computeTransformedSubtitleBounds(
+            metrics.left,
+            metrics.top,
+            metrics.left + std::max(1.0f, metrics.widthIncludingTrailingWhitespace),
+            metrics.top + text_height,
+            preview_transform);
+        const float transformed_height = std::max(1.0f, local_bounds.height());
+        const float gap = std::max(6.0f, font_size * 0.22f * glyph_scale_y);
 
         float draw_x = static_cast<float>(video_rect.x) + margin_left;
-        if (item.style.has_position) {
-            const float anchor_x = static_cast<float>(video_rect.x) + static_cast<float>(item.style.position_x) * scale_x;
-            switch (subtitleHorizontalGroup(alignment)) {
-            case 0:
-                draw_x = anchor_x;
-                break;
-            case 2:
-                draw_x = anchor_x - layout_width;
-                break;
-            default:
-                draw_x = anchor_x - layout_width * 0.5f;
-                break;
-            }
+        if (animation_state.has_position) {
+            const float anchor_x = static_cast<float>(video_rect.x) + static_cast<float>(animation_state.position_x) * script_scale_x;
+            draw_x = anchor_x - anchor_local_x;
         } else {
             switch (subtitleHorizontalGroup(alignment)) {
             case 2:
@@ -1912,73 +3207,302 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
                 break;
             }
         }
-        draw_x = std::clamp(draw_x,
-                            static_cast<float>(video_rect.x),
-                            static_cast<float>(video_rect.x + video_rect.w) - layout_width);
+        draw_x = clampSubtitleCoordinate(draw_x,
+                                         static_cast<float>(video_rect.x) - local_bounds.left,
+                                         static_cast<float>(video_rect.x + video_rect.w) - local_bounds.right);
 
         float draw_y = top_limit;
-        if (item.style.has_position) {
-            const float anchor_y = static_cast<float>(video_rect.y) + static_cast<float>(item.style.position_y) * scale_y;
-            switch (subtitleVerticalGroup(alignment)) {
-            case 2:
-                draw_y = anchor_y;
-                break;
-            case 1:
-                draw_y = anchor_y - text_height * 0.5f;
-                break;
-            default:
-                draw_y = anchor_y - text_height;
-                break;
-            }
+        if (animation_state.has_position) {
+            const float anchor_y = static_cast<float>(video_rect.y) + static_cast<float>(animation_state.position_y) * script_scale_y;
+            draw_y = anchor_y - anchor_local_y;
         } else {
             switch (subtitleVerticalGroup(alignment)) {
             case 2:
-                draw_y = next_top_y;
-                next_top_y += text_height + gap;
+                draw_y = next_top_y - local_bounds.top;
+                next_top_y += transformed_height + gap;
                 break;
             case 1:
-                draw_y = next_middle_y - text_height * 0.5f;
-                next_middle_y += text_height + gap;
+                draw_y = next_middle_y - local_bounds.centerY();
+                next_middle_y += transformed_height + gap;
                 break;
             default:
-                draw_y = next_bottom_y - text_height;
-                next_bottom_y = draw_y - gap;
+                draw_y = next_bottom_y - local_bounds.bottom;
+                next_bottom_y = draw_y + local_bounds.top - gap;
                 break;
             }
         }
-        draw_y = std::clamp(draw_y, top_limit, bottom_limit - text_height);
+        draw_y = clampSubtitleCoordinate(draw_y, top_limit - local_bounds.top, bottom_limit - local_bounds.bottom);
 
         const float actual_left = draw_x + metrics.left;
         const float actual_top = draw_y + metrics.top;
-        const bool draw_box = item.style.border_style == 3;
-        const float outline_radius = draw_box ? 0.0f : std::max(0.0f, static_cast<float>(item.style.outline) * average_scale);
-        const float shadow_offset = std::max(0.0f, static_cast<float>(item.style.shadow) * average_scale);
+        const bool draw_box = item_style.border_style == 3;
+        const float outline_radius_x = draw_box ? 0.0f : std::max(0.0f, static_cast<float>(item_style.outline_x) * script_scale_x);
+        const float outline_radius_y = draw_box ? 0.0f : std::max(0.0f, static_cast<float>(item_style.outline_y) * script_scale_y);
+        const float shadow_offset_x = static_cast<float>(item_style.shadow_x) * script_scale_x;
+        const float shadow_offset_y = static_cast<float>(item_style.shadow_y) * script_scale_y;
+        const subtitle::SubtitleColor box_color_source = item_style.background_color.a > 0
+            ? item_style.background_color
+            : subtitle::SubtitleColor(5, 5, 5, 148);
+        const D2D1_COLOR_F box_color = toD2DColor(applySubtitleOpacity(box_color_source, animation_state.opacity));
+        const D2D1_POINT_2F anchor_point = D2D1::Point2F(draw_x + anchor_local_x, draw_y + anchor_local_y);
+        const SubtitleAffineTransform item_transform_state = buildSubtitleAffineTransform(
+            item_style,
+            glyph_scale_x,
+            glyph_scale_y,
+            script_scale_x,
+            script_scale_y,
+            video_rect,
+            anchor_point);
+        const D2D1_MATRIX_3X2_F item_transform = subtitleTransformMatrix(item_transform_state);
+        const D2D1_RECT_F item_clip_rect = D2D1::RectF(
+            static_cast<float>(video_rect.x) + static_cast<float>(item_style.clip_x1) * script_scale_x,
+            static_cast<float>(video_rect.y) + static_cast<float>(item_style.clip_y1) * script_scale_y,
+            static_cast<float>(video_rect.x) + static_cast<float>(item_style.clip_x2) * script_scale_x,
+            static_cast<float>(video_rect.y) + static_cast<float>(item_style.clip_y2) * script_scale_y);
+        const std::vector<D2D1_RECT_F> item_clip_regions = item_style.has_clip
+            ? buildSubtitleClipRegions(video_rect, item_clip_rect, item_style.inverse_clip)
+            : std::vector<D2D1_RECT_F>{};
+        const bool has_rect_item_clip = !item_clip_regions.empty();
+        if (item_style.has_clip && !has_rect_item_clip) {
+            continue;
+        }
 
-        const D2D1_COLOR_F fill_color = toD2DColor(item.style.primary_color);
-        const D2D1_COLOR_F outline_color = toD2DColor(item.style.outline_color);
-        const D2D1_COLOR_F shadow_color = item.style.background_color.a > 0
-            ? toD2DColor(item.style.background_color)
-            : D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.72f);
-        const D2D1_COLOR_F box_color = item.style.background_color.a > 0
-            ? toD2DColor(item.style.background_color)
-            : D2D1::ColorF(0.02f, 0.02f, 0.02f, 0.58f);
+        ComPtr<ID2D1PathGeometry> vector_clip_path;
+        ComPtr<ID2D1PathGeometry> inverse_clip_path;
+        ID2D1Geometry* vector_clip_geometry = nullptr;
+        const bool wants_vector_clip = item_style.has_vector_clip && !item_style.vector_clip_commands.empty();
+        if (wants_vector_clip) {
+            if (!buildAssClipGeometry(d2d_factory_.Get(),
+                                      item_style.vector_clip_commands,
+                                      item_style.vector_clip_scale,
+                                      video_rect,
+                                      script_scale_x,
+                                      script_scale_y,
+                                      vector_clip_path.GetAddressOf()) ||
+                !vector_clip_path) {
+                continue;
+            }
+            if (item_style.inverse_clip) {
+                if (!buildInverseClipGeometry(d2d_factory_.Get(),
+                                              vector_clip_path.Get(),
+                                              video_rect,
+                                              inverse_clip_path.GetAddressOf()) ||
+                    !inverse_clip_path) {
+                    continue;
+                }
+                vector_clip_geometry = inverse_clip_path.Get();
+            } else {
+                vector_clip_geometry = vector_clip_path.Get();
+            }
+        }
+        const bool has_vector_item_clip = vector_clip_geometry != nullptr;
+        ComPtr<ID2D1Layer> item_clip_layer;
+        if (has_vector_item_clip) {
+            const HRESULT clip_hr = d2d_context_->CreateLayer(item_clip_layer.GetAddressOf());
+            if (FAILED(clip_hr) || !item_clip_layer) {
+                continue;
+            }
+        }
+
+        const auto push_vector_clip = [&]() {
+            if (!has_vector_item_clip) {
+                return;
+            }
+            d2d_context_->PushLayer(D2D1::LayerParameters(D2D1::InfiniteRect(), vector_clip_geometry), item_clip_layer.Get());
+        };
+
+        const auto pop_vector_clip = [&]() {
+            if (has_vector_item_clip) {
+                d2d_context_->PopLayer();
+            }
+        };
+
+        ComPtr<ID2D1SolidColorBrush> transparent_brush;
+        hr = d2d_context_->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 0.0f), transparent_brush.GetAddressOf());
+        if (FAILED(hr) || !transparent_brush) {
+            continue;
+        }
+
+        struct RunBrushPass {
+            DWRITE_TEXT_RANGE range{};
+            ComPtr<ID2D1SolidColorBrush> fill_brush;
+            ComPtr<ID2D1SolidColorBrush> outline_brush;
+            ComPtr<ID2D1SolidColorBrush> shadow_brush;
+            ComPtr<ID2D1SolidColorBrush> highlight_brush;
+            std::vector<KaraokeHighlightClip> highlight_clips;
+        };
+
+        std::vector<RunBrushPass> run_passes;
+        run_passes.reserve(std::max<size_t>(1, item.runs.size()));
+
+        const auto create_color_brush = [&](const subtitle::SubtitleColor& color,
+                                            ComPtr<ID2D1SolidColorBrush>& out_brush) -> bool {
+            return SUCCEEDED(d2d_context_->CreateSolidColorBrush(
+                                 toD2DColor(applySubtitleOpacity(color, animation_state.opacity)),
+                                 out_brush.GetAddressOf())) &&
+                   out_brush;
+        };
+
+        const auto append_run_pass = [&](const subtitle::SubtitleTextRun& run, UINT32 start_index, UINT32 length) -> bool {
+            RunBrushPass pass{};
+            pass.range = DWRITE_TEXT_RANGE{start_index, length};
+            const subtitle::SubtitleStyle run_style = resolveAnimatedSubtitleStyle(run.style,
+                                                                                   item.animation,
+                                                                                   item_elapsed_seconds,
+                                                                                   item_duration_seconds);
+
+            const KaraokeRunVisualState karaoke_state = resolveKaraokeRunVisualState(run_style, run, item_elapsed_seconds);
+            const subtitle::SubtitleColor shadow_color = run_style.background_color.a > 0
+                ? run_style.background_color
+                : subtitle::SubtitleColor(0, 0, 0, 184);
+            if (!create_color_brush(karaoke_state.base_fill_color, pass.fill_brush) ||
+                !create_color_brush(run_style.outline_color, pass.outline_brush) ||
+                !create_color_brush(shadow_color, pass.shadow_brush)) {
+                return false;
+            }
+
+            if (karaoke_state.has_highlight_overlay &&
+                create_color_brush(karaoke_state.overlay_fill_color, pass.highlight_brush)) {
+                std::vector<DWRITE_HIT_TEST_METRICS> hit_metrics;
+                if (collectTextRangeMetrics(text_layout.Get(), start_index, length, hit_metrics)) {
+                    pass.highlight_clips = buildKaraokeHighlightClips(hit_metrics,
+                                                                      karaoke_state.overlay_progress,
+                                                                      draw_x,
+                                                                      draw_y,
+                                                                      item_transform_state);
+                }
+            }
+
+            run_passes.push_back(std::move(pass));
+            return true;
+        };
+
+        if (!item.runs.empty()) {
+            for (const subtitle::SubtitleTextRun& run : item.runs) {
+                if (run.length == 0) {
+                    continue;
+                }
+                const UINT32 start_index = static_cast<UINT32>(std::min(run.start, static_cast<size_t>(text.size())));
+                const UINT32 length = static_cast<UINT32>(std::min(run.length, static_cast<size_t>(text.size()) - start_index));
+                if (length == 0 || !append_run_pass(run, start_index, length)) {
+                    run_passes.clear();
+                    break;
+                }
+            }
+        }
+        if (run_passes.empty()) {
+            subtitle::SubtitleTextRun fallback_run{};
+            fallback_run.start = 0;
+            fallback_run.length = text.size();
+            fallback_run.style = item_style;
+            if (!append_run_pass(fallback_run, 0, static_cast<UINT32>(text.size()))) {
+                continue;
+            }
+        }
+
+        enum class TextPassKind { Fill, Outline, Shadow, Highlight };
+        const auto apply_pass_effects = [&](TextPassKind kind) {
+            for (const RunBrushPass& pass : run_passes) {
+                IUnknown* effect = nullptr;
+                switch (kind) {
+                case TextPassKind::Fill:
+                    effect = pass.fill_brush.Get();
+                    break;
+                case TextPassKind::Outline:
+                    effect = pass.outline_brush.Get();
+                    break;
+                case TextPassKind::Shadow:
+                    effect = pass.shadow_brush.Get();
+                    break;
+                case TextPassKind::Highlight:
+                    effect = pass.highlight_brush ? pass.highlight_brush.Get() : transparent_brush.Get();
+                    break;
+                }
+                text_layout->SetDrawingEffect(effect, pass.range);
+            }
+        };
+
+        const auto draw_text_pass = [&](float pass_offset_x,
+                                        float pass_offset_y,
+                                        const std::vector<KaraokeHighlightClip>* clips) {
+            const auto draw_with_item_clip = [&](const D2D1_RECT_F* item_clip_region) {
+                d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                if (item_clip_region) {
+                    d2d_context_->PushAxisAlignedClip(*item_clip_region, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                }
+
+                push_vector_clip();
+
+                if (clips && !clips->empty()) {
+                    for (const KaraokeHighlightClip& clip : *clips) {
+                        d2d_context_->PushAxisAlignedClip(clip.world_rect, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                        d2d_context_->SetTransform(item_transform);
+                        d2d_context_->DrawTextLayout(D2D1::Point2F(draw_x + pass_offset_x, draw_y + pass_offset_y),
+                                                     text_layout.Get(),
+                                                     transparent_brush.Get());
+                        d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                        d2d_context_->PopAxisAlignedClip();
+                    }
+                } else {
+                    d2d_context_->SetTransform(item_transform);
+                    d2d_context_->DrawTextLayout(D2D1::Point2F(draw_x + pass_offset_x, draw_y + pass_offset_y),
+                                                 text_layout.Get(),
+                                                 transparent_brush.Get());
+                    d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                }
+
+                pop_vector_clip();
+                if (item_clip_region) {
+                    d2d_context_->PopAxisAlignedClip();
+                }
+            };
+
+            if (has_rect_item_clip) {
+                for (const D2D1_RECT_F& item_clip_region : item_clip_regions) {
+                    draw_with_item_clip(&item_clip_region);
+                }
+                return;
+            }
+            draw_with_item_clip(nullptr);
+        };
 
         if (draw_box) {
-            const D2D1_ROUNDED_RECT background = D2D1::RoundedRect(
-                D2D1::RectF(std::max(static_cast<float>(video_rect.x), actual_left - kSubtitleHorizontalPadding),
-                            std::max(top_limit, actual_top - kSubtitleVerticalPadding),
-                            std::min(static_cast<float>(video_rect.x + video_rect.w),
-                                     actual_left + std::max(1.0f, metrics.widthIncludingTrailingWhitespace) + kSubtitleHorizontalPadding),
-                            std::min(bottom_limit,
-                                     actual_top + text_height + kSubtitleVerticalPadding)),
-                8.0f,
-                8.0f);
-            subtitle_background_brush_->SetColor(box_color);
-            d2d_context_->FillRoundedRectangle(&background, subtitle_background_brush_.Get());
+            const auto draw_box_region = [&](const D2D1_RECT_F* item_clip_region) {
+                d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                if (item_clip_region) {
+                    d2d_context_->PushAxisAlignedClip(*item_clip_region, D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+                }
+                push_vector_clip();
+                d2d_context_->SetTransform(item_transform);
+                const D2D1_ROUNDED_RECT background = D2D1::RoundedRect(
+                    D2D1::RectF(std::max(static_cast<float>(video_rect.x), actual_left - kSubtitleHorizontalPadding),
+                                std::max(top_limit, actual_top - kSubtitleVerticalPadding),
+                                std::min(static_cast<float>(video_rect.x + video_rect.w),
+                                         actual_left + std::max(1.0f, metrics.widthIncludingTrailingWhitespace) + kSubtitleHorizontalPadding),
+                                std::min(bottom_limit,
+                                         actual_top + text_height + kSubtitleVerticalPadding)),
+                    8.0f,
+                    8.0f);
+                subtitle_background_brush_->SetColor(box_color);
+                d2d_context_->FillRoundedRectangle(&background, subtitle_background_brush_.Get());
+                d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+                pop_vector_clip();
+                if (item_clip_region) {
+                    d2d_context_->PopAxisAlignedClip();
+                }
+            };
+
+            if (has_rect_item_clip) {
+                for (const D2D1_RECT_F& item_clip_region : item_clip_regions) {
+                    draw_box_region(&item_clip_region);
+                }
+            } else {
+                draw_box_region(nullptr);
+            }
         }
 
 
-        if (outline_radius > 0.0f) {
+        if (outline_radius_x > 0.0f || outline_radius_y > 0.0f) {
             static const float kOutlineOffsets[8][2] = {
                 {-1.0f, 0.0f},
                 {1.0f, 0.0f},
@@ -1989,26 +3513,29 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
                 {-1.0f, 1.0f},
                 {1.0f, 1.0f},
             };
-            subtitle_shadow_brush_->SetColor(outline_color);
+            apply_pass_effects(TextPassKind::Outline);
             for (const auto& offset : kOutlineOffsets) {
-                d2d_context_->DrawTextLayout(D2D1::Point2F(draw_x + offset[0] * outline_radius,
-                                                           draw_y + offset[1] * outline_radius),
-                                             text_layout.Get(),
-                                             subtitle_shadow_brush_.Get());
+                draw_text_pass(offset[0] * outline_radius_x,
+                               offset[1] * outline_radius_y,
+                               nullptr);
             }
         }
 
-        if (shadow_offset > 0.0f) {
-            subtitle_shadow_brush_->SetColor(shadow_color);
-            d2d_context_->DrawTextLayout(D2D1::Point2F(draw_x + shadow_offset, draw_y + shadow_offset),
-                                         text_layout.Get(),
-                                         subtitle_shadow_brush_.Get());
+        if (std::abs(shadow_offset_x) > 0.001f || std::abs(shadow_offset_y) > 0.001f) {
+            apply_pass_effects(TextPassKind::Shadow);
+            draw_text_pass(shadow_offset_x, shadow_offset_y, nullptr);
         }
 
-        subtitle_fill_brush_->SetColor(fill_color);
-        d2d_context_->DrawTextLayout(D2D1::Point2F(draw_x, draw_y),
-                                     text_layout.Get(),
-                                     subtitle_fill_brush_.Get());
+        apply_pass_effects(TextPassKind::Fill);
+        draw_text_pass(0.0f, 0.0f, nullptr);
+
+        apply_pass_effects(TextPassKind::Highlight);
+        for (const RunBrushPass& pass : run_passes) {
+            if (!pass.highlight_brush || pass.highlight_clips.empty()) {
+                continue;
+            }
+            draw_text_pass(0.0f, 0.0f, &pass.highlight_clips);
+        }
     }
 
     const HRESULT hr = d2d_context_->EndDraw();
@@ -2161,6 +3688,8 @@ void D3D11VideoRenderer::Impl::resetRequests() {
     previous_chapter_requested_ = false;
     next_item_requested_ = false;
     previous_item_requested_ = false;
+    open_file_requested_ = false;
+    open_file_path_.clear();
     last_nonzero_volume_ = 1.0f;
     dragging_seek_ = false;
     dragging_volume_ = false;
@@ -2288,6 +3817,16 @@ void D3D11VideoRenderer::Impl::handleEvents() {
                 needs_redraw = true;
             }
             break;
+        case SDL_DROPFILE:
+            {
+                std::lock_guard<std::mutex> request_lock(request_mutex_);
+                open_file_path_ = event.drop.file ? event.drop.file : "";
+                open_file_requested_ = !open_file_path_.empty();
+                if (event.drop.file) {
+                    SDL_free(event.drop.file);
+                }
+            }
+            break;
         case SDL_MOUSEBUTTONDOWN:
             if (event.button.button == SDL_BUTTON_LEFT) {
                 const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
@@ -2338,10 +3877,25 @@ bool D3D11VideoRenderer::Impl::consumeNextChapterRequest() { VP_CONSUME_FLAG(nex
 bool D3D11VideoRenderer::Impl::consumePreviousChapterRequest() { VP_CONSUME_FLAG(previous_chapter_requested_); }
 bool D3D11VideoRenderer::Impl::consumeNextItemRequest() { VP_CONSUME_FLAG(next_item_requested_); }
 bool D3D11VideoRenderer::Impl::consumePreviousItemRequest() { VP_CONSUME_FLAG(previous_item_requested_); }
-
+bool D3D11VideoRenderer::Impl::consumeOpenFileRequest(std::string& path) {
+    std::lock_guard<std::mutex> request_lock(request_mutex_);
+    if (!open_file_requested_) return false;
+    path = open_file_path_;
+    open_file_path_.clear();
+    open_file_requested_ = false;
+    return !path.empty();
+}
 #undef VP_CONSUME_FLAG
 
 void D3D11VideoRenderer::Impl::setOverlayState(double position, double duration, float volume, bool paused) { overlay_position_.store(std::max(0.0, position)); overlay_duration_.store(std::max(0.0, duration)); overlay_volume_.store(clampVolume(volume)); overlay_paused_.store(paused); if (paused) redrawIfPaused(); }
+void D3D11VideoRenderer::Impl::setSubtitleClock(double subtitle_time_seconds) {
+    const double previous = subtitle_clock_seconds_.exchange(std::max(0.0, subtitle_time_seconds));
+    if (overlay_paused_.load() &&
+        subtitle_has_animated_content_.load() &&
+        std::abs(previous - subtitle_time_seconds) > 0.0005) {
+        redrawIfPaused();
+    }
+}
 void D3D11VideoRenderer::Impl::setSubtitleText(const std::string& text) {
     if (text.empty()) {
         setSubtitleItems({});
@@ -2363,6 +3917,7 @@ void D3D11VideoRenderer::Impl::setSubtitleItems(const std::vector<subtitle::Subt
         std::lock_guard<std::mutex> subtitle_lock(subtitle_mutex_);
         subtitle_items_ = items;
     }
+    subtitle_has_animated_content_.store(subtitleItemsHaveAnimatedRuns(items));
     if (overlay_paused_.load()) {
         redrawIfPaused();
     }
@@ -2402,7 +3957,9 @@ bool D3D11VideoRenderer::consumeNextChapterRequest() { return impl_->consumeNext
 bool D3D11VideoRenderer::consumePreviousChapterRequest() { return impl_->consumePreviousChapterRequest(); }
 bool D3D11VideoRenderer::consumeNextItemRequest() { return impl_->consumeNextItemRequest(); }
 bool D3D11VideoRenderer::consumePreviousItemRequest() { return impl_->consumePreviousItemRequest(); }
+bool D3D11VideoRenderer::consumeOpenFileRequest(std::string& path) { return impl_->consumeOpenFileRequest(path); }
 void D3D11VideoRenderer::setOverlayState(double position, double duration, float volume, bool paused) { impl_->setOverlayState(position, duration, volume, paused); }
+void D3D11VideoRenderer::setSubtitleClock(double subtitle_time_seconds) { impl_->setSubtitleClock(subtitle_time_seconds); }
 void D3D11VideoRenderer::setSubtitleText(const std::string& text) { impl_->setSubtitleText(text); }
 void D3D11VideoRenderer::setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) { impl_->setSubtitleItems(items); }
 void D3D11VideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { impl_->setHotkeyManager(hotkey_manager); }
@@ -2411,3 +3968,6 @@ void* D3D11VideoRenderer::nativeDeviceHandle() const { return impl_->nativeDevic
 const char* D3D11VideoRenderer::rendererBackendName() const { return "D3D11"; }
 
 }  // namespace vp::render
+
+
+

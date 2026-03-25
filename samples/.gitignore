@@ -11,6 +11,7 @@
 !mov/
 !avi/
 !m2ts/
+!subtitles/
 !mp4/.gitkeep
 !mkv/.gitkeep
 !webm/.gitkeep
@@ -19,3 +20,4 @@
 !mov/.gitkeep
 !avi/.gitkeep
 !m2ts/.gitkeep
+!subtitles/*.ass

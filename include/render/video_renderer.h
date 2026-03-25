@@ -29,6 +29,14 @@ struct RendererDiagnostics {
     uint64_t display_copy_bytes{0};
     uint64_t display_copy_time_us_total{0};
     uint64_t display_copy_time_us_max{0};
+    bool opengl_native_interop_active{false};
+    bool opengl_native_interop_startup_disabled{false};
+    std::string opengl_native_interop_disable_rule{"none"};
+    uint64_t opengl_native_interop_frames{0};
+    uint64_t opengl_native_interop_disable_events{0};
+    uint64_t opengl_present_wait_timeouts{0};
+    std::string opengl_present_mode_requested{"auto"};
+    std::string opengl_present_mode_active{"unknown"};
 };
 
 class IVideoRenderer {
@@ -64,8 +72,12 @@ public:
     virtual bool consumePreviousChapterRequest() = 0;
     virtual bool consumeNextItemRequest() = 0;
     virtual bool consumePreviousItemRequest() = 0;
+    virtual bool consumeOpenFileRequest(std::string& path) = 0;
 
     virtual void setOverlayState(double position, double duration, float volume, bool paused) = 0;
+    virtual void setSubtitleClock(double subtitle_time_seconds) {
+        (void)subtitle_time_seconds;
+    }
     virtual void setSubtitleText(const std::string& text) = 0;
     virtual void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) {
         setSubtitleText(subtitle::flattenSubtitleText(items));

@@ -1,53 +1,42 @@
-# Day4 结论：当前 D3D11 渲染器只是 SDL/D3D11 驱动偏好，不是解码面到显示面的零拷贝
+﻿# Day4 缁撹锛氬綋鍓?D3D11 娓叉煋鍣ㄥ彧鏄?SDL/D3D11 椹卞姩鍋忓ソ锛屼笉鏄В鐮侀潰鍒版樉绀洪潰鐨勯浂鎷疯礉
 
-> 历史说明（2026-03-18）：本文结论对应 2026-03-14 的旧实现。当前仓库已经具备独立的原生 D3D11 device/swap chain/video present/subtitle overlay 主链，请以 [`docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`](../design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md) 为最新状态说明。
-日期：2026-03-14  
-范围：`src/render/renderer_factory.cpp`、`src/render/sdl_video_renderer.cpp`、`src/render/d3d11_video_renderer.cpp`、`src/render/opengl_video_renderer.cpp`、`src/display.cpp`、`src/core/player_core.cpp`
+> 补充更新（2026-03-24）：本文关于 `OpenGL` stub 的判断已过期；当前仓库已具备 `OpenGL` M0 最小可用路径，作为 `MVP_RENDERER_BACKEND=opengl` 的显式 opt-in 后端使用。
+
+> 鍘嗗彶璇存槑锛?026-03-18锛夛細鏈枃缁撹瀵瑰簲 2026-03-14 鐨勬棫瀹炵幇銆傚綋鍓嶄粨搴撳凡缁忓叿澶囩嫭绔嬬殑鍘熺敓 D3D11 device/swap chain/video present/subtitle overlay 涓婚摼锛岃浠?[`docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md`](../design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md) 涓烘渶鏂扮姸鎬佽鏄庛€?鏃ユ湡锛?026-03-14  
+鑼冨洿锛歚src/render/renderer_factory.cpp`銆乣src/render/sdl_video_renderer.cpp`銆乣src/render/d3d11_video_renderer.cpp`銆乣src/render/opengl_video_renderer.cpp`銆乣src/display.cpp`銆乣src/core/player_core.cpp`
 
 ## implementation planner
 
-1. 先读 `renderer_factory`，确认“自动选择后端”和“失败回退”的边界。
-2. 再对比 `SdlVideoRenderer` 与 `D3D11VideoRenderer`，确认两者是否共享同一显示实现。
-3. 再读 `Display` 的 `renderFrame/copyFrameData/updateTexture/renderLoop`，确认 copy 点和线程边界。
-4. 最后回到 `prepareVideoOutputFrame()`，把“硬解输出”与“渲染输入”之间的断点找出来。
-5. 基于代码事实输出后端能力矩阵、零拷贝差距图和三条改造路线。
+1. 鍏堣 `renderer_factory`锛岀‘璁も€滆嚜鍔ㄩ€夋嫨鍚庣鈥濆拰鈥滃け璐ュ洖閫€鈥濈殑杈圭晫銆?2. 鍐嶅姣?`SdlVideoRenderer` 涓?`D3D11VideoRenderer`锛岀‘璁や袱鑰呮槸鍚﹀叡浜悓涓€鏄剧ず瀹炵幇銆?3. 鍐嶈 `Display` 鐨?`renderFrame/copyFrameData/updateTexture/renderLoop`锛岀‘璁?copy 鐐瑰拰绾跨▼杈圭晫銆?4. 鏈€鍚庡洖鍒?`prepareVideoOutputFrame()`锛屾妸鈥滅‖瑙ｈ緭鍑衡€濅笌鈥滄覆鏌撹緭鍏モ€濅箣闂寸殑鏂偣鎵惧嚭鏉ャ€?5. 鍩轰簬浠ｇ爜浜嬪疄杈撳嚭鍚庣鑳藉姏鐭╅樀銆侀浂鎷疯礉宸窛鍥惧拰涓夋潯鏀归€犺矾绾裤€?
+## 鍏堢粰缁撹
 
-## 先给结论
-
-- Windows 下 `RendererFactory::detectBestRendererType()` 默认返回 `D3D11`，但当前 `D3D11VideoRenderer` 本质上仍然是 `Display` 的包装器。
-- `SdlVideoRenderer` 和 `D3D11VideoRenderer` 的共同点远大于差异：两者都把 `VideoFrame.frame` 交给 `Display::renderFrame()`，真正的显示线程、事件处理、字幕叠加、OSD 和 `SDL_UpdateYUVTexture()` 全都走 `Display`。
-- `D3D11VideoRenderer` 现在唯一新增的行为是：给 SDL renderer 提一个 `direct3d11` 驱动偏好，并在初始化后校验 SDL 实际选中的 renderer 名称。
-- 因为视频帧在进 `Display` 之前已经被 `prepareVideoOutputFrame()` 统一整理成软件 `YUV420P`，所以当前路径不可能是零拷贝。GPU 解码面早就在 `av_hwframe_transfer_data()` 那一步被拉回 CPU 了。
-- `OpenGLVideoRenderer` 目前是明确的 stub，`init()` 固定返回 `false`。它现在属于“名义后端”，不属于“可交付后端”。
-
-## 关键文件与函数
-
-| 文件 | 关键函数 | 当前角色 |
+- Windows 涓?`RendererFactory::detectBestRendererType()` 榛樿杩斿洖 `D3D11`锛屼絾褰撳墠 `D3D11VideoRenderer` 鏈川涓婁粛鐒舵槸 `Display` 鐨勫寘瑁呭櫒銆?- `SdlVideoRenderer` 鍜?`D3D11VideoRenderer` 鐨勫叡鍚岀偣杩滃ぇ浜庡樊寮傦細涓よ€呴兘鎶?`VideoFrame.frame` 浜ょ粰 `Display::renderFrame()`锛岀湡姝ｇ殑鏄剧ず绾跨▼銆佷簨浠跺鐞嗐€佸瓧骞曞彔鍔犮€丱SD 鍜?`SDL_UpdateYUVTexture()` 鍏ㄩ兘璧?`Display`銆?- `D3D11VideoRenderer` 鐜板湪鍞竴鏂板鐨勮涓烘槸锛氱粰 SDL renderer 鎻愪竴涓?`direct3d11` 椹卞姩鍋忓ソ锛屽苟鍦ㄥ垵濮嬪寲鍚庢牎楠?SDL 瀹為檯閫変腑鐨?renderer 鍚嶇О銆?- 鍥犱负瑙嗛甯у湪杩?`Display` 涔嬪墠宸茬粡琚?`prepareVideoOutputFrame()` 缁熶竴鏁寸悊鎴愯蒋浠?`YUV420P`锛屾墍浠ュ綋鍓嶈矾寰勪笉鍙兘鏄浂鎷疯礉銆侴PU 瑙ｇ爜闈㈡棭灏卞湪 `av_hwframe_transfer_data()` 閭ｄ竴姝ヨ鎷夊洖 CPU 浜嗐€?- `OpenGLVideoRenderer` 鐩墠鏄槑纭殑 stub锛宍init()` 鍥哄畾杩斿洖 `false`銆傚畠鐜板湪灞炰簬鈥滃悕涔夊悗绔€濓紝涓嶅睘浜庘€滃彲浜や粯鍚庣鈥濄€?
+## 鍏抽敭鏂囦欢涓庡嚱鏁?
+| 鏂囦欢 | 鍏抽敭鍑芥暟 | 褰撳墠瑙掕壊 |
 | --- | --- | --- |
-| `src/render/renderer_factory.cpp:10` | `detectBestRendererType()` | Windows 默认偏向 `D3D11` |
-| `src/render/renderer_factory.cpp:19` | `create()` | 创建 `SdlVideoRenderer / D3D11VideoRenderer / OpenGLVideoRenderer` |
-| `src/render/sdl_video_renderer.cpp:11` | `SdlVideoRenderer::init()` | 创建 `Display` 并走 SDL 通用显示路径 |
-| `src/render/d3d11_video_renderer.cpp:40` | `D3D11VideoRenderer::init()` | 仍创建 `Display`，只是设置 preferred SDL driver |
-| `src/render/d3d11_video_renderer.cpp:81` | `D3D11VideoRenderer::renderFrame()` | 仍转发给 `Display::renderFrame()` |
-| `src/render/opengl_video_renderer.cpp:6` | `OpenGLVideoRenderer::init()` | 当前未实现 |
-| `src/display.cpp:722` | `Display::renderFrame()` | 接收 `AVFrame` 并转成待渲染缓存 |
-| `src/display.cpp:763` | `copyFrameData()` | 深拷贝 Y/U/V 平面 |
-| `src/display.cpp:700` | `updateTexture()` | `SDL_UpdateYUVTexture()` 纹理上传 |
-| `src/display.cpp:826` | `renderLoop()` | 真正执行 `SDL_RenderCopy/Present` |
-| `src/core/player_core.cpp:1462` | `prepareVideoOutputFrame()` | 把硬件帧/其他格式统一整理成软件 `YUV420P` |
-| `src/core/player_core.cpp:1476` | `av_hwframe_transfer_data()` | 当前零拷贝断点 |
-| `src/core/player_core.cpp:1546` | `convertVideoFrameToYuv420()` | 当前统一渲染输入格式的转换点 |
+| `src/render/renderer_factory.cpp:10` | `detectBestRendererType()` | Windows 榛樿鍋忓悜 `D3D11` |
+| `src/render/renderer_factory.cpp:19` | `create()` | 鍒涘缓 `SdlVideoRenderer / D3D11VideoRenderer / OpenGLVideoRenderer` |
+| `src/render/sdl_video_renderer.cpp:11` | `SdlVideoRenderer::init()` | 鍒涘缓 `Display` 骞惰蛋 SDL 閫氱敤鏄剧ず璺緞 |
+| `src/render/d3d11_video_renderer.cpp:40` | `D3D11VideoRenderer::init()` | 浠嶅垱寤?`Display`锛屽彧鏄缃?preferred SDL driver |
+| `src/render/d3d11_video_renderer.cpp:81` | `D3D11VideoRenderer::renderFrame()` | 浠嶈浆鍙戠粰 `Display::renderFrame()` |
+| `src/render/opengl_video_renderer.cpp:6` | `OpenGLVideoRenderer::init()` | 褰撳墠鏈疄鐜?|
+| `src/display.cpp:722` | `Display::renderFrame()` | 鎺ユ敹 `AVFrame` 骞惰浆鎴愬緟娓叉煋缂撳瓨 |
+| `src/display.cpp:763` | `copyFrameData()` | 娣辨嫹璐?Y/U/V 骞抽潰 |
+| `src/display.cpp:700` | `updateTexture()` | `SDL_UpdateYUVTexture()` 绾圭悊涓婁紶 |
+| `src/display.cpp:826` | `renderLoop()` | 鐪熸鎵ц `SDL_RenderCopy/Present` |
+| `src/core/player_core.cpp:1462` | `prepareVideoOutputFrame()` | 鎶婄‖浠跺抚/鍏朵粬鏍煎紡缁熶竴鏁寸悊鎴愯蒋浠?`YUV420P` |
+| `src/core/player_core.cpp:1476` | `av_hwframe_transfer_data()` | 褰撳墠闆舵嫹璐濇柇鐐?|
+| `src/core/player_core.cpp:1546` | `convertVideoFrameToYuv420()` | 褰撳墠缁熶竴娓叉煋杈撳叆鏍煎紡鐨勮浆鎹㈢偣 |
 
-## 当前渲染后端能力矩阵
+## 褰撳墠娓叉煋鍚庣鑳藉姏鐭╅樀
 
-| 后端 | 当前如何被选中 | 实际显示实现 | 输入帧形态 | 零拷贝能力 | 当前结论 |
+| 鍚庣 | 褰撳墠濡備綍琚€変腑 | 瀹為檯鏄剧ず瀹炵幇 | 杈撳叆甯у舰鎬?| 闆舵嫹璐濊兘鍔?| 褰撳墠缁撹 |
 | --- | --- | --- | --- | --- | --- |
-| `SoftwareSDL` | 显式选中或其他后端失败回退 | `Display` | 软件 `AVFrame(YUV420P)` | 无 | 真实可用主路径 |
-| `D3D11` | Windows `Auto` 默认优先 | 仍是 `Display`，只是 SDL renderer 偏好为 `direct3d11` | 软件 `AVFrame(YUV420P)` | 无 | 名称是 D3D11，数据链路仍非零拷贝 |
-| `OpenGL` | 显式选中 | 无 | 无 | 无 | 目前不可用 |
+| `SoftwareSDL` | 鏄惧紡閫変腑鎴栧叾浠栧悗绔け璐ュ洖閫€ | `Display` | 杞欢 `AVFrame(YUV420P)` | 鏃?| 鐪熷疄鍙敤涓昏矾寰?|
+| `D3D11` | Windows `Auto` 榛樿浼樺厛 | 浠嶆槸 `Display`锛屽彧鏄?SDL renderer 鍋忓ソ涓?`direct3d11` | 杞欢 `AVFrame(YUV420P)` | 鏃?| 鍚嶇О鏄?D3D11锛屾暟鎹摼璺粛闈為浂鎷疯礉 |
+| `OpenGL` | 鏄惧紡閫変腑 | 鏃?| 鏃?| 鏃?| 鐩墠涓嶅彲鐢?|
 
-## `D3D11VideoRenderer` 与 SDL 渲染路径的真实关系
-
+## `D3D11VideoRenderer` 涓?SDL 娓叉煋璺緞鐨勭湡瀹炲叧绯?
 ```mermaid
 flowchart LR
     A[RendererFactory::create D3D11] --> B[D3D11VideoRenderer]
@@ -59,15 +48,13 @@ flowchart LR
     G --> H[SDL_RenderCopy/Present]
 ```
 
-一句话结论：
-
-- 现在的 `D3D11VideoRenderer` 不是一条独立 GPU 渲染管线，只是“让 SDL 尽量选 D3D11 renderer backend”的一层薄包装。
-
-## 零拷贝差距图
+涓€鍙ヨ瘽缁撹锛?
+- 鐜板湪鐨?`D3D11VideoRenderer` 涓嶆槸涓€鏉＄嫭绔?GPU 娓叉煋绠＄嚎锛屽彧鏄€滆 SDL 灏介噺閫?D3D11 renderer backend鈥濈殑涓€灞傝杽鍖呰銆?
+## 闆舵嫹璐濆樊璺濆浘
 
 ```mermaid
 flowchart LR
-    subgraph Current[当前实现]
+    subgraph Current[褰撳墠瀹炵幇]
         A1[D3D11VA decoded surface] -->|copy back| A2[software frame]
         A2 -->|sws_scale| A3[YUV420P AVFrame]
         A3 -->|deep copy| A4[PendingVideoFrame]
@@ -75,96 +62,73 @@ flowchart LR
         A5 --> A6[Present]
     end
 
-    subgraph Target[目标零拷贝方向]
+    subgraph Target[鐩爣闆舵嫹璐濇柟鍚慮
         B1[D3D11VA decoded surface] --> B2[D3D11 shader resource / video processor]
         B2 --> B3[swap chain present]
     end
 ```
 
-差距不在“后端名字”，而在下面这几个事实：
+宸窛涓嶅湪鈥滃悗绔悕瀛椻€濓紝鑰屽湪涓嬮潰杩欏嚑涓簨瀹烇細
 
-1. `prepareVideoOutputFrame()` 先把硬件帧拉回软件内存。  
-2. `Display` 只接受软件平面数据，不接受 GPU surface/texture。  
-3. `D3D11VideoRenderer` 没有自己的 texture/swap chain/video processor 管理。  
-4. OSD/字幕也是跟着 `Display` 的 SDL 叠加逻辑走。
-
-## 为什么当前一定属于“硬解 + 回拷 + 上传”
-
-| 代码事实 | 含义 |
+1. `prepareVideoOutputFrame()` 鍏堟妸纭欢甯ф媺鍥炶蒋浠跺唴瀛樸€? 
+2. `Display` 鍙帴鍙楄蒋浠跺钩闈㈡暟鎹紝涓嶆帴鍙?GPU surface/texture銆? 
+3. `D3D11VideoRenderer` 娌℃湁鑷繁鐨?texture/swap chain/video processor 绠＄悊銆? 
+4. OSD/瀛楀箷涔熸槸璺熺潃 `Display` 鐨?SDL 鍙犲姞閫昏緫璧般€?
+## 涓轰粈涔堝綋鍓嶄竴瀹氬睘浜庘€滅‖瑙?+ 鍥炴嫹 + 涓婁紶鈥?
+| 浠ｇ爜浜嬪疄 | 鍚箟 |
 | --- | --- |
-| `tryConfigureD3D11HardwareDecode()` 只负责给 FFmpeg 绑定 D3D11VA device | 说明硬解只发生在 decode 侧 |
-| `prepareVideoOutputFrame()` 命中硬件像素格式后调用 `av_hwframe_transfer_data()` | 说明 decode 结果离开了 GPU surface |
-| `convertVideoFrameToYuv420()` 统一输出 `AV_PIX_FMT_YUV420P` | 说明渲染输入被压成软件像素平面 |
-| `Display::copyFrameData()` 用 `memcpy` 拷 Y/U/V 平面 | 说明显示层只认 CPU buffer |
-| `Display::updateTexture()` 用 `SDL_UpdateYUVTexture()` | 说明真正显示前又做了一次 CPU -> GPU 上传 |
+| `tryConfigureD3D11HardwareDecode()` 鍙礋璐ｇ粰 FFmpeg 缁戝畾 D3D11VA device | 璇存槑纭В鍙彂鐢熷湪 decode 渚?|
+| `prepareVideoOutputFrame()` 鍛戒腑纭欢鍍忕礌鏍煎紡鍚庤皟鐢?`av_hwframe_transfer_data()` | 璇存槑 decode 缁撴灉绂诲紑浜?GPU surface |
+| `convertVideoFrameToYuv420()` 缁熶竴杈撳嚭 `AV_PIX_FMT_YUV420P` | 璇存槑娓叉煋杈撳叆琚帇鎴愯蒋浠跺儚绱犲钩闈?|
+| `Display::copyFrameData()` 鐢?`memcpy` 鎷?Y/U/V 骞抽潰 | 璇存槑鏄剧ず灞傚彧璁?CPU buffer |
+| `Display::updateTexture()` 鐢?`SDL_UpdateYUVTexture()` | 璇存槑鐪熸鏄剧ず鍓嶅張鍋氫簡涓€娆?CPU -> GPU 涓婁紶 |
 
-所以当前是：
+鎵€浠ュ綋鍓嶆槸锛?
+- 瑙ｇ爜鍦?GPU
+- 娓叉煋鍓嶅鐞嗗湪 CPU
+- 鏈€缁堟樉绀哄啀鍥?GPU
 
-- 解码在 GPU
-- 渲染前处理在 CPU
-- 最终显示再回 GPU
+杩欎笉鏄浂鎷疯礉锛屼篃涓嶆槸鈥滅‖瑙?surface 鐩存帴 present鈥濄€?
+## 涓夋潯闆舵嫹璐濇敼閫犺矾绾?
+### 璺嚎 A锛氫繚瀹堣矾绾匡紝鍏堟秷鎺?CPU 娣辨嫹璐濓紝浠嶄繚鐣?SDL 鍛堢幇
 
-这不是零拷贝，也不是“硬解 surface 直接 present”。
-
-## 三条零拷贝改造路线
-
-### 路线 A：保守路线，先消掉 CPU 深拷贝，仍保留 SDL 呈现
-
-| 项目 | 方案 | 代价 | 风险 |
+| 椤圭洰 | 鏂规 | 浠ｄ环 | 椋庨櫓 |
 | --- | --- | --- | --- |
-| A1 | 让 `Display` 复用外部帧或引用计数帧，而不是 `copyFrameData()` 深拷贝 | 低到中 | 生命周期管理会变复杂，且仍然存在 `SDL_UpdateYUVTexture()` 上传 |
-| A2 | 给 `Display` 增加环形 staging buffer，减少重复分配和 memcpy | 低 | 只能减轻 CPU 压力，不是零拷贝 |
+| A1 | 璁?`Display` 澶嶇敤澶栭儴甯ф垨寮曠敤璁℃暟甯э紝鑰屼笉鏄?`copyFrameData()` 娣辨嫹璐?| 浣庡埌涓?| 鐢熷懡鍛ㄦ湡绠＄悊浼氬彉澶嶆潅锛屼笖浠嶇劧瀛樺湪 `SDL_UpdateYUVTexture()` 涓婁紶 |
+| A2 | 缁?`Display` 澧炲姞鐜舰 staging buffer锛屽噺灏戦噸澶嶅垎閰嶅拰 memcpy | 浣?| 鍙兘鍑忚交 CPU 鍘嬪姏锛屼笉鏄浂鎷疯礉 |
 
-适用判断：
+閫傜敤鍒ゆ柇锛?
+- 濡傛灉鐩爣鏄€滃厛鎶?4K CPU 浠?100% 鎷変笅鏉ヤ竴鐐光€濓紝杩欐潯鍙互鍏堝仛銆?- 浣嗗畠涓嶈兘浠庢牴涓婅В鍐?`hwframe transfer` 鍜?`texture upload` 涓や釜澶уご銆?
+### 璺嚎 B锛氫富璺嚎锛屽仛鐪熸鐨?`D3D11VideoRenderer`
 
-- 如果目标是“先把 4K CPU 从 100% 拉下来一点”，这条可以先做。
-- 但它不能从根上解决 `hwframe transfer` 和 `texture upload` 两个大头。
-
-### 路线 B：主路线，做真正的 `D3D11VideoRenderer`
-
-| 项目 | 方案 | 代价 | 风险 |
+| 椤圭洰 | 鏂规 | 浠ｄ环 | 椋庨櫓 |
 | --- | --- | --- | --- |
-| B1 | `D3D11VideoRenderer` 直接接收 `AV_PIX_FMT_D3D11` 帧，维护 D3D11 device/context/swap chain | 中到高 | 需要重写显示层和 OSD 叠加方案 |
-| B2 | 使用 shader/video processor 完成颜色空间转换和缩放 | 中 | 需要补齐 YUV/NV12 等格式处理 |
-| B3 | 字幕和 OSD 改为 D3D11 overlay/pass | 中 | 现有 `Display` 叠加逻辑无法直接复用 |
+| B1 | `D3D11VideoRenderer` 鐩存帴鎺ユ敹 `AV_PIX_FMT_D3D11` 甯э紝缁存姢 D3D11 device/context/swap chain | 涓埌楂?| 闇€瑕侀噸鍐欐樉绀哄眰鍜?OSD 鍙犲姞鏂规 |
+| B2 | 浣跨敤 shader/video processor 瀹屾垚棰滆壊绌洪棿杞崲鍜岀缉鏀?| 涓?| 闇€瑕佽ˉ榻?YUV/NV12 绛夋牸寮忓鐞?|
+| B3 | 瀛楀箷鍜?OSD 鏀逛负 D3D11 overlay/pass | 涓?| 鐜版湁 `Display` 鍙犲姞閫昏緫鏃犳硶鐩存帴澶嶇敤 |
 
-适用判断：
-
-- 这是当前项目最值得走的真零拷贝方向。
-- 成本高，但和 Day3 暴露出来的 4K CPU 问题是直接对口的。
-
-### 路线 C：进取路线，抽象统一 `GpuFrame` 与多后端渲染层
-
-| 项目 | 方案 | 代价 | 风险 |
+閫傜敤鍒ゆ柇锛?
+- 杩欐槸褰撳墠椤圭洰鏈€鍊煎緱璧扮殑鐪熼浂鎷疯礉鏂瑰悜銆?- 鎴愭湰楂橈紝浣嗗拰 Day3 鏆撮湶鍑烘潵鐨?4K CPU 闂鏄洿鎺ュ鍙ｇ殑銆?
+### 璺嚎 C锛氳繘鍙栬矾绾匡紝鎶借薄缁熶竴 `GpuFrame` 涓庡鍚庣娓叉煋灞?
+| 椤圭洰 | 鏂规 | 浠ｄ环 | 椋庨櫓 |
 | --- | --- | --- | --- |
-| C1 | 在 `PlayerCore` 和渲染层之间引入 `GpuFrame / CpuFrame` 双分支 | 高 | 需要重构 `VideoFrame`、滤镜、截图、字幕等边界 |
-| C2 | D3D11 先落地，后续再接 OpenGL/Vulkan/Metal 风格后端 | 高 | 设计不好会把复杂度提前摊开 |
+| C1 | 鍦?`PlayerCore` 鍜屾覆鏌撳眰涔嬮棿寮曞叆 `GpuFrame / CpuFrame` 鍙屽垎鏀?| 楂?| 闇€瑕侀噸鏋?`VideoFrame`銆佹护闀溿€佹埅鍥俱€佸瓧骞曠瓑杈圭晫 |
+| C2 | D3D11 鍏堣惤鍦帮紝鍚庣画鍐嶆帴 OpenGL/Vulkan/Metal 椋庢牸鍚庣 | 楂?| 璁捐涓嶅ソ浼氭妸澶嶆潅搴︽彁鍓嶆憡寮€ |
 
-适用判断：
+閫傜敤鍒ゆ柇锛?
+- 閫傚悎鏄庣‘瑕佹妸鎾斁鍣ㄥ仛鎴愰暱鏈熷鍚庣婕旇繘鐨勫钩鍙般€?- 涓嶉€傚悎浣滀负绗竴闃舵姝㈣鏂规銆?
+## 鎶€鏈喅绛栧缓璁?
+- 鐭湡锛氬厛鍋氳矾绾?A 鐨勨€滃噺鎷疯礉 + 绮惧噯 profiling鈥濓紝鎶婅瘉鎹ˉ榻愩€?- 涓湡锛氫互璺嚎 B 涓轰富锛屽仛鐪熷疄 `D3D11VideoRenderer` 鍘熷瀷锛屾妸 `av_hwframe_transfer_data()` 浠庣儹璺緞绉绘帀銆?- 闀挎湡锛氬彧鏈夊湪 D3D11 鍘熷瀷鎴愬姛鍚庯紝鎵嶅€煎緱鎺ㄨ繘璺嚎 C 鐨勭粺涓€ GPU 甯ф娊璞°€?
+## Day4 楠屾敹鏍囧噯瀵瑰簲鍥炵瓟
 
-- 适合明确要把播放器做成长期多后端演进的平台。
-- 不适合作为第一阶段止血方案。
+### 1. 涓轰粈涔堝綋鍓嶅睘浜庘€滅‖瑙?+ 鍥炴嫹 + 涓婁紶鈥濓紝涓嶆槸闆舵嫹璐?
+鍙互鐩存帴鐢ㄤ唬鐮佸洖绛旓細`D3D11VA` 纭欢甯у湪 `prepareVideoOutputFrame()` 閲岃 `av_hwframe_transfer_data()` 鎷夊洖杞欢鍐呭瓨锛岄殢鍚庡張琚浆鎹㈡垚 `YUV420P`锛屽啀琚?`Display::copyFrameData()` 娣辨嫹璐濓紝鏈€鍚庨€氳繃 `SDL_UpdateYUVTexture()` 涓婁紶鍥?GPU銆傚彧瑕佽繖鍑犳瀛樺湪锛屽畠灏变笉鏄浂鎷疯礉銆?
+### 2. D3D11 娓叉煋鍣ㄤ笌 SDL 娓叉煋璺緞鐨勫叧绯?
+褰撳墠鍏崇郴鏄€滃悓涓€鏉℃樉绀洪摼璺殑涓や釜澶栬鍚嶅瓧鈥濄€俙D3D11VideoRenderer` 鍜?`SdlVideoRenderer` 閮芥寔鏈変竴涓?`Display`锛岄兘璋冪敤鐩稿悓鐨?`renderFrame/present/handleEvents`銆傚尯鍒彧鍦ㄥ垵濮嬪寲鏃舵槸鍚︾粰 SDL 涓€涓?`direct3d11` 椹卞姩鍋忓ソ锛屼互鍙婃槸鍚︽牎楠?SDL 瀹為檯閫変腑鐨?backend 鍚嶅瓧銆?
+### 3. 涓夋潯闆舵嫹璐濇敼閫犺矾绾垮強鍏朵唬浠蜂笌椋庨櫓
 
-## 技术决策建议
+鍙互锛岃涓婇潰鐨勮矾绾?A/B/C锛?
+- A 鏄噺鎷疯礉锛屼笉鏄湡闆舵嫹璐濓紝浠ｄ环浣庯紝鏀剁泭鏈夐檺銆? 
+- B 鏄湡姝ｇ殑 D3D11 鐙珛娓叉煋璺緞锛屼唬浠蜂腑楂橈紝浣嗘敹鐩婃渶鐩存帴銆? 
+- C 鏄粺涓€ GPU 甯ф灦鏋勶紝浠ｄ环鏈€楂橈紝閫傚悎闀挎湡婕旇繘锛屼笉閫傚悎鍏堟琛€銆?
 
-- 短期：先做路线 A 的“减拷贝 + 精准 profiling”，把证据补齐。
-- 中期：以路线 B 为主，做真实 `D3D11VideoRenderer` 原型，把 `av_hwframe_transfer_data()` 从热路径移掉。
-- 长期：只有在 D3D11 原型成功后，才值得推进路线 C 的统一 GPU 帧抽象。
-
-## Day4 验收标准对应回答
-
-### 1. 为什么当前属于“硬解 + 回拷 + 上传”，不是零拷贝
-
-可以直接用代码回答：`D3D11VA` 硬件帧在 `prepareVideoOutputFrame()` 里被 `av_hwframe_transfer_data()` 拉回软件内存，随后又被转换成 `YUV420P`，再被 `Display::copyFrameData()` 深拷贝，最后通过 `SDL_UpdateYUVTexture()` 上传回 GPU。只要这几步存在，它就不是零拷贝。
-
-### 2. D3D11 渲染器与 SDL 渲染路径的关系
-
-当前关系是“同一条显示链路的两个外观名字”。`D3D11VideoRenderer` 和 `SdlVideoRenderer` 都持有一个 `Display`，都调用相同的 `renderFrame/present/handleEvents`。区别只在初始化时是否给 SDL 一个 `direct3d11` 驱动偏好，以及是否校验 SDL 实际选中的 backend 名字。
-
-### 3. 三条零拷贝改造路线及其代价与风险
-
-可以，见上面的路线 A/B/C：
-
-- A 是减拷贝，不是真零拷贝，代价低，收益有限。  
-- B 是真正的 D3D11 独立渲染路径，代价中高，但收益最直接。  
-- C 是统一 GPU 帧架构，代价最高，适合长期演进，不适合先止血。

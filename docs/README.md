@@ -1,126 +1,123 @@
-# 文档索引
+﻿# 鏂囨。绱㈠紩
 
-`docs/` 目录已按用途重新分类，建议优先从本页进入查找。
-每个分类目录下也补充了一个就近的 `README.md`，方便在 IDE 侧边栏按文件夹浏览。
+- 2026-03-24 新增：[`reports/OPENGL_RENDERER_LOCAL_CHECK.md`](./reports/OPENGL_RENDERER_LOCAL_CHECK.md) 记录 `OpenGL` M0 渲染链路的本地验收结果。
 
-## 目录分类
+`docs/` 鐩綍宸叉寜鐢ㄩ€旈噸鏂板垎绫伙紝寤鸿浼樺厛浠庢湰椤佃繘鍏ユ煡鎵俱€?姣忎釜鍒嗙被鐩綍涓嬩篃琛ュ厖浜嗕竴涓氨杩戠殑 `README.md`锛屾柟渚垮湪 IDE 渚ц竟鏍忔寜鏂囦欢澶规祻瑙堛€?
+## 鐩綍鍒嗙被
 
-| 目录 | 适合查看什么 | 代表文档 |
+| 鐩綍 | 閫傚悎鏌ョ湅浠€涔?| 浠ｈ〃鏂囨。 |
 |------|--------------|----------|
-| [`guides/README.md`](./guides/README.md) | 环境搭建、功能使用、快速上手 | `WINDOWS_SETUP.md`、`PLAYER_FEATURES_USAGE_VALIDATION.md` |
-| [`design/README.md`](./design/README.md) | 当前架构、历史架构、模块设计草案 | `ARCHITECTURE_REFACTOR_2026-03-06.md`、`FILTERS.md` |
-| [`analysis/README.md`](./analysis/README.md) | 差距评估、问题分析、文档巡检 | `MPC_HC_GAP_ANALYSIS.md`、`DOC_AUDIT_2026-03-08.md` |
-| [`reference/README.md`](./reference/README.md) | 外部能力参考、学习资料、日志库补充说明 | `PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`、`OPEN_SOURCE_PLAYER_LEARNING_PATH.md` |
-| [`plans/README.md`](./plans/README.md) | 路线图、阶段计划、TODO 清单 | `CROSS_PLATFORM_EVOLUTION_ROADMAP.md`、`PHASE1_CROSS_PLATFORM_TODO.md` |
-| [`workflows/README.md`](./workflows/README.md) | 回归手册、工作流、阅读清单、AI 提问剧本 | `REGRESSION_OPERATION_PLAYBOOK.md`、`WORKFLOW.md` |
-| [`records/README.md`](./records/README.md) | 版本记录、修复记录、开发日志 | `VERSION.md`、`CHANGELOG.md`、`DEVELOP_LOG.md` |
-| [`reports/README.md`](./reports/README.md) | 本地验收与功能验证结果 | `*_LOCAL_CHECK.md` |
+| [`guides/README.md`](./guides/README.md) | 鐜鎼缓銆佸姛鑳戒娇鐢ㄣ€佸揩閫熶笂鎵?| `WINDOWS_SETUP.md`銆乣PLAYER_FEATURES_USAGE_VALIDATION.md` |
+| [`design/README.md`](./design/README.md) | 褰撳墠鏋舵瀯銆佸巻鍙叉灦鏋勩€佹ā鍧楄璁¤崏妗?| `ARCHITECTURE_REFACTOR_2026-03-06.md`銆乣FILTERS.md` |
+| [`analysis/README.md`](./analysis/README.md) | 宸窛璇勪及銆侀棶棰樺垎鏋愩€佹枃妗ｅ贰妫€ | `MPC_HC_GAP_ANALYSIS.md`銆乣DOC_AUDIT_2026-03-08.md` |
+| [`reference/README.md`](./reference/README.md) | 澶栭儴鑳藉姏鍙傝€冦€佸涔犺祫鏂欍€佹棩蹇楀簱琛ュ厖璇存槑 | `PLAYER_REFERENCE_AND_FFMPEG_NOTES.md`銆乣OPEN_SOURCE_PLAYER_LEARNING_PATH.md` |
+| [`plans/README.md`](./plans/README.md) | 璺嚎鍥俱€侀樁娈佃鍒掋€乀ODO 娓呭崟 | `CROSS_PLATFORM_EVOLUTION_ROADMAP.md`銆乣PHASE1_CROSS_PLATFORM_TODO.md` |
+| [`workflows/README.md`](./workflows/README.md) | 鍥炲綊鎵嬪唽銆佸伐浣滄祦銆侀槄璇绘竻鍗曘€丄I 鎻愰棶鍓ф湰 | `REGRESSION_OPERATION_PLAYBOOK.md`銆乣WORKFLOW.md` |
+| [`records/README.md`](./records/README.md) | 鐗堟湰璁板綍銆佷慨澶嶈褰曘€佸紑鍙戞棩蹇?| `VERSION.md`銆乣CHANGELOG.md`銆乣DEVELOP_LOG.md` |
+| [`reports/README.md`](./reports/README.md) | 鏈湴楠屾敹涓庡姛鑳介獙璇佺粨鏋?| `*_LOCAL_CHECK.md` |
 
-## 按场景查找
+## 鎸夊満鏅煡鎵?
+- **鍏堣窇璧锋潵**锛歚guides/WINDOWS_SETUP.md`銆乣guides/PLAYER_FEATURES_USAGE_VALIDATION.md`
+- **鐞嗚В褰撳墠涓婚摼**锛歚design/ARCHITECTURE_REFACTOR_2026-03-06.md`銆乣design/ARCHITECTURE.md`
+- **鐪嬫ā鍧楄璁?*锛歚design/FILTERS.md`銆乣design/LOGGING.md`銆乣design/PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md`
+- **鐪嬭鍒掍笌璺嚎**锛歚plans/CROSS_PLATFORM_EVOLUTION_ROADMAP.md`銆乣plans/MPC_HC_ITERATION_PLAN.md`
+- **鐪嬪樊璺濆拰鍒嗘瀽**锛歚analysis/MPC_HC_GAP_ANALYSIS.md`銆乣analysis/video-stream-index-fix.md`
+- **璺戝洖褰?鏌ユ祦绋?*锛歚workflows/REGRESSION_OPERATION_PLAYBOOK.md`銆乣workflows/FORMAT_REGRESSION.md`銆乣workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`
+- **鏌ュ巻鍙茶褰?*锛歚records/CHANGELOG.md`銆乣records/VERSION.md`銆乣records/DEVELOP_LOG.md`
+- **鐪嬮獙鏀剁粨鏋?*锛歚reports/` 鐩綍涓嬪悇椤?`*_LOCAL_CHECK.md`
 
-- **先跑起来**：`guides/WINDOWS_SETUP.md`、`guides/PLAYER_FEATURES_USAGE_VALIDATION.md`
-- **理解当前主链**：`design/ARCHITECTURE_REFACTOR_2026-03-06.md`、`design/ARCHITECTURE.md`
-- **看模块设计**：`design/FILTERS.md`、`design/LOGGING.md`、`design/PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md`
-- **看规划与路线**：`plans/CROSS_PLATFORM_EVOLUTION_ROADMAP.md`、`plans/MPC_HC_ITERATION_PLAN.md`
-- **看差距和分析**：`analysis/MPC_HC_GAP_ANALYSIS.md`、`analysis/video-stream-index-fix.md`
-- **跑回归/查流程**：`workflows/REGRESSION_OPERATION_PLAYBOOK.md`、`workflows/FORMAT_REGRESSION.md`、`workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`
-- **查历史记录**：`records/CHANGELOG.md`、`records/VERSION.md`、`records/DEVELOP_LOG.md`
-- **看验收结果**：`reports/` 目录下各项 `*_LOCAL_CHECK.md`
-
-## 按目录浏览
-
+## 鎸夌洰褰曟祻瑙?
 ### `guides/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [WINDOWS_SETUP.md](./guides/WINDOWS_SETUP.md) | Windows 环境配置与构建入口 |
-| [PLAYER_FEATURES_USAGE_VALIDATION.md](./guides/PLAYER_FEATURES_USAGE_VALIDATION.md) | 当前功能、使用方式与验证入口总览 |
-| [IMPLEMENTATION.md](./guides/IMPLEMENTATION.md) | 早期原型的从零实现教程（历史实现基线） |
+| [WINDOWS_SETUP.md](./guides/WINDOWS_SETUP.md) | Windows 鐜閰嶇疆涓庢瀯寤哄叆鍙?|
+| [PLAYER_FEATURES_USAGE_VALIDATION.md](./guides/PLAYER_FEATURES_USAGE_VALIDATION.md) | 褰撳墠鍔熻兘銆佷娇鐢ㄦ柟寮忎笌楠岃瘉鍏ュ彛鎬昏 |
+| [IMPLEMENTATION.md](./guides/IMPLEMENTATION.md) | 鏃╂湡鍘熷瀷鐨勪粠闆跺疄鐜版暀绋嬶紙鍘嗗彶瀹炵幇鍩虹嚎锛?|
 
 ### `design/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [ARCHITECTURE_REFACTOR_2026-03-06.md](./design/ARCHITECTURE_REFACTOR_2026-03-06.md) | 当前主链重构说明 |
-| [ARCHITECTURE.md](./design/ARCHITECTURE.md) | 历史架构基线与设计背景 |
-| [FILTERS.md](./design/FILTERS.md) | 滤镜接口、内置滤镜与当前接入方式 |
-| [LOGGING.md](./design/LOGGING.md) | 日志系统说明 |
-| [PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md](./design/PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md) | 播放状态机设计草案 |
-| [WINDOWS_PLAYER_DEFAULT_STRATEGY_DRAFT.md](./design/WINDOWS_PLAYER_DEFAULT_STRATEGY_DRAFT.md) | Windows 默认策略建议稿 |
+| [ARCHITECTURE_REFACTOR_2026-03-06.md](./design/ARCHITECTURE_REFACTOR_2026-03-06.md) | 褰撳墠涓婚摼閲嶆瀯璇存槑 |
+| [ARCHITECTURE.md](./design/ARCHITECTURE.md) | 鍘嗗彶鏋舵瀯鍩虹嚎涓庤璁¤儗鏅?|
+| [FILTERS.md](./design/FILTERS.md) | 婊ら暅鎺ュ彛銆佸唴缃护闀滀笌褰撳墠鎺ュ叆鏂瑰紡 |
+| [LOGGING.md](./design/LOGGING.md) | 鏃ュ織绯荤粺璇存槑 |
+| [PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md](./design/PLAYERCORE_PLAYBACK_STATE_MACHINE_DRAFT.md) | 鎾斁鐘舵€佹満璁捐鑽夋 |
+| [WINDOWS_PLAYER_DEFAULT_STRATEGY_DRAFT.md](./design/WINDOWS_PLAYER_DEFAULT_STRATEGY_DRAFT.md) | Windows 榛樿绛栫暐寤鸿绋?|
 
 ### `analysis/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [MPC_HC_GAP_ANALYSIS.md](./analysis/MPC_HC_GAP_ANALYSIS.md) | 与 MPC-HC 的功能差距评估 |
-| [DOC_AUDIT_2026-03-08.md](./analysis/DOC_AUDIT_2026-03-08.md) | 本轮文档口径巡检与收敛结果总表 |
-| [video-stream-index-fix.md](./analysis/video-stream-index-fix.md) | 早期流索引问题的历史分析归档 |
+| [MPC_HC_GAP_ANALYSIS.md](./analysis/MPC_HC_GAP_ANALYSIS.md) | 涓?MPC-HC 鐨勫姛鑳藉樊璺濊瘎浼?|
+| [DOC_AUDIT_2026-03-08.md](./analysis/DOC_AUDIT_2026-03-08.md) | 鏈疆鏂囨。鍙ｅ緞宸℃涓庢敹鏁涚粨鏋滄€昏〃 |
+| [video-stream-index-fix.md](./analysis/video-stream-index-fix.md) | 鏃╂湡娴佺储寮曢棶棰樼殑鍘嗗彶鍒嗘瀽褰掓。 |
 
 ### `reference/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 播放能力实现参考（格式 / 高分高帧 / 多音道） |
-| [OPEN_SOURCE_PLAYER_LEARNING_PATH.md](./reference/OPEN_SOURCE_PLAYER_LEARNING_PATH.md) | 开源播放器整合学习路径 |
-| [QUILL_LOGGING.md](./reference/QUILL_LOGGING.md) | Quill 日志库集成补充说明 |
+| [PLAYER_REFERENCE_AND_FFMPEG_NOTES.md](./reference/PLAYER_REFERENCE_AND_FFMPEG_NOTES.md) | 鎾斁鑳藉姏瀹炵幇鍙傝€冿紙鏍煎紡 / 楂樺垎楂樺抚 / 澶氶煶閬擄級 |
+| [OPEN_SOURCE_PLAYER_LEARNING_PATH.md](./reference/OPEN_SOURCE_PLAYER_LEARNING_PATH.md) | 寮€婧愭挱鏀惧櫒鏁村悎瀛︿範璺緞 |
+| [QUILL_LOGGING.md](./reference/QUILL_LOGGING.md) | Quill 鏃ュ織搴撻泦鎴愯ˉ鍏呰鏄?|
 
 ### `plans/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [CROSS_PLATFORM_EVOLUTION_ROADMAP.md](./plans/CROSS_PLATFORM_EVOLUTION_ROADMAP.md) | 从 Windows 演进到跨平台架构的路线图 |
-| [CROSS_PLATFORM_REFACTOR_TASKLIST.md](./plans/CROSS_PLATFORM_REFACTOR_TASKLIST.md) | 当前仓库跨平台改造任务清单 |
-| [MPC_HC_ITERATION_PLAN.md](./plans/MPC_HC_ITERATION_PLAN.md) | MPC-HC 对齐迭代计划（快照） |
-| [PHASE1_CROSS_PLATFORM_TODO.md](./plans/PHASE1_CROSS_PLATFORM_TODO.md) | Phase 1 逐文件 TODO 实施单 |
+| [CROSS_PLATFORM_EVOLUTION_ROADMAP.md](./plans/CROSS_PLATFORM_EVOLUTION_ROADMAP.md) | 浠?Windows 婕旇繘鍒拌法骞冲彴鏋舵瀯鐨勮矾绾垮浘 |
+| [CROSS_PLATFORM_REFACTOR_TASKLIST.md](./plans/CROSS_PLATFORM_REFACTOR_TASKLIST.md) | 褰撳墠浠撳簱璺ㄥ钩鍙版敼閫犱换鍔℃竻鍗?|
+| [MPC_HC_ITERATION_PLAN.md](./plans/MPC_HC_ITERATION_PLAN.md) | MPC-HC 瀵归綈杩唬璁″垝锛堝揩鐓э級 |
+| [PHASE1_CROSS_PLATFORM_TODO.md](./plans/PHASE1_CROSS_PLATFORM_TODO.md) | Phase 1 閫愭枃浠?TODO 瀹炴柦鍗?|
 
 ### `workflows/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [WORKFLOW.md](./workflows/WORKFLOW.md) | 工作流程规范与文档同步要求 |
-| [REGRESSION_OPERATION_PLAYBOOK.md](./workflows/REGRESSION_OPERATION_PLAYBOOK.md) | 样本准备与回归操作手册 |
-| [FORMAT_REGRESSION.md](./workflows/FORMAT_REGRESSION.md) | 格式回归脚本与报告说明 |
-| [WEEKLY_CONVERGENCE_PLAYBOOK.md](./workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md) | 周节奏与周五收敛手册 |
-| [SOURCE_FILE_READING_CHECKLIST.md](./workflows/SOURCE_FILE_READING_CHECKLIST.md) | 按文件名展开的阅读清单 |
-| [MODULE_BASED_ANALYSIS_SCRIPTS.md](./workflows/MODULE_BASED_ANALYSIS_SCRIPTS.md) | 按模块的连续提问剧本 |
-| [AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md](./workflows/AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md) | AI 源码分析提问方案 |
-| [AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md](./workflows/AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md) | AI 逐函数提问模板清单 |
+| [WORKFLOW.md](./workflows/WORKFLOW.md) | 宸ヤ綔娴佺▼瑙勮寖涓庢枃妗ｅ悓姝ヨ姹?|
+| [REGRESSION_OPERATION_PLAYBOOK.md](./workflows/REGRESSION_OPERATION_PLAYBOOK.md) | 鏍锋湰鍑嗗涓庡洖褰掓搷浣滄墜鍐?|
+| [FORMAT_REGRESSION.md](./workflows/FORMAT_REGRESSION.md) | 鏍煎紡鍥炲綊鑴氭湰涓庢姤鍛婅鏄?|
+| [WEEKLY_CONVERGENCE_PLAYBOOK.md](./workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md) | 鍛ㄨ妭濂忎笌鍛ㄤ簲鏀舵暃鎵嬪唽 |
+| [SOURCE_FILE_READING_CHECKLIST.md](./workflows/SOURCE_FILE_READING_CHECKLIST.md) | 鎸夋枃浠跺悕灞曞紑鐨勯槄璇绘竻鍗?|
+| [MODULE_BASED_ANALYSIS_SCRIPTS.md](./workflows/MODULE_BASED_ANALYSIS_SCRIPTS.md) | 鎸夋ā鍧楃殑杩炵画鎻愰棶鍓ф湰 |
+| [AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md](./workflows/AI_SOURCE_ANALYSIS_PROMPT_PLAYBOOK.md) | AI 婧愮爜鍒嗘瀽鎻愰棶鏂规 |
+| [AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md](./workflows/AI_FUNCTION_LEVEL_PROMPT_CHECKLIST.md) | AI 閫愬嚱鏁版彁闂ā鏉挎竻鍗?|
 
 ### `records/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [VERSION.md](./records/VERSION.md) | 项目版本记录与依赖说明 |
-| [CHANGELOG.md](./records/CHANGELOG.md) | 问题修复记录 |
-| [DEVELOP_LOG.md](./records/DEVELOP_LOG.md) | 开发日志 |
+| [VERSION.md](./records/VERSION.md) | 椤圭洰鐗堟湰璁板綍涓庝緷璧栬鏄?|
+| [CHANGELOG.md](./records/CHANGELOG.md) | 闂淇璁板綍 |
+| [DEVELOP_LOG.md](./records/DEVELOP_LOG.md) | 寮€鍙戞棩蹇?|
 
 ### `reports/`
 
-| 文档 | 说明 |
+| 鏂囨。 | 璇存槑 |
 |------|------|
-| [V1_0_0_RC1_RELEASE_NOTES.md](./reports/V1_0_0_RC1_RELEASE_NOTES.md) | 1.0.0-rc1 可直接粘贴到 Release 页的正文 |
-| [V1_0_0_RC1_RELEASE_READINESS.md](./reports/V1_0_0_RC1_RELEASE_READINESS.md) | 1.0.0-rc1 发布准备、已知问题与发布说明 |
-| [DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 音轨 / 字幕延迟调节本地验收记录 |
-| [NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 数字热键 `1..9` 跳转本地验收记录 |
-| [PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) | 播放性能日志本地验收记录 |
-| [1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) | 1080p60 稳定播放本地验收记录 |
-| [4K_PLAYBACK_LOCAL_CHECK.md](./reports/4K_PLAYBACK_LOCAL_CHECK.md) | 4K 播放与降级本地验收记录 |
-| [HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) | >80Mbps 高码率样本本地验收记录 |
-| [LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) | 长时播放稳定性本地验收记录 |
-| [PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) | 插件系统本地验收记录 |
-| [STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) | 流媒体 HTTP 分片与缓冲本地验收记录 |
-| [ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) | HLS / DASH 自适应码率本地验收记录 |
+| [V1_0_0_RC1_RELEASE_NOTES.md](./reports/V1_0_0_RC1_RELEASE_NOTES.md) | 1.0.0-rc1 鍙洿鎺ョ矘璐村埌 Release 椤电殑姝ｆ枃 |
+| [V1_0_0_RC1_RELEASE_READINESS.md](./reports/V1_0_0_RC1_RELEASE_READINESS.md) | 1.0.0-rc1 鍙戝竷鍑嗗銆佸凡鐭ラ棶棰樹笌鍙戝竷璇存槑 |
+| [DELAY_ADJUST_LOCAL_CHECK.md](./reports/DELAY_ADJUST_LOCAL_CHECK.md) | 闊宠建 / 瀛楀箷寤惰繜璋冭妭鏈湴楠屾敹璁板綍 |
+| [NUMERIC_SEEK_LOCAL_CHECK.md](./reports/NUMERIC_SEEK_LOCAL_CHECK.md) | 鏁板瓧鐑敭 `1..9` 璺宠浆鏈湴楠屾敹璁板綍 |
+| [PERFORMANCE_LOG_LOCAL_CHECK.md](./reports/PERFORMANCE_LOG_LOCAL_CHECK.md) | 鎾斁鎬ц兘鏃ュ織鏈湴楠屾敹璁板綍 |
+| [1080P60_STABILITY_LOCAL_CHECK.md](./reports/1080P60_STABILITY_LOCAL_CHECK.md) | 1080p60 绋冲畾鎾斁鏈湴楠屾敹璁板綍 |
+| [4K_PLAYBACK_LOCAL_CHECK.md](./reports/4K_PLAYBACK_LOCAL_CHECK.md) | 4K 鎾斁涓庨檷绾ф湰鍦伴獙鏀惰褰?|
+| [HIGH_BITRATE_LOCAL_CHECK.md](./reports/HIGH_BITRATE_LOCAL_CHECK.md) | >80Mbps 楂樼爜鐜囨牱鏈湰鍦伴獙鏀惰褰?|
+| [LONG_PLAYBACK_LOCAL_CHECK.md](./reports/LONG_PLAYBACK_LOCAL_CHECK.md) | 闀挎椂鎾斁绋冲畾鎬ф湰鍦伴獙鏀惰褰?|
+| [PLUGIN_SYSTEM_LOCAL_CHECK.md](./reports/PLUGIN_SYSTEM_LOCAL_CHECK.md) | 鎻掍欢绯荤粺鏈湴楠屾敹璁板綍 |
+| [STREAMING_BUFFER_LOCAL_CHECK.md](./reports/STREAMING_BUFFER_LOCAL_CHECK.md) | 娴佸獟浣?HTTP 鍒嗙墖涓庣紦鍐叉湰鍦伴獙鏀惰褰?|
+| [ADAPTIVE_BITRATE_LOCAL_CHECK.md](./reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md) | HLS / DASH 鑷€傚簲鐮佺巼鏈湴楠屾敹璁板綍 |
 
-## 关联入口
+## 鍏宠仈鍏ュ彛
 
-- 项目总览：[../README.md](../README.md)
-- 回归样本目录：[../samples/README.md](../samples/README.md)
-- 周报模板：[../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md](../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md)
-- 周看板：[../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md](../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md)
-- 格式回归工作流：[../.github/workflows/format-regression.yml](../.github/workflows/format-regression.yml)
-- 运行参数示例：[../config/player_settings.ini](../config/player_settings.ini)
+- 椤圭洰鎬昏锛歔../README.md](../README.md)
+- 鍥炲綊鏍锋湰鐩綍锛歔../samples/README.md](../samples/README.md)
+- 鍛ㄦ姤妯℃澘锛歔../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md](../.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md)
+- 鍛ㄧ湅鏉匡細[../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md](../.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md)
+- 鏍煎紡鍥炲綊宸ヤ綔娴侊細[../.github/workflows/format-regression.yml](../.github/workflows/format-regression.yml)
+- 杩愯鍙傛暟绀轰緥锛歔../config/player_settings.ini](../config/player_settings.ini)
 
-## 本次整理
+## 鏈鏁寸悊
 
-- 2026-03-10：按用途将文档拆分为 `guides`、`design`、`analysis`、`reference`、`plans`、`workflows`、`records`、`reports` 八类。
-- 所有仓库内主要文档入口已同步到新路径，便于在 IDE 中按目录快速浏览。
+- 2026-03-10锛氭寜鐢ㄩ€斿皢鏂囨。鎷嗗垎涓?`guides`銆乣design`銆乣analysis`銆乣reference`銆乣plans`銆乣workflows`銆乣records`銆乣reports` 鍏被銆?- 鎵€鏈変粨搴撳唴涓昏鏂囨。鍏ュ彛宸插悓姝ュ埌鏂拌矾寰勶紝渚夸簬鍦?IDE 涓寜鐩綍蹇€熸祻瑙堛€?

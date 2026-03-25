@@ -66,6 +66,7 @@ public:
     bool consumePreviousChapterRequest();
     bool consumeNextItemRequest();
     bool consumePreviousItemRequest();
+    bool consumeOpenFileRequest(std::string& path);
     void setOverlayState(double position, double duration, float volume, bool paused);
     void setSubtitleText(const std::string& text);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
@@ -182,6 +183,8 @@ private:
     bool previous_chapter_requested_{false};
     bool next_item_requested_{false};
     bool previous_item_requested_{false};
+    bool open_file_requested_{false};
+    std::string open_file_path_;
     float last_nonzero_volume_{1.0f};
     bool dragging_seek_{false};
     bool dragging_volume_{false};
