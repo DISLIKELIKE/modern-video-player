@@ -7061,3 +7061,303 @@ Key lines:
 - `docs/records/CHANGELOG.md`
 - `docs/records/VERSION.md`
 - `docs/records/DEVELOP_LOG.md`
+## 问题 99: OpenGL 启动期卡死实为默认 WASAPI 端点阻塞
+**日期**: 2026-03-25
+**状态**: 已解决
+
+### 问题描述
+- 用户反馈：使用 OpenGL 链路播放视频时，播放约 1-2 秒后程序会卡死。
+- 本轮需要先判断这是 OpenGL render/present 死锁，还是启动期其他子系统阻塞。
+
+### 日志输出
+```text
+Before fix:
+2026-03-25 17:38:06.634 [INFO] OpenGL renderer initialized: window=1728x972
+2026-03-25 17:38:14.635 [WARNING] Audio output init failed, continuing with video-only playback
+Error: Could not open audio device: WASAPI can't find requested audio endpoint: 找不到元素。
+
+After fix:
+2026-03-25 17:59:13.711 [INFO] OpenGL renderer initialized: window=1728x972
+2026-03-25 17:59:13.711 [WARNING] Audio output preflight skipped SDL_OpenAudioDevice strategy=skip-no-default-render-endpoint elapsed_ms=0 detail=skipped SDL_OpenAudioDevice: no default or active render endpoint for WASAPI
+performance-log-check.audio_device_open_attempted=false
+performance-log-check.audio_init_latency_ms=0
+performance-log-check.audio_init_strategy=skip-no-default-render-endpoint
+performance-log-check.audio_init_detail=skipped SDL_OpenAudioDevice: no default or active render endpoint for WASAPI
+performance-log-check.result=PASS
+```
+
+### 分析记录
+- OpenGL renderer 和 context 已经在 `17:38:06.634` 初始化完成，说明卡点不在 OpenGL startup。
+- 真正的长时间空窗发生在 `PlayerCore::open() -> AudioPlayer::init() -> SDL_OpenAudioDevice(nullptr, ...)`。
+- 当前机器缺失默认 `WASAPI` render endpoint，SDL 打开默认输出设备时会同步阻塞数秒后才失败。
+- 由于阻塞发生在 open 主线程，UI/播放状态一起停住，用户才会把现象误判为 OpenGL 卡死。
+
+### 处理结果
+- `AudioPlayer::init()` 改为先执行 Windows 默认 render endpoint preflight。
+- 默认/`wasapi` 音频输出且没有默认或 active render endpoint 时：
+  - 不再进入 `SDL_OpenAudioDevice`
+  - 直接回报 `skip-no-default-render-endpoint`
+  - 视频文件立刻走 `video-only fallback`
+- `PlayerCore` / diagnostics / 播放类 CLI 已新增音频初始化策略和耗时输出。
+- Release build、`--opengl-diagnostics`、`--performance-log-check` 和 `tools/run_opengl_checks.ps1` 全部通过。
+
+### 修改文件
+- `include/audio_player.h`
+- `src/audio_player.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `CMakeLists.txt`
+- `docs/analysis/PLAYERCORE_DAY41_OPENGL_AUDIO_ENDPOINT_PREFLIGHT.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+## Issue 109: Embedded subtitle multi-track selection UI + CLI
+**Date**: 2026-03-25
+**Status**: Resolved
+
+### Description
+- Completed embedded subtitle multi-track control closure across core/UI/CLI:
+  - OpenGL subtitle previous/next track controls + track state overlay
+  - playback arg `--subtitle-track <stream_index>`
+  - diagnostics commands `--embedded-subtitle-list` and `--embedded-subtitle-select-check`
+- Kept `external > embedded` ownership policy and moved selection semantics to supported embedded subtitle codecs (`supported_codec`).
+
+### Log
+```text
+Build:
+cmd /c "call ""C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat"" -arch=x64 && msbuild build\modern-video-player.sln /m /p:Configuration=Release /p:Platform=x64"
+Result: PASS
+
+Embedded subtitle list:
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-text-validation.mp4
+Key lines:
+- embedded-subtitle-list.best_stream_index=2
+- embedded-subtitle-list.result=PASS
+
+Embedded subtitle select:
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-ass-validation.mkv 2
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-text-validation.mp4 2
+Key lines:
+- embedded-subtitle-select-check.loaded=true
+- embedded-subtitle-select-check.result=PASS
+
+Embedded best-stream check:
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-text-validation.mp4
+Key lines:
+- embedded-subtitle-check.result=PASS
+
+OpenGL gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+Key line:
+- OpenGL gate result: PASS (16/16)
+```
+
+### Analysis Notes
+1. The remaining gap after Day40 was no longer decoding but control surface completeness (multi-track selection path closure).
+2. OpenGL track state now maps to supported subtitle tracks (`supported_codec`), avoiding confusing counts when unsupported subtitle codecs exist.
+3. The new list/select CLI closes machine-readable observability for embedded multi-track behavior.
+
+### Files
+- `src/core/player_core.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY42_EMBEDDED_SUBTITLE_TRACK_SELECTION_UI_AND_CLI.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 110: Embedded bitmap subtitle path + DirectWrite custom font collection
+**Date**: 2026-03-25
+**Status**: Resolved
+
+### Description
+- Extended embedded subtitle capability from text-only closure to supported-codec closure (text + bitmap).
+- Landed PGS/DVD bitmap subtitle decode/model/render consumption path.
+- Landed DirectWrite custom subtitle font collection integration on top of registered private fonts.
+- Synced CLI diagnostics fields for bitmap and font-collection visibility.
+
+### Log
+```text
+Build:
+MSBuild.exe build/modern-video-player.sln /m /p:Configuration=Release /p:Platform=x64
+Result: PASS
+
+CLI:
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-ass-validation.mkv 2
+.\build\Release\modern-video-player.exe --directwrite-font-collection-check .\build\tmp\embedded-ass-validation.mkv
+Result: PASS
+
+Gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+Result: OpenGL gate result: PASS (16/16)
+```
+
+### Notes
+1. Embedded subtitle selection/overlay policy is now aligned with `supported_codec`, avoiding the previous text-only interpretation mismatch.
+2. Bitmap subtitle path is functionally closed in loader + renderer, but a wider real-media PGS/DVD sample corpus remains future regression debt.
+3. Display-level HDR output bridge and ICC/3D LUT output management remain separate backlog tracks.
+
+### Files
+- `include/subtitle/subtitle_parser.h`
+- `src/subtitle/subtitle_parser.cpp`
+- `include/subtitle/embedded_subtitle_loader.h`
+- `src/subtitle/embedded_subtitle_loader.cpp`
+- `include/subtitle/subtitle_font_registry.h`
+- `src/subtitle/subtitle_font_registry.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY43_BITMAP_SUBTITLE_AND_DWRITE_COLLECTION.md`
+- `docs/analysis/PLAYERCORE_DAY42_EMBEDDED_SUBTITLE_TRACK_SELECTION_UI_AND_CLI.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 111: OpenGL HDR output policy + 3D LUT output baseline
+**Date**: 2026-03-25
+**Status**: Resolved
+
+### Description
+- Added OpenGL output-color policy controls for HDR output mode and 3D LUT loading.
+- Wired output-stage 3D LUT parsing/upload/sampling into OpenGL final composition paths.
+- Extended machine-readable diagnostics for OpenGL HDR bridge and LUT runtime state.
+- Added dedicated regression command `--opengl-output-color-check`.
+
+### Log
+```text
+Build:
+cmake --build build --config Release --target modern-video-player
+Result: PASS
+
+OpenGL output color check:
+.\build\Release\modern-video-player.exe --opengl-output-color-check .\juren-30s.mp4 .\samples\lut\identity_2.cube 1200
+Key lines:
+- opengl-output-color-check.hdr_bridge_mode=auto
+- opengl-output-color-check.output_lut_configured=true
+- opengl-output-color-check.output_lut_active=true
+- opengl-output-color-check.result=PASS
+
+OpenGL performance log:
+$env:MVP_RENDERER_BACKEND='opengl'
+$env:MVP_OPENGL_3DLUT_FILE='.\samples\lut\identity_2.cube'
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+Key lines:
+- performance-log-check.renderer_opengl_hdr_bridge_mode=auto
+- performance-log-check.renderer_opengl_output_lut_active=true
+- performance-log-check.result=PASS
+
+OpenGL gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+Result: OpenGL gate result: PASS (16/16)
+```
+
+### Analysis Notes
+1. This round lands a practical output control plane (policy + LUT) but intentionally does not claim final display-HDR delivery closure.
+2. The new diagnostics fields close observability for request/active state, which was the main blocker for stable HDR/LUT regression checks.
+3. Full display-level HDR present still requires DXGI swapchain color-space/metadata output path, beyond this implementation batch.
+4. ICC/profile-driven LUT generation and per-display dynamic binding remain future backlog.
+
+### Files
+- `src/render/opengl_video_renderer.cpp`
+- `include/render/video_renderer.h`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY44_OPENGL_HDR_OUTPUT_POLICY_AND_3DLUT.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 112: OpenGL interaction freeze on mouse/keyboard/window events
+**Date**: 2026-03-25
+**Status**: Resolved
+
+### Description
+- User reported OpenGL playback freezing after mouse move/click, with hotkeys and maximize/minimize/fullscreen becoming unresponsive.
+- Root cause traced to SDL event pumping on the OpenGL render thread instead of main-thread handling.
+- Fixed by moving event pumping/fullscreen window operation to the `handleEvents()` main-thread path.
+
+### Log
+```text
+Build:
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build build --config Release --target modern-video-player
+Result: PASS
+
+OpenGL playback diagnostics:
+$env:MVP_RENDERER_BACKEND='opengl'
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+Result: performance-log-check.result=PASS
+
+OpenGL gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+Result: OpenGL gate result: PASS (16/16)
+```
+
+### Analysis Notes
+1. D3D11 path already pumps SDL events on `handleEvents()` main-thread path; OpenGL path drifted into render-thread pumping and diverged behavior.
+2. Interaction-triggered freezes were consistent with thread-affinity/message-pump stall patterns rather than decoder/render throughput bottlenecks.
+3. Render thread should remain frame/present focused; window/event transitions should stay in main-thread event path.
+4. Automated gate cannot fully replace real desktop-interaction smoke; final closure still requires short manual GUI stress pass.
+
+### Files
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY45_OPENGL_EVENT_THREAD_AFFINITY_FREEZE_FIX.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 113: Cross-platform master tasklist consolidation
+**Date**: 2026-03-25
+**Status**: Resolved
+
+### Description
+- Added one execution-ready master tasklist for all cross-platform work.
+- Unified task IDs, phase boundaries, milestone gates, and acceptance criteria into a single plan entry.
+- Synced matching analysis and records docs so future execution can be tracked from one baseline.
+
+### Log
+```text
+Master plan added:
+docs/plans/CROSS_PLATFORM_MASTER_TASKLIST.md
+
+Analysis added:
+docs/analysis/PLAYERCORE_DAY46_CROSS_PLATFORM_MASTER_TASKLIST_CONSOLIDATION.md
+
+Plans index updated:
+docs/plans/README.md
+```
+
+### Analysis Notes
+1. Existing plan docs had strong content but were fragmented by purpose; execution required repeated manual merging.
+2. A master task board with stable IDs is needed for continuous tracking, review, and staged delivery.
+3. Linux-first sequencing remains unchanged: strategy extraction -> Linux MVP -> subtitle/font/bitmap maturity -> HDR/ICC/LUT -> CI/package convergence.
+
+### Validation
+```text
+rg -n "CROSS_PLATFORM_MASTER_TASKLIST" docs/plans docs/analysis docs/records
+PASS
+
+cmake --build build --config Release --target modern-video-player
+PASS
+```
+
+### Files
+- `docs/plans/CROSS_PLATFORM_MASTER_TASKLIST.md`
+- `docs/plans/README.md`
+- `docs/analysis/PLAYERCORE_DAY46_CROSS_PLATFORM_MASTER_TASKLIST_CONSOLIDATION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`

@@ -270,6 +270,7 @@ if(WIN32)
         dwrite
         dxgi
         d3dcompiler
+        ole32
         opengl32
     )
 

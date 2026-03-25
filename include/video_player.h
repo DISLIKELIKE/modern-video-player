@@ -70,6 +70,26 @@ public:
     bool hasExternalSubtitle() const;
     const std::string& externalSubtitlePath() const;
     size_t externalSubtitleCount() const;
+    std::vector<subtitle::EmbeddedSubtitleTrackInfo> embeddedSubtitleTracks() const {
+        return core_player_ ? core_player_->embeddedSubtitleTracks() : std::vector<subtitle::EmbeddedSubtitleTrackInfo>{};
+    }
+    int selectedEmbeddedSubtitleStreamIndex() const {
+        return core_player_ ? core_player_->selectedEmbeddedSubtitleStreamIndex() : -1;
+    }
+    bool selectEmbeddedSubtitleStream(int stream_index) {
+        return core_player_ ? core_player_->selectEmbeddedSubtitleStream(stream_index) : false;
+    }
+    bool cycleEmbeddedSubtitleTrack(int direction) {
+        return core_player_ ? core_player_->cycleEmbeddedSubtitleTrack(direction) : false;
+    }
+    void setPreferredEmbeddedSubtitleStreamIndex(int stream_index) {
+        if (core_player_) {
+            core_player_->setPreferredEmbeddedSubtitleStreamIndex(stream_index);
+        }
+    }
+    int preferredEmbeddedSubtitleStreamIndex() const {
+        return core_player_ ? core_player_->preferredEmbeddedSubtitleStreamIndex() : -1;
+    }
     void setSubtitleEnabled(bool enabled);
     bool isSubtitleEnabled() const;
     bool toggleSubtitleEnabled();

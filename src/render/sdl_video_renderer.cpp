@@ -107,6 +107,14 @@ bool SdlVideoRenderer::consumeStepFrameForwardRequest() {
     return display_ ? display_->consumeStepFrameForwardRequest() : false;
 }
 
+bool SdlVideoRenderer::consumePreviousSubtitleTrackRequest() {
+    return false;
+}
+
+bool SdlVideoRenderer::consumeNextSubtitleTrackRequest() {
+    return false;
+}
+
 bool SdlVideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) {
     return display_ ? display_->consumeSubtitleDelayChangeRequest(delta_seconds) : false;
 }

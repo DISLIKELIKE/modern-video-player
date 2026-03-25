@@ -1904,6 +1904,8 @@ public:
     bool consumeScreenshotRequest();
     bool consumeStepFrameBackwardRequest();
     bool consumeStepFrameForwardRequest();
+    bool consumePreviousSubtitleTrackRequest();
+    bool consumeNextSubtitleTrackRequest();
     bool consumeSubtitleDelayChangeRequest(double& delta_seconds);
     bool consumeAudioDelayChangeRequest(double& delta_seconds);
     bool consumeNextChapterRequest();
@@ -2033,6 +2035,7 @@ private:
     ComPtr<ID2D1DeviceContext> d2d_context_;
     ComPtr<ID2D1Bitmap1> d2d_target_bitmap_;
     ComPtr<IDWriteFactory> dwrite_factory_;
+    ComPtr<IDWriteFontCollection> subtitle_dwrite_font_collection_;
     ComPtr<IDWriteTextFormat> subtitle_text_format_;
     ComPtr<ID2D1SolidColorBrush> subtitle_fill_brush_;
     ComPtr<ID2D1SolidColorBrush> subtitle_shadow_brush_;
@@ -2120,6 +2123,7 @@ void D3D11VideoRenderer::Impl::close() {
     subtitle_shadow_brush_.Reset();
     subtitle_fill_brush_.Reset();
     subtitle_text_format_.Reset();
+    subtitle_dwrite_font_collection_.Reset();
     d2d_target_bitmap_.Reset();
     dwrite_factory_.Reset();
     d2d_context_.Reset();
@@ -2405,6 +2409,20 @@ bool D3D11VideoRenderer::Impl::createTextResources() {
         return false;
     }
 
+    subtitle::SubtitleDirectWriteCollectionSummary font_collection_summary =
+        subtitle::buildDirectWriteSubtitleFontCollection(dwrite_factory_.Get(),
+                                                         subtitle_dwrite_font_collection_.ReleaseAndGetAddressOf());
+    if (font_collection_summary.collection_created) {
+        LOG_INFO("D3D11 subtitle DirectWrite custom font collection enabled: registered="
+                 << font_collection_summary.registered_font_file_count
+                 << ", added=" << font_collection_summary.added_font_file_count);
+    } else if (font_collection_summary.registered_font_file_count > 0) {
+        LOG_WARNING("D3D11 subtitle DirectWrite custom font collection unavailable: "
+                    << font_collection_summary.error
+                    << " (registered=" << font_collection_summary.registered_font_file_count
+                    << ", added=" << font_collection_summary.added_font_file_count << ")");
+    }
+
     subtitle_font_size_ = 0.0f;
     return true;
 }
@@ -2448,6 +2466,22 @@ bool D3D11VideoRenderer::Impl::ensureSubtitleTextFormat(float font_size) {
 
     subtitle_text_format_.Reset();
     const auto create_format = [&](const wchar_t* font_family) -> HRESULT {
+        HRESULT hr = E_FAIL;
+        if (subtitle_dwrite_font_collection_) {
+            subtitle_text_format_.Reset();
+            hr = dwrite_factory_->CreateTextFormat(font_family,
+                                                   subtitle_dwrite_font_collection_.Get(),
+                                                   DWRITE_FONT_WEIGHT_SEMI_BOLD,
+                                                   DWRITE_FONT_STYLE_NORMAL,
+                                                   DWRITE_FONT_STRETCH_NORMAL,
+                                                   font_size,
+                                                   L"zh-CN",
+                                                   subtitle_text_format_.GetAddressOf());
+            if (SUCCEEDED(hr) && subtitle_text_format_) {
+                return hr;
+            }
+        }
+        subtitle_text_format_.Reset();
         return dwrite_factory_->CreateTextFormat(font_family,
                                                  nullptr,
                                                  DWRITE_FONT_WEIGHT_SEMI_BOLD,
@@ -3019,6 +3053,75 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
             continue;
         }
 
+        if (item.is_bitmap) {
+            const subtitle::SubtitleBitmap& bitmap = item.bitmap;
+            if (bitmap.width <= 0 || bitmap.height <= 0) {
+                continue;
+            }
+
+            const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+            if (bitmap.rgba.size() < pixel_count * 4u) {
+                continue;
+            }
+
+            const float scale_x = item.play_res_x > 0
+                ? static_cast<float>(video_rect.w) / static_cast<float>(item.play_res_x)
+                : 1.0f;
+            const float scale_y = item.play_res_y > 0
+                ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y)
+                : 1.0f;
+            const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
+            const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
+            const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
+            const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
+            if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
+                continue;
+            }
+
+            std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
+            for (size_t i = 0; i < pixel_count; ++i) {
+                const uint8_t r = bitmap.rgba[i * 4u + 0u];
+                const uint8_t g = bitmap.rgba[i * 4u + 1u];
+                const uint8_t b = bitmap.rgba[i * 4u + 2u];
+                const uint8_t a = bitmap.rgba[i * 4u + 3u];
+                const uint16_t alpha = static_cast<uint16_t>(a);
+                premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 3u] = a;
+            }
+
+            ComPtr<ID2D1Bitmap1> d2d_bitmap;
+            const D2D1_BITMAP_PROPERTIES1 bitmap_props = D2D1::BitmapProperties1(
+                D2D1_BITMAP_OPTIONS_NONE,
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                96.0f,
+                96.0f);
+            const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(bitmap.width) * 4u);
+            if (FAILED(d2d_context_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(bitmap.width),
+                                                              static_cast<UINT32>(bitmap.height)),
+                                                  premul_bgra.data(),
+                                                  pitch,
+                                                  &bitmap_props,
+                                                  d2d_bitmap.GetAddressOf())) ||
+                !d2d_bitmap) {
+                continue;
+            }
+
+            d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
+            const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
+                                                     0.0f,
+                                                     static_cast<float>(bitmap.width),
+                                                     static_cast<float>(bitmap.height));
+            const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
+            d2d_context_->DrawBitmap(d2d_bitmap.Get(),
+                                     &dst_rect,
+                                     1.0f,
+                                     D2D1_INTERPOLATION_MODE_LINEAR,
+                                     &src_rect);
+            continue;
+        }
+
         if (item.text.empty()) {
             continue;
         }
@@ -3065,6 +3168,22 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
 
         ComPtr<IDWriteTextFormat> text_format;
         const auto create_text_format = [&](const wchar_t* font_family) -> HRESULT {
+            HRESULT hr = E_FAIL;
+            if (subtitle_dwrite_font_collection_) {
+                text_format.Reset();
+                hr = dwrite_factory_->CreateTextFormat(font_family,
+                                                       subtitle_dwrite_font_collection_.Get(),
+                                                       item_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                                                       item_style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                                                       DWRITE_FONT_STRETCH_NORMAL,
+                                                       font_size,
+                                                       L"zh-CN",
+                                                       text_format.GetAddressOf());
+                if (SUCCEEDED(hr) && text_format) {
+                    return hr;
+                }
+            }
+            text_format.Reset();
             return dwrite_factory_->CreateTextFormat(font_family,
                                                      nullptr,
                                                      item_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
@@ -3871,6 +3990,8 @@ bool D3D11VideoRenderer::Impl::consumeClearABRepeatRequest() { VP_CONSUME_FLAG(a
 bool D3D11VideoRenderer::Impl::consumeScreenshotRequest() { VP_CONSUME_FLAG(screenshot_requested_); }
 bool D3D11VideoRenderer::Impl::consumeStepFrameBackwardRequest() { VP_CONSUME_FLAG(step_frame_backward_requested_); }
 bool D3D11VideoRenderer::Impl::consumeStepFrameForwardRequest() { VP_CONSUME_FLAG(step_frame_forward_requested_); }
+bool D3D11VideoRenderer::Impl::consumePreviousSubtitleTrackRequest() { return false; }
+bool D3D11VideoRenderer::Impl::consumeNextSubtitleTrackRequest() { return false; }
 bool D3D11VideoRenderer::Impl::consumeSubtitleDelayChangeRequest(double& delta_seconds) { std::lock_guard<std::mutex> request_lock(request_mutex_); if (!subtitle_delay_change_requested_) return false; delta_seconds = subtitle_delay_delta_seconds_; subtitle_delay_delta_seconds_ = 0.0; subtitle_delay_change_requested_ = false; return true; }
 bool D3D11VideoRenderer::Impl::consumeAudioDelayChangeRequest(double& delta_seconds) { std::lock_guard<std::mutex> request_lock(request_mutex_); if (!audio_delay_change_requested_) return false; delta_seconds = audio_delay_delta_seconds_; audio_delay_delta_seconds_ = 0.0; audio_delay_change_requested_ = false; return true; }
 bool D3D11VideoRenderer::Impl::consumeNextChapterRequest() { VP_CONSUME_FLAG(next_chapter_requested_); }
@@ -3951,6 +4072,8 @@ bool D3D11VideoRenderer::consumeClearABRepeatRequest() { return impl_->consumeCl
 bool D3D11VideoRenderer::consumeScreenshotRequest() { return impl_->consumeScreenshotRequest(); }
 bool D3D11VideoRenderer::consumeStepFrameBackwardRequest() { return impl_->consumeStepFrameBackwardRequest(); }
 bool D3D11VideoRenderer::consumeStepFrameForwardRequest() { return impl_->consumeStepFrameForwardRequest(); }
+bool D3D11VideoRenderer::consumePreviousSubtitleTrackRequest() { return impl_->consumePreviousSubtitleTrackRequest(); }
+bool D3D11VideoRenderer::consumeNextSubtitleTrackRequest() { return impl_->consumeNextSubtitleTrackRequest(); }
 bool D3D11VideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) { return impl_->consumeSubtitleDelayChangeRequest(delta_seconds); }
 bool D3D11VideoRenderer::consumeAudioDelayChangeRequest(double& delta_seconds) { return impl_->consumeAudioDelayChangeRequest(delta_seconds); }
 bool D3D11VideoRenderer::consumeNextChapterRequest() { return impl_->consumeNextChapterRequest(); }

@@ -106,6 +106,8 @@ extern "C" {
 #endif
 
 #include <windows.h>
+#include <dwrite.h>
+#include <wrl/client.h>
 
 #endif
 
@@ -1999,6 +2001,16 @@ struct PlaybackCliArgs {
 
     std::string subtitle_file;
 
+    int preferred_embedded_subtitle_stream_index{-1};
+
+    bool has_preferred_embedded_subtitle_stream_index{false};
+
+    std::string opengl_hdr_output_mode;
+
+    bool has_opengl_hdr_output_mode{false};
+
+    std::string opengl_3dlut_file;
+
 };
 
 
@@ -2055,6 +2067,95 @@ bool parsePlaybackCliArgs(int argc, char* argv[], PlaybackCliArgs& out, std::str
 
             out.subtitle_file = argv[++i];
 
+            continue;
+
+        }
+
+        if (arg == "--subtitle-track") {
+
+            if (out.has_preferred_embedded_subtitle_stream_index) {
+
+                error = "duplicate --subtitle-track option";
+
+                return false;
+
+            }
+
+            if (i + 1 >= argc) {
+
+                error = "missing stream index after --subtitle-track";
+
+                return false;
+
+            }
+
+            int stream_index = -1;
+            if (!tryParseInt(argv[++i], stream_index)) {
+
+                error = "invalid stream index for --subtitle-track";
+
+                return false;
+
+            }
+
+            out.preferred_embedded_subtitle_stream_index = stream_index;
+            out.has_preferred_embedded_subtitle_stream_index = true;
+            continue;
+
+        }
+
+        if (arg == "--opengl-hdr-output-mode") {
+
+            if (out.has_opengl_hdr_output_mode) {
+
+                error = "duplicate --opengl-hdr-output-mode option";
+
+                return false;
+
+            }
+
+            if (i + 1 >= argc) {
+
+                error = "missing mode after --opengl-hdr-output-mode";
+
+                return false;
+
+            }
+
+            const std::string mode = toLower(argv[++i]);
+            if (mode != "auto" && mode != "off" && mode != "force") {
+
+                error = "invalid mode for --opengl-hdr-output-mode (expected auto|off|force)";
+
+                return false;
+
+            }
+
+            out.opengl_hdr_output_mode = mode;
+            out.has_opengl_hdr_output_mode = true;
+            continue;
+
+        }
+
+        if (arg == "--opengl-3dlut") {
+
+            if (!out.opengl_3dlut_file.empty()) {
+
+                error = "duplicate --opengl-3dlut option";
+
+                return false;
+
+            }
+
+            if (i + 1 >= argc) {
+
+                error = "missing file path after --opengl-3dlut";
+
+                return false;
+
+            }
+
+            out.opengl_3dlut_file = argv[++i];
             continue;
 
         }
@@ -5708,6 +5809,15 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
 
     std::cout << "performance-log-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
 
+    std::cout << "performance-log-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "performance-log-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "performance-log-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "performance-log-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
+
     std::cout << "performance-log-check.scheduler_clock_policy="
               << schedulerClockPolicyName(diag.scheduler_clock_policy) << std::endl;
 
@@ -5839,6 +5949,24 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
               << diag.renderer_opengl_present_mode_requested << std::endl;
     std::cout << "performance-log-check.renderer_opengl_present_mode_active="
               << diag.renderer_opengl_present_mode_active << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_hdr_bridge_requested="
+              << (diag.renderer_opengl_hdr_bridge_requested ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_hdr_bridge_active="
+              << (diag.renderer_opengl_hdr_bridge_active ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_hdr_bridge_mode="
+              << diag.renderer_opengl_hdr_bridge_mode << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_hdr_bridge_decision="
+              << diag.renderer_opengl_hdr_bridge_decision << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_output_lut_configured="
+              << (diag.renderer_opengl_output_lut_configured ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_output_lut_active="
+              << (diag.renderer_opengl_output_lut_active ? "true" : "false") << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_output_lut_size="
+              << diag.renderer_opengl_output_lut_size << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_output_lut_path="
+              << diag.renderer_opengl_output_lut_path << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_output_lut_error="
+              << diag.renderer_opengl_output_lut_error << std::endl;
 
     std::cout << "performance-log-check.video_filter_blocked_native_frames=" << diag.video_filter_blocked_native_frames << std::endl;
 
@@ -6182,6 +6310,15 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
               << (diag.video_only_fallback ? "true" : "false") << std::endl;
 
     std::cout << "software-video-decode-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
+
+    std::cout << "software-video-decode-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "software-video-decode-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "software-video-decode-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "software-video-decode-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
 
     std::cout << "software-video-decode-check.scheduler_clock_policy="
               << schedulerClockPolicyName(diag.scheduler_clock_policy) << std::endl;
@@ -6968,6 +7105,15 @@ bool run1080p60Check(const std::string& media_file, int sample_ms = 5000) {
 
     std::cout << "1080p60-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
 
+    std::cout << "1080p60-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "1080p60-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "1080p60-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "1080p60-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
+
     std::cout << "1080p60-check.timeline_serial=" << diag.timeline_serial << std::endl;
 
     std::cout << "1080p60-check.pending_seek_serial=" << diag.pending_seek_serial << std::endl;
@@ -7181,6 +7327,15 @@ bool run4kPlaybackCheck(const std::string& program_path, const std::string& medi
               << (diag.video_only_fallback ? "true" : "false") << std::endl;
 
     std::cout << "4k-playback-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
+
+    std::cout << "4k-playback-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "4k-playback-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "4k-playback-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "4k-playback-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
 
     std::cout << "4k-playback-check.timeline_serial=" << diag.timeline_serial << std::endl;
 
@@ -7406,6 +7561,15 @@ bool runHighBitrateCheck(const std::string& media_file, int sample_ms = 3000) {
 
     std::cout << "high-bitrate-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
 
+    std::cout << "high-bitrate-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "high-bitrate-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "high-bitrate-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "high-bitrate-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
+
     std::cout << "high-bitrate-check.timeline_serial=" << diag.timeline_serial << std::endl;
 
     std::cout << "high-bitrate-check.pending_seek_serial=" << diag.pending_seek_serial << std::endl;
@@ -7599,6 +7763,15 @@ bool runLongPlaybackCheck(const std::string& media_file, int sample_ms = 10000) 
               << (diag.video_only_fallback ? "true" : "false") << std::endl;
 
     std::cout << "long-playback-check.clock_source=" << clockSourceName(diag.clock_source) << std::endl;
+
+    std::cout << "long-playback-check.audio_device_open_attempted="
+              << (diag.audio_device_open_attempted ? "true" : "false") << std::endl;
+
+    std::cout << "long-playback-check.audio_init_latency_ms=" << diag.audio_init_latency_ms << std::endl;
+
+    std::cout << "long-playback-check.audio_init_strategy=" << diag.audio_init_strategy << std::endl;
+
+    std::cout << "long-playback-check.audio_init_detail=" << diag.audio_init_detail << std::endl;
 
     std::cout << "long-playback-check.timeline_serial=" << diag.timeline_serial << std::endl;
 
@@ -9161,6 +9334,72 @@ bool runOpenGLDiagnostics() {
 #endif
 }
 
+bool runOpenGLOutputColorCheck(const std::string& media_file,
+                               const std::string& lut_file,
+                               int sample_ms = 1200) {
+    ScopedEnvOverride force_opengl("MVP_RENDERER_BACKEND", "opengl");
+    ScopedEnvOverride force_lut("MVP_OPENGL_3DLUT_FILE", lut_file);
+    ScopedEnvOverride force_hdr_mode("MVP_OPENGL_HDR_OUTPUT_MODE", "auto");
+
+    VideoPlayer player;
+    const bool open_ok = player.open(media_file);
+    bool entered_playback_loop = false;
+    std::string renderer_backend = "None";
+    core::DiagnosticsSnapshot diag{};
+    auto pump_for = [](VideoPlayer& player, std::chrono::milliseconds duration) {
+        bool entered = false;
+        const auto deadline = std::chrono::steady_clock::now() + duration;
+        while (std::chrono::steady_clock::now() < deadline &&
+               (player.isPlaying() || player.isPaused())) {
+            entered = true;
+            player.pumpEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return entered;
+    };
+    if (open_ok) {
+        player.play();
+        entered_playback_loop = pump_for(player, std::chrono::milliseconds(sample_ms));
+        diag = player.getDiagnosticsSnapshot();
+        renderer_backend = player.videoRendererBackendName();
+        player.stop();
+        player.close();
+    }
+
+    const bool pass = open_ok &&
+                      entered_playback_loop &&
+                      diag.render_frames > 0 &&
+                      diag.renderer_opengl_output_lut_configured;
+
+    std::cout << "opengl-output-color-check.path=" << media_file << std::endl;
+    std::cout << "opengl-output-color-check.lut_file=" << lut_file << std::endl;
+    std::cout << "opengl-output-color-check.sample_ms=" << sample_ms << std::endl;
+    std::cout << "opengl-output-color-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "opengl-output-color-check.entered_playback_loop=" << (entered_playback_loop ? "true" : "false")
+              << std::endl;
+    std::cout << "opengl-output-color-check.renderer_backend=" << renderer_backend << std::endl;
+    std::cout << "opengl-output-color-check.hdr_bridge_requested="
+              << (diag.renderer_opengl_hdr_bridge_requested ? "true" : "false") << std::endl;
+    std::cout << "opengl-output-color-check.hdr_bridge_active="
+              << (diag.renderer_opengl_hdr_bridge_active ? "true" : "false") << std::endl;
+    std::cout << "opengl-output-color-check.hdr_bridge_mode="
+              << diag.renderer_opengl_hdr_bridge_mode << std::endl;
+    std::cout << "opengl-output-color-check.hdr_bridge_decision="
+              << diag.renderer_opengl_hdr_bridge_decision << std::endl;
+    std::cout << "opengl-output-color-check.output_lut_configured="
+              << (diag.renderer_opengl_output_lut_configured ? "true" : "false") << std::endl;
+    std::cout << "opengl-output-color-check.output_lut_active="
+              << (diag.renderer_opengl_output_lut_active ? "true" : "false") << std::endl;
+    std::cout << "opengl-output-color-check.output_lut_size="
+              << diag.renderer_opengl_output_lut_size << std::endl;
+    std::cout << "opengl-output-color-check.output_lut_path="
+              << diag.renderer_opengl_output_lut_path << std::endl;
+    std::cout << "opengl-output-color-check.output_lut_error="
+              << diag.renderer_opengl_output_lut_error << std::endl;
+    std::cout << "opengl-output-color-check.result=" << (pass ? "PASS" : "FAIL") << std::endl;
+    return pass;
+}
+
 bool runAttachmentFontCheck(const std::string& media_file) {
     Demuxer demuxer;
     const bool open_ok = demuxer.open(media_file);
@@ -9196,6 +9435,72 @@ bool runAttachmentFontCheck(const std::string& media_file) {
     return result;
 }
 
+bool runDirectWriteFontCollectionCheck(const std::string& media_file) {
+#if defined(_WIN32)
+    Demuxer demuxer;
+    const bool open_ok = demuxer.open(media_file);
+    const AVFormatContext* format_ctx = open_ok ? demuxer.getFormatContext() : nullptr;
+    const subtitle::SubtitleFontRegistrationSummary sidecar_summary =
+        subtitle::ensureSubtitleFontsRegistered(media_file);
+    const subtitle::SubtitleFontRegistrationSummary attachment_summary =
+        subtitle::ensureMediaAttachmentFontsRegistered(media_file, format_ctx);
+
+    Microsoft::WRL::ComPtr<IDWriteFactory> dwrite_factory;
+    const HRESULT factory_hr = DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,
+                                                   __uuidof(IDWriteFactory),
+                                                   reinterpret_cast<IUnknown**>(dwrite_factory.GetAddressOf()));
+    const bool factory_ok = SUCCEEDED(factory_hr) && dwrite_factory != nullptr;
+
+    Microsoft::WRL::ComPtr<IDWriteFontCollection> custom_collection;
+    subtitle::SubtitleDirectWriteCollectionSummary collection_summary{};
+    if (factory_ok) {
+        collection_summary = subtitle::buildDirectWriteSubtitleFontCollection(
+            dwrite_factory.Get(),
+            custom_collection.GetAddressOf());
+    } else {
+        collection_summary.attempted = true;
+        collection_summary.error = "DWriteCreateFactory failed";
+    }
+
+    const bool has_registered_fonts =
+        collection_summary.registered_font_file_count > 0 ||
+        sidecar_summary.registered_file_count > 0 ||
+        attachment_summary.registered_file_count > 0;
+    const bool pass = open_ok &&
+                      factory_ok &&
+                      (!has_registered_fonts || collection_summary.collection_created);
+
+    std::cout << "directwrite-font-collection-check.path=" << media_file << std::endl;
+    std::cout << "directwrite-font-collection-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "directwrite-font-collection-check.factory_ok=" << (factory_ok ? "true" : "false") << std::endl;
+    std::cout << "directwrite-font-collection-check.factory_hr=" << static_cast<long>(factory_hr) << std::endl;
+    std::cout << "directwrite-font-collection-check.sidecar_registered_file_count="
+              << sidecar_summary.registered_file_count << std::endl;
+    std::cout << "directwrite-font-collection-check.attachment_registered_file_count="
+              << attachment_summary.registered_file_count << std::endl;
+    std::cout << "directwrite-font-collection-check.registered_font_file_count="
+              << collection_summary.registered_font_file_count << std::endl;
+    std::cout << "directwrite-font-collection-check.added_font_file_count="
+              << collection_summary.added_font_file_count << std::endl;
+    std::cout << "directwrite-font-collection-check.factory3_available="
+              << (collection_summary.factory3_available ? "true" : "false") << std::endl;
+    std::cout << "directwrite-font-collection-check.collection_created="
+              << (collection_summary.collection_created ? "true" : "false") << std::endl;
+    std::cout << "directwrite-font-collection-check.error="
+              << (collection_summary.error.empty() ? "none" : collection_summary.error) << std::endl;
+    std::cout << "directwrite-font-collection-check.result=" << (pass ? "PASS" : "FAIL") << std::endl;
+
+    subtitle::releaseMediaAttachmentFonts(media_file);
+    demuxer.close();
+    return pass;
+#else
+    (void)media_file;
+    std::cout << "directwrite-font-collection-check.supported_platform=false" << std::endl;
+    std::cout << "directwrite-font-collection-check.result=FAIL" << std::endl;
+    return false;
+#endif
+}
+
 bool runEmbeddedSubtitleCheck(const std::string& media_file) {
     const subtitle::EmbeddedSubtitleLoadResult result = subtitle::loadBestEmbeddedSubtitleTrack(media_file);
     const bool pass = result.loaded && !result.items.empty();
@@ -9219,8 +9524,112 @@ bool runEmbeddedSubtitleCheck(const std::string& media_file) {
     std::cout << "embedded-subtitle-check.source_label="
               << (result.source_label.empty() ? "none" : result.source_label) << std::endl;
     std::cout << "embedded-subtitle-check.item_count=" << result.items.size() << std::endl;
+    std::cout << "embedded-subtitle-check.bitmap_codec="
+              << (result.bitmap_codec ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-check.bitmap_item_count=" << result.bitmap_item_count << std::endl;
     std::cout << "embedded-subtitle-check.first_text=" << first_text << std::endl;
     std::cout << "embedded-subtitle-check.result=" << (pass ? "PASS" : "FAIL") << std::endl;
+    return pass;
+}
+
+bool runEmbeddedSubtitleListCheck(const std::string& media_file) {
+    Demuxer demuxer;
+    const bool open_ok = demuxer.open(media_file);
+    const std::vector<subtitle::EmbeddedSubtitleTrackInfo> tracks =
+        open_ok ? subtitle::listEmbeddedSubtitleTracks(media_file) : std::vector<subtitle::EmbeddedSubtitleTrackInfo>{};
+    const int best_stream_index = subtitle::selectBestEmbeddedSubtitleStream(tracks);
+    const size_t supported_track_count = static_cast<size_t>(std::count_if(
+        tracks.begin(), tracks.end(), [](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+            return track.supported_codec;
+        }));
+    const size_t supported_text_track_count = static_cast<size_t>(std::count_if(
+        tracks.begin(), tracks.end(), [](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+            return track.supported_text_codec;
+        }));
+    const size_t supported_bitmap_track_count = static_cast<size_t>(std::count_if(
+        tracks.begin(), tracks.end(), [](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+            return track.supported_bitmap_codec;
+        }));
+
+    std::cout << "embedded-subtitle-list.path=" << media_file << std::endl;
+    std::cout << "embedded-subtitle-list.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-list.track_count=" << tracks.size() << std::endl;
+    std::cout << "embedded-subtitle-list.supported_track_count=" << supported_track_count << std::endl;
+    std::cout << "embedded-subtitle-list.supported_text_track_count=" << supported_text_track_count << std::endl;
+    std::cout << "embedded-subtitle-list.supported_bitmap_track_count=" << supported_bitmap_track_count << std::endl;
+    std::cout << "embedded-subtitle-list.best_stream_index=" << best_stream_index << std::endl;
+    for (size_t i = 0; i < tracks.size(); ++i) {
+        const subtitle::EmbeddedSubtitleTrackInfo& track = tracks[i];
+        const std::string prefix = "embedded-subtitle-list.track" + std::to_string(i);
+        std::cout << prefix << ".stream_index=" << track.stream_index << std::endl;
+        std::cout << prefix << ".codec_name="
+                  << (track.codec_name.empty() ? "unknown" : track.codec_name) << std::endl;
+        std::cout << prefix << ".language="
+                  << (track.language.empty() ? "und" : track.language) << std::endl;
+        std::cout << prefix << ".title="
+                  << (track.title.empty() ? "none" : track.title) << std::endl;
+        std::cout << prefix << ".supported="
+                  << (track.supported_codec ? "true" : "false") << std::endl;
+        std::cout << prefix << ".supported_text="
+                  << (track.supported_text_codec ? "true" : "false") << std::endl;
+        std::cout << prefix << ".supported_bitmap="
+                  << (track.supported_bitmap_codec ? "true" : "false") << std::endl;
+        std::cout << prefix << ".is_default="
+                  << (track.is_default ? "true" : "false") << std::endl;
+        std::cout << prefix << ".is_forced="
+                  << (track.is_forced ? "true" : "false") << std::endl;
+        std::cout << prefix << ".is_hearing_impaired="
+                  << (track.is_hearing_impaired ? "true" : "false") << std::endl;
+    }
+
+    const bool pass = open_ok;
+    std::cout << "embedded-subtitle-list.result=" << (pass ? "PASS" : "FAIL") << std::endl;
+    demuxer.close();
+    return pass;
+}
+
+bool runEmbeddedSubtitleSelectCheck(const std::string& media_file, int stream_index) {
+    const std::vector<subtitle::EmbeddedSubtitleTrackInfo> tracks = subtitle::listEmbeddedSubtitleTracks(media_file);
+    auto selected_track_it = std::find_if(
+        tracks.begin(),
+        tracks.end(),
+        [stream_index](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+            return track.stream_index == stream_index;
+        });
+
+    const bool stream_listed = selected_track_it != tracks.end();
+    const bool stream_supported = stream_listed && selected_track_it->supported_codec;
+    const subtitle::EmbeddedSubtitleLoadResult result =
+        subtitle::loadEmbeddedSubtitleTrack(media_file, stream_index);
+    const bool pass = stream_listed && stream_supported &&
+                      result.loaded && !result.items.empty() &&
+                      result.stream_index == stream_index;
+
+    std::string first_text = result.items.empty() ? std::string("none") : result.items.front().text;
+    std::replace(first_text.begin(), first_text.end(), '\r', ' ');
+    std::replace(first_text.begin(), first_text.end(), '\n', ' ');
+
+    std::cout << "embedded-subtitle-select-check.path=" << media_file << std::endl;
+    std::cout << "embedded-subtitle-select-check.requested_stream_index=" << stream_index << std::endl;
+    std::cout << "embedded-subtitle-select-check.track_count=" << tracks.size() << std::endl;
+    std::cout << "embedded-subtitle-select-check.stream_listed="
+              << (stream_listed ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-select-check.stream_supported="
+              << (stream_supported ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-select-check.loaded=" << (result.loaded ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-select-check.stream_index=" << result.stream_index << std::endl;
+    std::cout << "embedded-subtitle-select-check.codec_name="
+              << (result.codec_name.empty() ? "unknown" : result.codec_name) << std::endl;
+    std::cout << "embedded-subtitle-select-check.language="
+              << (result.language.empty() ? "und" : result.language) << std::endl;
+    std::cout << "embedded-subtitle-select-check.title="
+              << (result.title.empty() ? "none" : result.title) << std::endl;
+    std::cout << "embedded-subtitle-select-check.item_count=" << result.items.size() << std::endl;
+    std::cout << "embedded-subtitle-select-check.bitmap_codec="
+              << (result.bitmap_codec ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-select-check.bitmap_item_count=" << result.bitmap_item_count << std::endl;
+    std::cout << "embedded-subtitle-select-check.first_text=" << first_text << std::endl;
+    std::cout << "embedded-subtitle-select-check.result=" << (pass ? "PASS" : "FAIL") << std::endl;
     return pass;
 }
 
@@ -9263,6 +9672,9 @@ void printUsage(const char* program_name) {
     std::cout << "Usage: " << program_name << " [video_file] [more_video_files...]" << std::endl;
 
     std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.(srt|ass|ssa)>" << std::endl;
+    std::cout << "       " << program_name << " [media_files...] --subtitle-track <stream_index>" << std::endl;
+    std::cout << "       " << program_name << " [media_files...] --opengl-hdr-output-mode <auto|off|force>" << std::endl;
+    std::cout << "       " << program_name << " [media_files...] --opengl-3dlut <cube_lut_file>" << std::endl;
 
     std::cout << "       " << program_name << " <playlist.m3u8>" << std::endl;
 
@@ -9277,8 +9689,11 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --subtitle-style-check <subtitle.(srt|ass|ssa)>" << std::endl;
 
     std::cout << "       " << program_name << " --embedded-subtitle-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --embedded-subtitle-list <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --embedded-subtitle-select-check <media_file> <stream_index>" << std::endl;
 
     std::cout << "       " << program_name << " --attachment-font-check <media_file>" << std::endl;
+    std::cout << "       " << program_name << " --directwrite-font-collection-check <media_file>" << std::endl;
 
     std::cout << "       " << program_name << " --playlist-flow-check <media1> <media2> <media3> <media4> <media5> [more...]" << std::endl;
 
@@ -9312,6 +9727,7 @@ void printUsage(const char* program_name) {
 
     std::cout << "       " << program_name << " --d3d11-diagnostics" << std::endl;
     std::cout << "       " << program_name << " --opengl-diagnostics" << std::endl;
+    std::cout << "       " << program_name << " --opengl-output-color-check <media_file> <cube_lut_file> [sample_ms]" << std::endl;
 
     std::cout << "       " << program_name << " --version" << std::endl;
 
@@ -9583,6 +9999,43 @@ int main(int argc, char* argv[]) {
 
     }
 
+    if (argc >= 2 && std::string(argv[1]) == "--embedded-subtitle-list") {
+
+        if (argc != 3) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runEmbeddedSubtitleListCheck(argv[2]) ? 0 : 2;
+
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--embedded-subtitle-select-check") {
+
+        if (argc != 4) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        int stream_index = -1;
+        if (!tryParseInt(argv[3], stream_index)) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runEmbeddedSubtitleSelectCheck(argv[2], stream_index) ? 0 : 2;
+
+    }
+
     if (argc >= 2 && std::string(argv[1]) == "--attachment-font-check") {
 
         if (argc != 3) {
@@ -9594,6 +10047,20 @@ int main(int argc, char* argv[]) {
         }
 
         return runAttachmentFontCheck(argv[2]) ? 0 : 2;
+
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--directwrite-font-collection-check") {
+
+        if (argc != 3) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runDirectWriteFontCollectionCheck(argv[2]) ? 0 : 2;
 
     }
 
@@ -9941,6 +10408,29 @@ int main(int argc, char* argv[]) {
         }
 
         return runOpenGLDiagnostics() ? 0 : 2;
+
+    }
+    if (argc >= 2 && std::string(argv[1]) == "--opengl-output-color-check") {
+
+        if (argc != 4 && argc != 5) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        int sample_ms = 1200;
+
+        if (argc == 5 && !tryParseInt(argv[4], sample_ms)) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runOpenGLOutputColorCheck(argv[2], argv[3], sample_ms) ? 0 : 2;
 
     }
     if (argc >= 2 && std::string(argv[1]) == "--performance-log-check") {
@@ -10295,6 +10785,18 @@ int main(int argc, char* argv[]) {
 
     }
 
+    std::optional<ScopedEnvOverride> opengl_hdr_output_mode_override;
+    if (cli_args.has_opengl_hdr_output_mode) {
+        opengl_hdr_output_mode_override.emplace("MVP_OPENGL_HDR_OUTPUT_MODE", cli_args.opengl_hdr_output_mode);
+        Logger::info("OpenGL HDR output mode from CLI: " + cli_args.opengl_hdr_output_mode);
+    }
+
+    std::optional<ScopedEnvOverride> opengl_3dlut_override;
+    if (!cli_args.opengl_3dlut_file.empty()) {
+        opengl_3dlut_override.emplace("MVP_OPENGL_3DLUT_FILE", cli_args.opengl_3dlut_file);
+        Logger::info("OpenGL 3D LUT from CLI: " + cli_args.opengl_3dlut_file);
+    }
+
 
 
     g_player = std::make_unique<VideoPlayer>();
@@ -10310,6 +10812,12 @@ int main(int argc, char* argv[]) {
     g_player->setPreferHardwareDecode(app_settings.prefer_hardware_decode);
 
     g_player->setHotkeyManager(app_settings.hotkey_manager);
+
+    if (cli_args.has_preferred_embedded_subtitle_stream_index) {
+        g_player->setPreferredEmbeddedSubtitleStreamIndex(cli_args.preferred_embedded_subtitle_stream_index);
+        Logger::info("Preferred embedded subtitle stream index from CLI: " +
+                     std::to_string(cli_args.preferred_embedded_subtitle_stream_index));
+    }
 
 
 

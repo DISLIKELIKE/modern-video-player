@@ -81,6 +81,8 @@ public:
     bool consumeScreenshotRequest() override;
     bool consumeStepFrameBackwardRequest() override;
     bool consumeStepFrameForwardRequest() override;
+    bool consumePreviousSubtitleTrackRequest() override;
+    bool consumeNextSubtitleTrackRequest() override;
     bool consumeSubtitleDelayChangeRequest(double& delta_seconds) override;
     bool consumeAudioDelayChangeRequest(double& delta_seconds) override;
     bool consumeNextChapterRequest() override;
@@ -92,6 +94,7 @@ public:
     void setSubtitleClock(double subtitle_time_seconds) override;
     void setSubtitleText(const std::string& text) override;
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) override;
+    void setSubtitleTrackState(int current_ordinal, int track_count) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
     RendererDiagnostics getDiagnostics() const override;
     void resetDiagnostics() override;

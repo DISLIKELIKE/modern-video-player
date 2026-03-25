@@ -163,6 +163,17 @@ struct SubtitleTextRun {
 bool operator==(const SubtitleTextRun& lhs, const SubtitleTextRun& rhs);
 bool operator!=(const SubtitleTextRun& lhs, const SubtitleTextRun& rhs);
 
+struct SubtitleBitmap {
+    int x{0};
+    int y{0};
+    int width{0};
+    int height{0};
+    std::vector<uint8_t> rgba;
+};
+
+bool operator==(const SubtitleBitmap& lhs, const SubtitleBitmap& rhs);
+bool operator!=(const SubtitleBitmap& lhs, const SubtitleBitmap& rhs);
+
 struct SubtitleItem {
     int index{0};
     int layer{0};
@@ -178,6 +189,8 @@ struct SubtitleItem {
     bool is_vector_drawing{false};
     int drawing_scale{1};
     std::string drawing_commands;
+    bool is_bitmap{false};
+    SubtitleBitmap bitmap;
     std::vector<SubtitleTextRun> runs;
 };
 

@@ -9,6 +9,7 @@
 #endif
 
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -17,12 +18,20 @@
 
 namespace vp {
 
+struct AudioInitReport {
+    bool initialized{false};
+    bool device_open_attempted{false};
+    std::uint64_t elapsed_ms{0};
+    std::string strategy{"not-run"};
+    std::string detail;
+};
+
 class AudioPlayer {
 public:
     AudioPlayer();
     ~AudioPlayer();
 
-    bool init(int sample_rate, int channels);
+    AudioInitReport init(int sample_rate, int channels);
     void close();
 
     void play(const std::vector<uint8_t>& data, double pts = -1.0);
@@ -43,6 +52,7 @@ public:
     SDL_AudioFormat outputFormat() const { return audio_spec_.format; }
     int outputBytesPerSample() const;
     bool isInitialized() const { return initialized_; }
+    const AudioInitReport& lastInitReport() const { return last_init_report_; }
 
 private:
     struct AudioChunk {
@@ -68,6 +78,7 @@ private:
     std::atomic<size_t> queued_bytes_{0};
 
     bool initialized_{false};
+    AudioInitReport last_init_report_{};
 };
 
 }  // namespace vp

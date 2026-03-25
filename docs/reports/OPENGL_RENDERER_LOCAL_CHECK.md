@@ -405,6 +405,180 @@ powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -Executab
 - OpenGL gate: `OpenGL gate result: PASS`
 
 ### Notes
-- Embedded subtitle auto-load currently targets supported text subtitle codecs and reuses the same subtitle timeline model as external subtitles.
+- Embedded subtitle auto-load now targets supported embedded subtitle codecs (text + bitmap) and reuses the same subtitle timeline model as external subtitles.
 - `PlayerCore` now keeps separate embedded/external subtitle stores with `external > embedded` precedence, so clearing a sidecar subtitle falls back to the embedded track.
 - The OpenGL gate now covers 16 checks, including embedded ASS and embedded `mov_text` playback.
+## 2026-03-25 OpenGL 启动期冻结回归
+
+### 命令
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build build --config Release
+
+$env:MVP_RENDERER_BACKEND='opengl'
+$env:MVP_OPENGL_3DLUT_FILE='.\samples\lut\identity_2.cube'
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+Remove-Item Env:MVP_RENDERER_BACKEND
+
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath 'build/Release/modern-video-player.exe' -ProbeFile 'juren-30s.mp4'
+```
+
+### 结果
+- Release build：PASS
+- OpenGL `--performance-log-check`：
+  - `audio_output_initialized=false`
+  - `video_only_fallback=true`
+  - `clock_source=Video`
+  - `audio_device_open_attempted=false`
+  - `audio_init_latency_ms=0`
+  - `audio_init_strategy=skip-no-default-render-endpoint`
+  - `audio_init_detail=skipped SDL_OpenAudioDevice: no default or active render endpoint for WASAPI`
+  - `result=PASS`
+- `--opengl-diagnostics`：
+  - `probe_succeeded=true`
+  - `native_interop.allowed=true`
+  - `result=PASS`
+- `tools/run_opengl_checks.ps1`：
+  - `OpenGL gate result: PASS`
+  - `16/16 PASS`
+
+### 结论
+- 这次“OpenGL 播放卡死”已经确认不是 OpenGL render/present 死锁。
+- 根因是默认 `WASAPI` 输出端点缺失时，主线程同步打开默认音频设备会阻塞数秒。
+- 修复后播放器会在启动期直接识别 “无默认或 active render endpoint”，立刻跳过 `SDL_OpenAudioDevice` 并进入 `video-only fallback`，不再出现 8 秒空窗。
+## 2026-03-25 Embedded subtitle track selection UI + CLI regression
+
+### Commands
+```powershell
+cmd /c "call ""C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat"" -arch=x64 && msbuild build\modern-video-player.sln /m /p:Configuration=Release /p:Platform=x64"
+
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-text-validation.mp4
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-ass-validation.mkv 2
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-text-validation.mp4 2
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-text-validation.mp4
+
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+```
+
+### Results
+- Release build: PASS
+- `embedded-subtitle-list`:
+  - ASS sample: `track_count=1`, `supported_track_count=1`, `best_stream_index=2`, `result=PASS`
+  - MOV_TEXT sample: `track_count=1`, `supported_track_count=1`, `best_stream_index=2`, `result=PASS`
+- `embedded-subtitle-select-check`:
+  - ASS sample stream `2`: `loaded=true`, `item_count=3`, `result=PASS`
+  - MOV_TEXT sample stream `2`: `loaded=true`, `item_count=2`, `result=PASS`
+- `embedded-subtitle-check`:
+  - ASS sample: `result=PASS`
+  - MOV_TEXT sample: `result=PASS`
+- OpenGL gate: `OpenGL gate result: PASS` (`16/16 PASS`)
+
+### Notes
+- OpenGL bottom bar now includes subtitle track previous/next controls and displays `current / total` selectable embedded track state.
+- Subtitle track state shown in OpenGL is based on supported subtitle tracks (`supported_codec`), not raw subtitle stream count.
+- Playback CLI now accepts `--subtitle-track <stream_index>` to set preferred embedded subtitle stream selection before media open.
+
+## 2026-03-25 Embedded bitmap subtitle + DirectWrite collection regression
+
+### Commands
+```powershell
+MSBuild.exe build/modern-video-player.sln /m /p:Configuration=Release /p:Platform=x64
+
+.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-list .\build\tmp\embedded-ass-validation.mkv
+.\build\Release\modern-video-player.exe --embedded-subtitle-select-check .\build\tmp\embedded-ass-validation.mkv 2
+.\build\Release\modern-video-player.exe --directwrite-font-collection-check .\build\tmp\embedded-ass-validation.mkv
+
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+```
+
+### Results
+- Release build: PASS
+- `embedded-subtitle-check`:
+  - `bitmap_codec=false` (ASS sample)
+  - `bitmap_item_count=0`
+  - `result=PASS`
+- `embedded-subtitle-list`:
+  - `supported_track_count=1`
+  - `supported_text_track_count=1`
+  - `supported_bitmap_track_count=0` (ASS sample)
+  - `result=PASS`
+- `embedded-subtitle-select-check`:
+  - `stream_supported=true`
+  - `bitmap_codec=false` (ASS sample)
+  - `result=PASS`
+- `directwrite-font-collection-check`:
+  - `factory_ok=true`
+  - `factory3_available=true`
+  - `result=PASS`
+- OpenGL gate: `OpenGL gate result: PASS` (`16/16 PASS`)
+
+### Notes
+- Renderer and core policy now consistently use `supported_codec` for selectable embedded subtitle tracks.
+- Bitmap subtitle render branches are wired in OpenGL and D3D11, but this round still lacks a broader real-media PGS/DVD sample matrix.
+- Display-level HDR bridge and ICC/LUT output management remain outside this regression batch.
+
+## 2026-03-25 OpenGL HDR output policy + 3D LUT regression
+
+### Commands
+```powershell
+cmake --build build --config Release --target modern-video-player
+
+.\build\Release\modern-video-player.exe --opengl-output-color-check .\juren-30s.mp4 .\samples\lut\identity_2.cube 1200
+
+$env:MVP_RENDERER_BACKEND='opengl'
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+```
+
+### Results
+- Release build: PASS
+- `opengl-output-color-check`:
+  - `hdr_bridge_mode=auto`
+  - `output_lut_configured=true`
+  - `output_lut_active=true`
+  - `result=PASS`
+- OpenGL `performance-log-check`:
+  - `renderer_opengl_hdr_bridge_mode=auto`
+  - `renderer_opengl_output_lut_configured=true`
+  - `renderer_opengl_output_lut_active=true`
+  - `result=PASS`
+- OpenGL gate: `OpenGL gate result: PASS` (`16/16 PASS`)
+
+### Notes
+- This round closes the output-color control-plane baseline: runtime HDR output policy + `.cube` LUT loading + machine-readable diagnostics.
+- The implementation is intentionally not a full display-HDR present path yet.
+- Remaining backlog:
+  - full DXGI display-level HDR present bridge (`SetColorSpace1` / `SetHDRMetaData`)
+  - ICC/profile-driven LUT generation and dynamic per-display policy
+
+## 2026-03-25 OpenGL interaction freeze regression (event-thread affinity fix)
+
+### Commands
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build build --config Release --target modern-video-player
+
+$env:MVP_RENDERER_BACKEND='opengl'
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+
+powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"
+```
+
+### Results
+- Release build: PASS
+- OpenGL `performance-log-check`: `result=PASS`
+- OpenGL gate: `OpenGL gate result: PASS` (`16/16 PASS`)
+
+### Notes
+- OpenGL SDL event pumping is now on the main-thread `handleEvents()` path; render thread no longer pumps SDL events.
+- Fullscreen window transition is also handled from the same main-thread event path.
+- This closes the code-level thread-affinity mismatch behind user-reported interaction-triggered freezes.
+- Manual GUI stress is still required for final confidence:
+  - continuous mouse move and click on control bar
+  - seek/volume drag
+  - hotkeys (`Space`, arrows, `Enter`)
+  - maximize/minimize/restore/fullscreen round-trip

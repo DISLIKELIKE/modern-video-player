@@ -37,6 +37,15 @@ struct RendererDiagnostics {
     uint64_t opengl_present_wait_timeouts{0};
     std::string opengl_present_mode_requested{"auto"};
     std::string opengl_present_mode_active{"unknown"};
+    bool opengl_hdr_bridge_requested{false};
+    bool opengl_hdr_bridge_active{false};
+    std::string opengl_hdr_bridge_mode{"auto"};
+    std::string opengl_hdr_bridge_decision{"not-evaluated"};
+    bool opengl_output_lut_configured{false};
+    bool opengl_output_lut_active{false};
+    int opengl_output_lut_size{0};
+    std::string opengl_output_lut_path;
+    std::string opengl_output_lut_error;
 };
 
 class IVideoRenderer {
@@ -66,6 +75,8 @@ public:
     virtual bool consumeScreenshotRequest() = 0;
     virtual bool consumeStepFrameBackwardRequest() = 0;
     virtual bool consumeStepFrameForwardRequest() = 0;
+    virtual bool consumePreviousSubtitleTrackRequest() = 0;
+    virtual bool consumeNextSubtitleTrackRequest() = 0;
     virtual bool consumeSubtitleDelayChangeRequest(double& delta_seconds) = 0;
     virtual bool consumeAudioDelayChangeRequest(double& delta_seconds) = 0;
     virtual bool consumeNextChapterRequest() = 0;
@@ -81,6 +92,10 @@ public:
     virtual void setSubtitleText(const std::string& text) = 0;
     virtual void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) {
         setSubtitleText(subtitle::flattenSubtitleText(items));
+    }
+    virtual void setSubtitleTrackState(int current_ordinal, int track_count) {
+        (void)current_ordinal;
+        (void)track_count;
     }
     virtual void setHotkeyManager(const input::HotkeyManager& hotkey_manager) = 0;
 

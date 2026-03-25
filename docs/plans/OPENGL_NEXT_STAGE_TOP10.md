@@ -45,8 +45,15 @@
 - Completed: ASS `\t(...)` transform transition parsing, diagnostics, runtime interpolation, and OpenGL gate coverage.
 - Completed: container attachment font extraction, private registration, and cleanup diagnostics.
 - Completed: embedded text subtitle-track playback with `external > embedded` ownership, `--embedded-subtitle-check`, and OpenGL gate coverage.
+- Completed: embedded subtitle track selection baseline (`PlayerCore` multi-track catalog + OpenGL prev/next track UI + `--subtitle-track` / `--embedded-subtitle-list` / `--embedded-subtitle-select-check`).
+- Completed: OpenGL output-color baseline (`MVP_OPENGL_HDR_OUTPUT_MODE` + `MVP_OPENGL_3DLUT_FILE`, output diagnostics fields, and `--opengl-output-color-check`).
+- Completed: OpenGL interaction freeze stabilization by moving SDL event pumping/window fullscreen transition onto main-thread `handleEvents()` path.
 - Remaining subtitle long-tail after this follow-up:
   - fuller libass shaping/layout parity
-  - subtitle track selection UI and broader multi-track policy control
-  - bitmap subtitle formats and live subtitle packet paths
+  - broader multi-track policy control (default-language preference, forced/SDH policy, persistence strategy)
+  - live subtitle packet paths
+  - bitmap subtitle renderer optimization (cache/reuse/upload policy and multi-rect composition tuning)
   - more advanced transform/effect semantics beyond the current transition field set
+- Remaining color/HDR long-tail after this follow-up:
+  - full display-level HDR present bridge (`DXGI swapchain + SetColorSpace1 + SetHDRMetaData`)
+  - ICC/profile-driven LUT generation and per-display LUT selection/update strategy

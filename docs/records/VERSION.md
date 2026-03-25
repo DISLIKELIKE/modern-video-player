@@ -3938,3 +3938,66 @@ make -j$(nproc)
 - Added in-memory `AssParser::parseText(...)` / `SrtParser::parseText(...)`, plus `--embedded-subtitle-check <media_file>`.
 - Expanded `tools/run_opengl_checks.ps1` to validate generated embedded ASS and embedded `mov_text` samples through both CLI checks and OpenGL playback.
 - Validation: Release build PASS, embedded ASS check PASS, embedded text check PASS, OpenGL gate PASS.
+### 2026-03-25 更新：OpenGL 启动卡死收敛到 WASAPI 默认端点阻塞
+- Windows 音频输出新增默认 render endpoint preflight：默认/`wasapi` 输出且没有默认或 active render endpoint 时，不再进入阻塞的 `SDL_OpenAudioDevice(nullptr, ...)`，直接沿用现有 `video-only fallback`。
+- `DiagnosticsSnapshot` 和播放类检查命令新增：
+  - `audio_device_open_attempted`
+  - `audio_init_latency_ms`
+  - `audio_init_strategy`
+  - `audio_init_detail`
+- OpenGL 修复后本机验证：
+  - `$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200`
+  - `audio_device_open_attempted=false`
+  - `audio_init_strategy=skip-no-default-render-endpoint`
+  - `result=PASS`
+- `tools/run_opengl_checks.ps1`：`16/16 PASS`
+### 2026-03-25 Update: Embedded subtitle multi-track selection UI + CLI
+- Added OpenGL subtitle-track controls in bottom bar (previous/next track + `current / total` state).
+- Added playback argument `--subtitle-track <stream_index>` to set preferred embedded subtitle stream before media open.
+- Added machine-readable diagnostics:
+  - `--embedded-subtitle-list <media_file>`
+  - `--embedded-subtitle-select-check <media_file> <stream_index>`
+- `PlayerCore` subtitle track overlay state now counts selectable supported subtitle tracks (`supported_codec`), not raw stream count.
+- Validation: Release build PASS, embedded subtitle list/select checks PASS, OpenGL gate PASS (`16/16`).
+
+### 2026-03-25 Update: Embedded bitmap subtitle path and DirectWrite custom font collection
+- Embedded subtitle selection and track-state policy now use `supported_codec` (text + bitmap), not text-only assumptions.
+- Added embedded bitmap subtitle decode support for `hdmv_pgs_subtitle` and `dvd_subtitle`, including subtitle bitmap model payload (`SubtitleBitmap`) and item-level bitmap fields.
+- Added bitmap subtitle rendering branches in OpenGL and D3D11 subtitle renderers via D2D bitmap composition.
+- Added DirectWrite custom subtitle font collection builder from registered private subtitle fonts and applied it in both OpenGL and D3D11 subtitle text paths before system fallback.
+- Added and extended diagnostics:
+  - `--directwrite-font-collection-check <media_file>`
+  - `embedded-subtitle-check.bitmap_codec` / `embedded-subtitle-check.bitmap_item_count`
+  - `embedded-subtitle-list.supported_bitmap_track_count`
+  - `embedded-subtitle-select-check.bitmap_codec` / `embedded-subtitle-select-check.bitmap_item_count`
+- Validation: Release build PASS, embedded subtitle check/list/select PASS, directwrite-font-collection-check PASS, OpenGL gate PASS (`16/16`).
+
+### 2026-03-25 Update: OpenGL HDR output policy + 3D LUT output baseline
+- Added OpenGL output policy controls:
+  - env `MVP_OPENGL_HDR_OUTPUT_MODE=auto|off|force`
+  - CLI `--opengl-hdr-output-mode <auto|off|force>`
+- Added OpenGL 3D LUT output controls:
+  - env `MVP_OPENGL_3DLUT_FILE=<cube_lut_file>`
+  - CLI `--opengl-3dlut <cube_lut_file>`
+- Added `.cube` parser + OpenGL 3D LUT upload/sampling in output-stage shading.
+- Extended diagnostics output:
+  - `renderer_opengl_hdr_bridge_requested/active/mode/decision`
+  - `renderer_opengl_output_lut_configured/active/size/path/error`
+- Added machine-readable regression command:
+  - `--opengl-output-color-check <media_file> <cube_lut_file> [sample_ms]`
+- Validation: Release build PASS, `opengl-output-color-check` PASS, OpenGL `performance-log-check` PASS, OpenGL gate PASS (`16/16`).
+- Scope note: this update closes HDR policy + LUT plumbing baseline; full DXGI display-level HDR present bridge and ICC/profile-driven LUT generation remain backlog.
+
+### 2026-03-25 Update: OpenGL interaction freeze fix (mouse/keyboard/window events)
+- Fixed OpenGL event-thread affinity risk by moving SDL event pumping from render thread to `handleEvents()` main-thread path.
+- OpenGL render thread no longer executes `pumpEvents()` and no longer performs window fullscreen transition directly.
+- Fullscreen toggle is now consumed and applied in the main-thread event handler after SDL event pumping.
+- This targets the user-reported freeze pattern where mouse move/click could lead to UI/hotkey/window-operation deadlock behavior.
+- Validation: Release build PASS, OpenGL `performance-log-check` PASS, OpenGL gate PASS (`16/16`).
+
+### 2026-03-25 Update: Cross-platform master execution tasklist
+- Added `docs/plans/CROSS_PLATFORM_MASTER_TASKLIST.md` as the single execution board for cross-platform delivery.
+- Consolidated phased tasks with IDs (`CP-xxx`), status (`DONE/NEXT/LATER`), milestone gates (`M1..M5`), and acceptance criteria.
+- Added corresponding analysis document `docs/analysis/PLAYERCORE_DAY46_CROSS_PLATFORM_MASTER_TASKLIST_CONSOLIDATION.md`.
+- Rebuilt `docs/plans/README.md` to expose the new master tasklist as default plans entry.
+- Validation: doc reference check PASS, local `Release` build PASS.

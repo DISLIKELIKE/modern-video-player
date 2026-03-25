@@ -5,10 +5,13 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <fstream>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -551,6 +554,7 @@ struct GlFunctions {
     PFNGLUNIFORM1IPROC Uniform1i{};
     PFNGLUNIFORM4FPROC Uniform4f{};
     PFNGLACTIVETEXTUREPROC ActiveTexture{};
+    PFNGLTEXIMAGE3DPROC TexImage3D{};
 };
 
 GlFunctions g_gl;
@@ -566,7 +570,7 @@ bool loadGlProc(T& target, const char* name) {
 }
 
 bool loadGlFunctions() {
-    return loadGlProc(g_gl.CreateShader, "glCreateShader") &&
+    const bool mandatory_loaded = loadGlProc(g_gl.CreateShader, "glCreateShader") &&
            loadGlProc(g_gl.ShaderSource, "glShaderSource") &&
            loadGlProc(g_gl.CompileShader, "glCompileShader") &&
            loadGlProc(g_gl.GetShaderiv, "glGetShaderiv") &&
@@ -583,6 +587,11 @@ bool loadGlFunctions() {
            loadGlProc(g_gl.Uniform1i, "glUniform1i") &&
            loadGlProc(g_gl.Uniform4f, "glUniform4f") &&
            loadGlProc(g_gl.ActiveTexture, "glActiveTexture");
+    if (!mandatory_loaded) {
+        return false;
+    }
+    g_gl.TexImage3D = reinterpret_cast<PFNGLTEXIMAGE3DPROC>(SDL_GL_GetProcAddress("glTexImage3D"));
+    return true;
 }
 
 GLuint compileShader(GLenum type, const char* source, const char* label) {
@@ -646,6 +655,7 @@ constexpr const char* kYuv420FragmentShaderSource = R"(#version 120
 uniform sampler2D texY;
 uniform sampler2D texU;
 uniform sampler2D texV;
+uniform sampler3D texLut3D;
 uniform vec4 coeffR;
 uniform vec4 coeffG;
 uniform vec4 coeffB;
@@ -687,9 +697,19 @@ vec3 bt2020ToBt709(vec3 value) {
                 -0.0728, -0.0083, 1.1187) * value;
 }
 
+vec3 applyLut(vec3 value) {
+    int lut_enabled = int(colorConfig0.w + 0.5);
+    vec3 clamped_value = clamp(value, 0.0, 1.0);
+    if (lut_enabled == 0) {
+        return clamped_value;
+    }
+    return clamp(texture3D(texLut3D, clamped_value).rgb, 0.0, 1.0);
+}
+
 vec3 postProcessRgb(vec3 encoded_rgb) {
     int transfer_mode = int(colorConfig0.x + 0.5);
     int gamut_mode = int(colorConfig0.y + 0.5);
+    int hdr_output_mode = int(colorConfig0.z + 0.5);
     vec3 working = max(encoded_rgb, vec3(0.0));
     bool linearized = false;
     if (transfer_mode == 1) {
@@ -698,6 +718,9 @@ vec3 postProcessRgb(vec3 encoded_rgb) {
     } else if (transfer_mode == 2) {
         working = decodeHlg(working) * (1000.0 / 203.0);
         linearized = true;
+    }
+    if (transfer_mode != 0 && hdr_output_mode == 1) {
+        return applyLut(clamp(max(encoded_rgb, vec3(0.0)), 0.0, 1.0));
     }
     if (gamut_mode == 1) {
         if (!linearized) {
@@ -714,9 +737,9 @@ vec3 postProcessRgb(vec3 encoded_rgb) {
         working = working / (vec3(1.0) + working);
     }
     if (linearized) {
-        return clamp(encodeGamma22(working), 0.0, 1.0);
+        return applyLut(clamp(encodeGamma22(working), 0.0, 1.0));
     }
-    return clamp(working, 0.0, 1.0);
+    return applyLut(clamp(working, 0.0, 1.0));
 }
 
 void main() {
@@ -732,6 +755,7 @@ void main() {
 constexpr const char* kNv12FragmentShaderSource = R"(#version 120
 uniform sampler2D texY;
 uniform sampler2D texUV;
+uniform sampler3D texLut3D;
 uniform vec4 coeffR;
 uniform vec4 coeffG;
 uniform vec4 coeffB;
@@ -773,9 +797,19 @@ vec3 bt2020ToBt709(vec3 value) {
                 -0.0728, -0.0083, 1.1187) * value;
 }
 
+vec3 applyLut(vec3 value) {
+    int lut_enabled = int(colorConfig0.w + 0.5);
+    vec3 clamped_value = clamp(value, 0.0, 1.0);
+    if (lut_enabled == 0) {
+        return clamped_value;
+    }
+    return clamp(texture3D(texLut3D, clamped_value).rgb, 0.0, 1.0);
+}
+
 vec3 postProcessRgb(vec3 encoded_rgb) {
     int transfer_mode = int(colorConfig0.x + 0.5);
     int gamut_mode = int(colorConfig0.y + 0.5);
+    int hdr_output_mode = int(colorConfig0.z + 0.5);
     vec3 working = max(encoded_rgb, vec3(0.0));
     bool linearized = false;
     if (transfer_mode == 1) {
@@ -784,6 +818,9 @@ vec3 postProcessRgb(vec3 encoded_rgb) {
     } else if (transfer_mode == 2) {
         working = decodeHlg(working) * (1000.0 / 203.0);
         linearized = true;
+    }
+    if (transfer_mode != 0 && hdr_output_mode == 1) {
+        return applyLut(clamp(max(encoded_rgb, vec3(0.0)), 0.0, 1.0));
     }
     if (gamut_mode == 1) {
         if (!linearized) {
@@ -800,9 +837,9 @@ vec3 postProcessRgb(vec3 encoded_rgb) {
         working = working / (vec3(1.0) + working);
     }
     if (linearized) {
-        return clamp(encodeGamma22(working), 0.0, 1.0);
+        return applyLut(clamp(encodeGamma22(working), 0.0, 1.0));
     }
-    return clamp(working, 0.0, 1.0);
+    return applyLut(clamp(working, 0.0, 1.0));
 }
 
 void main() {
@@ -811,6 +848,27 @@ void main() {
     vec4 yuv = vec4(y, uv_sample.r, uv_sample.a, 1.0);
     vec3 rgb = vec3(dot(yuv, coeffR), dot(yuv, coeffG), dot(yuv, coeffB));
     gl_FragColor = vec4(postProcessRgb(rgb), 1.0);
+}
+)";
+
+constexpr const char* kRgbFragmentShaderSource = R"(#version 120
+uniform sampler2D texRgb;
+uniform sampler3D texLut3D;
+uniform vec4 colorConfig0;
+varying vec2 v_texcoord;
+
+vec3 applyLut(vec3 value) {
+    int lut_enabled = int(colorConfig0.w + 0.5);
+    vec3 clamped_value = clamp(value, 0.0, 1.0);
+    if (lut_enabled == 0) {
+        return clamped_value;
+    }
+    return clamp(texture3D(texLut3D, clamped_value).rgb, 0.0, 1.0);
+}
+
+void main() {
+    vec3 rgb = texture2D(texRgb, v_texcoord).rgb;
+    gl_FragColor = vec4(applyLut(rgb), 1.0);
 }
 )";
 
@@ -826,7 +884,7 @@ struct ColorMatrixConstants {
     float color_config0[4];
 };
 
-ColorMatrixConstants buildNativeColorMatrix(const AVFrame* frame, bool high_bit_depth) {
+ColorMatrixConstants buildNativeColorMatrix(const AVFrame* frame, bool high_bit_depth, bool hdr_output_bridge_active) {
     const ColorPipelineConfig pipeline = buildColorPipelineConfig(frame ? frame->color_range : AVCOL_RANGE_UNSPECIFIED,
                                                                   frame ? frame->colorspace : AVCOL_SPC_UNSPECIFIED,
                                                                   frame ? frame->color_trc : AVCOL_TRC_UNSPECIFIED,
@@ -840,6 +898,7 @@ ColorMatrixConstants buildNativeColorMatrix(const AVFrame* frame, bool high_bit_
     std::copy(pipeline.coeffs.b.begin(), pipeline.coeffs.b.end(), constants.coeff_b);
     constants.color_config0[0] = pipeline.transfer_mode;
     constants.color_config0[1] = pipeline.gamut_mode;
+    constants.color_config0[2] = hdr_output_bridge_active ? 1.0f : 0.0f;
     return constants;
 }
 
@@ -1899,6 +1958,23 @@ enum class OpenGLPresentMode {
     Immediate,
 };
 
+enum class OpenGLHdrBridgeMode {
+    Auto,
+    Off,
+    Force,
+};
+
+enum class OpenGLHdrBridgeDecision {
+    NotEvaluated = 0,
+    FrameSdr,
+    DisabledByMode,
+    UnsupportedPlatform,
+    ProbeUnavailable,
+    DisplayHdrInactive,
+    ForceEnabled,
+    AutoEnabled,
+};
+
 struct OpenGLNativeInteropRule {
     const char* rule_name;
     const char* reason;
@@ -2052,6 +2128,60 @@ const char* openGLPresentModeName(OpenGLPresentMode value) {
     }
 }
 
+OpenGLHdrBridgeMode readOpenGLHdrBridgeMode() {
+    const auto value = readEnvVar("MVP_OPENGL_HDR_OUTPUT_MODE");
+    if (!value) {
+        return OpenGLHdrBridgeMode::Auto;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    if (normalized == "0" || normalized == "off" || normalized == "false" ||
+        normalized == "disable" || normalized == "disabled" || normalized == "sdr") {
+        return OpenGLHdrBridgeMode::Off;
+    }
+    if (normalized == "1" || normalized == "on" || normalized == "true" ||
+        normalized == "force" || normalized == "forced" || normalized == "hdr") {
+        return OpenGLHdrBridgeMode::Force;
+    }
+    return OpenGLHdrBridgeMode::Auto;
+}
+
+const char* openGLHdrBridgeModeName(OpenGLHdrBridgeMode value) {
+    switch (value) {
+    case OpenGLHdrBridgeMode::Off:
+        return "off";
+    case OpenGLHdrBridgeMode::Force:
+        return "force";
+    default:
+        return "auto";
+    }
+}
+
+const char* openGLHdrBridgeDecisionName(OpenGLHdrBridgeDecision value) {
+    switch (value) {
+    case OpenGLHdrBridgeDecision::FrameSdr:
+        return "frame-sdr";
+    case OpenGLHdrBridgeDecision::DisabledByMode:
+        return "disabled-by-mode";
+    case OpenGLHdrBridgeDecision::UnsupportedPlatform:
+        return "unsupported-platform";
+    case OpenGLHdrBridgeDecision::ProbeUnavailable:
+        return "probe-unavailable";
+    case OpenGLHdrBridgeDecision::DisplayHdrInactive:
+        return "display-hdr-inactive";
+    case OpenGLHdrBridgeDecision::ForceEnabled:
+        return "force-enabled";
+    case OpenGLHdrBridgeDecision::AutoEnabled:
+        return "auto-enabled";
+    default:
+        return "not-evaluated";
+    }
+}
+
+std::string readOpenGLOutputLutPath() {
+    const auto value = readEnvVar("MVP_OPENGL_3DLUT_FILE");
+    return value ? *value : std::string{};
+}
+
 std::string describeOpenGLSwapInterval(int interval) {
     switch (interval) {
     case 1:
@@ -2063,6 +2193,158 @@ std::string describeOpenGLSwapInterval(int interval) {
     default:
         return "interval(" + std::to_string(interval) + ")";
     }
+}
+
+std::string trimAscii(const std::string& text) {
+    size_t start = 0;
+    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+        ++start;
+    }
+    size_t end = text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+bool tryParseFloatToken(const std::string& token, float& out) {
+    if (token.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    const float value = std::strtof(token.c_str(), &end);
+    if (end == token.c_str() || (end && *end != '\0') || !std::isfinite(value)) {
+        return false;
+    }
+    out = value;
+    return true;
+}
+
+bool tryParseIntToken(const std::string& token, int& out) {
+    if (token.empty()) {
+        return false;
+    }
+    char* end = nullptr;
+    const long value = std::strtol(token.c_str(), &end, 10);
+    if (end == token.c_str() || (end && *end != '\0')) {
+        return false;
+    }
+    if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+        return false;
+    }
+    out = static_cast<int>(value);
+    return true;
+}
+
+struct CubeLut3DData {
+    int size{0};
+    std::vector<uint8_t> rgb8;
+};
+
+bool loadCubeLut3D(const std::string& path, CubeLut3DData& out, std::string& error) {
+    out = CubeLut3DData{};
+    std::ifstream input(path);
+    if (!input.is_open()) {
+        error = "failed to open file";
+        return false;
+    }
+
+    int lut_size = 0;
+    float domain_min[3] = {0.0f, 0.0f, 0.0f};
+    float domain_max[3] = {1.0f, 1.0f, 1.0f};
+    std::vector<float> values;
+    std::string line;
+    while (std::getline(input, line)) {
+        const size_t comment_pos = line.find('#');
+        const std::string no_comment = trimAscii(line.substr(0, comment_pos));
+        if (no_comment.empty()) {
+            continue;
+        }
+
+        std::istringstream iss(no_comment);
+        std::vector<std::string> tokens;
+        std::string token;
+        while (iss >> token) {
+            tokens.push_back(token);
+        }
+        if (tokens.empty()) {
+            continue;
+        }
+
+        const std::string directive = toLowerAscii(tokens[0]);
+        if (directive == "title") {
+            continue;
+        }
+        if (directive == "lut_3d_size") {
+            if (tokens.size() < 2 || !tryParseIntToken(tokens[1], lut_size) || lut_size < 2 || lut_size > 128) {
+                error = "invalid LUT_3D_SIZE";
+                return false;
+            }
+            continue;
+        }
+        if (directive == "domain_min" || directive == "domain_max") {
+            if (tokens.size() < 4) {
+                error = "invalid DOMAIN_* line";
+                return false;
+            }
+            float parsed[3] = {0.0f, 0.0f, 0.0f};
+            if (!tryParseFloatToken(tokens[1], parsed[0]) ||
+                !tryParseFloatToken(tokens[2], parsed[1]) ||
+                !tryParseFloatToken(tokens[3], parsed[2])) {
+                error = "invalid DOMAIN_* values";
+                return false;
+            }
+            float* target = directive == "domain_min" ? domain_min : domain_max;
+            target[0] = parsed[0];
+            target[1] = parsed[1];
+            target[2] = parsed[2];
+            continue;
+        }
+
+        if (tokens.size() < 3) {
+            error = "invalid LUT sample line";
+            return false;
+        }
+        float rgb[3] = {0.0f, 0.0f, 0.0f};
+        if (!tryParseFloatToken(tokens[0], rgb[0]) ||
+            !tryParseFloatToken(tokens[1], rgb[1]) ||
+            !tryParseFloatToken(tokens[2], rgb[2])) {
+            error = "invalid LUT sample values";
+            return false;
+        }
+        values.push_back(rgb[0]);
+        values.push_back(rgb[1]);
+        values.push_back(rgb[2]);
+    }
+
+    if (lut_size < 2) {
+        error = "LUT_3D_SIZE missing";
+        return false;
+    }
+
+    const size_t expected_samples = static_cast<size_t>(lut_size) * static_cast<size_t>(lut_size) *
+                                    static_cast<size_t>(lut_size);
+    if (values.size() / 3u != expected_samples) {
+        error = "LUT sample count does not match LUT_3D_SIZE";
+        return false;
+    }
+
+    out.size = lut_size;
+    out.rgb8.resize(expected_samples * 3u, 0u);
+    for (size_t sample_index = 0; sample_index < expected_samples; ++sample_index) {
+        for (int channel = 0; channel < 3; ++channel) {
+            const float min_value = domain_min[channel];
+            const float max_value = domain_max[channel];
+            const float denom = std::max(1e-6f, max_value - min_value);
+            const float normalized = std::clamp((values[sample_index * 3u + static_cast<size_t>(channel)] - min_value) / denom,
+                                                0.0f,
+                                                1.0f);
+            out.rgb8[sample_index * 3u + static_cast<size_t>(channel)] =
+                static_cast<uint8_t>(std::lround(normalized * 255.0f));
+        }
+    }
+    error.clear();
+    return true;
 }
 
 #if defined(_WIN32)
@@ -2637,7 +2919,7 @@ public:
     void renderFrame(const core::VideoFrame& frame);
     void present();
     void clear();
-    void handleEvents() {}
+    void handleEvents();
     bool shouldQuit() const { return should_quit_.load(); }
     bool consumeTogglePauseRequest();
     bool consumeSeekRequest(double& normalized_position);
@@ -2652,6 +2934,8 @@ public:
     bool consumeScreenshotRequest();
     bool consumeStepFrameBackwardRequest();
     bool consumeStepFrameForwardRequest();
+    bool consumePreviousSubtitleTrackRequest();
+    bool consumeNextSubtitleTrackRequest();
     bool consumeSubtitleDelayChangeRequest(double& delta_seconds);
     bool consumeAudioDelayChangeRequest(double& delta_seconds);
     bool consumeNextChapterRequest();
@@ -2663,6 +2947,7 @@ public:
     void setSubtitleClock(double subtitle_time_seconds);
     void setSubtitleText(const std::string& text);
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items);
+    void setSubtitleTrackState(int current_ordinal, int track_count);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
     RendererDiagnostics getDiagnostics() const;
     void resetDiagnostics();
@@ -2766,6 +3051,8 @@ private:
         bool screenshot_requested{false};
         bool step_frame_backward_requested{false};
         bool step_frame_forward_requested{false};
+        bool previous_subtitle_track_requested{false};
+        bool next_subtitle_track_requested{false};
         bool subtitle_delay_change_requested{false};
         double subtitle_delay_delta_seconds{0.0};
         bool audio_delay_change_requested{false};
@@ -2779,10 +3066,24 @@ private:
         std::vector<subtitle::SubtitleItem> items;
     };
 
+    struct OutputColorState {
+        bool hdr_bridge_requested{false};
+        bool hdr_bridge_active{false};
+        OpenGLHdrBridgeDecision hdr_bridge_decision{OpenGLHdrBridgeDecision::NotEvaluated};
+        bool lut_active{false};
+    };
+
     struct ControlLayout {
         SDL_Rect panel{0, 0, 0, 0};
+        SDL_Rect previous_item_button{0, 0, 0, 0};
         SDL_Rect play_button{0, 0, 0, 0};
+        SDL_Rect next_item_button{0, 0, 0, 0};
+        SDL_Rect subtitle_previous_button{0, 0, 0, 0};
+        SDL_Rect subtitle_text{0, 0, 0, 0};
+        SDL_Rect subtitle_next_button{0, 0, 0, 0};
         SDL_Rect time_text{0, 0, 0, 0};
+        SDL_Rect mute_button{0, 0, 0, 0};
+        SDL_Rect fullscreen_button{0, 0, 0, 0};
         SDL_Rect progress_track{0, 0, 0, 0};
         SDL_Rect progress_hit_box{0, 0, 0, 0};
         SDL_Rect volume_track{0, 0, 0, 0};
@@ -2809,6 +3110,9 @@ private:
     void renderCurrentFrame(const PendingVideoFrame* frame);
     void renderSoftwareFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height);
     void renderNativeFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height);
+    OutputColorState evaluateOutputColorState(const PendingVideoFrame& frame);
+    bool initializeOutputLutTexture();
+    void resetOutputLutTexture();
     void logColorPipelineIfChanged(const PendingVideoFrame& frame, bool native_path);
     void drawAspectQuad(int drawable_width, int drawable_height, int frame_width, int frame_height);
     void drawFilledRect(int drawable_width, int drawable_height, int x, int y, int w, int h, float r, float g, float b, float a);
@@ -2862,7 +3166,7 @@ private:
     bool ensureNativeSourceViewsLocked(ID3D11Texture2D* texture, intptr_t index, DXGI_FORMAT format);
     bool ensureNativeInteropTarget(int width, int height);
     void resetNativeInteropTarget();
-    bool updateNativeGlTexture(const AVFrame* frame);
+    bool updateNativeGlTexture(const AVFrame* frame, bool hdr_bridge_active);
     bool ensureSubtitleTextResources();
     void resetSubtitleTextResources();
     bool renderSubtitleItemsWithD2D(const std::vector<subtitle::SubtitleItem>& items, const PendingVideoFrame* frame, int drawable_width, int drawable_height, const SDL_Rect& video_rect);
@@ -2906,9 +3210,15 @@ private:
     bool seek_preview_active_{false};
     double seek_preview_ratio_{0.0};
     bool hover_panel_{false};
+    bool hover_previous_item_button_{false};
     bool hover_play_button_{false};
+    bool hover_next_item_button_{false};
+    bool hover_subtitle_previous_button_{false};
+    bool hover_subtitle_next_button_{false};
     bool hover_progress_{false};
+    bool hover_mute_button_{false};
     bool hover_volume_{false};
+    bool hover_fullscreen_button_{false};
 
     std::atomic<double> overlay_position_{0.0};
     std::atomic<double> overlay_duration_{0.0};
@@ -2921,6 +3231,8 @@ private:
     std::vector<subtitle::SubtitleItem> subtitle_items_;
     std::atomic<uint64_t> subtitle_generation_{1};
     std::atomic<bool> subtitle_has_animated_content_{false};
+    std::atomic<int> subtitle_track_current_ordinal_{0};
+    std::atomic<int> subtitle_track_count_{0};
     input::HotkeyManager hotkey_manager_{};
 
     GLuint yuv420_program_{0};
@@ -2931,6 +3243,7 @@ private:
     GLint yuv420_coeff_g_location_{-1};
     GLint yuv420_coeff_b_location_{-1};
     GLint yuv420_color_config0_location_{-1};
+    GLint yuv420_lut_location_{-1};
     GLuint nv12_program_{0};
     GLint nv12_tex_y_location_{-1};
     GLint nv12_tex_uv_location_{-1};
@@ -2938,11 +3251,17 @@ private:
     GLint nv12_coeff_g_location_{-1};
     GLint nv12_coeff_b_location_{-1};
     GLint nv12_color_config0_location_{-1};
+    GLint nv12_lut_location_{-1};
+    GLuint rgb_program_{0};
+    GLint rgb_tex_location_{-1};
+    GLint rgb_color_config0_location_{-1};
+    GLint rgb_lut_location_{-1};
 
     GLuint tex_y_{0};
     GLuint tex_u_{0};
     GLuint tex_v_{0};
     GLuint tex_uv_{0};
+    GLuint output_lut_texture_{0};
     int texture_width_{0};
     int texture_height_{0};
     AVPixelFormat texture_format_{AV_PIX_FMT_NONE};
@@ -2971,6 +3290,15 @@ private:
     std::atomic<uint64_t> present_wait_timeouts_{0};
     OpenGLPresentMode present_mode_requested_{OpenGLPresentMode::Auto};
     std::string present_mode_active_{"unknown"};
+    OpenGLHdrBridgeMode hdr_bridge_mode_{OpenGLHdrBridgeMode::Auto};
+    std::atomic<bool> hdr_bridge_requested_{false};
+    std::atomic<bool> hdr_bridge_active_{false};
+    std::atomic<int> hdr_bridge_decision_{static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated)};
+    std::string output_lut_path_;
+    std::string output_lut_error_;
+    std::atomic<bool> output_lut_configured_{false};
+    std::atomic<bool> output_lut_active_{false};
+    std::atomic<int> output_lut_size_{0};
 
 #if defined(_WIN32)
     ComPtr<ID3D11Device> native_d3d_device_;
@@ -3007,6 +3335,7 @@ private:
     OpenGLNativeInteropOverride native_override_mode_{OpenGLNativeInteropOverride::Auto};
     ComPtr<ID2D1Factory> subtitle_d2d_factory_;
     ComPtr<IDWriteFactory> subtitle_dwrite_factory_;
+    ComPtr<IDWriteFontCollection> subtitle_dwrite_font_collection_;
     ComPtr<ID2D1DCRenderTarget> subtitle_d2d_target_;
     ComPtr<ID2D1SolidColorBrush> subtitle_fill_brush_;
     ComPtr<ID2D1SolidColorBrush> subtitle_shadow_brush_;
@@ -3053,6 +3382,8 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
     clear_requested_.store(false);
     redraw_requested_.store(false);
     osd_visible_until_ms_.store(0);
+    subtitle_track_current_ordinal_.store(0);
+    subtitle_track_count_.store(0);
     pending_frame_.reset();
     pending_frame_ready_ = false;
     last_submitted_frame_id_ = 0;
@@ -3069,11 +3400,26 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
         seek_preview_active_ = false;
         seek_preview_ratio_ = 0.0;
         hover_panel_ = false;
+        hover_previous_item_button_ = false;
         hover_play_button_ = false;
+        hover_next_item_button_ = false;
+        hover_subtitle_previous_button_ = false;
+        hover_subtitle_next_button_ = false;
         hover_progress_ = false;
+        hover_mute_button_ = false;
         hover_volume_ = false;
+        hover_fullscreen_button_ = false;
     }
     resetDiagnostics();
+    hdr_bridge_mode_ = readOpenGLHdrBridgeMode();
+    hdr_bridge_requested_.store(false);
+    hdr_bridge_active_.store(false);
+    hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
+    output_lut_path_ = trimAscii(readOpenGLOutputLutPath());
+    output_lut_error_.clear();
+    output_lut_configured_.store(false);
+    output_lut_active_.store(false);
+    output_lut_size_.store(0);
 
     render_thread_ = std::thread(&Impl::renderLoop, this);
     for (int i = 0; i < 200 && !render_initialized_.load(); ++i) {
@@ -3135,6 +3481,15 @@ void OpenGLVideoRenderer::Impl::close() {
     gl_vendor_.clear();
     gl_renderer_.clear();
     gl_version_.clear();
+    hdr_bridge_mode_ = OpenGLHdrBridgeMode::Auto;
+    hdr_bridge_requested_.store(false);
+    hdr_bridge_active_.store(false);
+    hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
+    output_lut_path_.clear();
+    output_lut_error_.clear();
+    output_lut_configured_.store(false);
+    output_lut_active_.store(false);
+    output_lut_size_.store(0);
 #if defined(_WIN32)
     native_startup_allowed_.store(false);
     native_session_disabled_.store(false);
@@ -3313,20 +3668,17 @@ void OpenGLVideoRenderer::Impl::renderLoop() {
     }
 
     while (render_running_.load()) {
-        pumpEvents();
-
         PendingVideoFrame incoming_frame;
         bool have_new_frame = false;
         bool clear_now = clear_requested_.exchange(false);
         bool redraw_now = redraw_requested_.exchange(false);
-        bool fullscreen_now = fullscreen_toggle_requested_.exchange(false);
 
         {
             std::unique_lock<std::mutex> lock(frame_mutex_);
-            if (!pending_frame_ready_ && !clear_now && !redraw_now && !fullscreen_now) {
+            if (!pending_frame_ready_ && !clear_now && !redraw_now) {
                 frame_cv_.wait_for(lock, std::chrono::milliseconds(8), [this] {
                     return !render_running_.load() || pending_frame_ready_ || clear_requested_.load() ||
-                           redraw_requested_.load() || fullscreen_toggle_requested_.load();
+                           redraw_requested_.load();
                 });
             }
             if (pending_frame_ready_) {
@@ -3339,21 +3691,8 @@ void OpenGLVideoRenderer::Impl::renderLoop() {
 
         clear_now = clear_now || clear_requested_.exchange(false);
         redraw_now = redraw_now || redraw_requested_.exchange(false);
-        fullscreen_now = fullscreen_now || fullscreen_toggle_requested_.exchange(false);
         if (!render_running_.load()) {
             break;
-        }
-
-        if (fullscreen_now && window_) {
-            const bool next_fullscreen = !fullscreen_.load();
-            if (SDL_SetWindowFullscreen(window_, next_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) == 0) {
-                fullscreen_.store(next_fullscreen);
-            } else {
-                LOG_WARNING("OpenGL fullscreen toggle failed: " << SDL_GetError());
-            }
-            updateWindowSizeFromSdl(window_, width_, height_);
-            minimized_.store(false);
-            redraw_now = true;
         }
 
         if (minimized_.load()) {
@@ -3466,20 +3805,24 @@ bool OpenGLVideoRenderer::Impl::createGlContext() {
     const GLuint vertex_shader = compileShader(GL_VERTEX_SHADER, kVertexShaderSource, "opengl-video-vertex");
     const GLuint yuv420_fragment_shader = compileShader(GL_FRAGMENT_SHADER, kYuv420FragmentShaderSource, "opengl-yuv420-fragment");
     const GLuint nv12_fragment_shader = compileShader(GL_FRAGMENT_SHADER, kNv12FragmentShaderSource, "opengl-nv12-fragment");
-    if (vertex_shader == 0 || yuv420_fragment_shader == 0 || nv12_fragment_shader == 0) {
+    const GLuint rgb_fragment_shader = compileShader(GL_FRAGMENT_SHADER, kRgbFragmentShaderSource, "opengl-rgb-fragment");
+    if (vertex_shader == 0 || yuv420_fragment_shader == 0 || nv12_fragment_shader == 0 || rgb_fragment_shader == 0) {
         if (vertex_shader != 0) g_gl.DeleteShader(vertex_shader);
         if (yuv420_fragment_shader != 0) g_gl.DeleteShader(yuv420_fragment_shader);
         if (nv12_fragment_shader != 0) g_gl.DeleteShader(nv12_fragment_shader);
+        if (rgb_fragment_shader != 0) g_gl.DeleteShader(rgb_fragment_shader);
         destroyGlResources();
         return false;
     }
 
     yuv420_program_ = linkProgram(vertex_shader, yuv420_fragment_shader, "opengl-yuv420-program");
     nv12_program_ = linkProgram(vertex_shader, nv12_fragment_shader, "opengl-nv12-program");
+    rgb_program_ = linkProgram(vertex_shader, rgb_fragment_shader, "opengl-rgb-program");
     g_gl.DeleteShader(vertex_shader);
     g_gl.DeleteShader(yuv420_fragment_shader);
     g_gl.DeleteShader(nv12_fragment_shader);
-    if (yuv420_program_ == 0 || nv12_program_ == 0) {
+    g_gl.DeleteShader(rgb_fragment_shader);
+    if (yuv420_program_ == 0 || nv12_program_ == 0 || rgb_program_ == 0) {
         destroyGlResources();
         return false;
     }
@@ -3491,20 +3834,30 @@ bool OpenGLVideoRenderer::Impl::createGlContext() {
     yuv420_coeff_g_location_ = g_gl.GetUniformLocation(yuv420_program_, "coeffG");
     yuv420_coeff_b_location_ = g_gl.GetUniformLocation(yuv420_program_, "coeffB");
     yuv420_color_config0_location_ = g_gl.GetUniformLocation(yuv420_program_, "colorConfig0");
+    yuv420_lut_location_ = g_gl.GetUniformLocation(yuv420_program_, "texLut3D");
     nv12_tex_y_location_ = g_gl.GetUniformLocation(nv12_program_, "texY");
     nv12_tex_uv_location_ = g_gl.GetUniformLocation(nv12_program_, "texUV");
     nv12_coeff_r_location_ = g_gl.GetUniformLocation(nv12_program_, "coeffR");
     nv12_coeff_g_location_ = g_gl.GetUniformLocation(nv12_program_, "coeffG");
     nv12_coeff_b_location_ = g_gl.GetUniformLocation(nv12_program_, "coeffB");
     nv12_color_config0_location_ = g_gl.GetUniformLocation(nv12_program_, "colorConfig0");
+    nv12_lut_location_ = g_gl.GetUniformLocation(nv12_program_, "texLut3D");
+    rgb_tex_location_ = g_gl.GetUniformLocation(rgb_program_, "texRgb");
+    rgb_color_config0_location_ = g_gl.GetUniformLocation(rgb_program_, "colorConfig0");
+    rgb_lut_location_ = g_gl.GetUniformLocation(rgb_program_, "texLut3D");
 
     g_gl.UseProgram(yuv420_program_);
     g_gl.Uniform1i(yuv420_tex_y_location_, 0);
     g_gl.Uniform1i(yuv420_tex_u_location_, 1);
     g_gl.Uniform1i(yuv420_tex_v_location_, 2);
+    g_gl.Uniform1i(yuv420_lut_location_, 3);
     g_gl.UseProgram(nv12_program_);
     g_gl.Uniform1i(nv12_tex_y_location_, 0);
     g_gl.Uniform1i(nv12_tex_uv_location_, 1);
+    g_gl.Uniform1i(nv12_lut_location_, 3);
+    g_gl.UseProgram(rgb_program_);
+    g_gl.Uniform1i(rgb_tex_location_, 0);
+    g_gl.Uniform1i(rgb_lut_location_, 3);
     g_gl.UseProgram(0);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -3512,6 +3865,13 @@ bool OpenGLVideoRenderer::Impl::createGlContext() {
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    if (!initializeOutputLutTexture()) {
+        LOG_WARNING("OpenGL output LUT initialization failed: " << output_lut_error_);
+    }
+    LOG_INFO("[diag:opengl-output] hdr_mode=" << openGLHdrBridgeModeName(hdr_bridge_mode_)
+             << " lut_configured=" << boolName(output_lut_configured_.load())
+             << " lut_size=" << output_lut_size_.load()
+             << " lut_path=" << (output_lut_path_.empty() ? std::string("none") : output_lut_path_));
 
 #if defined(_WIN32)
     if (!initializeNativeInterop()) {
@@ -3525,13 +3885,20 @@ void OpenGLVideoRenderer::Impl::destroyGlResources() {
     auto reset_state_only = [this] {
         yuv420_program_ = 0;
         nv12_program_ = 0;
+        rgb_program_ = 0;
         yuv420_tex_y_location_ = yuv420_tex_u_location_ = yuv420_tex_v_location_ = -1;
         yuv420_coeff_r_location_ = yuv420_coeff_g_location_ = yuv420_coeff_b_location_ = -1;
         yuv420_color_config0_location_ = -1;
+        yuv420_lut_location_ = -1;
         nv12_tex_y_location_ = nv12_tex_uv_location_ = -1;
         nv12_coeff_r_location_ = nv12_coeff_g_location_ = nv12_coeff_b_location_ = -1;
         nv12_color_config0_location_ = -1;
+        nv12_lut_location_ = -1;
+        rgb_tex_location_ = -1;
+        rgb_color_config0_location_ = -1;
+        rgb_lut_location_ = -1;
         tex_y_ = tex_u_ = tex_v_ = tex_uv_ = 0;
+        output_lut_texture_ = 0;
         texture_width_ = texture_height_ = 0;
         texture_format_ = AV_PIX_FMT_NONE;
         subtitle_texture_ = 0;
@@ -3556,6 +3923,7 @@ void OpenGLVideoRenderer::Impl::destroyGlResources() {
     destroyNativeInterop();
     resetSubtitleTextResources();
 #endif
+    resetOutputLutTexture();
     if (subtitle_texture_ != 0) glDeleteTextures(1, &subtitle_texture_);
     if (tex_y_ != 0) glDeleteTextures(1, &tex_y_);
     if (tex_u_ != 0) glDeleteTextures(1, &tex_u_);
@@ -3563,6 +3931,7 @@ void OpenGLVideoRenderer::Impl::destroyGlResources() {
     if (tex_uv_ != 0) glDeleteTextures(1, &tex_uv_);
     if (yuv420_program_ != 0 && g_gl.DeleteProgram) g_gl.DeleteProgram(yuv420_program_);
     if (nv12_program_ != 0 && g_gl.DeleteProgram) g_gl.DeleteProgram(nv12_program_);
+    if (rgb_program_ != 0 && g_gl.DeleteProgram) g_gl.DeleteProgram(rgb_program_);
     SDL_GL_DeleteContext(gl_context_);
     gl_context_ = nullptr;
     reset_state_only();
@@ -3654,6 +4023,113 @@ bool OpenGLVideoRenderer::Impl::uploadFrameTextures(const PendingVideoFrame& fra
     return true;
 }
 
+void OpenGLVideoRenderer::Impl::resetOutputLutTexture() {
+    if (output_lut_texture_ != 0) {
+        glDeleteTextures(1, &output_lut_texture_);
+        output_lut_texture_ = 0;
+    }
+    output_lut_configured_.store(false);
+    output_lut_size_.store(0);
+    output_lut_active_.store(false);
+}
+
+bool OpenGLVideoRenderer::Impl::initializeOutputLutTexture() {
+    resetOutputLutTexture();
+    output_lut_configured_.store(false);
+    output_lut_active_.store(false);
+    output_lut_size_.store(0);
+    if (output_lut_path_.empty()) {
+        output_lut_error_.clear();
+        return true;
+    }
+
+    CubeLut3DData lut_data;
+    if (!loadCubeLut3D(output_lut_path_, lut_data, output_lut_error_)) {
+        return false;
+    }
+
+    if (!g_gl.TexImage3D) {
+        output_lut_error_ = "glTexImage3D unavailable";
+        return false;
+    }
+
+    glGenTextures(1, &output_lut_texture_);
+    if (output_lut_texture_ == 0) {
+        output_lut_error_ = "glGenTextures failed";
+        return false;
+    }
+
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, output_lut_texture_);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    g_gl.TexImage3D(GL_TEXTURE_3D,
+                    0,
+                    GL_RGB,
+                    lut_data.size,
+                    lut_data.size,
+                    lut_data.size,
+                    0,
+                    GL_RGB,
+                    GL_UNSIGNED_BYTE,
+                    lut_data.rgb8.data());
+    const GLenum lut_upload_error = glGetError();
+    glBindTexture(GL_TEXTURE_3D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE0);
+
+    if (lut_upload_error != GL_NO_ERROR) {
+        output_lut_error_ = "glTexImage3D upload failed";
+        resetOutputLutTexture();
+        return false;
+    }
+
+    output_lut_configured_.store(true);
+    output_lut_size_.store(lut_data.size);
+    output_lut_error_.clear();
+    return true;
+}
+
+OpenGLVideoRenderer::Impl::OutputColorState OpenGLVideoRenderer::Impl::evaluateOutputColorState(const PendingVideoFrame& frame) {
+    OutputColorState state;
+    const bool frame_hdr = isHdrTransfer(frame.color_transfer);
+    state.hdr_bridge_requested = frame_hdr && hdr_bridge_mode_ != OpenGLHdrBridgeMode::Off;
+
+    if (!frame_hdr) {
+        state.hdr_bridge_decision = OpenGLHdrBridgeDecision::FrameSdr;
+    } else if (hdr_bridge_mode_ == OpenGLHdrBridgeMode::Off) {
+        state.hdr_bridge_decision = OpenGLHdrBridgeDecision::DisabledByMode;
+    } else {
+#if defined(_WIN32)
+        if (hdr_bridge_mode_ == OpenGLHdrBridgeMode::Force) {
+            state.hdr_bridge_active = true;
+            state.hdr_bridge_decision = OpenGLHdrBridgeDecision::ForceEnabled;
+        } else if (!native_diagnostics_.hdr_output.probe_succeeded ||
+                   !native_diagnostics_.hdr_output.output_found ||
+                   !native_diagnostics_.hdr_output.has_output6) {
+            state.hdr_bridge_decision = OpenGLHdrBridgeDecision::ProbeUnavailable;
+        } else if (!(native_diagnostics_.hdr_output.hdr_active || native_diagnostics_.hdr_output.advanced_color_active)) {
+            state.hdr_bridge_decision = OpenGLHdrBridgeDecision::DisplayHdrInactive;
+        } else {
+            state.hdr_bridge_active = true;
+            state.hdr_bridge_decision = OpenGLHdrBridgeDecision::AutoEnabled;
+        }
+#else
+        state.hdr_bridge_decision = OpenGLHdrBridgeDecision::UnsupportedPlatform;
+#endif
+    }
+
+    state.lut_active = output_lut_configured_.load() && output_lut_texture_ != 0 && !state.hdr_bridge_active;
+
+    hdr_bridge_requested_.store(state.hdr_bridge_requested);
+    hdr_bridge_active_.store(state.hdr_bridge_active);
+    hdr_bridge_decision_.store(static_cast<int>(state.hdr_bridge_decision));
+    output_lut_active_.store(state.lut_active);
+    return state;
+}
+
 void OpenGLVideoRenderer::Impl::drawAspectQuad(int drawable_width, int drawable_height, int frame_width, int frame_height) {
     float x_scale = 1.0f;
     float y_scale = 1.0f;
@@ -3672,6 +4148,7 @@ void OpenGLVideoRenderer::Impl::drawAspectQuad(int drawable_width, int drawable_
 
 void OpenGLVideoRenderer::Impl::renderSoftwareFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height) {
     if (!uploadFrameTextures(frame)) return;
+    const OutputColorState output_state = evaluateOutputColorState(frame);
     logColorPipelineIfChanged(frame, false);
     const ColorPipelineConfig pipeline = buildColorPipelineConfig(frame.color_range,
                                                                   frame.color_space,
@@ -3684,14 +4161,31 @@ void OpenGLVideoRenderer::Impl::renderSoftwareFrame(const PendingVideoFrame& fra
         g_gl.Uniform4f(nv12_coeff_r_location_, pipeline.coeffs.r[0], pipeline.coeffs.r[1], pipeline.coeffs.r[2], pipeline.coeffs.r[3]);
         g_gl.Uniform4f(nv12_coeff_g_location_, pipeline.coeffs.g[0], pipeline.coeffs.g[1], pipeline.coeffs.g[2], pipeline.coeffs.g[3]);
         g_gl.Uniform4f(nv12_coeff_b_location_, pipeline.coeffs.b[0], pipeline.coeffs.b[1], pipeline.coeffs.b[2], pipeline.coeffs.b[3]);
-        g_gl.Uniform4f(nv12_color_config0_location_, pipeline.transfer_mode, pipeline.gamut_mode, 0.0f, 0.0f);
+        g_gl.Uniform4f(nv12_color_config0_location_,
+                       pipeline.transfer_mode,
+                       pipeline.gamut_mode,
+                       output_state.hdr_bridge_active ? 1.0f : 0.0f,
+                       output_state.lut_active ? 1.0f : 0.0f);
     } else {
         g_gl.Uniform4f(yuv420_coeff_r_location_, pipeline.coeffs.r[0], pipeline.coeffs.r[1], pipeline.coeffs.r[2], pipeline.coeffs.r[3]);
         g_gl.Uniform4f(yuv420_coeff_g_location_, pipeline.coeffs.g[0], pipeline.coeffs.g[1], pipeline.coeffs.g[2], pipeline.coeffs.g[3]);
         g_gl.Uniform4f(yuv420_coeff_b_location_, pipeline.coeffs.b[0], pipeline.coeffs.b[1], pipeline.coeffs.b[2], pipeline.coeffs.b[3]);
-        g_gl.Uniform4f(yuv420_color_config0_location_, pipeline.transfer_mode, pipeline.gamut_mode, 0.0f, 0.0f);
+        g_gl.Uniform4f(yuv420_color_config0_location_,
+                       pipeline.transfer_mode,
+                       pipeline.gamut_mode,
+                       output_state.hdr_bridge_active ? 1.0f : 0.0f,
+                       output_state.lut_active ? 1.0f : 0.0f);
+    }
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    if (output_state.lut_active && output_lut_texture_ != 0) {
+        glBindTexture(GL_TEXTURE_3D, output_lut_texture_);
+    } else {
+        glBindTexture(GL_TEXTURE_3D, 0);
     }
     drawAspectQuad(drawable_width, drawable_height, frame.width, frame.height);
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     g_gl.UseProgram(0);
 }
 
@@ -3931,17 +4425,34 @@ void OpenGLVideoRenderer::Impl::logColorPipelineIfChanged(const PendingVideoFram
 
 void OpenGLVideoRenderer::Impl::renderNativeFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height) {
 #if defined(_WIN32)
+    const OutputColorState output_state = evaluateOutputColorState(frame);
     logColorPipelineIfChanged(frame, true);
-    if (!updateNativeGlTexture(frame.native_frame) || native_gl_texture_ == 0) return;
+    if (!updateNativeGlTexture(frame.native_frame, output_state.hdr_bridge_active) || native_gl_texture_ == 0) return;
     native_interop_frames_.fetch_add(1);
-    g_gl.UseProgram(0);
+    g_gl.UseProgram(rgb_program_);
+    g_gl.Uniform4f(rgb_color_config0_location_,
+                   0.0f,
+                   0.0f,
+                   output_state.hdr_bridge_active ? 1.0f : 0.0f,
+                   output_state.lut_active ? 1.0f : 0.0f);
     glEnable(GL_TEXTURE_2D);
     glDisable(GL_BLEND);
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    if (output_state.lut_active && output_lut_texture_ != 0) {
+        glBindTexture(GL_TEXTURE_3D, output_lut_texture_);
+    } else {
+        glBindTexture(GL_TEXTURE_3D, 0);
+    }
+    g_gl.ActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, native_gl_texture_);
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
     drawAspectQuad(drawable_width, drawable_height, frame.width, frame.height);
     glBindTexture(GL_TEXTURE_2D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_3D, 0);
+    g_gl.ActiveTexture(GL_TEXTURE0);
     glDisable(GL_TEXTURE_2D);
+    g_gl.UseProgram(0);
 #else
     (void)frame; (void)drawable_width; (void)drawable_height;
 #endif
@@ -3996,6 +4507,20 @@ bool OpenGLVideoRenderer::Impl::ensureSubtitleTextResources() {
         return false;
     }
 
+    subtitle::SubtitleDirectWriteCollectionSummary font_collection_summary =
+        subtitle::buildDirectWriteSubtitleFontCollection(subtitle_dwrite_factory_.Get(),
+                                                         subtitle_dwrite_font_collection_.ReleaseAndGetAddressOf());
+    if (font_collection_summary.collection_created) {
+        LOG_INFO("OpenGL subtitle DirectWrite custom font collection enabled: registered="
+                 << font_collection_summary.registered_font_file_count
+                 << ", added=" << font_collection_summary.added_font_file_count);
+    } else if (font_collection_summary.registered_font_file_count > 0) {
+        LOG_WARNING("OpenGL subtitle DirectWrite custom font collection unavailable: "
+                    << font_collection_summary.error
+                    << " (registered=" << font_collection_summary.registered_font_file_count
+                    << ", added=" << font_collection_summary.added_font_file_count << ")");
+    }
+
     const D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
         D2D1_RENDER_TARGET_TYPE_DEFAULT,
         D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
@@ -4025,6 +4550,7 @@ void OpenGLVideoRenderer::Impl::resetSubtitleTextResources() {
     subtitle_shadow_brush_.Reset();
     subtitle_fill_brush_.Reset();
     subtitle_d2d_target_.Reset();
+    subtitle_dwrite_font_collection_.Reset();
     subtitle_dwrite_factory_.Reset();
     subtitle_d2d_factory_.Reset();
     rendered_subtitle_clock_seconds_ = -1.0;
@@ -4353,6 +4879,74 @@ bool OpenGLVideoRenderer::Impl::renderSubtitleItemsWithD2D(const std::vector<sub
             continue;
         }
 
+        if (item.is_bitmap) {
+            const subtitle::SubtitleBitmap& bitmap = item.bitmap;
+            if (bitmap.width <= 0 || bitmap.height <= 0) {
+                continue;
+            }
+
+            const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+            if (bitmap.rgba.size() < pixel_count * 4u) {
+                continue;
+            }
+
+            const float scale_x = item.play_res_x > 0
+                ? static_cast<float>(video_rect.w) / static_cast<float>(item.play_res_x)
+                : 1.0f;
+            const float scale_y = item.play_res_y > 0
+                ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y)
+                : 1.0f;
+            const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
+            const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
+            const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
+            const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
+            if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
+                continue;
+            }
+
+            std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
+            for (size_t i = 0; i < pixel_count; ++i) {
+                const uint8_t r = bitmap.rgba[i * 4u + 0u];
+                const uint8_t g = bitmap.rgba[i * 4u + 1u];
+                const uint8_t b = bitmap.rgba[i * 4u + 2u];
+                const uint8_t a = bitmap.rgba[i * 4u + 3u];
+                const uint16_t alpha = static_cast<uint16_t>(a);
+                premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
+                premul_bgra[i * 4u + 3u] = a;
+            }
+
+            ComPtr<ID2D1Bitmap> d2d_bitmap;
+            const D2D1_BITMAP_PROPERTIES bitmap_props = D2D1::BitmapProperties(
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+                96.0f,
+                96.0f);
+            const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(bitmap.width) * 4u);
+            if (FAILED(subtitle_d2d_target_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(bitmap.width),
+                                                                       static_cast<UINT32>(bitmap.height)),
+                                                           premul_bgra.data(),
+                                                           pitch,
+                                                           &bitmap_props,
+                                                           d2d_bitmap.GetAddressOf())) ||
+                !d2d_bitmap) {
+                continue;
+            }
+
+            subtitle_d2d_target_->SetTransform(D2D1::Matrix3x2F::Identity());
+            const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
+                                                     0.0f,
+                                                     static_cast<float>(bitmap.width),
+                                                     static_cast<float>(bitmap.height));
+            const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
+            subtitle_d2d_target_->DrawBitmap(d2d_bitmap.Get(),
+                                             &dst_rect,
+                                             1.0f,
+                                             D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                                             &src_rect);
+            continue;
+        }
+
         if (item.text.empty()) {
             continue;
         }
@@ -4398,6 +4992,22 @@ bool OpenGLVideoRenderer::Impl::renderSubtitleItemsWithD2D(const std::vector<sub
 
         ComPtr<IDWriteTextFormat> text_format;
         const auto create_text_format = [&](const wchar_t* font_family) -> HRESULT {
+            HRESULT hr = E_FAIL;
+            if (subtitle_dwrite_font_collection_) {
+                text_format.Reset();
+                hr = subtitle_dwrite_factory_->CreateTextFormat(font_family,
+                                                                subtitle_dwrite_font_collection_.Get(),
+                                                                item_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
+                                                                item_style.italic ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL,
+                                                                DWRITE_FONT_STRETCH_NORMAL,
+                                                                font_size,
+                                                                L"zh-CN",
+                                                                text_format.GetAddressOf());
+                if (SUCCEEDED(hr) && text_format) {
+                    return hr;
+                }
+            }
+            text_format.Reset();
             return subtitle_dwrite_factory_->CreateTextFormat(font_family,
                                                               nullptr,
                                                               item_style.bold ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL,
@@ -5001,25 +5611,59 @@ OpenGLVideoRenderer::Impl::ControlLayout OpenGLVideoRenderer::Impl::computeContr
     const int row_top = layout.progress_track.y + layout.progress_track.h + 12;
     const int row_height = std::max(28, layout.panel.y + layout.panel.h - kControlPadding - row_top);
     const int button_size = std::max(28, std::min(36, row_height));
-    layout.play_button = {layout.panel.x + kControlPadding,
-                          row_top + std::max(0, (row_height - button_size) / 2),
+    const int row_y = row_top + std::max(0, (row_height - button_size) / 2);
+    layout.previous_item_button = {layout.panel.x + kControlPadding, row_y, button_size, button_size};
+    layout.play_button = {layout.previous_item_button.x + layout.previous_item_button.w + kControlGap,
+                          row_y,
                           button_size,
                           button_size};
+    layout.next_item_button = {layout.play_button.x + layout.play_button.w + kControlGap,
+                               row_y,
+                               button_size,
+                               button_size};
 
     const int volume_width = std::min(kVolumeBarWidth, std::max(72, layout.panel.w / 6));
-    layout.volume_track = {layout.panel.x + layout.panel.w - kControlPadding - volume_width,
+    layout.fullscreen_button = {layout.panel.x + layout.panel.w - kControlPadding - button_size,
+                                row_y,
+                                button_size,
+                                button_size};
+    layout.volume_track = {layout.fullscreen_button.x - kControlGap - volume_width,
                            layout.play_button.y + (layout.play_button.h - kBarHeight) / 2,
                            std::max(1, volume_width),
                            kBarHeight};
+    layout.mute_button = {layout.volume_track.x - kControlGap - button_size, row_y, button_size, button_size};
     layout.volume_hit_box = {layout.volume_track.x,
                              layout.play_button.y,
                              layout.volume_track.w,
                              layout.play_button.h};
 
-    const int time_x = layout.play_button.x + layout.play_button.w + kControlGap;
+    const int subtitle_text_width = std::max(48, std::min(96, layout.panel.w / 7));
+    layout.subtitle_next_button = {layout.mute_button.x - kControlGap - button_size, row_y, button_size, button_size};
+    layout.subtitle_text = {layout.subtitle_next_button.x - kControlGap - subtitle_text_width,
+                            row_y,
+                            subtitle_text_width,
+                            button_size};
+    layout.subtitle_previous_button = {layout.subtitle_text.x - kControlGap - button_size,
+                                       row_y,
+                                       button_size,
+                                       button_size};
+
+    const int time_x = layout.next_item_button.x + layout.next_item_button.w + kControlGap;
+    const int min_time_width = 48;
+    if (layout.subtitle_previous_button.x - kControlGap - time_x < min_time_width) {
+        const int subtitle_group_width =
+            button_size + kControlGap + subtitle_text_width + kControlGap + button_size;
+        const int min_subtitle_start = time_x + min_time_width + kControlGap;
+        const int max_subtitle_start = layout.mute_button.x - kControlGap - subtitle_group_width;
+        const int subtitle_group_start = std::max(min_subtitle_start, max_subtitle_start);
+        layout.subtitle_previous_button.x = subtitle_group_start;
+        layout.subtitle_text.x = layout.subtitle_previous_button.x + button_size + kControlGap;
+        layout.subtitle_next_button.x = layout.subtitle_text.x + subtitle_text_width + kControlGap;
+    }
+
     layout.time_text = {time_x,
                         layout.play_button.y,
-                        std::max(48, layout.volume_track.x - kControlGap - time_x),
+                        std::max(48, layout.subtitle_previous_button.x - kControlGap - time_x),
                         layout.play_button.h};
     return layout;
 }
@@ -5032,9 +5676,15 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
     bool dragging_volume = false;
     bool seek_preview_active = false;
     bool hover_panel = false;
+    bool hover_previous_item_button = false;
     bool hover_play_button = false;
+    bool hover_next_item_button = false;
+    bool hover_subtitle_previous_button = false;
+    bool hover_subtitle_next_button = false;
     bool hover_progress = false;
+    bool hover_mute_button = false;
     bool hover_volume = false;
+    bool hover_fullscreen_button = false;
     {
         std::lock_guard<std::mutex> lock(request_mutex_);
         preview_progress = seek_preview_ratio_;
@@ -5043,9 +5693,15 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
         dragging_volume = dragging_volume_;
         seek_preview_active = seek_preview_active_;
         hover_panel = hover_panel_;
+        hover_previous_item_button = hover_previous_item_button_;
         hover_play_button = hover_play_button_;
+        hover_next_item_button = hover_next_item_button_;
+        hover_subtitle_previous_button = hover_subtitle_previous_button_;
+        hover_subtitle_next_button = hover_subtitle_next_button_;
         hover_progress = hover_progress_;
+        hover_mute_button = hover_mute_button_;
         hover_volume = hover_volume_;
+        hover_fullscreen_button = hover_fullscreen_button_;
     }
 
     const uint64_t now_ms = monotonicMsNow();
@@ -5076,11 +5732,27 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
     const float volume = dragging_volume ? clampVolume(preview_volume) : clampVolume(overlay_volume_.load());
     const ControlLayout layout = computeControlLayout(drawable_width, drawable_height);
     const std::string time_text = formatOverlayTimeText(display_position, duration);
+    const int subtitle_track_count = std::max(0, subtitle_track_count_.load());
+    const int subtitle_track_current_ordinal = subtitle_track_count > 0
+                                                   ? std::clamp(subtitle_track_current_ordinal_.load(), 1, subtitle_track_count)
+                                                   : 0;
+    const std::string subtitle_track_text =
+        std::to_string(subtitle_track_current_ordinal) + " / " + std::to_string(subtitle_track_count);
     int glyph_height = std::max(12, layout.time_text.h - 10);
     while (glyph_height > 10 && measureOverlayTextWidth(time_text, glyph_height) > layout.time_text.w) {
         --glyph_height;
     }
+    int subtitle_glyph_height = std::max(10, layout.subtitle_text.h - 12);
+    while (subtitle_glyph_height > 8 &&
+           measureOverlayTextWidth(subtitle_track_text, subtitle_glyph_height) > layout.subtitle_text.w) {
+        --subtitle_glyph_height;
+    }
     const int text_y = layout.time_text.y + std::max(0, (layout.time_text.h - glyph_height) / 2);
+    const int subtitle_text_width = measureOverlayTextWidth(subtitle_track_text, subtitle_glyph_height);
+    const int subtitle_text_x = layout.subtitle_text.x +
+                                std::max(0, (layout.subtitle_text.w - subtitle_text_width) / 2);
+    const int subtitle_text_y = layout.subtitle_text.y +
+                                std::max(0, (layout.subtitle_text.h - subtitle_glyph_height) / 2);
     const int progress_fill_width =
         std::max(0, static_cast<int>(std::lround(progress * static_cast<double>(layout.progress_track.w))));
     const int volume_fill_width =
@@ -5097,6 +5769,61 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
 
     drawFilledRect(drawable_width, drawable_height, layout.panel.x, layout.panel.y, layout.panel.w, layout.panel.h, 0.02f, 0.02f, 0.03f, 0.82f * overlay_alpha);
     drawFilledRect(drawable_width, drawable_height, layout.panel.x, layout.panel.y, layout.panel.w, 1, 0.96f, 0.68f, 0.18f, 0.42f * overlay_alpha);
+
+    const float button_base_r = 0.16f;
+    const float button_base_g = 0.17f;
+    const float button_base_b = 0.18f;
+    const auto drawButtonBackground = [&](const SDL_Rect& rect, bool hovered) {
+        drawFilledCircle(drawable_width,
+                         drawable_height,
+                         static_cast<float>(rect.x + rect.w / 2),
+                         static_cast<float>(rect.y + rect.h / 2),
+                         static_cast<float>(rect.w) * 0.5f,
+                         button_base_r,
+                         button_base_g,
+                         hovered ? 0.22f : button_base_b,
+                         (hovered ? 0.42f : 0.30f) * overlay_alpha);
+    };
+
+    drawButtonBackground(layout.previous_item_button, hover_previous_item_button);
+    drawButtonBackground(layout.play_button, hover_play_button);
+    drawButtonBackground(layout.next_item_button, hover_next_item_button);
+    drawButtonBackground(layout.subtitle_previous_button, hover_subtitle_previous_button);
+    drawButtonBackground(layout.subtitle_next_button, hover_subtitle_next_button);
+    drawButtonBackground(layout.mute_button, hover_mute_button);
+    drawButtonBackground(layout.fullscreen_button, hover_fullscreen_button);
+
+    // Previous item icon: |<
+    {
+        const float cx = static_cast<float>(layout.previous_item_button.x + layout.previous_item_button.w / 2);
+        const float cy = static_cast<float>(layout.previous_item_button.y + layout.previous_item_button.h / 2);
+        const float w = static_cast<float>(layout.previous_item_button.w);
+        const float h = static_cast<float>(layout.previous_item_button.h);
+        const float icon_left = cx - w * 0.18f;
+        const float icon_right = cx + w * 0.20f;
+        drawFilledRect(drawable_width,
+                       drawable_height,
+                       static_cast<int>(std::lround(icon_right - w * 0.08f)),
+                       static_cast<int>(std::lround(cy - h * 0.20f)),
+                       std::max(2, static_cast<int>(std::lround(w * 0.08f))),
+                       std::max(8, static_cast<int>(std::lround(h * 0.40f))),
+                       1.0f,
+                       1.0f,
+                       1.0f,
+                       0.92f * overlay_alpha);
+        drawFilledTriangle(drawable_width,
+                           drawable_height,
+                           icon_left,
+                           cy,
+                           icon_right,
+                           cy - h * 0.26f,
+                           icon_right,
+                           cy + h * 0.26f,
+                           1.0f,
+                           1.0f,
+                           1.0f,
+                           0.92f * overlay_alpha);
+    }
 
     drawFilledRect(drawable_width,
                    drawable_height,
@@ -5128,15 +5855,6 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
                      0.82f,
                      0.98f * overlay_alpha);
 
-    drawFilledCircle(drawable_width,
-                     drawable_height,
-                     static_cast<float>(layout.play_button.x + layout.play_button.w / 2),
-                     static_cast<float>(layout.play_button.y + layout.play_button.h / 2),
-                     static_cast<float>(layout.play_button.w) * 0.5f,
-                     0.16f,
-                     0.17f,
-                     hover_play_button ? 0.20f : 0.18f,
-                     (hover_play_button ? 0.40f : 0.30f) * overlay_alpha);
     if (paused) {
         const float left = static_cast<float>(layout.play_button.x) + static_cast<float>(layout.play_button.w) * 0.36f;
         const float right = static_cast<float>(layout.play_button.x) + static_cast<float>(layout.play_button.w) * 0.72f;
@@ -5152,6 +5870,87 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
         const int right_bar = layout.play_button.x + layout.play_button.w / 2 + 2;
         drawFilledRect(drawable_width, drawable_height, left_bar, top, bar_width, bar_height, 1.0f, 1.0f, 1.0f, 0.94f * overlay_alpha);
         drawFilledRect(drawable_width, drawable_height, right_bar, top, bar_width, bar_height, 1.0f, 1.0f, 1.0f, 0.94f * overlay_alpha);
+    }
+
+    // Next item icon: >|
+    {
+        const float cx = static_cast<float>(layout.next_item_button.x + layout.next_item_button.w / 2);
+        const float cy = static_cast<float>(layout.next_item_button.y + layout.next_item_button.h / 2);
+        const float w = static_cast<float>(layout.next_item_button.w);
+        const float h = static_cast<float>(layout.next_item_button.h);
+        const float icon_left = cx - w * 0.20f;
+        const float icon_right = cx + w * 0.18f;
+        drawFilledRect(drawable_width,
+                       drawable_height,
+                       static_cast<int>(std::lround(icon_left)),
+                       static_cast<int>(std::lround(cy - h * 0.20f)),
+                       std::max(2, static_cast<int>(std::lround(w * 0.08f))),
+                       std::max(8, static_cast<int>(std::lround(h * 0.40f))),
+                       1.0f,
+                       1.0f,
+                       1.0f,
+                       0.92f * overlay_alpha);
+        drawFilledTriangle(drawable_width,
+                           drawable_height,
+                           icon_right,
+                           cy,
+                           icon_left,
+                           cy - h * 0.26f,
+                           icon_left,
+                           cy + h * 0.26f,
+                           1.0f,
+                           1.0f,
+                           1.0f,
+                           0.92f * overlay_alpha);
+    }
+
+    // Subtitle track previous/next icons and current track text.
+    {
+        const auto drawArrow = [&](const SDL_Rect& rect, bool to_left) {
+            const float cx = static_cast<float>(rect.x + rect.w / 2);
+            const float cy = static_cast<float>(rect.y + rect.h / 2);
+            const float w = static_cast<float>(rect.w);
+            const float h = static_cast<float>(rect.h);
+            if (to_left) {
+                drawFilledTriangle(drawable_width,
+                                   drawable_height,
+                                   cx - w * 0.18f,
+                                   cy,
+                                   cx + w * 0.14f,
+                                   cy - h * 0.23f,
+                                   cx + w * 0.14f,
+                                   cy + h * 0.23f,
+                                   0.95f,
+                                   0.95f,
+                                   0.95f,
+                                   0.90f * overlay_alpha);
+            } else {
+                drawFilledTriangle(drawable_width,
+                                   drawable_height,
+                                   cx + w * 0.18f,
+                                   cy,
+                                   cx - w * 0.14f,
+                                   cy - h * 0.23f,
+                                   cx - w * 0.14f,
+                                   cy + h * 0.23f,
+                                   0.95f,
+                                   0.95f,
+                                   0.95f,
+                                   0.90f * overlay_alpha);
+            }
+        };
+        drawArrow(layout.subtitle_previous_button, true);
+        drawArrow(layout.subtitle_next_button, false);
+        drawOverlayText(drawable_width,
+                        drawable_height,
+                        subtitle_text_x,
+                        subtitle_text_y,
+                        subtitle_glyph_height,
+                        subtitle_track_text,
+                        subtitle_track_count > 0 ? 0.92f : 0.62f,
+                        subtitle_track_count > 0 ? 0.92f : 0.62f,
+                        subtitle_track_count > 0 ? 0.92f : 0.62f,
+                        0.90f * overlay_alpha);
     }
 
     drawOverlayText(drawable_width,
@@ -5190,10 +5989,91 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
                      volume_knob_x,
                      volume_knob_y,
                      hover_volume || dragging_volume ? 5.5f : 4.5f,
-                     0.90f,
-                     0.96f,
-                     0.92f,
-                     0.98f * overlay_alpha);
+                    0.90f,
+                    0.96f,
+                    0.92f,
+                    0.98f * overlay_alpha);
+
+    // Mute/unmute icon.
+    {
+        const bool muted = volume <= 0.0001f;
+        const float cx = static_cast<float>(layout.mute_button.x + layout.mute_button.w / 2);
+        const float cy = static_cast<float>(layout.mute_button.y + layout.mute_button.h / 2);
+        const float w = static_cast<float>(layout.mute_button.w);
+        const float h = static_cast<float>(layout.mute_button.h);
+        drawFilledRect(drawable_width,
+                       drawable_height,
+                       static_cast<int>(std::lround(cx - w * 0.23f)),
+                       static_cast<int>(std::lround(cy - h * 0.12f)),
+                       std::max(2, static_cast<int>(std::lround(w * 0.12f))),
+                       std::max(6, static_cast<int>(std::lround(h * 0.24f))),
+                       0.95f,
+                       0.95f,
+                       0.95f,
+                       0.90f * overlay_alpha);
+        drawFilledTriangle(drawable_width,
+                           drawable_height,
+                           cx - w * 0.08f,
+                           cy,
+                           cx + w * 0.18f,
+                           cy - h * 0.22f,
+                           cx + w * 0.18f,
+                           cy + h * 0.22f,
+                           0.95f,
+                           0.95f,
+                           0.95f,
+                           0.90f * overlay_alpha);
+        if (!muted) {
+            drawFilledRect(drawable_width,
+                           drawable_height,
+                           static_cast<int>(std::lround(cx + w * 0.23f)),
+                           static_cast<int>(std::lround(cy - h * 0.14f)),
+                           std::max(2, static_cast<int>(std::lround(w * 0.04f))),
+                           std::max(6, static_cast<int>(std::lround(h * 0.28f))),
+                           0.95f,
+                           0.95f,
+                           0.95f,
+                           0.86f * overlay_alpha);
+            drawFilledRect(drawable_width,
+                           drawable_height,
+                           static_cast<int>(std::lround(cx + w * 0.29f)),
+                           static_cast<int>(std::lround(cy - h * 0.20f)),
+                           std::max(2, static_cast<int>(std::lround(w * 0.04f))),
+                           std::max(8, static_cast<int>(std::lround(h * 0.40f))),
+                           0.95f,
+                           0.95f,
+                           0.95f,
+                           0.74f * overlay_alpha);
+        } else {
+            const int line_w = std::max(2, layout.mute_button.w / 10);
+            const int step_count = std::max(6, layout.mute_button.w / 3);
+            for (int step = 0; step < step_count; ++step) {
+                const float t = static_cast<float>(step) / static_cast<float>(std::max(1, step_count - 1));
+                const int px = static_cast<int>(std::lround(layout.mute_button.x + layout.mute_button.w * (0.30f + t * 0.40f)));
+                const int py = static_cast<int>(std::lround(layout.mute_button.y + layout.mute_button.h * (0.70f - t * 0.40f)));
+                drawFilledRect(drawable_width, drawable_height, px, py, line_w, line_w + 1, 0.96f, 0.32f, 0.32f, 0.90f * overlay_alpha);
+            }
+        }
+    }
+
+    // Fullscreen icon (four corner L strokes).
+    {
+        const int stroke = std::max(2, layout.fullscreen_button.w / 12);
+        const int corner = std::max(6, layout.fullscreen_button.w / 4);
+        const SDL_Rect& r = layout.fullscreen_button;
+        const float cr = 0.95f;
+        const float cg = 0.95f;
+        const float cb = 0.95f;
+        const float ca = 0.90f * overlay_alpha;
+        drawFilledRect(drawable_width, drawable_height, r.x + stroke, r.y + stroke, corner, stroke, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + stroke, r.y + stroke, stroke, corner, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + r.w - stroke - corner, r.y + stroke, corner, stroke, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + r.w - stroke * 2, r.y + stroke, stroke, corner, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + stroke, r.y + r.h - stroke * 2, corner, stroke, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + stroke, r.y + r.h - stroke - corner, stroke, corner, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + r.w - stroke - corner, r.y + r.h - stroke * 2, corner, stroke, cr, cg, cb, ca);
+        drawFilledRect(drawable_width, drawable_height, r.x + r.w - stroke * 2, r.y + r.h - stroke - corner, stroke, corner, cr, cg, cb, ca);
+    }
 
     if (paused) {
         const SDL_Rect video_rect = frame && frame->valid
@@ -5246,9 +6126,15 @@ void OpenGLVideoRenderer::Impl::pumpEvents() {
                 {
                     std::lock_guard<std::mutex> lock(request_mutex_);
                     hover_panel_ = false;
+                    hover_previous_item_button_ = false;
                     hover_play_button_ = false;
+                    hover_next_item_button_ = false;
+                    hover_subtitle_previous_button_ = false;
+                    hover_subtitle_next_button_ = false;
                     hover_progress_ = false;
+                    hover_mute_button_ = false;
                     hover_volume_ = false;
+                    hover_fullscreen_button_ = false;
                 }
                 requestRedraw();
             }
@@ -5277,6 +6163,28 @@ void OpenGLVideoRenderer::Impl::pumpEvents() {
     }
 }
 
+void OpenGLVideoRenderer::Impl::handleEvents() {
+    if (!window_) {
+        return;
+    }
+
+    // SDL events are pumped on the main thread to avoid thread-affinity stalls
+    // during mouse/window interaction on some platforms.
+    pumpEvents();
+
+    if (fullscreen_toggle_requested_.exchange(false)) {
+        const bool next_fullscreen = !fullscreen_.load();
+        if (SDL_SetWindowFullscreen(window_, next_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) == 0) {
+            fullscreen_.store(next_fullscreen);
+        } else {
+            LOG_WARNING("OpenGL fullscreen toggle failed: " << SDL_GetError());
+        }
+        updateWindowSizeFromSdl(window_, width_, height_);
+        minimized_.store(false);
+        requestRedraw();
+    }
+}
+
 void OpenGLVideoRenderer::Impl::handleKeyDown(int key_code, unsigned short modifiers, bool is_repeat) {
     if (is_repeat) return;
     if (key_code == SDLK_ESCAPE) {
@@ -5302,15 +6210,41 @@ void OpenGLVideoRenderer::Impl::handleMouseButtonDown(int mouse_x, int mouse_y, 
     if (button != SDL_BUTTON_LEFT) return;
 
     showOsdFor();
+    bool request_fullscreen_toggle = false;
     {
         std::lock_guard<std::mutex> lock(request_mutex_);
         const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
         hover_panel_ = pointInRect(mouse_x, mouse_y, layout.panel);
+        hover_previous_item_button_ = pointInRect(mouse_x, mouse_y, layout.previous_item_button);
         hover_play_button_ = pointInRect(mouse_x, mouse_y, layout.play_button);
+        hover_next_item_button_ = pointInRect(mouse_x, mouse_y, layout.next_item_button);
+        hover_subtitle_previous_button_ = pointInRect(mouse_x, mouse_y, layout.subtitle_previous_button);
+        hover_subtitle_next_button_ = pointInRect(mouse_x, mouse_y, layout.subtitle_next_button);
         hover_progress_ = pointInRect(mouse_x, mouse_y, layout.progress_hit_box);
+        hover_mute_button_ = pointInRect(mouse_x, mouse_y, layout.mute_button);
         hover_volume_ = pointInRect(mouse_x, mouse_y, layout.volume_hit_box);
-        if (hover_play_button_) {
+        hover_fullscreen_button_ = pointInRect(mouse_x, mouse_y, layout.fullscreen_button);
+        if (hover_previous_item_button_) {
+            requests_.previous_item_requested = true;
+        } else if (hover_play_button_) {
             requests_.toggle_pause_requested = true;
+        } else if (hover_next_item_button_) {
+            requests_.next_item_requested = true;
+        } else if (hover_subtitle_previous_button_) {
+            requests_.previous_subtitle_track_requested = true;
+        } else if (hover_subtitle_next_button_) {
+            requests_.next_subtitle_track_requested = true;
+        } else if (hover_mute_button_) {
+            const float current = clampVolume(overlay_volume_.load());
+            float next = current > 0.0001f ? 0.0f : std::max(0.5f, clampVolume(last_nonzero_volume_));
+            if (current > 0.0001f) {
+                last_nonzero_volume_ = current;
+            }
+            requests_.requested_volume = next;
+            requests_.volume_change_requested = true;
+            overlay_volume_.store(next);
+        } else if (hover_fullscreen_button_) {
+            request_fullscreen_toggle = true;
         } else if (overlay_duration_.load() > 0.001 && hover_progress_) {
             dragging_seek_ = true;
             seek_preview_active_ = true;
@@ -5325,6 +6259,9 @@ void OpenGLVideoRenderer::Impl::handleMouseButtonDown(int mouse_x, int mouse_y, 
             overlay_volume_.store(next_volume);
         }
     }
+    if (request_fullscreen_toggle) {
+        requestFullscreenToggle();
+    }
     requestRedraw();
 }
 
@@ -5334,9 +6271,15 @@ void OpenGLVideoRenderer::Impl::handleMouseMotion(int mouse_x, int mouse_y) {
         std::lock_guard<std::mutex> lock(request_mutex_);
         const ControlLayout layout = computeControlLayout(width_.load(), height_.load());
         hover_panel_ = pointInRect(mouse_x, mouse_y, layout.panel);
+        hover_previous_item_button_ = pointInRect(mouse_x, mouse_y, layout.previous_item_button);
         hover_play_button_ = pointInRect(mouse_x, mouse_y, layout.play_button);
+        hover_next_item_button_ = pointInRect(mouse_x, mouse_y, layout.next_item_button);
+        hover_subtitle_previous_button_ = pointInRect(mouse_x, mouse_y, layout.subtitle_previous_button);
+        hover_subtitle_next_button_ = pointInRect(mouse_x, mouse_y, layout.subtitle_next_button);
         hover_progress_ = pointInRect(mouse_x, mouse_y, layout.progress_hit_box);
+        hover_mute_button_ = pointInRect(mouse_x, mouse_y, layout.mute_button);
         hover_volume_ = pointInRect(mouse_x, mouse_y, layout.volume_hit_box);
+        hover_fullscreen_button_ = pointInRect(mouse_x, mouse_y, layout.fullscreen_button);
         if (dragging_seek_) {
             seek_preview_ratio_ = clampRatio(static_cast<double>(mouse_x - layout.progress_track.x) /
                                              static_cast<double>(std::max(1, layout.progress_track.w)));
@@ -5466,6 +6409,8 @@ bool OpenGLVideoRenderer::Impl::consumeClearABRepeatRequest() { return consumeFl
 bool OpenGLVideoRenderer::Impl::consumeScreenshotRequest() { return consumeFlagRequest(requests_.screenshot_requested); }
 bool OpenGLVideoRenderer::Impl::consumeStepFrameBackwardRequest() { return consumeFlagRequest(requests_.step_frame_backward_requested); }
 bool OpenGLVideoRenderer::Impl::consumeStepFrameForwardRequest() { return consumeFlagRequest(requests_.step_frame_forward_requested); }
+bool OpenGLVideoRenderer::Impl::consumePreviousSubtitleTrackRequest() { return consumeFlagRequest(requests_.previous_subtitle_track_requested); }
+bool OpenGLVideoRenderer::Impl::consumeNextSubtitleTrackRequest() { return consumeFlagRequest(requests_.next_subtitle_track_requested); }
 bool OpenGLVideoRenderer::Impl::consumeSubtitleDelayChangeRequest(double& delta_seconds) { return consumeDoubleRequest(requests_.subtitle_delay_change_requested, requests_.subtitle_delay_delta_seconds, delta_seconds); }
 bool OpenGLVideoRenderer::Impl::consumeAudioDelayChangeRequest(double& delta_seconds) { return consumeDoubleRequest(requests_.audio_delay_change_requested, requests_.audio_delay_delta_seconds, delta_seconds); }
 bool OpenGLVideoRenderer::Impl::consumeNextChapterRequest() { return consumeFlagRequest(requests_.next_chapter_requested); }
@@ -5534,6 +6479,14 @@ void OpenGLVideoRenderer::Impl::setSubtitleItems(const std::vector<subtitle::Sub
     requestRedrawIfPaused();
 }
 
+void OpenGLVideoRenderer::Impl::setSubtitleTrackState(int current_ordinal, int track_count) {
+    const int safe_track_count = std::max(0, track_count);
+    const int safe_current_ordinal = safe_track_count > 0 ? std::clamp(current_ordinal, 1, safe_track_count) : 0;
+    subtitle_track_current_ordinal_.store(safe_current_ordinal);
+    subtitle_track_count_.store(safe_track_count);
+    requestRedrawIfPaused();
+}
+
 void OpenGLVideoRenderer::Impl::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
     std::lock_guard<std::mutex> lock(request_mutex_);
     hotkey_manager_ = hotkey_manager;
@@ -5555,6 +6508,16 @@ RendererDiagnostics OpenGLVideoRenderer::Impl::getDiagnostics() const {
     diagnostics.opengl_present_wait_timeouts = present_wait_timeouts_.load();
     diagnostics.opengl_present_mode_requested = openGLPresentModeName(present_mode_requested_);
     diagnostics.opengl_present_mode_active = present_mode_active_;
+    diagnostics.opengl_hdr_bridge_requested = hdr_bridge_requested_.load();
+    diagnostics.opengl_hdr_bridge_active = hdr_bridge_active_.load();
+    diagnostics.opengl_hdr_bridge_mode = openGLHdrBridgeModeName(hdr_bridge_mode_);
+    diagnostics.opengl_hdr_bridge_decision =
+        openGLHdrBridgeDecisionName(static_cast<OpenGLHdrBridgeDecision>(hdr_bridge_decision_.load()));
+    diagnostics.opengl_output_lut_configured = output_lut_configured_.load();
+    diagnostics.opengl_output_lut_active = output_lut_active_.load();
+    diagnostics.opengl_output_lut_size = output_lut_size_.load();
+    diagnostics.opengl_output_lut_path = output_lut_path_.empty() ? std::string("none") : output_lut_path_;
+    diagnostics.opengl_output_lut_error = output_lut_error_.empty() ? std::string("none") : output_lut_error_;
     return diagnostics;
 }
 
@@ -5566,6 +6529,10 @@ void OpenGLVideoRenderer::Impl::resetDiagnostics() {
     native_interop_frames_.store(0);
     native_interop_disable_events_.store(0);
     present_wait_timeouts_.store(0);
+    hdr_bridge_requested_.store(false);
+    hdr_bridge_active_.store(false);
+    hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
+    output_lut_active_.store(false);
 }
 
 bool OpenGLVideoRenderer::Impl::supportsNativeFrameFormat(AVPixelFormat format) const {
@@ -5694,6 +6661,7 @@ float3 bt2020ToBt709(float3 value) {
 float3 postProcessRgb(float3 encodedRgb) {
     int transferMode = (int)(colorConfig0.x + 0.5);
     int gamutMode = (int)(colorConfig0.y + 0.5);
+    int hdrOutputMode = (int)(colorConfig0.z + 0.5);
     float3 working = max(encodedRgb, float3(0.0, 0.0, 0.0));
     bool linearized = false;
     if (transferMode == 1) {
@@ -5702,6 +6670,9 @@ float3 postProcessRgb(float3 encodedRgb) {
     } else if (transferMode == 2) {
         working = decodeHlg(working) * (1000.0 / 203.0);
         linearized = true;
+    }
+    if (transferMode != 0 && hdrOutputMode == 1) {
+        return saturate(max(encodedRgb, float3(0.0, 0.0, 0.0)));
     }
     if (gamutMode == 1) {
         if (!linearized) {
@@ -5850,7 +6821,7 @@ void OpenGLVideoRenderer::Impl::disableNativeInterop(const char* reason, const D
                 << " fallback=copyback-to-software");
 }
 
-bool OpenGLVideoRenderer::Impl::updateNativeGlTexture(const AVFrame* frame) {
+bool OpenGLVideoRenderer::Impl::updateNativeGlTexture(const AVFrame* frame, bool hdr_bridge_active) {
     if (!frame || !native_d3d_device_ || !native_d3d_context_ || !interop_device_handle_ || native_session_disabled_.load()) return false;
     if (frame->format != AV_PIX_FMT_D3D11 || !frame->data[0]) return false;
     auto* texture = reinterpret_cast<ID3D11Texture2D*>(frame->data[0]);
@@ -5878,7 +6849,9 @@ bool OpenGLVideoRenderer::Impl::updateNativeGlTexture(const AVFrame* frame) {
     native_d3d_context_->VSSetShader(native_video_vertex_shader_.Get(), nullptr, 0);
     native_d3d_context_->PSSetShader(native_nv12_pixel_shader_.Get(), nullptr, 0);
     native_d3d_context_->PSSetSamplers(0, 1, native_sampler_state_.GetAddressOf());
-    const ColorMatrixConstants matrix = buildNativeColorMatrix(frame, desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016);
+    const ColorMatrixConstants matrix = buildNativeColorMatrix(frame,
+                                                               desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016,
+                                                               hdr_bridge_active);
     native_d3d_context_->UpdateSubresource(native_color_matrix_buffer_.Get(), 0, nullptr, &matrix, 0, 0);
     native_d3d_context_->PSSetConstantBuffers(0, 1, native_color_matrix_buffer_.GetAddressOf());
     ID3D11RenderTargetView* rtvs[] = {native_output_rtv_.Get()};
@@ -5969,6 +6942,8 @@ bool OpenGLVideoRenderer::consumeClearABRepeatRequest() { return impl_->consumeC
 bool OpenGLVideoRenderer::consumeScreenshotRequest() { return impl_->consumeScreenshotRequest(); }
 bool OpenGLVideoRenderer::consumeStepFrameBackwardRequest() { return impl_->consumeStepFrameBackwardRequest(); }
 bool OpenGLVideoRenderer::consumeStepFrameForwardRequest() { return impl_->consumeStepFrameForwardRequest(); }
+bool OpenGLVideoRenderer::consumePreviousSubtitleTrackRequest() { return impl_->consumePreviousSubtitleTrackRequest(); }
+bool OpenGLVideoRenderer::consumeNextSubtitleTrackRequest() { return impl_->consumeNextSubtitleTrackRequest(); }
 bool OpenGLVideoRenderer::consumeSubtitleDelayChangeRequest(double& delta_seconds) { return impl_->consumeSubtitleDelayChangeRequest(delta_seconds); }
 bool OpenGLVideoRenderer::consumeAudioDelayChangeRequest(double& delta_seconds) { return impl_->consumeAudioDelayChangeRequest(delta_seconds); }
 bool OpenGLVideoRenderer::consumeNextChapterRequest() { return impl_->consumeNextChapterRequest(); }
@@ -5980,6 +6955,7 @@ void OpenGLVideoRenderer::setOverlayState(double position, double duration, floa
 void OpenGLVideoRenderer::setSubtitleClock(double subtitle_time_seconds) { impl_->setSubtitleClock(subtitle_time_seconds); }
 void OpenGLVideoRenderer::setSubtitleText(const std::string& text) { impl_->setSubtitleText(text); }
 void OpenGLVideoRenderer::setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) { impl_->setSubtitleItems(items); }
+void OpenGLVideoRenderer::setSubtitleTrackState(int current_ordinal, int track_count) { impl_->setSubtitleTrackState(current_ordinal, track_count); }
 void OpenGLVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { impl_->setHotkeyManager(hotkey_manager); }
 RendererDiagnostics OpenGLVideoRenderer::getDiagnostics() const { return impl_->getDiagnostics(); }
 void OpenGLVideoRenderer::resetDiagnostics() { impl_->resetDiagnostics(); }

@@ -54,6 +54,8 @@ extern "C" {
 
 #include "render/video_renderer.h"
 
+#include "subtitle/embedded_subtitle_loader.h"
+
 #include "subtitle/subtitle_parser.h"
 
 #include "thread_safe_queue.h"
@@ -145,6 +147,14 @@ struct DiagnosticsSnapshot {
     bool video_only_fallback{false};
 
     ClockSource clock_source{ClockSource::Audio};
+
+    bool audio_device_open_attempted{false};
+
+    std::uint64_t audio_init_latency_ms{0};
+
+    std::string audio_init_strategy{"not-run"};
+
+    std::string audio_init_detail;
 
     SchedulerClockPolicy scheduler_clock_policy{SchedulerClockPolicy::UseClockSource};
 
@@ -294,6 +304,24 @@ struct DiagnosticsSnapshot {
 
     std::string renderer_opengl_present_mode_active{"unknown"};
 
+    bool renderer_opengl_hdr_bridge_requested{false};
+
+    bool renderer_opengl_hdr_bridge_active{false};
+
+    std::string renderer_opengl_hdr_bridge_mode{"auto"};
+
+    std::string renderer_opengl_hdr_bridge_decision{"not-evaluated"};
+
+    bool renderer_opengl_output_lut_configured{false};
+
+    bool renderer_opengl_output_lut_active{false};
+
+    int renderer_opengl_output_lut_size{0};
+
+    std::string renderer_opengl_output_lut_path;
+
+    std::string renderer_opengl_output_lut_error;
+
     size_t video_packet_queue_size{0};
 
     size_t audio_packet_queue_size{0};
@@ -419,6 +447,18 @@ public:
     void clearExternalSubtitles();
 
     bool hasExternalSubtitles() const;
+
+    std::vector<subtitle::EmbeddedSubtitleTrackInfo> embeddedSubtitleTracks() const;
+
+    int selectedEmbeddedSubtitleStreamIndex() const;
+
+    bool selectEmbeddedSubtitleStream(int stream_index);
+
+    bool cycleEmbeddedSubtitleTrack(int direction);
+
+    void setPreferredEmbeddedSubtitleStreamIndex(int stream_index);
+
+    int preferredEmbeddedSubtitleStreamIndex() const;
 
     void setSubtitleEnabled(bool enabled);
 
@@ -669,6 +709,9 @@ private:
     void setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
     void clearEmbeddedSubtitles();
     void refreshActiveSubtitleTrackLocked();
+    bool applyEmbeddedSubtitleTrackSelectionLocked(int stream_index, bool force_reload);
+    int selectedEmbeddedSubtitleTrackOrdinalLocked() const;
+    void updateSubtitleTrackOverlayState();
 
     bool transitionSessionState(SessionState next, const char* reason);
 
@@ -727,6 +770,14 @@ private:
     render::VideoRendererPtr video_renderer_;
 
     std::unique_ptr<AudioPlayer> audio_player_;
+
+    bool audio_device_open_attempted_{false};
+
+    std::uint64_t audio_init_latency_ms_{0};
+
+    std::string audio_init_strategy_{"not-run"};
+
+    std::string audio_init_detail_;
 
 
 
@@ -959,12 +1010,15 @@ private:
     std::vector<subtitle::SubtitleItem> subtitle_items_;
     std::vector<subtitle::SubtitleItem> external_subtitle_items_;
     std::vector<subtitle::SubtitleItem> embedded_subtitle_items_;
+    std::vector<subtitle::EmbeddedSubtitleTrackInfo> embedded_subtitle_tracks_;
 
     std::string current_media_source_path_;
 
     std::string subtitle_source_path_;
     std::string external_subtitle_source_path_;
     std::string embedded_subtitle_source_path_;
+    int embedded_subtitle_selected_stream_index_{-1};
+    int preferred_embedded_subtitle_stream_index_{-1};
 
     std::vector<int> subtitle_active_indices_;
 

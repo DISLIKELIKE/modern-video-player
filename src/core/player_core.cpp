@@ -1773,12 +1773,35 @@ bool PlayerCore::open(const std::string& filename) {
                      ? std::string("none")
                      : attachment_font_summary.extraction_cache_path));
 
-    const subtitle::EmbeddedSubtitleLoadResult embedded_subtitle_result =
-        subtitle::loadBestEmbeddedSubtitleTrack(current_media_source_path_);
-    if (embedded_subtitle_result.loaded) {
-        setEmbeddedSubtitles(embedded_subtitle_result.items, embedded_subtitle_result.source_label);
-    } else {
-        clearEmbeddedSubtitles();
+    const std::vector<subtitle::EmbeddedSubtitleTrackInfo> embedded_tracks =
+        subtitle::listEmbeddedSubtitleTracks(current_media_source_path_);
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        embedded_subtitle_tracks_ = embedded_tracks;
+        embedded_subtitle_selected_stream_index_ = -1;
+    }
+    clearEmbeddedSubtitles();
+
+    int target_embedded_stream = -1;
+    if (preferred_embedded_subtitle_stream_index_ >= 0) {
+        const auto preferred_it = std::find_if(embedded_tracks.begin(),
+                                               embedded_tracks.end(),
+                                               [this](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+                                                   return track.stream_index == preferred_embedded_subtitle_stream_index_ &&
+                                                          track.supported_codec;
+                                               });
+        if (preferred_it != embedded_tracks.end()) {
+            target_embedded_stream = preferred_embedded_subtitle_stream_index_;
+        } else {
+            LOG_WARNING("Preferred embedded subtitle stream is unavailable: stream_index="
+                        << preferred_embedded_subtitle_stream_index_);
+        }
+    }
+    if (target_embedded_stream < 0) {
+        target_embedded_stream = subtitle::selectBestEmbeddedSubtitleStream(embedded_tracks);
+    }
+    if (target_embedded_stream >= 0 && !selectEmbeddedSubtitleStream(target_embedded_stream)) {
+        LOG_WARNING("Failed to load selected embedded subtitle stream: stream_index=" << target_embedded_stream);
     }
 
     const MediaInfo& info = demuxer_->getMediaInfo();
@@ -1858,6 +1881,7 @@ bool PlayerCore::open(const std::string& filename) {
 
 
         video_renderer_->setHotkeyManager(hotkey_manager_);
+        updateSubtitleTrackOverlayState();
 
     }
 
@@ -1869,6 +1893,11 @@ bool PlayerCore::open(const std::string& filename) {
 
     const bool disable_audio_output = envFlagEnabled("MVP_DISABLE_AUDIO_OUTPUT");
 
+    audio_device_open_attempted_ = false;
+    audio_init_latency_ms_ = 0;
+    audio_init_strategy_ = has_audio_stream ? "not-started" : "no-audio-stream";
+    audio_init_detail_.clear();
+
 
 
     // Audio output is optional when video playback can continue independently.
@@ -1876,8 +1905,13 @@ bool PlayerCore::open(const std::string& filename) {
     if (has_audio_stream && !disable_audio_output) {
 
         audio_player_ = std::make_unique<AudioPlayer>();
+        const AudioInitReport audio_init = audio_player_->init(info.sample_rate, info.channels);
+        audio_device_open_attempted_ = audio_init.device_open_attempted;
+        audio_init_latency_ms_ = audio_init.elapsed_ms;
+        audio_init_strategy_ = audio_init.strategy;
+        audio_init_detail_ = audio_init.detail;
 
-        if (!audio_player_->init(info.sample_rate, info.channels)) {
+        if (!audio_init.initialized) {
 
             if (!has_video_stream) {
 
@@ -1887,13 +1921,20 @@ bool PlayerCore::open(const std::string& filename) {
 
             }
 
-            LOG_WARNING("Audio output init failed, continuing with video-only playback");
+            LOG_WARNING("Audio output init failed, continuing with video-only playback"
+                        << " strategy=" << audio_init_strategy_
+                        << " elapsed_ms=" << audio_init_latency_ms_
+                        << " device_open_attempted=" << (audio_device_open_attempted_ ? "true" : "false")
+                        << " detail=" << audio_init_detail_);
 
             audio_player_.reset();
 
         }
 
     } else if (has_audio_stream && disable_audio_output) {
+
+        audio_init_strategy_ = "disabled-by-env";
+        audio_init_detail_ = "MVP_DISABLE_AUDIO_OUTPUT=1";
 
         LOG_INFO("Audio output disabled by MVP_DISABLE_AUDIO_OUTPUT, continuing with video-only playback");
 
@@ -2976,6 +3017,18 @@ void PlayerCore::pumpEvents() {
 
         }
 
+        if (video_renderer_->consumePreviousSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(-1)) {
+
+            LOG_WARNING("Previous embedded subtitle track request failed");
+
+        }
+
+        if (video_renderer_->consumeNextSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(1)) {
+
+            LOG_WARNING("Next embedded subtitle track request failed");
+
+        }
+
 
 
         if (video_renderer_->consumeNextItemRequest()) {
@@ -3584,6 +3637,14 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
 
     snapshot.clock_source = clock_.getSource();
 
+    snapshot.audio_device_open_attempted = audio_device_open_attempted_;
+
+    snapshot.audio_init_latency_ms = audio_init_latency_ms_;
+
+    snapshot.audio_init_strategy = audio_init_strategy_;
+
+    snapshot.audio_init_detail = audio_init_detail_;
+
     const SchedulerControlSnapshot scheduler_control = makeSchedulerControlSnapshot();
 
     snapshot.scheduler_clock_policy = scheduler_control.clock_policy;
@@ -3737,6 +3798,24 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.renderer_opengl_present_mode_requested = renderer_diagnostics.opengl_present_mode_requested;
 
     snapshot.renderer_opengl_present_mode_active = renderer_diagnostics.opengl_present_mode_active;
+
+    snapshot.renderer_opengl_hdr_bridge_requested = renderer_diagnostics.opengl_hdr_bridge_requested;
+
+    snapshot.renderer_opengl_hdr_bridge_active = renderer_diagnostics.opengl_hdr_bridge_active;
+
+    snapshot.renderer_opengl_hdr_bridge_mode = renderer_diagnostics.opengl_hdr_bridge_mode;
+
+    snapshot.renderer_opengl_hdr_bridge_decision = renderer_diagnostics.opengl_hdr_bridge_decision;
+
+    snapshot.renderer_opengl_output_lut_configured = renderer_diagnostics.opengl_output_lut_configured;
+
+    snapshot.renderer_opengl_output_lut_active = renderer_diagnostics.opengl_output_lut_active;
+
+    snapshot.renderer_opengl_output_lut_size = renderer_diagnostics.opengl_output_lut_size;
+
+    snapshot.renderer_opengl_output_lut_path = renderer_diagnostics.opengl_output_lut_path;
+
+    snapshot.renderer_opengl_output_lut_error = renderer_diagnostics.opengl_output_lut_error;
 
     snapshot.video_packet_queue_size = video_packet_queue_ ? video_packet_queue_->size() : 0;
 
@@ -3930,6 +4009,160 @@ void PlayerCore::refreshActiveSubtitleTrackLocked() {
 
 }
 
+int PlayerCore::selectedEmbeddedSubtitleTrackOrdinalLocked() const {
+
+    if (embedded_subtitle_selected_stream_index_ < 0 || embedded_subtitle_tracks_.empty()) {
+
+        return 0;
+
+    }
+
+    int ordinal = 0;
+    for (const auto& track : embedded_subtitle_tracks_) {
+        if (!track.supported_codec) {
+            continue;
+        }
+        ++ordinal;
+        if (track.stream_index == embedded_subtitle_selected_stream_index_) {
+            return ordinal;
+        }
+    }
+
+    return 0;
+
+}
+
+void PlayerCore::updateSubtitleTrackOverlayState() {
+
+    if (!video_renderer_) {
+
+        return;
+
+    }
+
+    int current_ordinal = 0;
+
+    int track_count = 0;
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        track_count = static_cast<int>(std::count_if(
+            embedded_subtitle_tracks_.begin(),
+            embedded_subtitle_tracks_.end(),
+            [](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+                return track.supported_codec;
+            }));
+
+        current_ordinal = selectedEmbeddedSubtitleTrackOrdinalLocked();
+
+    }
+
+    video_renderer_->setSubtitleTrackState(current_ordinal, track_count);
+
+}
+
+bool PlayerCore::applyEmbeddedSubtitleTrackSelectionLocked(int stream_index, bool force_reload) {
+
+    std::string media_source_path;
+
+    bool track_found = false;
+
+    bool track_supported = false;
+
+    bool requires_reload = force_reload;
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        const auto it = std::find_if(embedded_subtitle_tracks_.begin(),
+
+                                     embedded_subtitle_tracks_.end(),
+
+                                     [stream_index](const subtitle::EmbeddedSubtitleTrackInfo& track) {
+
+                                         return track.stream_index == stream_index;
+
+                                     });
+
+        if (it != embedded_subtitle_tracks_.end()) {
+
+            track_found = true;
+
+            track_supported = it->supported_codec;
+
+        }
+
+        if (!track_found || !track_supported) {
+
+            return false;
+
+        }
+
+        requires_reload = requires_reload || embedded_subtitle_selected_stream_index_ != stream_index ||
+
+                          embedded_subtitle_items_.empty();
+
+        media_source_path = current_media_source_path_;
+
+    }
+
+    if (!requires_reload) {
+
+        updateSubtitleTrackOverlayState();
+
+        return true;
+
+    }
+
+    if (media_source_path.empty()) {
+
+        return false;
+
+    }
+
+    const subtitle::EmbeddedSubtitleLoadResult result =
+
+        subtitle::loadEmbeddedSubtitleTrack(media_source_path, stream_index);
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        if (current_media_source_path_ != media_source_path) {
+
+            return false;
+
+        }
+
+        if (!result.subtitle_stream_found || !result.supported_stream_found) {
+
+            return false;
+
+        }
+
+        embedded_subtitle_selected_stream_index_ = stream_index;
+
+    }
+
+    if (result.loaded) {
+
+        setEmbeddedSubtitles(result.items, result.source_label);
+
+    } else {
+
+        clearEmbeddedSubtitles();
+
+    }
+
+    updateSubtitleTrackOverlayState();
+
+    return result.loaded;
+
+}
+
 void PlayerCore::setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
 
     std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
@@ -3986,6 +4219,8 @@ void PlayerCore::setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtit
 
     }
 
+    updateSubtitleTrackOverlayState();
+
     LOG_INFO("Embedded subtitle track attached: path=" << subtitle_path << ", entries=" << subtitle_count);
 
 }
@@ -4011,6 +4246,8 @@ void PlayerCore::clearEmbeddedSubtitles() {
         video_renderer_->setSubtitleItems({});
 
     }
+
+    updateSubtitleTrackOverlayState();
 
 }
 
@@ -4109,6 +4346,126 @@ bool PlayerCore::hasExternalSubtitles() const {
     std::lock_guard<std::mutex> lock(subtitle_mutex_);
 
     return !external_subtitle_items_.empty();
+
+}
+
+std::vector<subtitle::EmbeddedSubtitleTrackInfo> PlayerCore::embeddedSubtitleTracks() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return embedded_subtitle_tracks_;
+
+}
+
+int PlayerCore::selectedEmbeddedSubtitleStreamIndex() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return embedded_subtitle_selected_stream_index_;
+
+}
+
+bool PlayerCore::selectEmbeddedSubtitleStream(int stream_index) {
+
+    return applyEmbeddedSubtitleTrackSelectionLocked(stream_index, true);
+
+}
+
+bool PlayerCore::cycleEmbeddedSubtitleTrack(int direction) {
+
+    if (direction == 0) {
+
+        return false;
+
+    }
+
+    int target_stream = -1;
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        if (embedded_subtitle_tracks_.empty()) {
+
+            return false;
+
+        }
+
+        std::vector<int> supported_streams;
+
+        supported_streams.reserve(embedded_subtitle_tracks_.size());
+
+        for (const auto& track : embedded_subtitle_tracks_) {
+
+            if (track.supported_codec) {
+
+                supported_streams.push_back(track.stream_index);
+
+            }
+
+        }
+
+        if (supported_streams.empty()) {
+
+            return false;
+
+        }
+
+        int current_index = -1;
+
+        for (size_t i = 0; i < supported_streams.size(); ++i) {
+
+            if (supported_streams[i] == embedded_subtitle_selected_stream_index_) {
+
+                current_index = static_cast<int>(i);
+
+                break;
+
+            }
+
+        }
+
+        if (current_index < 0) {
+
+            target_stream = direction > 0 ? supported_streams.front() : supported_streams.back();
+
+        } else {
+
+            const int step = direction > 0 ? 1 : -1;
+
+            const int next_index = (current_index + step + static_cast<int>(supported_streams.size())) %
+
+                                   static_cast<int>(supported_streams.size());
+
+            target_stream = supported_streams[static_cast<size_t>(next_index)];
+
+        }
+
+    }
+
+    if (target_stream < 0) {
+
+        return false;
+
+    }
+
+    return applyEmbeddedSubtitleTrackSelectionLocked(target_stream, true);
+
+}
+
+void PlayerCore::setPreferredEmbeddedSubtitleStreamIndex(int stream_index) {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    preferred_embedded_subtitle_stream_index_ = stream_index;
+
+}
+
+int PlayerCore::preferredEmbeddedSubtitleStreamIndex() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return preferred_embedded_subtitle_stream_index_;
 
 }
 
@@ -6309,6 +6666,12 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
     clearEmbeddedSubtitles();
 
     clearExternalSubtitles();
+
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        embedded_subtitle_tracks_.clear();
+        embedded_subtitle_selected_stream_index_ = -1;
+    }
 
     chapter_points_.clear();
 

@@ -19,6 +19,9 @@
 #endif
 #if defined(_WIN32)
 #include <windows.h>
+#include <dwrite.h>
+#include <dwrite_3.h>
+#include <wrl/client.h>
 #endif
 
 extern "C" {
@@ -42,7 +45,7 @@ struct SubtitleFontRegistryState {
     std::mutex mutex;
     std::unordered_map<std::string, SubtitleFontRegistrationSummary> per_source;
     std::unordered_map<std::string, MediaAttachmentFontSession> media_sessions;
-    std::unordered_set<std::string> registered_font_files;
+    std::unordered_map<std::string, Path> registered_font_files;
 };
 
 SubtitleFontRegistryState& registryState() {
@@ -374,6 +377,18 @@ std::string uniqueAttachmentFilename(const std::string& normalized_name,
     return uniqued;
 }
 
+std::vector<Path> collectRegisteredPrivateFontFilesLocked(const SubtitleFontRegistryState& state) {
+    std::vector<Path> files;
+    files.reserve(state.registered_font_files.size());
+    for (const auto& entry : state.registered_font_files) {
+        files.push_back(entry.second);
+    }
+    std::sort(files.begin(), files.end(), [](const Path& lhs, const Path& rhs) {
+        return lhs.native() < rhs.native();
+    });
+    return files;
+}
+
 }  // namespace
 
 SubtitleFontRegistrationSummary ensureSubtitleFontsRegistered(const std::string& subtitle_source_path) {
@@ -406,7 +421,7 @@ SubtitleFontRegistrationSummary ensureSubtitleFontsRegistered(const std::string&
             continue;
         }
         if (registerPrivateFontFile(font_file)) {
-            state.registered_font_files.insert(file_key);
+            state.registered_font_files.emplace(file_key, font_file);
             summary.registered_font_files.push_back(font_file.u8string());
             ++summary.registered_file_count;
         }
@@ -497,7 +512,7 @@ SubtitleFontRegistrationSummary ensureMediaAttachmentFontsRegistered(const std::
         }
 
         if (registerPrivateFontFile(output_path)) {
-            state.registered_font_files.insert(file_key);
+            state.registered_font_files.emplace(file_key, output_path);
             session.registered_files.push_back(output_path);
             session.summary.registered_font_files.push_back(output_path.u8string());
             ++session.summary.registered_file_count;
@@ -559,5 +574,93 @@ std::vector<std::wstring> buildSubtitleFontFallbackFamilies(const std::string& p
     appendUniqueFamily(families, seen, L"Arial Unicode MS");
     return families;
 }
+
+#if defined(_WIN32)
+SubtitleDirectWriteCollectionSummary buildDirectWriteSubtitleFontCollection(
+    IDWriteFactory* dwrite_factory,
+    IDWriteFontCollection** out_collection) {
+    SubtitleDirectWriteCollectionSummary summary;
+    summary.attempted = true;
+    if (out_collection) {
+        *out_collection = nullptr;
+    }
+    if (!dwrite_factory || !out_collection) {
+        summary.factory_available = dwrite_factory != nullptr;
+        summary.error = "invalid arguments";
+        return summary;
+    }
+
+    summary.factory_available = true;
+
+    std::vector<Path> registered_font_files;
+    {
+        SubtitleFontRegistryState& state = registryState();
+        std::lock_guard<std::mutex> lock(state.mutex);
+        registered_font_files = collectRegisteredPrivateFontFilesLocked(state);
+    }
+    summary.registered_font_file_count = registered_font_files.size();
+    if (registered_font_files.empty()) {
+        summary.error = "no registered private subtitle fonts";
+        return summary;
+    }
+
+    Microsoft::WRL::ComPtr<IDWriteFactory3> factory3;
+    if (FAILED(dwrite_factory->QueryInterface(IID_PPV_ARGS(factory3.GetAddressOf()))) || !factory3) {
+        summary.error = "IDWriteFactory3 unavailable";
+        return summary;
+    }
+    summary.factory3_available = true;
+
+    Microsoft::WRL::ComPtr<IDWriteFontSetBuilder> font_set_builder;
+    if (FAILED(factory3->CreateFontSetBuilder(font_set_builder.GetAddressOf())) || !font_set_builder) {
+        summary.error = "CreateFontSetBuilder failed";
+        return summary;
+    }
+
+    for (const Path& font_path : registered_font_files) {
+        Microsoft::WRL::ComPtr<IDWriteFontFaceReference> font_face_reference;
+        if (FAILED(factory3->CreateFontFaceReference(font_path.c_str(),
+                                                     nullptr,
+                                                     0,
+                                                     DWRITE_FONT_SIMULATIONS_NONE,
+                                                     font_face_reference.GetAddressOf())) ||
+            !font_face_reference) {
+            continue;
+        }
+        if (SUCCEEDED(font_set_builder->AddFontFaceReference(font_face_reference.Get()))) {
+            ++summary.added_font_file_count;
+        }
+    }
+
+    if (summary.added_font_file_count == 0) {
+        summary.error = "no registered font file could be added to DirectWrite font set";
+        return summary;
+    }
+
+    Microsoft::WRL::ComPtr<IDWriteFontSet> font_set;
+    if (FAILED(font_set_builder->CreateFontSet(font_set.GetAddressOf())) || !font_set) {
+        summary.error = "CreateFontSet failed";
+        return summary;
+    }
+
+    Microsoft::WRL::ComPtr<IDWriteFontCollection1> font_collection1;
+    if (FAILED(factory3->CreateFontCollectionFromFontSet(font_set.Get(), font_collection1.GetAddressOf())) ||
+        !font_collection1) {
+        summary.error = "CreateFontCollectionFromFontSet failed";
+        return summary;
+    }
+
+    Microsoft::WRL::ComPtr<IDWriteFontCollection> font_collection;
+    if (FAILED(font_collection1.As(&font_collection)) || !font_collection) {
+        summary.error = "IDWriteFontCollection conversion failed";
+        return summary;
+    }
+
+    *out_collection = font_collection.Detach();
+    summary.collection_created = true;
+    summary.error.clear();
+    return summary;
+}
+#endif
 
 }  // namespace vp::subtitle

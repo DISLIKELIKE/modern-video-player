@@ -123,6 +123,18 @@ bool operator!=(const SubtitleTextRun& lhs, const SubtitleTextRun& rhs) {
     return !(lhs == rhs);
 }
 
+bool operator==(const SubtitleBitmap& lhs, const SubtitleBitmap& rhs) {
+    return lhs.x == rhs.x &&
+           lhs.y == rhs.y &&
+           lhs.width == rhs.width &&
+           lhs.height == rhs.height &&
+           lhs.rgba == rhs.rgba;
+}
+
+bool operator!=(const SubtitleBitmap& lhs, const SubtitleBitmap& rhs) {
+    return !(lhs == rhs);
+}
+
 bool operator==(const SubtitleItem& lhs, const SubtitleItem& rhs) {
     return lhs.index == rhs.index &&
            lhs.layer == rhs.layer &&
@@ -138,6 +150,8 @@ bool operator==(const SubtitleItem& lhs, const SubtitleItem& rhs) {
            lhs.is_vector_drawing == rhs.is_vector_drawing &&
            lhs.drawing_scale == rhs.drawing_scale &&
            lhs.drawing_commands == rhs.drawing_commands &&
+           lhs.is_bitmap == rhs.is_bitmap &&
+           lhs.bitmap == rhs.bitmap &&
            lhs.runs == rhs.runs;
 }
 

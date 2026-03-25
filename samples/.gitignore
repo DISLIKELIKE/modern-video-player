@@ -12,6 +12,7 @@
 !avi/
 !m2ts/
 !subtitles/
+!lut/
 !mp4/.gitkeep
 !mkv/.gitkeep
 !webm/.gitkeep
@@ -21,3 +22,4 @@
 !avi/.gitkeep
 !m2ts/.gitkeep
 !subtitles/*.ass
+!lut/*.cube

@@ -86,6 +86,20 @@ bool isSupportedTextSubtitleCodec(AVCodecID codec_id) {
     }
 }
 
+bool isSupportedBitmapSubtitleCodec(AVCodecID codec_id) {
+    switch (codec_id) {
+    case AV_CODEC_ID_HDMV_PGS_SUBTITLE:
+    case AV_CODEC_ID_DVD_SUBTITLE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool isSupportedSubtitleCodec(AVCodecID codec_id) {
+    return isSupportedTextSubtitleCodec(codec_id) || isSupportedBitmapSubtitleCodec(codec_id);
+}
+
 int subtitleCodecPreference(AVCodecID codec_id) {
     switch (codec_id) {
     case AV_CODEC_ID_ASS:
@@ -100,9 +114,32 @@ int subtitleCodecPreference(AVCodecID codec_id) {
         return 220;
     case AV_CODEC_ID_TEXT:
         return 200;
+    case AV_CODEC_ID_HDMV_PGS_SUBTITLE:
+        return 190;
+    case AV_CODEC_ID_DVD_SUBTITLE:
+        return 170;
     default:
         return 0;
     }
+}
+
+int subtitleTrackPreferenceScore(const AVStream* stream) {
+    if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+        return std::numeric_limits<int>::min();
+    }
+    if (!isSupportedSubtitleCodec(stream->codecpar->codec_id)) {
+        return std::numeric_limits<int>::min();
+    }
+
+    int score = subtitleCodecPreference(stream->codecpar->codec_id);
+    if ((stream->disposition & AV_DISPOSITION_DEFAULT) != 0) {
+        score += 10000;
+    }
+    if ((stream->disposition & AV_DISPOSITION_FORCED) != 0) {
+        score += 2000;
+    }
+    score -= static_cast<int>(stream->index);
+    return score;
 }
 
 double timestampToSeconds(int64_t timestamp, AVRational time_base) {
@@ -270,6 +307,25 @@ bool splitAssPayloadPrefix(const std::string& payload,
     return true;
 }
 
+EmbeddedSubtitleTrackInfo buildTrackInfo(const AVStream* stream) {
+    EmbeddedSubtitleTrackInfo info;
+    if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+        return info;
+    }
+    info.stream_index = stream->index;
+    info.codec_name = codecName(stream->codecpar->codec_id);
+    info.language = metadataValue(stream->metadata, "language");
+    info.title = metadataValue(stream->metadata, "title");
+    info.is_default = (stream->disposition & AV_DISPOSITION_DEFAULT) != 0;
+    info.is_forced = (stream->disposition & AV_DISPOSITION_FORCED) != 0;
+    info.is_hearing_impaired = (stream->disposition & AV_DISPOSITION_HEARING_IMPAIRED) != 0;
+    info.supported_text_codec = isSupportedTextSubtitleCodec(stream->codecpar->codec_id);
+    info.supported_bitmap_codec = isSupportedBitmapSubtitleCodec(stream->codecpar->codec_id);
+    info.supported_codec = info.supported_text_codec || info.supported_bitmap_codec;
+    info.preference_score = subtitleTrackPreferenceScore(stream);
+    return info;
+}
+
 std::string buildSyntheticAssDocument(const AVCodecContext* codec_ctx,
                                       const AVFormatContext* format_ctx,
                                       const std::vector<SubtitlePacketEntry>& entries) {
@@ -373,6 +429,52 @@ std::string extractDecodedSubtitleText(const AVSubtitle& subtitle) {
     return oss.str();
 }
 
+bool decodeBitmapSubtitleRect(const AVSubtitleRect* rect, SubtitleBitmap& out_bitmap) {
+    if (!rect || rect->w <= 0 || rect->h <= 0) {
+        return false;
+    }
+    if (!rect->data[0] || !rect->data[1] || rect->linesize[0] <= 0) {
+        return false;
+    }
+
+    const int width = rect->w;
+    const int height = rect->h;
+    const int stride = rect->linesize[0];
+    if (stride < width) {
+        return false;
+    }
+
+    const uint8_t* indices = rect->data[0];
+    const auto* palette = reinterpret_cast<const uint32_t*>(rect->data[1]);
+
+    out_bitmap = SubtitleBitmap{};
+    out_bitmap.x = rect->x;
+    out_bitmap.y = rect->y;
+    out_bitmap.width = width;
+    out_bitmap.height = height;
+    out_bitmap.rgba.resize(static_cast<size_t>(width) * static_cast<size_t>(height) * 4u);
+
+    for (int y = 0; y < height; ++y) {
+        const uint8_t* src_row = indices + static_cast<size_t>(y) * static_cast<size_t>(stride);
+        uint8_t* dst_row = out_bitmap.rgba.data() + static_cast<size_t>(y) * static_cast<size_t>(width) * 4u;
+        for (int x = 0; x < width; ++x) {
+            const uint32_t color = palette[src_row[x]];
+            const uint8_t b = static_cast<uint8_t>(color & 0xffu);
+            const uint8_t g = static_cast<uint8_t>((color >> 8u) & 0xffu);
+            const uint8_t r = static_cast<uint8_t>((color >> 16u) & 0xffu);
+            const uint8_t a = static_cast<uint8_t>((color >> 24u) & 0xffu);
+
+            uint8_t* pixel = dst_row + static_cast<size_t>(x) * 4u;
+            pixel[0] = r;
+            pixel[1] = g;
+            pixel[2] = b;
+            pixel[3] = a;
+        }
+    }
+
+    return true;
+}
+
 SubtitleDecoderPtr openSubtitleDecoder(AVFormatContext* format_ctx, int stream_index) {
     if (!format_ctx || stream_index < 0 || stream_index >= static_cast<int>(format_ctx->nb_streams)) {
         return {};
@@ -413,49 +515,6 @@ InputContextPtr openInputContext(const std::string& media_source_path) {
     return format_ctx;
 }
 
-int findBestSupportedSubtitleStream(const AVFormatContext* format_ctx,
-                                    bool& any_subtitle_stream_found,
-                                    bool& any_supported_stream_found) {
-    any_subtitle_stream_found = false;
-    any_supported_stream_found = false;
-
-    int best_stream_index = -1;
-    int best_score = std::numeric_limits<int>::min();
-
-    if (!format_ctx) {
-        return best_stream_index;
-    }
-
-    for (unsigned int i = 0; i < format_ctx->nb_streams; ++i) {
-        const AVStream* stream = format_ctx->streams[i];
-        if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
-            continue;
-        }
-
-        any_subtitle_stream_found = true;
-        if (!isSupportedTextSubtitleCodec(stream->codecpar->codec_id)) {
-            continue;
-        }
-
-        any_supported_stream_found = true;
-        int score = subtitleCodecPreference(stream->codecpar->codec_id);
-        if ((stream->disposition & AV_DISPOSITION_DEFAULT) != 0) {
-            score += 10000;
-        }
-        if ((stream->disposition & AV_DISPOSITION_FORCED) != 0) {
-            score += 2000;
-        }
-        score -= static_cast<int>(i);
-
-        if (score > best_score) {
-            best_score = score;
-            best_stream_index = static_cast<int>(i);
-        }
-    }
-
-    return best_stream_index;
-}
-
 EmbeddedSubtitleLoadResult loadAssSubtitleTrack(AVFormatContext* format_ctx,
                                                 AVCodecContext* codec_ctx,
                                                 int stream_index,
@@ -470,6 +529,8 @@ EmbeddedSubtitleLoadResult loadAssSubtitleTrack(AVFormatContext* format_ctx,
     result.language = language;
     result.title = title;
     result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
+    result.bitmap_codec = false;
+    result.bitmap_item_count = 0;
 
     std::vector<SubtitlePacketEntry> entries;
     AVPacket* packet = av_packet_alloc();
@@ -504,6 +565,7 @@ EmbeddedSubtitleLoadResult loadAssSubtitleTrack(AVFormatContext* format_ctx,
 
     result.items = parser.items();
     result.loaded = !result.items.empty();
+    result.bitmap_item_count = 0;
     return result;
 }
 
@@ -521,6 +583,8 @@ EmbeddedSubtitleLoadResult loadPlainTextSubtitleTrack(AVFormatContext* format_ct
     result.language = language;
     result.title = title;
     result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
+    result.bitmap_codec = false;
+    result.bitmap_item_count = 0;
 
     std::vector<SubtitlePacketEntry> entries;
     AVPacket* packet = av_packet_alloc();
@@ -577,12 +641,143 @@ EmbeddedSubtitleLoadResult loadPlainTextSubtitleTrack(AVFormatContext* format_ct
 
     result.items = parser.items();
     result.loaded = !result.items.empty();
+    result.bitmap_item_count = 0;
+    return result;
+}
+
+EmbeddedSubtitleLoadResult loadBitmapSubtitleTrack(AVFormatContext* format_ctx,
+                                                   AVCodecContext* codec_ctx,
+                                                   int stream_index,
+                                                   const std::string& media_source_path,
+                                                   const std::string& language,
+                                                   const std::string& title) {
+    EmbeddedSubtitleLoadResult result;
+    result.subtitle_stream_found = true;
+    result.supported_stream_found = true;
+    result.stream_index = stream_index;
+    result.codec_name = codecName(format_ctx->streams[stream_index]->codecpar->codec_id);
+    result.language = language;
+    result.title = title;
+    result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
+    result.bitmap_codec = true;
+    result.bitmap_item_count = 0;
+
+    AVPacket* packet = av_packet_alloc();
+    if (!packet) {
+        return result;
+    }
+
+    std::vector<SubtitleItem> items;
+    int item_index = 0;
+    const int video_width = bestVideoWidth(format_ctx);
+    const int video_height = bestVideoHeight(format_ctx);
+
+    while (av_read_frame(format_ctx, packet) >= 0) {
+        if (packet->stream_index == stream_index) {
+            AVSubtitle subtitle{};
+            int got_subtitle = 0;
+            const int decode_ret = avcodec_decode_subtitle2(codec_ctx, &subtitle, &got_subtitle, packet);
+            if (decode_ret >= 0 && got_subtitle != 0) {
+                const double packet_start = packetStartSeconds(*packet, format_ctx->streams[stream_index]);
+                double start_seconds = packet_start + (static_cast<double>(subtitle.start_display_time) / 1000.0);
+                double end_seconds = packet_start + (static_cast<double>(subtitle.end_display_time) / 1000.0);
+                if (end_seconds <= start_seconds + 0.001) {
+                    end_seconds = start_seconds + std::max(0.5, packetDurationSeconds(*packet, format_ctx->streams[stream_index]));
+                }
+
+                for (unsigned int i = 0; i < subtitle.num_rects; ++i) {
+                    const AVSubtitleRect* rect = subtitle.rects[i];
+                    if (!rect || rect->type != SUBTITLE_BITMAP) {
+                        continue;
+                    }
+
+                    SubtitleBitmap bitmap;
+                    if (!decodeBitmapSubtitleRect(rect, bitmap)) {
+                        continue;
+                    }
+
+                    SubtitleItem item;
+                    item.index = item_index++;
+                    item.layer = static_cast<int>(i);
+                    item.start_seconds = start_seconds;
+                    item.end_seconds = end_seconds;
+                    item.source_path = result.source_label;
+                    item.text = "[bitmap subtitle]";
+                    item.raw_text = item.text;
+                    item.play_res_x = video_width;
+                    item.play_res_y = video_height;
+                    item.is_bitmap = true;
+                    item.bitmap = std::move(bitmap);
+                    items.push_back(std::move(item));
+                }
+                avsubtitle_free(&subtitle);
+            }
+        }
+        av_packet_unref(packet);
+    }
+    av_packet_free(&packet);
+
+    if (!items.empty()) {
+        std::sort(items.begin(), items.end(), [](const SubtitleItem& lhs, const SubtitleItem& rhs) {
+            if (lhs.start_seconds != rhs.start_seconds) {
+                return lhs.start_seconds < rhs.start_seconds;
+            }
+            if (lhs.layer != rhs.layer) {
+                return lhs.layer < rhs.layer;
+            }
+            if (lhs.end_seconds != rhs.end_seconds) {
+                return lhs.end_seconds < rhs.end_seconds;
+            }
+            return lhs.index < rhs.index;
+        });
+    }
+
+    result.items = std::move(items);
+    result.bitmap_item_count = result.items.size();
+    result.loaded = !result.items.empty();
     return result;
 }
 
 }  // namespace
 
-EmbeddedSubtitleLoadResult loadBestEmbeddedSubtitleTrack(const std::string& media_source_path) {
+std::vector<EmbeddedSubtitleTrackInfo> listEmbeddedSubtitleTracks(const std::string& media_source_path) {
+    std::vector<EmbeddedSubtitleTrackInfo> tracks;
+    InputContextPtr format_ctx = openInputContext(media_source_path);
+    if (!format_ctx) {
+        LOG_WARNING("Embedded subtitle track listing failed to open media: " << media_source_path);
+        return tracks;
+    }
+
+    tracks.reserve(format_ctx->nb_streams);
+    for (unsigned int i = 0; i < format_ctx->nb_streams; ++i) {
+        const AVStream* stream = format_ctx->streams[i];
+        if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+            continue;
+        }
+        tracks.push_back(buildTrackInfo(stream));
+    }
+
+    LOG_INFO("Embedded subtitle track listing: media=" << media_source_path
+             << ", subtitle_tracks=" << tracks.size());
+    return tracks;
+}
+
+int selectBestEmbeddedSubtitleStream(const std::vector<EmbeddedSubtitleTrackInfo>& tracks) {
+    int best_stream_index = -1;
+    int best_score = std::numeric_limits<int>::min();
+    for (const EmbeddedSubtitleTrackInfo& track : tracks) {
+        if (!track.supported_codec) {
+            continue;
+        }
+        if (track.preference_score > best_score) {
+            best_score = track.preference_score;
+            best_stream_index = track.stream_index;
+        }
+    }
+    return best_stream_index;
+}
+
+EmbeddedSubtitleLoadResult loadEmbeddedSubtitleTrack(const std::string& media_source_path, int stream_index) {
     EmbeddedSubtitleLoadResult result;
     InputContextPtr format_ctx = openInputContext(media_source_path);
     if (!format_ctx) {
@@ -590,30 +785,60 @@ EmbeddedSubtitleLoadResult loadBestEmbeddedSubtitleTrack(const std::string& medi
         return result;
     }
 
-    bool any_subtitle_stream_found = false;
-    bool any_supported_stream_found = false;
-    const int stream_index =
-        findBestSupportedSubtitleStream(format_ctx.get(), any_subtitle_stream_found, any_supported_stream_found);
-    result.subtitle_stream_found = any_subtitle_stream_found;
-    result.supported_stream_found = any_supported_stream_found;
-    if (stream_index < 0) {
+    if (stream_index < 0 || stream_index >= static_cast<int>(format_ctx->nb_streams)) {
+        bool any_subtitle_stream_found = false;
+        bool any_supported_stream_found = false;
+        for (unsigned int i = 0; i < format_ctx->nb_streams; ++i) {
+            const AVStream* stream = format_ctx->streams[i];
+            if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+                continue;
+            }
+            any_subtitle_stream_found = true;
+            if (isSupportedSubtitleCodec(stream->codecpar->codec_id)) {
+                any_supported_stream_found = true;
+            }
+        }
+        result.subtitle_stream_found = any_subtitle_stream_found;
+        result.supported_stream_found = any_supported_stream_found;
         return result;
     }
 
     AVStream* stream = format_ctx->streams[stream_index];
-    if (!stream || !stream->codecpar) {
+    if (!stream || !stream->codecpar || stream->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+        bool any_supported_stream_found = false;
+        for (unsigned int i = 0; i < format_ctx->nb_streams; ++i) {
+            const AVStream* candidate = format_ctx->streams[i];
+            if (!candidate || !candidate->codecpar || candidate->codecpar->codec_type != AVMEDIA_TYPE_SUBTITLE) {
+                continue;
+            }
+            if (isSupportedSubtitleCodec(candidate->codecpar->codec_id)) {
+                any_supported_stream_found = true;
+                break;
+            }
+        }
+        result.subtitle_stream_found = false;
+        result.supported_stream_found = any_supported_stream_found;
         return result;
     }
 
     const std::string language = metadataValue(stream->metadata, "language");
     const std::string title = metadataValue(stream->metadata, "title");
+    result.subtitle_stream_found = true;
+    result.supported_stream_found = isSupportedSubtitleCodec(stream->codecpar->codec_id);
+    result.stream_index = stream_index;
+    result.codec_name = codecName(stream->codecpar->codec_id);
+    result.language = language;
+    result.title = title;
+    result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
+    result.bitmap_codec = isSupportedBitmapSubtitleCodec(stream->codecpar->codec_id);
+    result.bitmap_item_count = 0;
+
+    if (!result.supported_stream_found) {
+        return result;
+    }
+
     SubtitleDecoderPtr codec_ctx = openSubtitleDecoder(format_ctx.get(), stream_index);
     if (!codec_ctx) {
-        result.stream_index = stream_index;
-        result.codec_name = codecName(stream->codecpar->codec_id);
-        result.language = language;
-        result.title = title;
-        result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
         return result;
     }
 
@@ -638,14 +863,48 @@ EmbeddedSubtitleLoadResult loadBestEmbeddedSubtitleTrack(const std::string& medi
                                             language,
                                             title);
         break;
+    case AV_CODEC_ID_HDMV_PGS_SUBTITLE:
+    case AV_CODEC_ID_DVD_SUBTITLE:
+        result = loadBitmapSubtitleTrack(format_ctx.get(),
+                                         codec_ctx.get(),
+                                         stream_index,
+                                         media_source_path,
+                                         language,
+                                         title);
+        break;
     default:
-        result.stream_index = stream_index;
-        result.codec_name = codecName(stream->codecpar->codec_id);
-        result.language = language;
-        result.title = title;
-        result.source_label = buildEmbeddedSubtitleSourceLabel(media_source_path, stream_index, result.codec_name, language);
         break;
     }
+
+    LOG_INFO("Embedded subtitle track load: media=" << media_source_path
+             << ", stream_index=" << result.stream_index
+             << ", codec=" << result.codec_name
+             << ", language=" << (result.language.empty() ? std::string("und") : result.language)
+             << ", title=" << (result.title.empty() ? std::string("none") : result.title)
+             << ", loaded=" << (result.loaded ? "true" : "false")
+             << ", items=" << result.items.size());
+
+    return result;
+}
+
+EmbeddedSubtitleLoadResult loadBestEmbeddedSubtitleTrack(const std::string& media_source_path) {
+    EmbeddedSubtitleLoadResult result;
+    const std::vector<EmbeddedSubtitleTrackInfo> tracks = listEmbeddedSubtitleTracks(media_source_path);
+    result.subtitle_stream_found = !tracks.empty();
+    result.supported_stream_found =
+        std::any_of(tracks.begin(), tracks.end(), [](const EmbeddedSubtitleTrackInfo& track) {
+            return track.supported_codec;
+        });
+    if (!result.supported_stream_found) {
+        return result;
+    }
+
+    const int stream_index = selectBestEmbeddedSubtitleStream(tracks);
+    if (stream_index < 0) {
+        return result;
+    }
+
+    result = loadEmbeddedSubtitleTrack(media_source_path, stream_index);
 
     LOG_INFO("Embedded subtitle probe: media=" << media_source_path
              << ", subtitle_stream_found=" << (result.subtitle_stream_found ? "true" : "false")
