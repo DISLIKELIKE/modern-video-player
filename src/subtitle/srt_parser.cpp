@@ -40,6 +40,7 @@ SubtitleStyle makeDefaultSrtStyle() {
     style.font_size = 36.0;
     style.bold = true;
     style.primary_color = SubtitleColor(255, 255, 255, 250);
+    style.secondary_color = style.primary_color;
     style.outline_color = SubtitleColor(0, 0, 0, 255);
     style.background_color = SubtitleColor(5, 5, 5, 148);
     style.alignment = 2;
@@ -49,18 +50,31 @@ SubtitleStyle makeDefaultSrtStyle() {
     style.border_style = 3;
     style.outline = 0.0;
     style.shadow = 2.0;
+    style.outline_x = 0.0;
+    style.outline_y = 0.0;
+    style.shadow_x = 2.0;
+    style.shadow_y = 2.0;
     return style;
 }
 
 }  // namespace
 
 bool SrtParser::parseFile(const std::string& file_path) {
-    items_.clear();
-
     std::ifstream input(file_path, std::ios::binary);
     if (!input.good()) {
         return false;
     }
+
+    return parseStream(input, file_path);
+}
+
+bool SrtParser::parseText(const std::string& content, const std::string& source_path) {
+    std::istringstream input(content);
+    return parseStream(input, source_path);
+}
+
+bool SrtParser::parseStream(std::istream& input, const std::string& source_path) {
+    items_.clear();
 
     const SubtitleStyle default_style = makeDefaultSrtStyle();
     std::string line;
@@ -117,6 +131,7 @@ bool SrtParser::parseFile(const std::string& file_path) {
 
         item.text = content.str();
         item.raw_text = item.text;
+        item.source_path = source_path;
         item.style = default_style;
         const size_t visible_length = countUtf8CodePoints(item.text);
         if (visible_length > 0) {

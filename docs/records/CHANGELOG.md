@@ -1,4 +1,110 @@
-﻿# 闂淇璁板綍
+# 问题修复记录
+
+## 问题 98: OpenGL libass 差距清单、显示级 HDR 设计与 quirk diagnostics 正式化
+
+**日期**: 2026-03-24
+
+### 问题描述
+- 用户要求把上一轮给出的三个后续建议全部落地：
+  - 补 OpenGL 与 `libass/mpv` 的能力差距清单
+  - 补显示级 HDR 输出设计
+  - 把 OpenGL quirk 机制做成可扩展规则表和独立诊断快照
+- 当前 OpenGL 虽已具备 `ASS/SSA` 基础渲染、native interop 和基础 HDR aware 处理，但对外仍缺少明确的差距口径与正式诊断入口。
+
+### 原因分析
+- `ASS/SSA` 之前虽然已能渲染，但“还差多少”仍然停留在模糊描述，没有拆到 `karaoke / vector / shaping / font fallback` 等成熟播放器真正敏感的维度。
+- 现有 OpenGL HDR 处理还只是 renderer 内部色彩变换，没有把显示级 HDR 输出需要的 `swapchain / metadata / ICC/3D LUT` 结构化下来。
+- OpenGL native interop 的启动期决策此前仍偏内部实现细节，缺少像 `--d3d11-diagnostics` 那样可单独执行的机器可读快照。
+
+### 解决方案
+- 在 `include/render/opengl_video_renderer.h` 与 `src/render/opengl_video_renderer.cpp` 中新增 `OpenGLDiagnosticsSnapshot`、`probeSystemDiagnostics()` 和结构化 `hard blocker + quirk rule + env override` 启动期决策。
+- 在 `src/main.cpp` 中新增 `--opengl-diagnostics` CLI，一次性输出 OpenGL 上下文、`WGL_NV_DX_interop`、D3D11 基础能力、最终生效规则与 override 结果。
+- 新增 `docs/analysis/PLAYERCORE_DAY27_OPENGL_LIBASS_GAP_AND_QUIRK_DIAGNOSTICS.md`，把 `libass` 差距拆为明确清单。
+- 新增 `docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`，明确显示级 HDR 输出应走 `DXGI HDR swapchain bridge` 路径，并定义 metadata/ICC 策略边界。
+- 更新 `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md` 与 records 文档。
+
+### 本地验收
+- `cmake --build build --config Release`：通过。
+- `./build/Release/modern-video-player.exe --opengl-diagnostics`
+  - `probe_succeeded=true`
+  - `has_wgl_dx_interop=true`
+  - `native_interop.allowed=true`
+  - `result=PASS`
+- `$env:MVP_OPENGL_NATIVE_INTEROP='disable'; ./build/Release/modern-video-player.exe --opengl-diagnostics`
+  - `native_interop.env_override=disable`
+  - `native_interop.allowed=false`
+  - `native_interop.disable_rule=env_disable`
+  - `result=PASS`
+- `$env:MVP_RENDERER_BACKEND='opengl'; ./build/Release/modern-video-player.exe --performance-log-check ./juren-30s.mp4 2000`
+  - `renderer_backend=OpenGL`
+  - `decoder_backend=D3D11VA`
+  - `video_native_output_frames=62`
+  - `video_copy_back_frames=0`
+  - `result=PASS`
+- `./build/Release/modern-video-player.exe --subtitle-sync-check ./build/tmp_opengl_ass_validation.ass`
+  - `mismatches=0`
+  - `result=PASS`
+- `$env:MVP_RENDERER_BACKEND='opengl'; ./build/Release/modern-video-player.exe --delay-adjust-check ./juren-30s.mp4 ./build/tmp_opengl_ass_validation.ass`
+  - `subtitle_loaded=true`
+  - `probe_found=true`
+  - `result=PASS`
+
+### 修改文件
+- `include/render/opengl_video_renderer.h`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY27_OPENGL_LIBASS_GAP_AND_QUIRK_DIAGNOSTICS.md`
+- `docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## 问题 97: OpenGL ASS/SSA、driver quirk 收敛与 HDR/色彩管理补齐
+
+**日期**: 2026-03-24
+
+### 问题描述
+- 用户要求继续把 `OpenGL` 往成熟播放器方向推进，优先补齐 `ASS/SSA`、driver quirk 收敛和 `HDR / 色彩管理`。
+- 当前 `OpenGL` 虽已具备可播放链路和 `D3D11VA -> OpenGL` 原生互操作，但字幕、启动期策略和色彩处理仍偏 `M0/M1-` 过渡状态。
+
+### 原因分析
+- 旧 OpenGL 字幕路径仍偏简单叠字，不能稳定承接 `ASS/SSA` 的 item/run 样式信息。
+- native interop 主要依赖运行期失败回退，缺少启动期环境策略、适配器/驱动诊断和保守 blacklist。
+- 软件上传和原生 interop 两条 OpenGL 路径的色彩处理此前没有收敛到一套统一且可观测的管线。
+
+### 解决方案
+- 在 `src/render/opengl_video_renderer.cpp` 中将 OpenGL 字幕渲染升级为 `DirectWrite + D2D offscreen -> GL texture`，支持多 `SubtitleItem` 排序、item/run 分段样式、定位对齐、描边、阴影、背景框和填充。
+- 为 OpenGL native interop 增加 `MVP_OPENGL_NATIVE_INTEROP=auto|disable|force`、软件 GL blacklist 和 `[diag:opengl-native]` 启动期诊断。
+- 统一软件/原生 OpenGL 色彩链路：补齐 `BT.601 / 709 / 2020`、`PQ / HLG`、基础 tone-map 和 `BT.2020 -> BT.709` gamut mapping，并输出 `[diag:opengl-color]`。
+- 新增 `docs/analysis/PLAYERCORE_DAY26_OPENGL_ASS_HDR_QUIRK_CONVERGENCE.md` 记录 implementation planner，并更新 `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`。
+
+### 本地验收
+- `cmake --build build --config Release`：通过。
+- `$env:MVP_RENDERER_BACKEND='opengl'; ./build/Release/modern-video-player.exe --performance-log-check ./juren-30s.mp4 2000`
+  - `renderer_backend=OpenGL`
+  - `decoder_backend=D3D11VA`
+  - `video_native_output_frames=62`
+  - `video_copy_back_frames=0`
+  - `render_frames=47`
+  - `result=PASS`
+- `./build/Release/modern-video-player.exe --subtitle-sync-check ./build/tmp_opengl_ass_validation.ass`
+  - `entries=2`
+  - `mismatches=0`
+  - `result=PASS`
+- `$env:MVP_RENDERER_BACKEND='opengl'; ./build/Release/modern-video-player.exe --delay-adjust-check ./juren-30s.mp4 ./build/tmp_opengl_ass_validation.ass`
+  - `subtitle_loaded=true`
+  - `subtitle_entries=2`
+  - `probe_found=true`
+  - `result=PASS`
+
+### 修改文件
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY26_OPENGL_ASS_HDR_QUIRK_CONVERGENCE.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## 问题 96: OpenGL 渲染链路 M0 落地并完成本地验收
 
@@ -12176,3 +12282,543 @@ void VideoPlayer::play() {
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
+
+## 问题 91: OpenGL/D3D11 字幕链补齐 ASS 样式变换与样式诊断
+
+**日期**: 2026-03-24
+
+### 问题描述
+- OpenGL 与 D3D11 播放链已经能稳定播放，但 `ASS/SSA` 样式语义仍明显弱于成熟播放器。
+- 之前 `ASS parser` 只覆盖少量 tag，很多常见样式虽然在字幕文件里存在，但进入播放器后并没有真正作用到 GPU 字幕渲染。
+- 缺少机器可读的样式检查入口，导致 OpenGL 字幕问题排查仍偏依赖肉眼观察。
+
+### 原因分析
+- `SubtitleStyle` 数据模型不够完整，缺少：`wrap_style`、`spacing`、`scale_x/scale_y`、`rotation`、`x/y border`、`x/y shadow`。
+- `src/subtitle/ass_parser.cpp` 未解析 `WrapStyle`、`ScaleX/ScaleY`、`Spacing`、`Angle` 以及 `\q/\fsp/\fscx/\fscy/\fr/\xbord/\ybord/\xshad/\yshad`。
+- OpenGL / D3D11 的 D2D/DirectWrite 字幕路径也没有消费这些字段。
+
+### 解决方案
+- 扩展 `SubtitleStyle` 和比较逻辑，增加 ASS 样式变换字段。
+- 增强 `ASS parser`，把脚本级、style 级和 override 级常见 ASS 样式映射到统一字幕模型。
+- 同步更新 `src/render/opengl_video_renderer.cpp` 与 `src/render/d3d11_video_renderer.cpp`，让 GPU 字幕链真正消费这些字段。
+- 新增 `--subtitle-style-check`，输出 item/run/style 全量 `key=value` 诊断信息。
+- 新增样本 `samples/subtitles/opengl_ass_style_validation.ass`。
+
+### 本地验证
+- `./build/Release/modern-video-player.exe --subtitle-style-check ./samples/subtitles/opengl_ass_style_validation.ass`
+- `./build/Release/modern-video-player.exe --subtitle-sync-check ./samples/subtitles/opengl_ass_style_validation.ass`
+- `$env:MVP_RENDERER_BACKEND='opengl'; ./build/Release/modern-video-player.exe --delay-adjust-check ./samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4 ./samples/subtitles/opengl_ass_style_validation.ass`
+- `./build/Release/modern-video-player.exe --opengl-diagnostics`
+- 结果：`subtitle-style-check.result=PASS`、`subtitle-sync-check.result=PASS`、`delay-adjust-check.result=PASS`、`opengl-diagnostics.result=PASS`
+
+### 修改文件
+- include/subtitle/subtitle_parser.h
+- src/subtitle/subtitle_parser.cpp
+- src/subtitle/ass_parser.cpp
+- src/subtitle/srt_parser.cpp
+- src/render/d3d11_video_renderer.cpp
+- src/render/opengl_video_renderer.cpp
+- src/main.cpp
+- samples/subtitles/opengl_ass_style_validation.ass
+- docs/analysis/PLAYERCORE_DAY28_OPENGL_ASS_STYLE_TRANSFORM_AND_PARSER_DIAGNOSTICS.md
+- docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md
+- docs/records/CHANGELOG.md
+- docs/records/VERSION.md
+- docs/records/DEVELOP_LOG.md
+
+## Issue 92: OpenGL/D3D11 subtitle run-level karaoke, clip and subtitle clock convergence
+
+**Date**: 2026-03-24
+
+### Problem Description
+- The second ASS capability batch was only partially wired in: parser/model changes existed, but renderer-side run-level coloring, karaoke timing, clip rendering and paused redraw behavior were not fully closed.
+- OpenGL still rendered subtitles mostly as item-level text, which left a visible gap against mature players for `secondary color`, `clip`, `iclip` and karaoke sweep behavior.
+
+### Root Cause Analysis
+- Subtitle timing data was not fully propagated from `PlayerCore` into renderer-side subtitle texture invalidation / redraw decisions.
+- The OpenGL subtitle D2D path had not yet been ported to the same run-level brush/effect logic already drafted for D3D11.
+- `iclip` had parser coverage but no rendering coverage.
+
+### Solution
+- Added `setSubtitleClock()` plumbing from `PlayerCore` into `IVideoRenderer`, `D3D11VideoRenderer` and `OpenGLVideoRenderer`.
+- Completed ASS parser support for `SecondaryColour`, `2c/2a/3c/3a/4c/4a`, `clip`, `iclip`, `k/kf/ko` and uppercase `K`.
+- Completed run-level D2D subtitle rendering for D3D11/OpenGL with per-run fill/outline/shadow brushes and karaoke sweep highlight overlays.
+- Added rectangular `clip` and basic rectangular `iclip` rendering by decomposing the inverse clip area into visible outer regions.
+- Extended `--subtitle-style-check` output and added `samples/subtitles/opengl_ass_karaoke_clip_validation.ass`.
+
+### Modified Files
+- `include/render/video_renderer.h`
+- `include/render/d3d11_video_renderer.h`
+- `include/render/opengl_video_renderer.h`
+- `include/subtitle/subtitle_parser.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `src/subtitle/srt_parser.cpp`
+- `src/subtitle/subtitle_parser.cpp`
+- `samples/subtitles/opengl_ass_karaoke_clip_validation.ass`
+- `docs/analysis/PLAYERCORE_DAY29_OPENGL_KARAOKE_CLIP_AND_SUBTITLE_CLOCK.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 93: ASS move/fad/fade animation converged into D3D11/OpenGL subtitle rendering
+
+**Date**: 2026-03-24
+
+### Problem Description
+- The GPU subtitle path already supported style transforms, karaoke and clip, but still lacked a usable subset of ASS line animation semantics.
+- `\move`, `\fad` and `\fade` were still a visible gap against mature players because subtitles remained spatially static and fully opaque once displayed.
+
+### Root Cause Analysis
+- The subtitle model only held style/run data and had no dedicated line-level animation container.
+- Renderer-side animated subtitle detection only covered karaoke timing, so even if move/fade were parsed they would not trigger correct redraw behavior.
+- D3D11/OpenGL brush generation had no item-level opacity modulation stage.
+
+### Solution
+- Added `SubtitleStyleAnimation` / `SubtitleFadeMode` and stored line-level animation on `SubtitleItem.animation`.
+- Added ASS parser support for `\move`, `\fad` and `\fade`.
+- Added subtitle-clock-based move interpolation and fade opacity evaluation in both D3D11 and OpenGL subtitle renderers.
+- Extended animated subtitle detection to include move/fade and extended `--subtitle-style-check` output accordingly.
+- Added `samples/subtitles/opengl_ass_animation_validation.ass`.
+
+### Modified Files
+- `include/subtitle/subtitle_parser.h`
+- `src/subtitle/subtitle_parser.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `samples/subtitles/opengl_ass_animation_validation.ass`
+- `docs/analysis/PLAYERCORE_DAY30_ASS_MOVE_FADE_GPU_SUBTITLE_ANIMATION.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+
+## Issue 94: ASS transform, vector drawing/clip, and font fallback groundwork converged into GPU subtitle rendering
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The subtitle pipeline had already covered style expansion, karaoke, clip, and move/fade, but the next practical ASS batch was still missing: `\org`, `\fax`, `\fay`, `\frx`, `\fry`, vector drawing, vector clip, and font fallback groundwork.
+- During OpenGL runtime validation of this batch, the new vector clip path also exposed an internal Direct2D state-stack regression.
+
+### Root Cause Analysis
+- The subtitle model/parser could not yet carry transform-origin, projected-rotation, shear, vector drawing, and vector clip data through to the GPU renderers.
+- The renderer-side subtitle path lacked geometry generation and masking logic for ASS drawing and vector clip semantics.
+- The new clip-layer integration introduced mismatched `PushLayer()/PopLayer()` usage, which produced `D2DERR_PUSH_POP_UNBALANCED (0x88990016)` during `EndDraw()`.
+
+### Solution
+- Extended the subtitle model and ASS parser with transform, drawing, vector clip, and source-path fields.
+- Added affine transform, vector drawing, and vector clip rendering to both D3D11 and OpenGL subtitle renderers.
+- Added subtitle-sidecar/private font registration and fallback family-chain groundwork through `subtitle_font_registry`.
+- Fixed the D2D layer-stack regression by removing the stray pre-emptive `PopLayer()` and restoring the missing `PopLayer()` in the subtitle box path across both renderers.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `build\Release\modern-video-player.exe --subtitle-style-check samples\subtitles\opengl_ass_transform_vector_font_validation.ass`
+- `build\Release\modern-video-player.exe --subtitle-sync-check samples\subtitles\opengl_ass_transform_vector_font_validation.ass`
+- `MVP_RENDERER_BACKEND=opengl build\Release\modern-video-player.exe --delay-adjust-check samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 samples\subtitles\opengl_ass_transform_vector_font_validation.ass`
+- `MVP_RENDERER_BACKEND=d3d11 build\Release\modern-video-player.exe --delay-adjust-check samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 samples\subtitles\opengl_ass_transform_vector_font_validation.ass`
+- Results: all PASS
+
+### Modified Files
+- `include/subtitle/subtitle_parser.h`
+- `src/subtitle/subtitle_parser.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `include/subtitle/subtitle_font_registry.h`
+- `src/subtitle/subtitle_font_registry.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `samples/subtitles/opengl_ass_transform_vector_font_validation.ass`
+- `docs/analysis/PLAYERCORE_DAY31_ASS_TRANSFORM_VECTOR_FONT_FALLBACK.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
+## Issue 99: Idle window startup and drag-drop playback
+**Date**: 2026-03-25
+
+### Problem Description
+- Launching the exe without media arguments exited immediately instead of opening a usable player window.
+- There was no drag-and-drop media open path for SDL, D3D11, or OpenGL playback windows.
+- Dropping a new file during playback could not switch media because the app layer never received an open-file request.
+
+### Root Cause
+- The startup path required at least one CLI media input.
+- Renderer event pumps exposed quit/seek/navigation requests but not file-drop requests.
+- `PlayerCore` stopped playback for next/previous/quit, but had no buffered handoff for a validated media replacement flow.
+
+### Solution
+- Added idle-window mode for empty-start sessions.
+- Added `consumeOpenFileRequest()` across the renderer interface and implementations.
+- Buffered file-drop requests in `PlayerCore` and exposed them through `VideoPlayer`.
+- Updated `main.cpp` to validate dropped paths before replacing playback and to return to idle mode for sessions launched without CLI media.
+
+### Local Validation
+- `cmake --build build --config Release --target modern-video-player`: PASS
+- Manual GUI smoke test still pending for this turn.
+
+### Modified Files
+- `src/main.cpp`
+- `src/display.cpp`
+- `src/render/sdl_video_renderer.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/core/player_core.cpp`
+- `src/video_player.cpp`
+- `include/render/video_renderer.h`
+- `include/display.h`
+- `include/render/sdl_video_renderer.h`
+- `include/render/d3d11_video_renderer.h`
+- `include/render/opengl_video_renderer.h`
+- `include/core/player_core.h`
+- `include/video_player.h`
+- `docs/analysis/PLAYERCORE_DAY32_IDLE_WINDOW_AND_DRAG_DROP_PLAYBACK.md`
+
+## Issue 100: OpenGL playback stutter caused by async present pacing
+**Date**: 2026-03-25
+
+### Problem Description
+- OpenGL playback could visibly stutter on the user's AMD machine even when decoder, queue, and native-output counters still looked healthy.
+- The existing diagnostics mostly reflected submit-side progress, not the moment a frame was actually shown by the OpenGL render thread.
+
+### Root Cause Analysis
+- OpenGL `present()` returned immediately after queueing work to the renderer thread, so `PlayerCore` advanced the video clock before on-screen presentation actually completed.
+- A single pending-frame slot allowed silent replacement when the renderer thread lagged behind the scheduler.
+- OpenGL forced `swap interval=0`, which made display pacing less stable than the D3D11 path.
+- The native interop path also executed a per-frame `ID3D11DeviceContext::Flush()`.
+
+### Solution
+- Made OpenGL `present()` wait for the submitted frame to be displayed.
+- Added submission/presentation IDs to synchronize scheduler pacing with actual OpenGL presentation.
+- Changed OpenGL to prefer `swap interval=1`, with fallback to `0` only when needed.
+- Removed the per-frame native interop `Flush()` call.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `MVP_RENDERER_BACKEND=opengl .\build\Release\modern-video-player.exe --opengl-diagnostics`
+- `MVP_RENDERER_BACKEND=opengl .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2500`
+- `MVP_RENDERER_BACKEND=opengl MVP_OPENGL_NATIVE_INTEROP=disable .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2500`
+- Results: build PASS, diagnostics PASS, OpenGL native path PASS, OpenGL copy-back path PASS
+
+### Modified Files
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY33_OPENGL_PRESENT_PACING_AND_AMD_STUTTER.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+## Issue 101: OpenGL runtime diagnostics export and P010/P016 copy-back upload
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The new OpenGL runtime counters had been wired into the renderer, but still needed end-to-end verification through `--performance-log-check`.
+- OpenGL software upload only accepted `yuv420p/nv12`, so 10-bit copy-back frames could still fall through an extra `swscale -> yuv420p` downgrade when native interop was disabled.
+
+### Root Cause Analysis
+- The machine-readable reporting path spans renderer diagnostics, `PlayerCore` diagnostics snapshot, and `main.cpp`, so the new keys had to be verified on the final CLI output instead of assuming the plumbing was complete.
+- The OpenGL software upload path had no 16-bit semi-planar texture allocation/upload support.
+- Software color coefficients only modeled 8-bit normalized sampling.
+
+### Solution
+- Verified and retained the `renderer_opengl_native_interop_*` / `renderer_opengl_present_wait_timeouts` exports in `--performance-log-check`.
+- Added `AV_PIX_FMT_P010LE` and `AV_PIX_FMT_P016LE` direct upload support to the OpenGL renderer.
+- Added 16-bit GL texture allocation/upload and 16-bit normalized color coefficient handling for the semi-planar software path.
+- Extended the OpenGL color diagnostics to print the software input format during validation.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `MVP_RENDERER_BACKEND=opengl .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1800`
+- `MVP_RENDERER_BACKEND=opengl MVP_OPENGL_NATIVE_INTEROP=disable .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1800`
+- `MVP_RENDERER_BACKEND=opengl MVP_OPENGL_NATIVE_INTEROP=disable .\build\Release\modern-video-player.exe --performance-log-check .\build\tmp\opengl-p010-validation.mp4 2200`
+- Results: all PASS; 10-bit forced copy-back path reported `video_copy_back_frames=72` and `video_swscale_frames=0`
+
+### Modified Files
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY34_OPENGL_RUNTIME_DIAGNOSTICS_AND_P010_UPLOAD.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 102: OpenGL present-mode override and gate script
+
+**Date**: 2026-03-25
+
+### Problem Description
+- OpenGL present pacing had been fixed, but现场排障 still needed a supported way to switch between paced and immediate present behavior.
+- The OpenGL regression commands for diagnostics/native/copy-back/10-bit/subtitle were still scattered and manual.
+
+### Root Cause Analysis
+- Swap interval selection was still effectively hard-coded in renderer startup.
+- Diagnostics snapshots did not expose the requested and active OpenGL present mode.
+- There was no single OpenGL-focused gate script comparable to the project's other validation helpers.
+
+### Solution
+- Added `MVP_OPENGL_PRESENT_MODE=auto|paced|immediate`.
+- Added `[diag:opengl-present] requested=... active=...` startup logging.
+- Exported `renderer_opengl_present_mode_requested` and `renderer_opengl_present_mode_active` in `--performance-log-check`.
+- Added `tools/run_opengl_checks.ps1` to run OpenGL diagnostics, native playback, copy-back playback, immediate present mode, 10-bit copy-back, and subtitle delay regression in one command.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `MVP_RENDERER_BACKEND=opengl .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1500`
+- `MVP_RENDERER_BACKEND=opengl MVP_OPENGL_PRESENT_MODE=immediate .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1500`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: all PASS; gate script reported `OpenGL gate result: PASS`
+
+### Modified Files
+- `include/render/video_renderer.h`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `tools/run_opengl_checks.ps1`
+- `docs/analysis/PLAYERCORE_DAY35_OPENGL_PRESENT_OVERRIDE_AND_GATE_SCRIPT.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 103: OpenGL HDR probe, quirk-table expansion, subtitle gate completion, and final gap matrix
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The OpenGL next-stage task table still had unfinished items around HDR output capability probing, quirk-table growth, subtitle sample gating, and a final mature-player gap summary.
+
+### Root Cause Analysis
+- Diagnostics previously stopped at adapter/decoder capability and did not reach the display-output layer.
+- The quirk mechanism existed, but the rule table still covered only a very small set of known conditions.
+- Subtitle sample validation was still spread across manual commands instead of a single OpenGL-focused gate.
+- The remaining OpenGL gap against mature players was known informally, but not yet closed into one final backend-level matrix.
+
+### Solution
+- Added `opengl-diagnostics.hdr_output.*` fields to probe DXGI output color space and luminance state.
+- Expanded the OpenGL quirk table with `device_id` / `subsystem_id` match capacity and additional software / virtual GPU context rules.
+- Expanded `tools/run_opengl_checks.ps1` into a 10-step OpenGL gate including the ASS subtitle sample suite.
+- Added a final OpenGL mature-player gap matrix and aligned the HDR design document with the implemented probe surface.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `MVP_RENDERER_BACKEND=opengl .\build\Release\modern-video-player.exe --opengl-diagnostics`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: build PASS, `opengl-diagnostics.result=PASS`, `opengl-diagnostics.hdr_output.probe_succeeded=true`, `OpenGL gate result: PASS`
+
+### Modified Files
+- `include/render/opengl_video_renderer.h`
+- `src/render/opengl_video_renderer.cpp`
+- `src/main.cpp`
+- `tools/run_opengl_checks.ps1`
+- `docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`
+- `docs/analysis/PLAYERCORE_DAY36_OPENGL_HDR_PROBE_QUIRK_TABLE_AND_GAP_MATRIX.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 104: OpenGL hotkey stall and missing control OSD
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The OpenGL playback path could stutter or appear frozen after hotkeys, especially on seek/volume-related input.
+- The OpenGL window did not visibly expose the progress bar and volume bar unless a paused redraw happened, so the UI looked like it had no controls.
+
+### Root Cause Analysis
+- The OpenGL renderer consumed every `SDL_KEYDOWN`, including auto-repeat events, which could accumulate repeated control requests on one physical key press.
+- Hotkey-triggered OSD visibility only called `requestRedrawIfPaused()`, so normal playback often did not repaint the OSD immediately.
+- Unlike the D3D11 path, the OpenGL path had no mouse-driven progress/volume interaction loop wired into SDL events.
+
+### Solution
+- Suppressed repeated `SDL_KEYDOWN` handling in the OpenGL path to avoid hotkey request storms.
+- Changed OpenGL hotkey OSD wakeup from paused-only redraw to unconditional `requestRedraw()`.
+- Added startup OSD visibility, mouse-move OSD wakeup, and left-button progress/volume drag handling with seek preview and live volume updates.
+- Refactored OpenGL control layout calculation so rendering and hit-testing use the same geometry.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: build PASS, `OpenGL gate result: PASS`
+- Manual GUI smoke is still recommended for actual hotkey feel and control dragging.
+
+### Modified Files
+- `src/render/opengl_video_renderer.cpp`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 105: ASS transform transition parser/runtime support
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The OpenGL Top 10 table was already closed, but a visible libass parity gap still remained: `\t(...)` style transitions were not parsed or executed.
+- `--subtitle-style-check` could not expose machine-readable transition fields, so transition regressions were hard to verify.
+- OpenGL and D3D11 subtitle paths still rendered these subtitles as static styles instead of time-varying transforms/colors/scales.
+
+### Root Cause Analysis
+- The ASS override parser still assumed simple argument extraction and did not handle nested parentheses or top-level comma splitting required by `\t(...)`.
+- Subtitle runtime style resolution only consumed the base item/run style plus existing move/fade state; it had no transition interpolation stage.
+- The OpenGL gate had no dedicated transition sample, so this semantic gap could survive without a targeted regression.
+
+### Solution
+- Added `SubtitleStyleTransition` plus transition property masks to the subtitle model and parser.
+- Added nested-parenthesis matching and top-level comma splitting so `\t(...)` bodies parse correctly, including embedded `\clip(...)`.
+- Added runtime style interpolation for supported transition fields across both OpenGL and D3D11 subtitle renderers.
+- Extended `--subtitle-style-check` with `transition_count`, per-transition timing/accel/property names, and target-style dumps.
+- Added `samples/subtitles/opengl_ass_transform_transition_validation.ass` and wired it into `tools/run_opengl_checks.ps1`.
+- Fixed the MSVC `std::clamp` ambiguity in transition byte interpolation during final integration.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `.\build\Release\modern-video-player.exe --subtitle-style-check .\samples\subtitles\opengl_ass_transform_transition_validation.ass`
+- `$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --delay-adjust-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 .\samples\subtitles\opengl_ass_transform_transition_validation.ass`
+- `$env:MVP_RENDERER_BACKEND='d3d11'; .\build\Release\modern-video-player.exe --delay-adjust-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 .\samples\subtitles\opengl_ass_transform_transition_validation.ass`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: build PASS, `subtitle-style-check.result=PASS`, OpenGL `delay-adjust-check.result=PASS`, D3D11 `delay-adjust-check.result=PASS`, `OpenGL gate result: PASS`
+
+### Modified Files
+- `include/subtitle/subtitle_parser.h`
+- `src/subtitle/subtitle_parser.cpp`
+- `src/subtitle/ass_parser.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `src/render/d3d11_video_renderer.cpp`
+- `src/main.cpp`
+- `samples/subtitles/opengl_ass_transform_transition_validation.ass`
+- `tools/run_opengl_checks.ps1`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/analysis/PLAYERCORE_DAY37_OPENGL_ASS_TRANSFORM_TRANSITION.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 106: OpenGL bottom-bar player chrome
+
+**Date**: 2026-03-25
+
+### Problem Description
+- The OpenGL path only exposed a lightweight OSD with progress and volume rails, not a complete player-style control bar.
+- There was no clickable play/pause button, no time text, and no hover-aware keep-visible/auto-hide behavior.
+- The result still felt like a diagnostics overlay instead of a mature player UI.
+
+### Root Cause Analysis
+- `ControlLayout` only modeled `progress_track` and `volume_track`.
+- `drawOsdOverlay()` only painted flat bars plus a center pause badge.
+- Mouse handling only understood seek/volume drag and had no concept of play-button hit-testing or panel hover state.
+
+### Solution
+- Expanded the OpenGL control layout to include a bottom bar, play/pause button, time text region, and larger progress/volume hit boxes.
+- Added geometry-based OpenGL UI drawing helpers for circles, triangles, and lightweight segmented time text rendering.
+- Reworked OpenGL OSD drawing into a full bottom player chrome with top progress rail, play/pause button, current/total time text, and volume rail.
+- Added hover state tracking so the bar stays visible while hovered and fades out automatically after idle playback.
+- Wired play/pause button clicks into the existing request path and kept seek/volume drag behavior on the expanded layout.
+
+### Validation
+- `cmake --build build --config Release --target modern-video-player`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: build PASS, `OpenGL gate result: PASS`
+- Manual GUI smoke is still recommended for hover timing, hit testing, and visual spacing.
+
+### Modified Files
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY38_OPENGL_BOTTOM_BAR_PLAYER_CHROME.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 107: Container attachment font pipeline
+
+**Date**: 2026-03-25
+
+### Problem Description
+- Subtitle font registration only covered sidecar font folders near external subtitle files.
+- Container font attachments were ignored, so ASS/SSA subtitles that depended on MKV-attached fonts could still fall back to the wrong system font.
+- There was no dedicated CLI regression for attachment extraction, registration, and cleanup.
+
+### Root Cause Analysis
+- `subtitle_font_registry` only scanned file-system directories and never consumed `AVMEDIA_TYPE_ATTACHMENT` streams from FFmpeg.
+- `PlayerCore::open()` did not create any media-scoped subtitle font session after opening the demuxer.
+- Because there was no attachment-specific diagnostics command, this gap could survive without a direct machine-readable test.
+
+### Solution
+- Extended `SubtitleFontRegistrationSummary` with attachment-specific extraction and registration fields.
+- Added media-scoped attachment APIs in `subtitle_font_registry` to extract font payloads from container attachments into a temp cache and register them as private fonts.
+- Wired `PlayerCore::open()` to register attachment fonts immediately after `demuxer_->open(...)`, and wired session release to unregister fonts and delete the cache.
+- Added `--attachment-font-check <media_file>` for machine-readable validation.
+
+### Validation
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player -j 8`
+- `ffmpeg -y -i .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 -c copy -attach C:\Windows\Fonts\arial.ttf -metadata:s:t mimetype=application/x-truetype-font -metadata:s:t:0 filename=attachment-font-check.ttf .\build\tmp\attachment-font-check.mkv`
+- `.\build\Release\modern-video-player.exe --attachment-font-check .\build\tmp\attachment-font-check.mkv`
+- Results: build PASS, `attachment-font-check.result=PASS`, extracted cache directory cleanup PASS
+
+### Modified Files
+- `include/subtitle/subtitle_font_registry.h`
+- `src/subtitle/subtitle_font_registry.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `docs/analysis/PLAYERCORE_DAY39_ATTACHMENT_FONT_PIPELINE.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`
+
+## Issue 108: Embedded subtitle-track playback
+
+**Date**: 2026-03-25
+
+### Problem Description
+- After the attachment-font pipeline landed, a major remaining player gap was that muxed subtitle streams inside media containers still did not play automatically.
+- Files with embedded ASS/SSA or text subtitles opened without subtitle output unless the user manually loaded a sidecar file.
+- There was no dedicated machine-readable regression for embedded subtitle discovery, selection, and playback.
+
+### Root Cause Analysis
+- `PlayerCore` only owned one subtitle timeline fed from external subtitle parsing, so embedded subtitles had no first-class storage or fallback policy.
+- `AssParser` and `SrtParser` did not expose a simple in-memory text entry point, which made reuse from demuxed container packets awkward.
+- The project had no loader that scanned FFmpeg subtitle streams, selected a supported text track, and converted it into the existing `SubtitleItem` model.
+
+### Solution
+- Added `AssParser::parseText(...)` and `SrtParser::parseText(...)` so reconstructed container subtitle text can reuse the existing subtitle pipeline.
+- Added `subtitle::loadBestEmbeddedSubtitleTrack(...)` with support for ASS/SSA plus plain-text subtitle codecs such as `subrip`, `text`, `mov_text`, and `webvtt`.
+- Split `PlayerCore` subtitle ownership into external and embedded stores, with active selection rule `external > embedded`.
+- Added `--embedded-subtitle-check <media_file>` for machine-readable validation.
+- Expanded `tools/run_opengl_checks.ps1` to auto-generate embedded ASS and embedded `mov_text` samples and verify both CLI load and OpenGL playback.
+
+### Validation
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player -j 8`
+- `ffmpeg -y -i .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 -i .\samples\subtitles\opengl_ass_transform_transition_validation.ass -map 0:v -map 0:a? -map 1:0 -c:v copy -c:a copy -c:s ass .\build\tmp\embedded-ass-validation.mkv`
+- `.\build\Release\modern-video-player.exe --embedded-subtitle-check .\build\tmp\embedded-ass-validation.mkv`
+- `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
+- Results: build PASS, embedded ASS check PASS, embedded text check PASS, `OpenGL gate result: PASS`
+
+### Modified Files
+- `include/subtitle/ass_parser.h`
+- `src/subtitle/ass_parser.cpp`
+- `include/subtitle/srt_parser.h`
+- `src/subtitle/srt_parser.cpp`
+- `include/subtitle/embedded_subtitle_loader.h`
+- `src/subtitle/embedded_subtitle_loader.cpp`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `tools/run_opengl_checks.ps1`
+- `docs/analysis/PLAYERCORE_DAY40_EMBEDDED_SUBTITLE_TRACK_PLAYBACK.md`
+- `docs/plans/OPENGL_NEXT_STAGE_TOP10.md`
+- `docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
+- `docs/records/VERSION.md`

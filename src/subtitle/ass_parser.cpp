@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -17,8 +19,38 @@ namespace {
 struct ParsedAssText {
     std::string visible_text;
     SubtitleStyle cue_style;
+    SubtitleStyleAnimation cue_animation;
+    bool has_vector_drawing{false};
+    int drawing_scale{1};
+    std::string drawing_commands;
     std::vector<SubtitleTextRun> runs;
 };
+
+struct PendingKaraokeState {
+    bool pending{false};
+    SubtitleKaraokeMode mode{SubtitleKaraokeMode::None};
+    int duration_centiseconds{0};
+    int cursor_centiseconds{0};
+};
+
+struct DrawingModeState {
+    int scale{0};
+    bool enabled() const { return scale > 0; }
+};
+
+std::vector<std::string> splitAndTrim(const std::string& text);
+bool parseInt(const std::string& text, int& value);
+bool parseDouble(const std::string& text, double& value);
+void parseOverrideBlock(const std::string& block,
+                        const std::unordered_map<std::string, SubtitleStyle>& styles,
+                        const SubtitleStyle& base_style,
+                        SubtitleStyle& cue_style,
+                        SubtitleStyle& current_style,
+                        SubtitleStyleAnimation& cue_animation,
+                        SubtitleStyleAnimation& current_animation,
+                        PendingKaraokeState& karaoke_state,
+                        DrawingModeState& drawing_mode,
+                        bool allow_transform_tags = true);
 
 std::string trimCopy(const std::string& text) {
     size_t start = 0;
@@ -84,6 +116,44 @@ size_t countUtf16CodeUnits(const std::string& text) {
     return count;
 }
 
+size_t findMatchingParenthesis(const std::string& text, size_t open_index) {
+    if (open_index >= text.size() || text[open_index] != '(') {
+        return std::string::npos;
+    }
+
+    size_t depth = 1;
+    for (size_t index = open_index + 1; index < text.size(); ++index) {
+        if (text[index] == '(') {
+            ++depth;
+        } else if (text[index] == ')') {
+            if (--depth == 0) {
+                return index;
+            }
+        }
+    }
+    return std::string::npos;
+}
+
+std::vector<std::string> splitTopLevelCommaSeparated(const std::string& text) {
+    std::vector<std::string> parts;
+    size_t start = 0;
+    size_t depth = 0;
+    for (size_t index = 0; index < text.size(); ++index) {
+        if (text[index] == '(') {
+            ++depth;
+        } else if (text[index] == ')') {
+            if (depth > 0) {
+                --depth;
+            }
+        } else if (text[index] == ',' && depth == 0) {
+            parts.push_back(trimCopy(text.substr(start, index - start)));
+            start = index + 1;
+        }
+    }
+    parts.push_back(trimCopy(text.substr(start)));
+    return parts;
+}
+
 bool startsWithIgnoreCase(const std::string& text, size_t offset, const char* token) {
     for (size_t i = 0; token[i] != '\0'; ++i) {
         if (offset + i >= text.size()) {
@@ -99,13 +169,42 @@ bool startsWithIgnoreCase(const std::string& text, size_t offset, const char* to
 
 std::string tryMatchSupportedTag(const std::string& block, size_t offset) {
     static const char* kSupportedTags[] = {
+        "iclip",
+        "clip",
         "alpha",
+        "fade",
+        "move",
+        "org",
+        "xbord",
+        "ybord",
+        "xshad",
+        "yshad",
+        "fscx",
+        "fscy",
+        "fsp",
+        "fax",
+        "fay",
+        "frz",
+        "frx",
+        "fry",
+        "fad",
+        "kf",
+        "ko",
         "bord",
         "shad",
         "pos",
         "fn",
         "fs",
+        "fr",
         "an",
+        "q",
+        "p",
+        "4c",
+        "4a",
+        "3c",
+        "3a",
+        "2c",
+        "2a",
         "1c",
         "1a",
         "c",
@@ -115,6 +214,7 @@ std::string tryMatchSupportedTag(const std::string& block, size_t offset) {
         "u",
         "s",
         "r",
+        "t",
     };
 
     for (const char* tag : kSupportedTags) {
@@ -135,6 +235,7 @@ SubtitleStyle makeDefaultAssStyle() {
     style.underline = false;
     style.strikeout = false;
     style.primary_color = SubtitleColor(255, 255, 255, 255);
+    style.secondary_color = SubtitleColor(255, 255, 0, 255);
     style.outline_color = SubtitleColor(0, 0, 0, 255);
     style.background_color = SubtitleColor(0, 0, 0, 170);
     style.alignment = 2;
@@ -144,7 +245,230 @@ SubtitleStyle makeDefaultAssStyle() {
     style.border_style = 1;
     style.outline = 2.0;
     style.shadow = 2.0;
+    style.outline_x = 2.0;
+    style.outline_y = 2.0;
+    style.shadow_x = 2.0;
+    style.shadow_y = 2.0;
+    style.wrap_style = 0;
+    style.spacing = 0.0;
+    style.scale_x_percent = 100.0;
+    style.scale_y_percent = 100.0;
+    style.rotation_degrees = 0.0;
     return style;
+}
+
+void clearClipState(SubtitleStyle& style) {
+    style.has_clip = false;
+    style.inverse_clip = false;
+    style.clip_x1 = 0.0;
+    style.clip_y1 = 0.0;
+    style.clip_x2 = 0.0;
+    style.clip_y2 = 0.0;
+    style.has_vector_clip = false;
+    style.vector_clip_scale = 1;
+    style.vector_clip_commands.clear();
+}
+
+void setClipRect(SubtitleStyle& style, bool inverse, double x1, double y1, double x2, double y2) {
+    clearClipState(style);
+    style.has_clip = true;
+    style.inverse_clip = inverse;
+    style.clip_x1 = std::min(x1, x2);
+    style.clip_y1 = std::min(y1, y2);
+    style.clip_x2 = std::max(x1, x2);
+    style.clip_y2 = std::max(y1, y2);
+}
+
+void setVectorClip(SubtitleStyle& style, bool inverse, int scale, const std::string& commands) {
+    clearClipState(style);
+    style.has_vector_clip = true;
+    style.inverse_clip = inverse;
+    style.vector_clip_scale = std::max(1, scale);
+    style.vector_clip_commands = commands;
+}
+
+void syncOutlineScalar(SubtitleStyle& style) {
+    style.outline = (style.outline_x + style.outline_y) * 0.5;
+}
+
+void setOutline(SubtitleStyle& style, double value) {
+    style.outline = value;
+    style.outline_x = value;
+    style.outline_y = value;
+}
+
+void setOutlineX(SubtitleStyle& style, double value) {
+    style.outline_x = value;
+    syncOutlineScalar(style);
+}
+
+void setOutlineY(SubtitleStyle& style, double value) {
+    style.outline_y = value;
+    syncOutlineScalar(style);
+}
+
+void syncShadowScalar(SubtitleStyle& style) {
+    style.shadow = std::max(std::abs(style.shadow_x), std::abs(style.shadow_y));
+}
+
+void setShadow(SubtitleStyle& style, double value) {
+    style.shadow = value;
+    style.shadow_x = value;
+    style.shadow_y = value;
+}
+
+void setShadowX(SubtitleStyle& style, double value) {
+    style.shadow_x = value;
+    syncShadowScalar(style);
+}
+
+void setShadowY(SubtitleStyle& style, double value) {
+    style.shadow_y = value;
+    syncShadowScalar(style);
+}
+
+bool normalizeWrapStyle(int value, int& normalized) {
+    if (value < 0 || value > 3) {
+        return false;
+    }
+    normalized = value;
+    return true;
+}
+
+bool parseRectClip(const std::string& value, double& x1, double& y1, double& x2, double& y2) {
+    const std::vector<std::string> parts = splitAndTrim(value);
+    if (parts.size() != 4) {
+        return false;
+    }
+    return parseDouble(parts[0], x1) &&
+           parseDouble(parts[1], y1) &&
+           parseDouble(parts[2], x2) &&
+           parseDouble(parts[3], y2);
+}
+
+bool parseOrgTag(const std::string& value, double& x, double& y) {
+    const std::vector<std::string> parts = splitAndTrim(value);
+    if (parts.size() != 2) {
+        return false;
+    }
+    return parseDouble(parts[0], x) && parseDouble(parts[1], y);
+}
+
+bool parseVectorClipTag(const std::string& value, int& scale, std::string& commands) {
+    const std::string trimmed = trimCopy(value);
+    if (trimmed.empty()) {
+        return false;
+    }
+
+    const size_t comma = trimmed.find(',');
+    if (comma != std::string::npos) {
+        int parsed_scale = 0;
+        const std::string first = trimCopy(trimmed.substr(0, comma));
+        const std::string rest = trimCopy(trimmed.substr(comma + 1));
+        if (!rest.empty() && parseInt(first, parsed_scale) && parsed_scale > 0) {
+            scale = parsed_scale;
+            commands = rest;
+            return true;
+        }
+    }
+
+    scale = 1;
+    commands = trimmed;
+    return true;
+}
+
+bool parseMoveTag(const std::string& value,
+                  double& x1,
+                  double& y1,
+                  double& x2,
+                  double& y2,
+                  bool& has_timing,
+                  double& t1_seconds,
+                  double& t2_seconds) {
+    const std::vector<std::string> parts = splitAndTrim(value);
+    if (parts.size() != 4 && parts.size() != 6) {
+        return false;
+    }
+    if (!parseDouble(parts[0], x1) ||
+        !parseDouble(parts[1], y1) ||
+        !parseDouble(parts[2], x2) ||
+        !parseDouble(parts[3], y2)) {
+        return false;
+    }
+
+    has_timing = false;
+    t1_seconds = 0.0;
+    t2_seconds = 0.0;
+    if (parts.size() == 6) {
+        double t1_ms = 0.0;
+        double t2_ms = 0.0;
+        if (!parseDouble(parts[4], t1_ms) || !parseDouble(parts[5], t2_ms)) {
+            return false;
+        }
+        has_timing = true;
+        t1_seconds = std::max(0.0, t1_ms / 1000.0);
+        t2_seconds = std::max(t1_seconds, t2_ms / 1000.0);
+    }
+    return true;
+}
+
+bool parseFadTag(const std::string& value, double& fade_in_seconds, double& fade_out_seconds) {
+    const std::vector<std::string> parts = splitAndTrim(value);
+    if (parts.size() != 2) {
+        return false;
+    }
+    double fade_in_ms = 0.0;
+    double fade_out_ms = 0.0;
+    if (!parseDouble(parts[0], fade_in_ms) || !parseDouble(parts[1], fade_out_ms)) {
+        return false;
+    }
+    fade_in_seconds = std::max(0.0, fade_in_ms / 1000.0);
+    fade_out_seconds = std::max(0.0, fade_out_ms / 1000.0);
+    return true;
+}
+
+uint8_t convertAssAnimationAlpha(int ass_alpha) {
+    return static_cast<uint8_t>(255 - std::clamp(ass_alpha, 0, 255));
+}
+
+bool parseFadeTag(const std::string& value,
+                  uint8_t& alpha1,
+                  uint8_t& alpha2,
+                  uint8_t& alpha3,
+                  double& t1_seconds,
+                  double& t2_seconds,
+                  double& t3_seconds,
+                  double& t4_seconds) {
+    const std::vector<std::string> parts = splitAndTrim(value);
+    if (parts.size() != 7) {
+        return false;
+    }
+
+    int a1 = 0;
+    int a2 = 0;
+    int a3 = 0;
+    double t1_ms = 0.0;
+    double t2_ms = 0.0;
+    double t3_ms = 0.0;
+    double t4_ms = 0.0;
+    if (!parseInt(parts[0], a1) ||
+        !parseInt(parts[1], a2) ||
+        !parseInt(parts[2], a3) ||
+        !parseDouble(parts[3], t1_ms) ||
+        !parseDouble(parts[4], t2_ms) ||
+        !parseDouble(parts[5], t3_ms) ||
+        !parseDouble(parts[6], t4_ms)) {
+        return false;
+    }
+
+    alpha1 = convertAssAnimationAlpha(a1);
+    alpha2 = convertAssAnimationAlpha(a2);
+    alpha3 = convertAssAnimationAlpha(a3);
+    t1_seconds = std::max(0.0, t1_ms / 1000.0);
+    t2_seconds = std::max(t1_seconds, t2_ms / 1000.0);
+    t3_seconds = std::max(t2_seconds, t3_ms / 1000.0);
+    t4_seconds = std::max(t3_seconds, t4_ms / 1000.0);
+    return true;
 }
 
 bool parseInt(const std::string& text, int& value) {
@@ -366,7 +690,8 @@ std::string decodeAssTextChunk(const std::string& chunk) {
 void appendStyledText(ParsedAssText& result,
                       const SubtitleStyle& current_style,
                       const std::string& text,
-                      size_t& cursor) {
+                      size_t& cursor,
+                      PendingKaraokeState& karaoke_state) {
     if (text.empty()) {
         return;
     }
@@ -375,16 +700,166 @@ void appendStyledText(ParsedAssText& result,
         return;
     }
     result.visible_text += text;
+    const SubtitleKaraokeMode karaoke_mode =
+        karaoke_state.pending ? karaoke_state.mode : SubtitleKaraokeMode::None;
+    const int karaoke_start_centiseconds = karaoke_state.pending ? karaoke_state.cursor_centiseconds : 0;
+    const int karaoke_end_centiseconds =
+        karaoke_state.pending ? (karaoke_start_centiseconds + std::max(0, karaoke_state.duration_centiseconds)) : 0;
     if (!result.runs.empty()) {
         SubtitleTextRun& last = result.runs.back();
-        if (last.start + last.length == cursor && last.style == current_style) {
+        if (last.start + last.length == cursor &&
+            last.style == current_style &&
+            last.karaoke_mode == SubtitleKaraokeMode::None &&
+            karaoke_mode == SubtitleKaraokeMode::None) {
             last.length += length;
             cursor += length;
             return;
         }
     }
-    result.runs.push_back(SubtitleTextRun{cursor, length, current_style});
+    SubtitleTextRun run{};
+    run.start = cursor;
+    run.length = length;
+    run.style = current_style;
+    run.karaoke_mode = karaoke_mode;
+    run.karaoke_start_centiseconds = karaoke_start_centiseconds;
+    run.karaoke_end_centiseconds = karaoke_end_centiseconds;
+    result.runs.push_back(std::move(run));
     cursor += length;
+    if (karaoke_state.pending) {
+        karaoke_state.cursor_centiseconds = karaoke_end_centiseconds;
+        karaoke_state.pending = false;
+    }
+}
+
+void appendDrawingCommands(ParsedAssText& result,
+                           const std::string& text,
+                           const DrawingModeState& drawing_mode) {
+    if (!drawing_mode.enabled()) {
+        return;
+    }
+
+    const std::string trimmed = trimCopy(text);
+    if (trimmed.empty()) {
+        return;
+    }
+
+    result.has_vector_drawing = true;
+    result.drawing_scale = std::max(1, drawing_mode.scale);
+    if (!result.drawing_commands.empty()) {
+        result.drawing_commands.push_back(' ');
+    }
+    result.drawing_commands += trimmed;
+}
+
+uint64_t buildSupportedTransitionMask(const SubtitleStyle& from_style, const SubtitleStyle& to_style) {
+    uint64_t mask = 0;
+    if (from_style.font_size != to_style.font_size) mask |= kSubtitleTransitionFontSize;
+    if (from_style.primary_color != to_style.primary_color) mask |= kSubtitleTransitionPrimaryColor;
+    if (from_style.secondary_color != to_style.secondary_color) mask |= kSubtitleTransitionSecondaryColor;
+    if (from_style.outline_color != to_style.outline_color) mask |= kSubtitleTransitionOutlineColor;
+    if (from_style.background_color != to_style.background_color) mask |= kSubtitleTransitionBackgroundColor;
+    if (from_style.outline_x != to_style.outline_x) mask |= kSubtitleTransitionOutlineX;
+    if (from_style.outline_y != to_style.outline_y) mask |= kSubtitleTransitionOutlineY;
+    if (from_style.shadow_x != to_style.shadow_x) mask |= kSubtitleTransitionShadowX;
+    if (from_style.shadow_y != to_style.shadow_y) mask |= kSubtitleTransitionShadowY;
+    if (from_style.spacing != to_style.spacing) mask |= kSubtitleTransitionSpacing;
+    if (from_style.scale_x_percent != to_style.scale_x_percent) mask |= kSubtitleTransitionScaleX;
+    if (from_style.scale_y_percent != to_style.scale_y_percent) mask |= kSubtitleTransitionScaleY;
+    if (from_style.rotation_degrees != to_style.rotation_degrees) mask |= kSubtitleTransitionRotationZ;
+    if (from_style.rotation_x_degrees != to_style.rotation_x_degrees) mask |= kSubtitleTransitionRotationX;
+    if (from_style.rotation_y_degrees != to_style.rotation_y_degrees) mask |= kSubtitleTransitionRotationY;
+    if (from_style.shear_x != to_style.shear_x) mask |= kSubtitleTransitionShearX;
+    if (from_style.shear_y != to_style.shear_y) mask |= kSubtitleTransitionShearY;
+    if (from_style.has_rotation_origin != to_style.has_rotation_origin ||
+        from_style.rotation_origin_x != to_style.rotation_origin_x ||
+        from_style.rotation_origin_y != to_style.rotation_origin_y) {
+        mask |= kSubtitleTransitionRotationOrigin;
+    }
+    return mask;
+}
+
+bool parseTransformTag(const std::string& value,
+                       const std::unordered_map<std::string, SubtitleStyle>& styles,
+                       const SubtitleStyle& base_style,
+                       const SubtitleStyle& current_style,
+                       const SubtitleStyleAnimation& current_animation,
+                       SubtitleStyleTransition& transition) {
+    const std::vector<std::string> parts = splitTopLevelCommaSeparated(value);
+    if (parts.empty()) {
+        return false;
+    }
+
+    std::string transform_block;
+    double start_seconds = 0.0;
+    double end_seconds = 0.0;
+    double accel = 1.0;
+    bool has_timing = false;
+
+    if (parts.size() == 1) {
+        transform_block = parts[0];
+    } else if (parts.size() == 2) {
+        if (!parseDouble(parts[0], accel)) {
+            return false;
+        }
+        transform_block = parts[1];
+    } else if (parts.size() == 3) {
+        double start_ms = 0.0;
+        double end_ms = 0.0;
+        if (!parseDouble(parts[0], start_ms) || !parseDouble(parts[1], end_ms)) {
+            return false;
+        }
+        has_timing = true;
+        start_seconds = std::max(0.0, start_ms / 1000.0);
+        end_seconds = std::max(0.0, end_ms / 1000.0);
+        transform_block = parts[2];
+    } else if (parts.size() == 4) {
+        double start_ms = 0.0;
+        double end_ms = 0.0;
+        if (!parseDouble(parts[0], start_ms) || !parseDouble(parts[1], end_ms) || !parseDouble(parts[2], accel)) {
+            return false;
+        }
+        has_timing = true;
+        start_seconds = std::max(0.0, start_ms / 1000.0);
+        end_seconds = std::max(0.0, end_ms / 1000.0);
+        transform_block = parts[3];
+    } else {
+        return false;
+    }
+
+    transform_block = trimCopy(transform_block);
+    if (transform_block.empty()) {
+        return false;
+    }
+
+    SubtitleStyle temp_cue_style = current_style;
+    SubtitleStyle temp_current_style = current_style;
+    SubtitleStyleAnimation temp_cue_animation = current_animation;
+    SubtitleStyleAnimation temp_current_animation = current_animation;
+    PendingKaraokeState temp_karaoke_state{};
+    DrawingModeState temp_drawing_mode{};
+    parseOverrideBlock(transform_block,
+                       styles,
+                       base_style,
+                       temp_cue_style,
+                       temp_current_style,
+                       temp_cue_animation,
+                       temp_current_animation,
+                       temp_karaoke_state,
+                       temp_drawing_mode,
+                       false);
+
+    const uint64_t property_mask = buildSupportedTransitionMask(current_style, temp_current_style);
+    if (property_mask == 0) {
+        return false;
+    }
+
+    transition.has_timing = has_timing;
+    transition.start_seconds = start_seconds;
+    transition.end_seconds = end_seconds;
+    transition.accel = accel > 0.0 ? accel : 1.0;
+    transition.property_mask = property_mask;
+    transition.target_style = temp_current_style;
+    return true;
 }
 
 void applyTagValue(const std::string& name,
@@ -392,7 +867,12 @@ void applyTagValue(const std::string& name,
                    const std::unordered_map<std::string, SubtitleStyle>& styles,
                    const SubtitleStyle& base_style,
                    SubtitleStyle& cue_style,
-                   SubtitleStyle& current_style) {
+                   SubtitleStyle& current_style,
+                   SubtitleStyleAnimation& cue_animation,
+                   SubtitleStyleAnimation& current_animation,
+                   PendingKaraokeState& karaoke_state,
+                   DrawingModeState& drawing_mode,
+                   bool allow_transform_tags) {
     if (name == "r") {
         SubtitleStyle reset_style = base_style;
         const std::string style_name = toLowerAscii(trimCopy(value));
@@ -404,6 +884,8 @@ void applyTagValue(const std::string& name,
         }
         current_style = reset_style;
         cue_style = reset_style;
+        current_animation = {};
+        cue_animation = current_animation;
         return;
     }
 
@@ -468,18 +950,73 @@ void applyTagValue(const std::string& name,
         return;
     }
 
-    if (name == "alpha" || name == "1a") {
+    if (name == "2c") {
+        const SubtitleColor color = parseAssColor(value, current_style.secondary_color);
+        current_style.secondary_color = color;
+        cue_style.secondary_color = color;
+        return;
+    }
+
+    if (name == "3c") {
+        const SubtitleColor color = parseAssColor(value, current_style.outline_color);
+        current_style.outline_color = color;
+        cue_style.outline_color = color;
+        return;
+    }
+
+    if (name == "4c") {
+        const SubtitleColor color = parseAssColor(value, current_style.background_color);
+        current_style.background_color = color;
+        cue_style.background_color = color;
+        return;
+    }
+
+    if (name == "alpha") {
+        const uint8_t alpha = parseAssAlpha(value, current_style.primary_color.a);
+        current_style.primary_color.a = alpha;
+        current_style.secondary_color.a = alpha;
+        current_style.outline_color.a = alpha;
+        current_style.background_color.a = alpha;
+        cue_style.primary_color.a = alpha;
+        cue_style.secondary_color.a = alpha;
+        cue_style.outline_color.a = alpha;
+        cue_style.background_color.a = alpha;
+        return;
+    }
+
+    if (name == "1a") {
         const uint8_t alpha = parseAssAlpha(value, current_style.primary_color.a);
         current_style.primary_color.a = alpha;
         cue_style.primary_color.a = alpha;
         return;
     }
 
+    if (name == "2a") {
+        const uint8_t alpha = parseAssAlpha(value, current_style.secondary_color.a);
+        current_style.secondary_color.a = alpha;
+        cue_style.secondary_color.a = alpha;
+        return;
+    }
+
+    if (name == "3a") {
+        const uint8_t alpha = parseAssAlpha(value, current_style.outline_color.a);
+        current_style.outline_color.a = alpha;
+        cue_style.outline_color.a = alpha;
+        return;
+    }
+
+    if (name == "4a") {
+        const uint8_t alpha = parseAssAlpha(value, current_style.background_color.a);
+        current_style.background_color.a = alpha;
+        cue_style.background_color.a = alpha;
+        return;
+    }
+
     if (name == "bord") {
         double outline = 0.0;
         if (parseDouble(value, outline) && outline >= 0.0) {
-            current_style.outline = outline;
-            cue_style.outline = outline;
+            setOutline(current_style, outline);
+            setOutline(cue_style, outline);
         }
         return;
     }
@@ -487,8 +1024,256 @@ void applyTagValue(const std::string& name,
     if (name == "shad") {
         double shadow = 0.0;
         if (parseDouble(value, shadow) && shadow >= 0.0) {
-            current_style.shadow = shadow;
-            cue_style.shadow = shadow;
+            setShadow(current_style, shadow);
+            setShadow(cue_style, shadow);
+        }
+        return;
+    }
+
+    if (name == "xbord") {
+        double outline_x = 0.0;
+        if (parseDouble(value, outline_x) && outline_x >= 0.0) {
+            setOutlineX(current_style, outline_x);
+            setOutlineX(cue_style, outline_x);
+        }
+        return;
+    }
+
+    if (name == "ybord") {
+        double outline_y = 0.0;
+        if (parseDouble(value, outline_y) && outline_y >= 0.0) {
+            setOutlineY(current_style, outline_y);
+            setOutlineY(cue_style, outline_y);
+        }
+        return;
+    }
+
+    if (name == "xshad") {
+        double shadow_x = 0.0;
+        if (parseDouble(value, shadow_x)) {
+            setShadowX(current_style, shadow_x);
+            setShadowX(cue_style, shadow_x);
+        }
+        return;
+    }
+
+    if (name == "yshad") {
+        double shadow_y = 0.0;
+        if (parseDouble(value, shadow_y)) {
+            setShadowY(current_style, shadow_y);
+            setShadowY(cue_style, shadow_y);
+        }
+        return;
+    }
+
+    if (name == "q") {
+        int wrap_style = 0;
+        if (parseInt(value, wrap_style) && normalizeWrapStyle(wrap_style, wrap_style)) {
+            current_style.wrap_style = wrap_style;
+            cue_style.wrap_style = wrap_style;
+        }
+        return;
+    }
+
+    if (name == "fsp") {
+        double spacing = 0.0;
+        if (parseDouble(value, spacing)) {
+            current_style.spacing = spacing;
+            cue_style.spacing = spacing;
+        }
+        return;
+    }
+
+    if (name == "fscx") {
+        double scale_x_percent = 0.0;
+        if (parseDouble(value, scale_x_percent) && scale_x_percent > 0.0) {
+            current_style.scale_x_percent = scale_x_percent;
+            cue_style.scale_x_percent = scale_x_percent;
+        }
+        return;
+    }
+
+    if (name == "fscy") {
+        double scale_y_percent = 0.0;
+        if (parseDouble(value, scale_y_percent) && scale_y_percent > 0.0) {
+            current_style.scale_y_percent = scale_y_percent;
+            cue_style.scale_y_percent = scale_y_percent;
+        }
+        return;
+    }
+
+    if (name == "fr" || name == "frz") {
+        double rotation_degrees = 0.0;
+        if (parseDouble(value, rotation_degrees)) {
+            current_style.rotation_degrees = rotation_degrees;
+            cue_style.rotation_degrees = rotation_degrees;
+        }
+        return;
+    }
+
+    if (name == "frx") {
+        double rotation_x_degrees = 0.0;
+        if (parseDouble(value, rotation_x_degrees)) {
+            current_style.rotation_x_degrees = rotation_x_degrees;
+            cue_style.rotation_x_degrees = rotation_x_degrees;
+        }
+        return;
+    }
+
+    if (name == "fry") {
+        double rotation_y_degrees = 0.0;
+        if (parseDouble(value, rotation_y_degrees)) {
+            current_style.rotation_y_degrees = rotation_y_degrees;
+            cue_style.rotation_y_degrees = rotation_y_degrees;
+        }
+        return;
+    }
+
+    if (name == "fax") {
+        double shear_x = 0.0;
+        if (parseDouble(value, shear_x)) {
+            current_style.shear_x = shear_x;
+            cue_style.shear_x = shear_x;
+        }
+        return;
+    }
+
+    if (name == "fay") {
+        double shear_y = 0.0;
+        if (parseDouble(value, shear_y)) {
+            current_style.shear_y = shear_y;
+            cue_style.shear_y = shear_y;
+        }
+        return;
+    }
+
+    if (name == "org") {
+        double origin_x = 0.0;
+        double origin_y = 0.0;
+        if (parseOrgTag(value, origin_x, origin_y)) {
+            current_style.has_rotation_origin = true;
+            current_style.rotation_origin_x = origin_x;
+            current_style.rotation_origin_y = origin_y;
+            cue_style.has_rotation_origin = true;
+            cue_style.rotation_origin_x = origin_x;
+            cue_style.rotation_origin_y = origin_y;
+        }
+        return;
+    }
+
+    if (name == "t") {
+        if (!allow_transform_tags) {
+            return;
+        }
+        SubtitleStyleTransition transition{};
+        if (parseTransformTag(value, styles, base_style, current_style, current_animation, transition)) {
+            current_animation.style_transitions.push_back(std::move(transition));
+            cue_animation = current_animation;
+        }
+        return;
+    }
+
+    if (name == "p") {
+        int drawing_scale = 0;
+        if (parseInt(value, drawing_scale) && drawing_scale >= 0) {
+            drawing_mode.scale = drawing_scale;
+        }
+        return;
+    }
+
+    if (name == "clip" || name == "iclip") {
+        double x1 = 0.0;
+        double y1 = 0.0;
+        double x2 = 0.0;
+        double y2 = 0.0;
+        if (parseRectClip(value, x1, y1, x2, y2)) {
+            setClipRect(current_style, name == "iclip", x1, y1, x2, y2);
+            setClipRect(cue_style, name == "iclip", x1, y1, x2, y2);
+            return;
+        }
+
+        int vector_clip_scale = 1;
+        std::string vector_clip_commands;
+        if (parseVectorClipTag(value, vector_clip_scale, vector_clip_commands)) {
+            setVectorClip(current_style, name == "iclip", vector_clip_scale, vector_clip_commands);
+            setVectorClip(cue_style, name == "iclip", vector_clip_scale, vector_clip_commands);
+        }
+        return;
+    }
+
+    if (name == "move") {
+        double x1 = 0.0;
+        double y1 = 0.0;
+        double x2 = 0.0;
+        double y2 = 0.0;
+        bool has_timing = false;
+        double t1_seconds = 0.0;
+        double t2_seconds = 0.0;
+        if (parseMoveTag(value, x1, y1, x2, y2, has_timing, t1_seconds, t2_seconds)) {
+            current_animation.has_move = true;
+            current_animation.move_has_timing = has_timing;
+            current_animation.move_x1 = x1;
+            current_animation.move_y1 = y1;
+            current_animation.move_x2 = x2;
+            current_animation.move_y2 = y2;
+            current_animation.move_t1_seconds = t1_seconds;
+            current_animation.move_t2_seconds = t2_seconds;
+            cue_animation = current_animation;
+            current_style.has_position = false;
+            cue_style.has_position = false;
+        }
+        return;
+    }
+
+    if (name == "fad") {
+        double fade_in_seconds = 0.0;
+        double fade_out_seconds = 0.0;
+        if (parseFadTag(value, fade_in_seconds, fade_out_seconds)) {
+            current_animation.fade_mode = SubtitleFadeMode::Simple;
+            current_animation.fade_in_seconds = fade_in_seconds;
+            current_animation.fade_out_seconds = fade_out_seconds;
+            current_animation.fade_alpha1 = 0;
+            current_animation.fade_alpha2 = 255;
+            current_animation.fade_alpha3 = 0;
+            current_animation.fade_t1_seconds = 0.0;
+            current_animation.fade_t2_seconds = 0.0;
+            current_animation.fade_t3_seconds = 0.0;
+            current_animation.fade_t4_seconds = 0.0;
+            cue_animation = current_animation;
+        }
+        return;
+    }
+
+    if (name == "fade") {
+        uint8_t alpha1 = 255;
+        uint8_t alpha2 = 255;
+        uint8_t alpha3 = 255;
+        double t1_seconds = 0.0;
+        double t2_seconds = 0.0;
+        double t3_seconds = 0.0;
+        double t4_seconds = 0.0;
+        if (parseFadeTag(value, alpha1, alpha2, alpha3, t1_seconds, t2_seconds, t3_seconds, t4_seconds)) {
+            current_animation.fade_mode = SubtitleFadeMode::Complex;
+            current_animation.fade_in_seconds = 0.0;
+            current_animation.fade_out_seconds = 0.0;
+            current_animation.fade_alpha1 = alpha1;
+            current_animation.fade_alpha2 = alpha2;
+            current_animation.fade_alpha3 = alpha3;
+            current_animation.fade_t1_seconds = t1_seconds;
+            current_animation.fade_t2_seconds = t2_seconds;
+            current_animation.fade_t3_seconds = t3_seconds;
+            current_animation.fade_t4_seconds = t4_seconds;
+            cue_animation = current_animation;
+        }
+        return;
+    }
+
+    if (name == "k" || name == "kf" || name == "ko") {
+        int duration_centiseconds = 0;
+        if (parseInt(value, duration_centiseconds) && duration_centiseconds >= 0) {
+            karaoke_state.pending = true;
+            karaoke_state.duration_centiseconds = duration_centiseconds;
+            karaoke_state.mode = (name == "kf") ? SubtitleKaraokeMode::Sweep : SubtitleKaraokeMode::Instant;
         }
         return;
     }
@@ -528,6 +1313,9 @@ void applyTagValue(const std::string& name,
             cue_style.has_position = true;
             cue_style.position_x = x;
             cue_style.position_y = y;
+            current_animation.has_move = false;
+            current_animation.move_has_timing = false;
+            cue_animation = current_animation;
         }
     }
 }
@@ -536,7 +1324,12 @@ void parseOverrideBlock(const std::string& block,
                         const std::unordered_map<std::string, SubtitleStyle>& styles,
                         const SubtitleStyle& base_style,
                         SubtitleStyle& cue_style,
-                        SubtitleStyle& current_style) {
+                        SubtitleStyle& current_style,
+                        SubtitleStyleAnimation& cue_animation,
+                        SubtitleStyleAnimation& current_animation,
+                        PendingKaraokeState& karaoke_state,
+                        DrawingModeState& drawing_mode,
+                        bool allow_transform_tags) {
     size_t cursor = 0;
     while (cursor < block.size()) {
         if (block[cursor] != '\\') {
@@ -556,11 +1349,15 @@ void parseOverrideBlock(const std::string& block,
             while (cursor < block.size() && std::isalpha(static_cast<unsigned char>(block[cursor])) != 0) {
                 ++cursor;
             }
-            name = toLowerAscii(block.substr(name_start, cursor - name_start));
+            const std::string raw_name = block.substr(name_start, cursor - name_start);
+            name = toLowerAscii(raw_name);
+            if (raw_name == "K") {
+                name = "kf";
+            }
         }
         std::string value;
         if (cursor < block.size() && block[cursor] == '(') {
-            const size_t close = block.find(')', cursor + 1);
+            const size_t close = findMatchingParenthesis(block, cursor);
             if (close == std::string::npos) {
                 value = block.substr(cursor + 1);
                 cursor = block.size();
@@ -577,7 +1374,17 @@ void parseOverrideBlock(const std::string& block,
         }
 
         if (!name.empty()) {
-            applyTagValue(name, trimCopy(value), styles, base_style, cue_style, current_style);
+            applyTagValue(name,
+                          trimCopy(value),
+                          styles,
+                          base_style,
+                          cue_style,
+                          current_style,
+                          cue_animation,
+                          current_animation,
+                          karaoke_state,
+                          drawing_mode,
+                          allow_transform_tags);
         }
     }
 }
@@ -588,26 +1395,43 @@ ParsedAssText parseAssText(const std::string& raw_text,
     ParsedAssText result;
     result.cue_style = base_style;
     SubtitleStyle current_style = base_style;
+    SubtitleStyleAnimation current_animation{};
+    PendingKaraokeState karaoke_state{};
+    DrawingModeState drawing_mode{};
     size_t cursor = 0;
     size_t text_start = 0;
 
     while (text_start < raw_text.size()) {
         const size_t open = raw_text.find('{', text_start);
         const size_t chunk_end = (open == std::string::npos) ? raw_text.size() : open;
-        appendStyledText(result,
-                         current_style,
-                         decodeAssTextChunk(raw_text.substr(text_start, chunk_end - text_start)),
-                         cursor);
+        if (drawing_mode.enabled()) {
+            appendDrawingCommands(result,
+                                  raw_text.substr(text_start, chunk_end - text_start),
+                                  drawing_mode);
+        } else {
+            appendStyledText(result,
+                             current_style,
+                             decodeAssTextChunk(raw_text.substr(text_start, chunk_end - text_start)),
+                             cursor,
+                             karaoke_state);
+        }
         if (open == std::string::npos) {
             break;
         }
 
         const size_t close = raw_text.find('}', open + 1);
         if (close == std::string::npos) {
-            appendStyledText(result,
-                             current_style,
-                             decodeAssTextChunk(raw_text.substr(open)),
-                             cursor);
+            if (drawing_mode.enabled()) {
+                appendDrawingCommands(result,
+                                      raw_text.substr(open),
+                                      drawing_mode);
+            } else {
+                appendStyledText(result,
+                                 current_style,
+                                 decodeAssTextChunk(raw_text.substr(open)),
+                                 cursor,
+                                 karaoke_state);
+            }
             break;
         }
 
@@ -615,12 +1439,21 @@ ParsedAssText parseAssText(const std::string& raw_text,
                            styles,
                            base_style,
                            result.cue_style,
-                           current_style);
+                           current_style,
+                           result.cue_animation,
+                           current_animation,
+                           karaoke_state,
+                           drawing_mode,
+                           true);
         text_start = close + 1;
     }
 
     if (result.runs.empty() && !result.visible_text.empty()) {
-        result.runs.push_back(SubtitleTextRun{0, countUtf16CodeUnits(result.visible_text), current_style});
+        SubtitleTextRun run{};
+        run.start = 0;
+        run.length = countUtf16CodeUnits(result.visible_text);
+        run.style = current_style;
+        result.runs.push_back(std::move(run));
     }
     return result;
 }
@@ -628,12 +1461,21 @@ ParsedAssText parseAssText(const std::string& raw_text,
 }  // namespace
 
 bool AssParser::parseFile(const std::string& file_path) {
-    items_.clear();
-
     std::ifstream input(file_path, std::ios::binary);
     if (!input.good()) {
         return false;
     }
+
+    return parseStream(input, file_path);
+}
+
+bool AssParser::parseText(const std::string& content, const std::string& source_path) {
+    std::istringstream input(content);
+    return parseStream(input, source_path);
+}
+
+bool AssParser::parseStream(std::istream& input, const std::string& source_path) {
+    items_.clear();
 
     enum class Section {
         None,
@@ -692,6 +1534,11 @@ bool AssParser::parseFile(const std::string& file_path) {
                 parseInt(value, play_res_x);
             } else if (key == "playresy") {
                 parseInt(value, play_res_y);
+            } else if (key == "wrapstyle") {
+                int wrap_style = 0;
+                if (parseInt(value, wrap_style) && normalizeWrapStyle(wrap_style, wrap_style)) {
+                    default_style.wrap_style = wrap_style;
+                }
             }
             continue;
         }
@@ -729,6 +1576,9 @@ bool AssParser::parseFile(const std::string& file_path) {
             if (const auto it = field_values.find("primarycolour"); it != field_values.end()) {
                 style.primary_color = parseAssColor(it->second, style.primary_color);
             }
+            if (const auto it = field_values.find("secondarycolour"); it != field_values.end()) {
+                style.secondary_color = parseAssColor(it->second, style.secondary_color);
+            }
             if (const auto it = field_values.find("outlinecolour"); it != field_values.end()) {
                 style.outline_color = parseAssColor(it->second, style.outline_color);
             } else if (const auto fallback_it = field_values.find("tertiarycolour"); fallback_it != field_values.end()) {
@@ -752,11 +1602,35 @@ bool AssParser::parseFile(const std::string& file_path) {
             if (const auto it = field_values.find("borderstyle"); it != field_values.end()) {
                 parseInt(it->second, style.border_style);
             }
+            if (const auto it = field_values.find("scalex"); it != field_values.end()) {
+                double scale_x_percent = style.scale_x_percent;
+                if (parseDouble(it->second, scale_x_percent) && scale_x_percent > 0.0) {
+                    style.scale_x_percent = scale_x_percent;
+                }
+            }
+            if (const auto it = field_values.find("scaley"); it != field_values.end()) {
+                double scale_y_percent = style.scale_y_percent;
+                if (parseDouble(it->second, scale_y_percent) && scale_y_percent > 0.0) {
+                    style.scale_y_percent = scale_y_percent;
+                }
+            }
+            if (const auto it = field_values.find("spacing"); it != field_values.end()) {
+                parseDouble(it->second, style.spacing);
+            }
+            if (const auto it = field_values.find("angle"); it != field_values.end()) {
+                parseDouble(it->second, style.rotation_degrees);
+            }
             if (const auto it = field_values.find("outline"); it != field_values.end()) {
-                parseDouble(it->second, style.outline);
+                double outline = style.outline;
+                if (parseDouble(it->second, outline)) {
+                    setOutline(style, outline);
+                }
             }
             if (const auto it = field_values.find("shadow"); it != field_values.end()) {
-                parseDouble(it->second, style.shadow);
+                double shadow = style.shadow;
+                if (parseDouble(it->second, shadow)) {
+                    setShadow(style, shadow);
+                }
             }
             if (const auto it = field_values.find("alignment"); it != field_values.end()) {
                 parseInt(it->second, style.alignment);
@@ -836,10 +1710,15 @@ bool AssParser::parseFile(const std::string& file_path) {
         }
 
         const auto text_it = field_values.find("text");
+        item.source_path = source_path;
         item.raw_text = (text_it != field_values.end()) ? text_it->second : std::string{};
         ParsedAssText parsed = parseAssText(item.raw_text, styles, base_style);
         item.text = std::move(parsed.visible_text);
         item.style = std::move(parsed.cue_style);
+        item.animation = std::move(parsed.cue_animation);
+        item.is_vector_drawing = parsed.has_vector_drawing && parsed.visible_text.empty();
+        item.drawing_scale = std::max(1, parsed.drawing_scale);
+        item.drawing_commands = std::move(parsed.drawing_commands);
         item.runs = std::move(parsed.runs);
 
         if (item.style.style_name.empty()) {
@@ -848,7 +1727,7 @@ bool AssParser::parseFile(const std::string& file_path) {
         if (item.end_seconds < item.start_seconds) {
             continue;
         }
-        if (item.text.empty()) {
+        if (item.text.empty() && !item.is_vector_drawing) {
             continue;
         }
         items_.push_back(std::move(item));

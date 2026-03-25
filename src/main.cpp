@@ -16,6 +16,8 @@
 
 #include "mvp_version.h"
 
+#include "render/renderer_factory.h"
+
 #include "streaming/adaptive_bitrate_selector.h"
 
 #include "streaming/dash_manifest_parser.h"
@@ -23,6 +25,10 @@
 #include "streaming/hls_manifest_parser.h"
 
 #include "streaming/http_stream_downloader.h"
+
+#include "subtitle/subtitle_font_registry.h"
+
+#include "subtitle/embedded_subtitle_loader.h"
 
 #include "subtitle/subtitle_parser.h"
 
@@ -32,6 +38,7 @@
 
 #if defined(_WIN32)
 #include "render/d3d11_video_renderer.h"
+#include "render/opengl_video_renderer.h"
 #endif
 
 
@@ -1496,6 +1503,330 @@ bool runSubtitleSyncCheck(const std::string& subtitle_path) {
 
 }
 
+const char* subtitleFormatName(subtitle::SubtitleFormat format) {
+
+    switch (format) {
+
+    case subtitle::SubtitleFormat::Srt:
+
+        return "srt";
+
+    case subtitle::SubtitleFormat::Ass:
+
+        return "ass";
+
+    case subtitle::SubtitleFormat::Ssa:
+
+        return "ssa";
+
+    default:
+
+        return "unknown";
+
+    }
+
+}
+
+std::string formatSubtitleColor(const subtitle::SubtitleColor& color) {
+
+    std::ostringstream oss;
+
+    oss << std::hex << std::uppercase << std::setfill('0')
+
+        << std::setw(2) << static_cast<unsigned int>(color.r)
+
+        << std::setw(2) << static_cast<unsigned int>(color.g)
+
+        << std::setw(2) << static_cast<unsigned int>(color.b)
+
+        << std::setw(2) << static_cast<unsigned int>(color.a);
+
+    return oss.str();
+
+}
+
+std::string formatSubtitleTransitionMask(uint64_t mask) {
+    struct NamedBit {
+        uint64_t value;
+        const char* name;
+    };
+    static const NamedBit kNamedBits[] = {
+        {subtitle::kSubtitleTransitionFontSize, "font_size"},
+        {subtitle::kSubtitleTransitionPrimaryColor, "primary_color"},
+        {subtitle::kSubtitleTransitionSecondaryColor, "secondary_color"},
+        {subtitle::kSubtitleTransitionOutlineColor, "outline_color"},
+        {subtitle::kSubtitleTransitionBackgroundColor, "background_color"},
+        {subtitle::kSubtitleTransitionOutlineX, "outline_x"},
+        {subtitle::kSubtitleTransitionOutlineY, "outline_y"},
+        {subtitle::kSubtitleTransitionShadowX, "shadow_x"},
+        {subtitle::kSubtitleTransitionShadowY, "shadow_y"},
+        {subtitle::kSubtitleTransitionSpacing, "spacing"},
+        {subtitle::kSubtitleTransitionScaleX, "scale_x"},
+        {subtitle::kSubtitleTransitionScaleY, "scale_y"},
+        {subtitle::kSubtitleTransitionRotationZ, "rotation_z"},
+        {subtitle::kSubtitleTransitionRotationX, "rotation_x"},
+        {subtitle::kSubtitleTransitionRotationY, "rotation_y"},
+        {subtitle::kSubtitleTransitionShearX, "shear_x"},
+        {subtitle::kSubtitleTransitionShearY, "shear_y"},
+        {subtitle::kSubtitleTransitionRotationOrigin, "rotation_origin"},
+    };
+
+    std::ostringstream oss;
+    bool first = true;
+    for (const NamedBit& named_bit : kNamedBits) {
+        if ((mask & named_bit.value) == 0) {
+            continue;
+        }
+        if (!first) {
+            oss << ",";
+        }
+        first = false;
+        oss << named_bit.name;
+    }
+    return oss.str();
+}
+
+const char* subtitleKaraokeModeName(subtitle::SubtitleKaraokeMode mode) {
+    switch (mode) {
+    case subtitle::SubtitleKaraokeMode::None:
+        return "none";
+    case subtitle::SubtitleKaraokeMode::Instant:
+        return "instant";
+    case subtitle::SubtitleKaraokeMode::Sweep:
+        return "sweep";
+    default:
+        return "unknown";
+    }
+}
+
+const char* subtitleFadeModeName(subtitle::SubtitleFadeMode mode) {
+    switch (mode) {
+    case subtitle::SubtitleFadeMode::None:
+        return "none";
+    case subtitle::SubtitleFadeMode::Simple:
+        return "simple";
+    case subtitle::SubtitleFadeMode::Complex:
+        return "complex";
+    default:
+        return "unknown";
+    }
+}
+
+void printSubtitleStyleFields(const std::string& prefix, const subtitle::SubtitleStyle& style) {
+
+    std::cout << prefix << ".style_name=" << std::quoted(style.style_name) << std::endl;
+
+    std::cout << prefix << ".font_family=" << std::quoted(style.font_family) << std::endl;
+
+    std::cout << prefix << ".font_size=" << style.font_size << std::endl;
+
+    std::cout << prefix << ".bold=" << (style.bold ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".italic=" << (style.italic ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".underline=" << (style.underline ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".strikeout=" << (style.strikeout ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".primary_rgba=" << formatSubtitleColor(style.primary_color) << std::endl;
+
+    std::cout << prefix << ".secondary_rgba=" << formatSubtitleColor(style.secondary_color) << std::endl;
+
+    std::cout << prefix << ".outline_rgba=" << formatSubtitleColor(style.outline_color) << std::endl;
+
+    std::cout << prefix << ".background_rgba=" << formatSubtitleColor(style.background_color) << std::endl;
+
+    std::cout << prefix << ".alignment=" << style.alignment << std::endl;
+
+    std::cout << prefix << ".margin_l=" << style.margin_l << std::endl;
+
+    std::cout << prefix << ".margin_r=" << style.margin_r << std::endl;
+
+    std::cout << prefix << ".margin_v=" << style.margin_v << std::endl;
+
+    std::cout << prefix << ".border_style=" << style.border_style << std::endl;
+
+    std::cout << prefix << ".outline=" << style.outline << std::endl;
+
+    std::cout << prefix << ".shadow=" << style.shadow << std::endl;
+
+    std::cout << prefix << ".outline_x=" << style.outline_x << std::endl;
+
+    std::cout << prefix << ".outline_y=" << style.outline_y << std::endl;
+
+    std::cout << prefix << ".shadow_x=" << style.shadow_x << std::endl;
+
+    std::cout << prefix << ".shadow_y=" << style.shadow_y << std::endl;
+
+    std::cout << prefix << ".wrap_style=" << style.wrap_style << std::endl;
+
+    std::cout << prefix << ".spacing=" << style.spacing << std::endl;
+
+    std::cout << prefix << ".scale_x_percent=" << style.scale_x_percent << std::endl;
+
+    std::cout << prefix << ".scale_y_percent=" << style.scale_y_percent << std::endl;
+
+    std::cout << prefix << ".rotation_degrees=" << style.rotation_degrees << std::endl;
+
+    std::cout << prefix << ".rotation_x_degrees=" << style.rotation_x_degrees << std::endl;
+
+    std::cout << prefix << ".rotation_y_degrees=" << style.rotation_y_degrees << std::endl;
+
+    std::cout << prefix << ".shear_x=" << style.shear_x << std::endl;
+
+    std::cout << prefix << ".shear_y=" << style.shear_y << std::endl;
+
+    std::cout << prefix << ".has_rotation_origin=" << (style.has_rotation_origin ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".rotation_origin_x=" << style.rotation_origin_x << std::endl;
+
+    std::cout << prefix << ".rotation_origin_y=" << style.rotation_origin_y << std::endl;
+
+    std::cout << prefix << ".has_clip=" << (style.has_clip ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".inverse_clip=" << (style.inverse_clip ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".clip_x1=" << style.clip_x1 << std::endl;
+
+    std::cout << prefix << ".clip_y1=" << style.clip_y1 << std::endl;
+
+    std::cout << prefix << ".clip_x2=" << style.clip_x2 << std::endl;
+
+    std::cout << prefix << ".clip_y2=" << style.clip_y2 << std::endl;
+
+    std::cout << prefix << ".has_vector_clip=" << (style.has_vector_clip ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".vector_clip_scale=" << style.vector_clip_scale << std::endl;
+
+    std::cout << prefix << ".vector_clip_commands=" << std::quoted(style.vector_clip_commands) << std::endl;
+
+    std::cout << prefix << ".has_position=" << (style.has_position ? "true" : "false") << std::endl;
+
+    std::cout << prefix << ".position_x=" << style.position_x << std::endl;
+
+    std::cout << prefix << ".position_y=" << style.position_y << std::endl;
+
+}
+
+void printSubtitleAnimationFields(const std::string& prefix, const subtitle::SubtitleStyleAnimation& animation) {
+    std::cout << prefix << ".has_move=" << (animation.has_move ? "true" : "false") << std::endl;
+    std::cout << prefix << ".move_has_timing=" << (animation.move_has_timing ? "true" : "false") << std::endl;
+    std::cout << prefix << ".move_x1=" << animation.move_x1 << std::endl;
+    std::cout << prefix << ".move_y1=" << animation.move_y1 << std::endl;
+    std::cout << prefix << ".move_x2=" << animation.move_x2 << std::endl;
+    std::cout << prefix << ".move_y2=" << animation.move_y2 << std::endl;
+    std::cout << prefix << ".move_t1_seconds=" << animation.move_t1_seconds << std::endl;
+    std::cout << prefix << ".move_t2_seconds=" << animation.move_t2_seconds << std::endl;
+    std::cout << prefix << ".fade_mode=" << subtitleFadeModeName(animation.fade_mode) << std::endl;
+    std::cout << prefix << ".fade_in_seconds=" << animation.fade_in_seconds << std::endl;
+    std::cout << prefix << ".fade_out_seconds=" << animation.fade_out_seconds << std::endl;
+    std::cout << prefix << ".fade_alpha1=" << static_cast<unsigned int>(animation.fade_alpha1) << std::endl;
+    std::cout << prefix << ".fade_alpha2=" << static_cast<unsigned int>(animation.fade_alpha2) << std::endl;
+    std::cout << prefix << ".fade_alpha3=" << static_cast<unsigned int>(animation.fade_alpha3) << std::endl;
+    std::cout << prefix << ".fade_t1_seconds=" << animation.fade_t1_seconds << std::endl;
+    std::cout << prefix << ".fade_t2_seconds=" << animation.fade_t2_seconds << std::endl;
+    std::cout << prefix << ".fade_t3_seconds=" << animation.fade_t3_seconds << std::endl;
+    std::cout << prefix << ".fade_t4_seconds=" << animation.fade_t4_seconds << std::endl;
+    std::cout << prefix << ".transition_count=" << animation.style_transitions.size() << std::endl;
+    for (size_t transition_index = 0; transition_index < animation.style_transitions.size(); ++transition_index) {
+        const subtitle::SubtitleStyleTransition& transition = animation.style_transitions[transition_index];
+        const std::string transition_prefix = prefix + ".transition" + std::to_string(transition_index);
+        std::cout << transition_prefix << ".has_timing=" << (transition.has_timing ? "true" : "false") << std::endl;
+        std::cout << transition_prefix << ".start_seconds=" << transition.start_seconds << std::endl;
+        std::cout << transition_prefix << ".end_seconds=" << transition.end_seconds << std::endl;
+        std::cout << transition_prefix << ".accel=" << transition.accel << std::endl;
+        std::cout << transition_prefix << ".property_mask=" << transition.property_mask << std::endl;
+        std::cout << transition_prefix << ".property_names=" << std::quoted(formatSubtitleTransitionMask(transition.property_mask)) << std::endl;
+        printSubtitleStyleFields(transition_prefix + ".target", transition.target_style);
+    }
+}
+
+bool runSubtitleStyleCheck(const std::string& subtitle_path) {
+
+    auto parser = subtitle::createParserForPath(subtitle_path);
+
+    if (!parser || !parser->parseFile(subtitle_path)) {
+
+        std::cerr << "subtitle-style-check: failed to parse subtitle file: " << subtitle_path << std::endl;
+
+        return false;
+
+    }
+
+    const auto& parsed_items = parser->items();
+
+    std::cout << "subtitle-style-check.path=" << subtitle_path << std::endl;
+
+    std::cout << "subtitle-style-check.format=" << subtitleFormatName(parser->format()) << std::endl;
+
+    std::cout << "subtitle-style-check.entries=" << parsed_items.size() << std::endl;
+
+    for (size_t item_index = 0; item_index < parsed_items.size(); ++item_index) {
+
+        const subtitle::SubtitleItem& item = parsed_items[item_index];
+
+        const std::string item_prefix = "subtitle-style-check.item" + std::to_string(item_index);
+
+        std::cout << item_prefix << ".index=" << item.index << std::endl;
+
+        std::cout << item_prefix << ".layer=" << item.layer << std::endl;
+
+        std::cout << item_prefix << ".start=" << item.start_seconds << std::endl;
+
+        std::cout << item_prefix << ".end=" << item.end_seconds << std::endl;
+
+        std::cout << item_prefix << ".play_res_x=" << item.play_res_x << std::endl;
+
+        std::cout << item_prefix << ".play_res_y=" << item.play_res_y << std::endl;
+
+        std::cout << item_prefix << ".source_path=" << std::quoted(item.source_path) << std::endl;
+
+        std::cout << item_prefix << ".is_vector_drawing=" << (item.is_vector_drawing ? "true" : "false") << std::endl;
+
+        std::cout << item_prefix << ".drawing_scale=" << item.drawing_scale << std::endl;
+
+        std::cout << item_prefix << ".drawing_commands=" << std::quoted(item.drawing_commands) << std::endl;
+
+        std::cout << item_prefix << ".text=" << std::quoted(item.text) << std::endl;
+
+        std::cout << item_prefix << ".raw_text=" << std::quoted(item.raw_text) << std::endl;
+
+        std::cout << item_prefix << ".run_count=" << item.runs.size() << std::endl;
+
+        printSubtitleStyleFields(item_prefix + ".style", item.style);
+        printSubtitleAnimationFields(item_prefix + ".animation", item.animation);
+
+        for (size_t run_index = 0; run_index < item.runs.size(); ++run_index) {
+
+            const subtitle::SubtitleTextRun& run = item.runs[run_index];
+
+            const std::string run_prefix = item_prefix + ".run" + std::to_string(run_index);
+
+            std::cout << run_prefix << ".start=" << run.start << std::endl;
+
+            std::cout << run_prefix << ".length=" << run.length << std::endl;
+
+            printSubtitleStyleFields(run_prefix + ".style", run.style);
+
+            std::cout << run_prefix << ".karaoke_mode="
+                      << subtitleKaraokeModeName(run.karaoke_mode) << std::endl;
+
+            std::cout << run_prefix << ".karaoke_start_cs="
+                      << run.karaoke_start_centiseconds << std::endl;
+
+            std::cout << run_prefix << ".karaoke_end_cs="
+                      << run.karaoke_end_centiseconds << std::endl;
+
+        }
+
+    }
+
+    std::cout << "subtitle-style-check.result=PASS" << std::endl;
+
+    return true;
+
+}
+
 
 
 std::string joinIndexList(const std::vector<size_t>& indices) {
@@ -1743,17 +2074,6 @@ bool parsePlaybackCliArgs(int argc, char* argv[], PlaybackCliArgs& out, std::str
         out.media_inputs.push_back(arg);
 
     }
-
-
-
-    if (out.media_inputs.empty()) {
-
-        error = "no media input provided";
-
-        return false;
-
-    }
-
     return true;
 
 }
@@ -1796,7 +2116,257 @@ playlist::PlaylistManager buildPlaylistFromInputs(const std::vector<std::string>
 
 }
 
+const char* rendererTypeName(render::VideoRendererType type) {
 
+    switch (type) {
+
+    case render::VideoRendererType::SoftwareSDL:
+
+        return "SoftwareSDL";
+
+    case render::VideoRendererType::D3D11:
+
+        return "D3D11";
+
+    case render::VideoRendererType::OpenGL:
+
+        return "OpenGL";
+
+    case render::VideoRendererType::Auto:
+
+    default:
+
+        return "Auto";
+
+    }
+
+}
+
+bool tryResolveInteractiveMediaInput(const std::string& raw_input,
+
+                                    playlist::PlaylistManager& playlist_manager,
+
+                                    std::string& normalized_input,
+
+                                    std::string& error) {
+
+    playlist_manager = playlist::PlaylistManager{};
+
+    normalized_input.clear();
+
+    error.clear();
+
+
+
+    if (raw_input.empty()) {
+
+        error = "empty input";
+
+        return false;
+
+    }
+
+
+
+    normalized_input = raw_input;
+
+    if (raw_input.find("://") == std::string::npos) {
+
+        std::error_code ec;
+
+        std::filesystem::path fs_path(raw_input);
+
+        if (!std::filesystem::exists(fs_path, ec) || ec) {
+
+            error = "path does not exist";
+
+            return false;
+
+        }
+
+
+
+        ec.clear();
+
+        if (!std::filesystem::is_regular_file(fs_path, ec) || ec) {
+
+            error = "path is not a regular file";
+
+            return false;
+
+        }
+
+
+
+        ec.clear();
+
+        const std::filesystem::path canonical_path = std::filesystem::weakly_canonical(fs_path, ec);
+
+        normalized_input = (!ec ? canonical_path : fs_path.lexically_normal()).string();
+
+    }
+
+
+
+    playlist_manager = buildPlaylistFromInputs({normalized_input});
+
+    if (playlist_manager.empty()) {
+
+        error = "no playable items built from input";
+
+        return false;
+
+    }
+
+
+
+    return true;
+
+}
+
+render::VideoRendererPtr createIdleRendererWindow(const input::HotkeyManager& hotkey_manager) {
+
+    render::VideoRendererConfig renderer_config{};
+
+    renderer_config.width = 1280;
+
+    renderer_config.height = 720;
+
+    renderer_config.title = "Modern Video Player - Drop Media Here";
+
+
+
+    const render::VideoRendererType selected_type = render::RendererFactory::detectBestRendererType();
+
+    const auto init_renderer = [&](render::VideoRendererType type) -> render::VideoRendererPtr {
+
+        render::VideoRendererPtr renderer = render::RendererFactory::create(type);
+
+        if (!renderer) {
+
+            return nullptr;
+
+        }
+
+        if (!renderer->init(renderer_config)) {
+
+            Logger::warning(std::string("Idle renderer init failed: ") + rendererTypeName(type));
+
+            return nullptr;
+
+        }
+
+        renderer->setHotkeyManager(hotkey_manager);
+
+        renderer->clear();
+
+        renderer->present();
+
+        Logger::info(std::string("Idle renderer initialized: ") + rendererTypeName(type));
+
+        return renderer;
+
+    };
+
+
+
+    render::VideoRendererPtr renderer = init_renderer(selected_type);
+
+    if (!renderer && selected_type != render::VideoRendererType::SoftwareSDL) {
+
+        Logger::warning("Falling back to SoftwareSDL idle renderer");
+
+        renderer = init_renderer(render::VideoRendererType::SoftwareSDL);
+
+    }
+
+
+
+    return renderer;
+
+}
+
+bool waitForIdlePlaylistSelection(const input::HotkeyManager& hotkey_manager,
+
+                                 playlist::PlaylistManager& playlist_manager,
+
+                                 std::string& normalized_input,
+
+                                 bool& quit_requested) {
+
+    normalized_input.clear();
+
+
+
+    render::VideoRendererPtr idle_renderer = createIdleRendererWindow(hotkey_manager);
+
+    if (!idle_renderer) {
+
+        Logger::error("Failed to create idle renderer window");
+
+        quit_requested = true;
+
+        return false;
+
+    }
+
+
+
+    Logger::info("Idle window ready; waiting for drag-and-drop media input");
+
+
+
+    while (!quit_requested && playlist_manager.empty()) {
+
+        idle_renderer->handleEvents();
+
+
+
+        if (idle_renderer->shouldQuit()) {
+
+            quit_requested = true;
+
+            break;
+
+        }
+
+
+
+        std::string dropped_path;
+
+        if (idle_renderer->consumeOpenFileRequest(dropped_path)) {
+
+            std::string error;
+
+            if (!tryResolveInteractiveMediaInput(dropped_path, playlist_manager, normalized_input, error)) {
+
+                Logger::warning("Ignoring dropped input: " + dropped_path + " reason=" + error);
+
+                continue;
+
+            }
+
+
+
+            Logger::info("Accepted dropped media: " + normalized_input);
+
+            break;
+
+        }
+
+
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    }
+
+
+
+    idle_renderer->close();
+
+    return !quit_requested && !playlist_manager.empty();
+
+}
 
 std::string detectAutoSubtitlePath(const std::string& media_uri) {
 
@@ -5248,6 +5818,28 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
 
     std::cout << "performance-log-check.display_copy_max_us=" << diag.display_copy_time_us_max << std::endl;
 
+    std::cout << "performance-log-check.renderer_opengl_native_interop_active="
+              << (diag.renderer_opengl_native_interop_active ? "true" : "false") << std::endl;
+
+    std::cout << "performance-log-check.renderer_opengl_native_interop_startup_disabled="
+              << (diag.renderer_opengl_native_interop_startup_disabled ? "true" : "false") << std::endl;
+
+    std::cout << "performance-log-check.renderer_opengl_native_interop_disable_rule="
+              << diag.renderer_opengl_native_interop_disable_rule << std::endl;
+
+    std::cout << "performance-log-check.renderer_opengl_native_interop_frames="
+              << diag.renderer_opengl_native_interop_frames << std::endl;
+
+    std::cout << "performance-log-check.renderer_opengl_native_interop_disable_events="
+              << diag.renderer_opengl_native_interop_disable_events << std::endl;
+
+    std::cout << "performance-log-check.renderer_opengl_present_wait_timeouts="
+              << diag.renderer_opengl_present_wait_timeouts << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_present_mode_requested="
+              << diag.renderer_opengl_present_mode_requested << std::endl;
+    std::cout << "performance-log-check.renderer_opengl_present_mode_active="
+              << diag.renderer_opengl_present_mode_active << std::endl;
+
     std::cout << "performance-log-check.video_filter_blocked_native_frames=" << diag.video_filter_blocked_native_frames << std::endl;
 
     std::cout << "performance-log-check.audio_submitted_frames=" << diag.audio_submitted_frames << std::endl;
@@ -8493,6 +9085,144 @@ bool runD3D11Diagnostics() {
     return false;
 #endif
 }
+bool runOpenGLDiagnostics() {
+#if defined(_WIN32)
+    const render::OpenGLDiagnosticsSnapshot diag = render::OpenGLVideoRenderer::probeSystemDiagnostics();
+    const bool h264_any = diag.d3d11.decoder_profiles.h264_vld_nofgt || diag.d3d11.decoder_profiles.h264_vld_fgt;
+    const bool hevc_any = diag.d3d11.decoder_profiles.hevc_main || diag.d3d11.decoder_profiles.hevc_main10;
+    const bool vp9_any = diag.d3d11.decoder_profiles.vp9_profile0 || diag.d3d11.decoder_profiles.vp9_profile2_10bit;
+    const bool av1_any = diag.d3d11.decoder_profiles.av1_profile0 ||
+                         diag.d3d11.decoder_profiles.av1_profile1 ||
+                         diag.d3d11.decoder_profiles.av1_profile2 ||
+                         diag.d3d11.decoder_profiles.av1_profile2_12bit ||
+                         diag.d3d11.decoder_profiles.av1_profile2_12bit_420;
+
+    std::cout << "opengl-diagnostics.supported_platform=true" << std::endl;
+    std::cout << "opengl-diagnostics.probe_succeeded=" << (diag.probe_succeeded ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.gl_context_created=" << (diag.gl_context_created ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.create_context_error=" << diag.create_context_error << std::endl;
+    std::cout << "opengl-diagnostics.gl_vendor=" << diag.gl_vendor << std::endl;
+    std::cout << "opengl-diagnostics.gl_renderer=" << diag.gl_renderer << std::endl;
+    std::cout << "opengl-diagnostics.gl_version=" << diag.gl_version << std::endl;
+    std::cout << "opengl-diagnostics.has_wgl_dx_interop=" << (diag.has_wgl_dx_interop ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.env_override=" << diag.native_interop_env_override << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.allowed=" << (diag.native_direct_allowed ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.startup_disabled=" << (diag.native_direct_startup_disabled ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.disable_rule=" << diag.native_direct_disable_rule << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.disable_reason=" << diag.native_direct_disable_reason << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.hard_blocker_matched=" << (diag.hard_blocker_matched ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.hard_blocker_rule=" << diag.hard_blocker_rule << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.hard_blocker_reason=" << diag.hard_blocker_reason << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.quirk_rule_matched=" << (diag.quirk_rule_matched ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.quirk_rule_name=" << diag.quirk_rule_name << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.quirk_rule_reason=" << diag.quirk_rule_reason << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.env_force_overrode_quirk=" << (diag.env_force_overrode_quirk ? "true" : "false") << std::endl;
+
+    std::cout << "opengl-diagnostics.d3d11.adapter_name=" << diag.d3d11.adapter_name << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.vendor_id=" << formatHexUint32(diag.d3d11.vendor_id) << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.device_id=" << formatHexUint32(diag.d3d11.device_id) << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.driver_version=" << diag.d3d11.driver_version << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.feature_level=" << diag.d3d11.feature_level << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.software_adapter=" << (diag.d3d11.software_adapter ? "true" : "false") << std::endl;
+    printD3D11FormatSupport("opengl-diagnostics.d3d11.format.nv12", diag.d3d11.nv12_support);
+    std::cout << "opengl-diagnostics.d3d11.decoder_profiles.h264_any=" << (h264_any ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.decoder_profiles.hevc_any=" << (hevc_any ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.decoder_profiles.vp9_any=" << (vp9_any ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.d3d11.decoder_profiles.av1_any=" << (av1_any ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.probe_succeeded=" << (diag.hdr_output.probe_succeeded ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.probe_error=" << diag.hdr_output.probe_error << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.adapter_matched=" << (diag.hdr_output.adapter_matched ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.adapter_index=" << diag.hdr_output.adapter_index << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.output_found=" << (diag.hdr_output.output_found ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.output_index=" << diag.hdr_output.output_index << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.output_name=" << diag.hdr_output.output_name << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.output_device_name=" << diag.hdr_output.output_device_name << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.output_attached_to_desktop="
+              << (diag.hdr_output.output_attached_to_desktop ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.has_output6=" << (diag.hdr_output.has_output6 ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.color_space=" << diag.hdr_output.color_space << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.advanced_color_active="
+              << (diag.hdr_output.advanced_color_active ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.hdr_active="
+              << (diag.hdr_output.hdr_active ? "true" : "false") << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.bits_per_color=" << diag.hdr_output.bits_per_color << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.min_luminance_nits=" << diag.hdr_output.min_luminance_nits << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.max_luminance_nits=" << diag.hdr_output.max_luminance_nits << std::endl;
+    std::cout << "opengl-diagnostics.hdr_output.max_full_frame_luminance_nits="
+              << diag.hdr_output.max_full_frame_luminance_nits << std::endl;
+    std::cout << "opengl-diagnostics.result=" << (diag.probe_succeeded ? "PASS" : "FAIL") << std::endl;
+    return diag.probe_succeeded;
+#else
+    std::cout << "opengl-diagnostics.supported_platform=false" << std::endl;
+    std::cout << "opengl-diagnostics.probe_succeeded=false" << std::endl;
+    std::cout << "opengl-diagnostics.native_interop.allowed=false" << std::endl;
+    std::cout << "opengl-diagnostics.result=FAIL" << std::endl;
+    return false;
+#endif
+}
+
+bool runAttachmentFontCheck(const std::string& media_file) {
+    Demuxer demuxer;
+    const bool open_ok = demuxer.open(media_file);
+    const AVFormatContext* format_ctx = open_ok ? demuxer.getFormatContext() : nullptr;
+    const subtitle::SubtitleFontRegistrationSummary summary =
+        subtitle::ensureMediaAttachmentFontsRegistered(media_file, format_ctx);
+
+    const bool has_font_attachments = summary.discovered_attachment_stream_count > 0;
+    const bool extraction_ok = has_font_attachments &&
+                               summary.extracted_file_count == summary.discovered_attachment_stream_count &&
+                               summary.invalid_attachment_stream_count == 0;
+    const bool registration_ok = has_font_attachments &&
+                                 summary.registered_file_count == summary.extracted_file_count;
+    const bool result = open_ok && extraction_ok && registration_ok;
+
+    std::cout << "attachment-font-check.path=" << media_file << std::endl;
+    std::cout << "attachment-font-check.open_ok=" << (open_ok ? "true" : "false") << std::endl;
+    std::cout << "attachment-font-check.attachment_streams=" << summary.discovered_attachment_stream_count << std::endl;
+    std::cout << "attachment-font-check.extracted_file_count=" << summary.extracted_file_count << std::endl;
+    std::cout << "attachment-font-check.registered_file_count=" << summary.registered_file_count << std::endl;
+    std::cout << "attachment-font-check.invalid_attachment_stream_count="
+              << summary.invalid_attachment_stream_count << std::endl;
+    std::cout << "attachment-font-check.cache_path="
+              << (summary.extraction_cache_path.empty() ? "none" : summary.extraction_cache_path) << std::endl;
+    std::cout << "attachment-font-check.extracted_font_files="
+              << (summary.extracted_font_files.empty() ? "none" : joinTopN(summary.extracted_font_files)) << std::endl;
+    std::cout << "attachment-font-check.registered_font_files="
+              << (summary.registered_font_files.empty() ? "none" : joinTopN(summary.registered_font_files)) << std::endl;
+    std::cout << "attachment-font-check.result=" << (result ? "PASS" : "FAIL") << std::endl;
+
+    subtitle::releaseMediaAttachmentFonts(media_file);
+    demuxer.close();
+    return result;
+}
+
+bool runEmbeddedSubtitleCheck(const std::string& media_file) {
+    const subtitle::EmbeddedSubtitleLoadResult result = subtitle::loadBestEmbeddedSubtitleTrack(media_file);
+    const bool pass = result.loaded && !result.items.empty();
+    std::string first_text = result.items.empty() ? std::string("none") : result.items.front().text;
+    std::replace(first_text.begin(), first_text.end(), '\r', ' ');
+    std::replace(first_text.begin(), first_text.end(), '\n', ' ');
+
+    std::cout << "embedded-subtitle-check.path=" << media_file << std::endl;
+    std::cout << "embedded-subtitle-check.subtitle_stream_found="
+              << (result.subtitle_stream_found ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-check.supported_stream_found="
+              << (result.supported_stream_found ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-check.loaded=" << (result.loaded ? "true" : "false") << std::endl;
+    std::cout << "embedded-subtitle-check.stream_index=" << result.stream_index << std::endl;
+    std::cout << "embedded-subtitle-check.codec_name="
+              << (result.codec_name.empty() ? "unknown" : result.codec_name) << std::endl;
+    std::cout << "embedded-subtitle-check.language="
+              << (result.language.empty() ? "und" : result.language) << std::endl;
+    std::cout << "embedded-subtitle-check.title="
+              << (result.title.empty() ? "none" : result.title) << std::endl;
+    std::cout << "embedded-subtitle-check.source_label="
+              << (result.source_label.empty() ? "none" : result.source_label) << std::endl;
+    std::cout << "embedded-subtitle-check.item_count=" << result.items.size() << std::endl;
+    std::cout << "embedded-subtitle-check.first_text=" << first_text << std::endl;
+    std::cout << "embedded-subtitle-check.result=" << (pass ? "PASS" : "FAIL") << std::endl;
+    return pass;
+}
 
 }  // namespace
 
@@ -8530,7 +9260,7 @@ void printUsage(const char* program_name) {
 
     std::cout << std::endl;
 
-    std::cout << "Usage: " << program_name << " <video_file> [more_video_files...]" << std::endl;
+    std::cout << "Usage: " << program_name << " [video_file] [more_video_files...]" << std::endl;
 
     std::cout << "       " << program_name << " [media_files...] --subtitle <subtitle.(srt|ass|ssa)>" << std::endl;
 
@@ -8538,9 +9268,17 @@ void printUsage(const char* program_name) {
 
     std::cout << "       " << program_name << " --capabilities" << std::endl;
 
+    std::cout << "Launch without media to open an idle window, then drag files into it to play." << std::endl;
+
     std::cout << "       " << program_name << " --probe-file <media_file> [--json]" << std::endl;
 
     std::cout << "       " << program_name << " --subtitle-sync-check <subtitle.(srt|ass|ssa)>" << std::endl;
+
+    std::cout << "       " << program_name << " --subtitle-style-check <subtitle.(srt|ass|ssa)>" << std::endl;
+
+    std::cout << "       " << program_name << " --embedded-subtitle-check <media_file>" << std::endl;
+
+    std::cout << "       " << program_name << " --attachment-font-check <media_file>" << std::endl;
 
     std::cout << "       " << program_name << " --playlist-flow-check <media1> <media2> <media3> <media4> <media5> [more...]" << std::endl;
 
@@ -8573,6 +9311,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --forced-failsession-check <media_file> [sample_ms]" << std::endl;
 
     std::cout << "       " << program_name << " --d3d11-diagnostics" << std::endl;
+    std::cout << "       " << program_name << " --opengl-diagnostics" << std::endl;
 
     std::cout << "       " << program_name << " --version" << std::endl;
 
@@ -8813,6 +9552,48 @@ int main(int argc, char* argv[]) {
         }
 
         return runSubtitleSyncCheck(argv[2]) ? 0 : 2;
+
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--subtitle-style-check") {
+
+        if (argc != 3) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runSubtitleStyleCheck(argv[2]) ? 0 : 2;
+
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--embedded-subtitle-check") {
+
+        if (argc != 3) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runEmbeddedSubtitleCheck(argv[2]) ? 0 : 2;
+
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--attachment-font-check") {
+
+        if (argc != 3) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runAttachmentFontCheck(argv[2]) ? 0 : 2;
 
     }
 
@@ -9148,6 +9929,20 @@ int main(int argc, char* argv[]) {
         return runD3D11Diagnostics() ? 0 : 2;
 
     }
+
+    if (argc >= 2 && std::string(argv[1]) == "--opengl-diagnostics") {
+
+        if (argc != 2) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runOpenGLDiagnostics() ? 0 : 2;
+
+    }
     if (argc >= 2 && std::string(argv[1]) == "--performance-log-check") {
 
         if (argc != 3 && argc != 4) {
@@ -9432,16 +10227,6 @@ int main(int argc, char* argv[]) {
 
     
 
-    if (argc < 2) {
-
-        printUsage(argv[0]);
-
-        return 1;
-
-    }
-
-
-
     PlaybackCliArgs cli_args;
 
     std::string cli_error;
@@ -9492,21 +10277,13 @@ int main(int argc, char* argv[]) {
 
     playlist::PlaylistManager playlist_manager = buildPlaylistFromInputs(cli_args.media_inputs);
 
-    if (playlist_manager.empty()) {
-
-        Logger::error("No playable media found from input arguments");
-
-        Logger::shutdown();
-
-        return 1;
-
-    }
-
-
+    const bool interactive_idle_mode = playlist_manager.empty();
 
     size_t current_index = 0;
 
-    if (app_settings.resume_last_playlist && app_settings.last_playlist_index >= 0) {
+    if (!interactive_idle_mode &&
+        app_settings.resume_last_playlist &&
+        app_settings.last_playlist_index >= 0) {
 
         const size_t saved_index = static_cast<size_t>(app_settings.last_playlist_index);
 
@@ -9540,19 +10317,229 @@ int main(int argc, char* argv[]) {
 
     bool opened_any_media = false;
 
-
-
-    while (!quit_requested && current_index < playlist_manager.size()) {
-
-        const playlist::PlaylistItem& item = playlist_manager.items()[current_index];
-
-        Logger::info("Opening file: " + item.uri);
+    std::string session_subtitle_override = cli_args.subtitle_file;
 
 
 
-        if (!g_player->open(item.uri)) {
+    while (!quit_requested) {
 
-            Logger::error("Could not open media file: " + item.uri);
+        if (playlist_manager.empty()) {
+
+            if (!interactive_idle_mode) {
+
+                break;
+
+            }
+
+
+
+            std::string accepted_input;
+
+            if (!waitForIdlePlaylistSelection(g_player->hotkeyManager(),
+
+                                             playlist_manager,
+
+                                             accepted_input,
+
+                                             quit_requested)) {
+
+                if (quit_requested) {
+
+                    break;
+
+                }
+
+                continue;
+
+            }
+
+
+
+            current_index = 0;
+
+            Logger::info("Opening dropped media from idle window: " + accepted_input);
+
+        }
+
+
+
+        bool replacement_requested = false;
+
+        std::string replacement_input;
+
+        playlist::PlaylistManager replacement_playlist;
+
+
+
+        while (!quit_requested && current_index < playlist_manager.size()) {
+
+            const playlist::PlaylistItem& item = playlist_manager.items()[current_index];
+
+            Logger::info("Opening file: " + item.uri);
+
+
+
+            if (!g_player->open(item.uri)) {
+
+                Logger::error("Could not open media file: " + item.uri);
+
+                if (current_index + 1 < playlist_manager.size()) {
+
+                    ++current_index;
+
+                    continue;
+
+                }
+
+                break;
+
+            }
+
+
+
+            opened_any_media = true;
+
+            Logger::info("Starting playback...");
+
+            std::cout << "Playing: " << item.uri << std::endl;
+
+
+
+            const std::string subtitle_path =
+
+                !session_subtitle_override.empty() ? session_subtitle_override : detectAutoSubtitlePath(item.uri);
+
+            if (!subtitle_path.empty()) {
+
+                if (g_player->loadExternalSubtitle(subtitle_path)) {
+
+                    Logger::info("Loaded external subtitle: " + subtitle_path +
+
+                                 " entries=" + std::to_string(g_player->externalSubtitleCount()));
+
+                } else {
+
+                    Logger::warning("Failed to load external subtitle: " + subtitle_path);
+
+                }
+
+            }
+
+
+
+            g_player->play();
+
+
+
+            bool next_requested = false;
+
+            bool previous_requested = false;
+
+            while (g_player->isPlaying() || g_player->isPaused()) {
+
+                g_player->pumpEvents();
+
+                if (g_player->consumeQuitRequest()) {
+
+                    quit_requested = true;
+
+                    break;
+
+                }
+
+
+
+                std::string dropped_path;
+
+                if (g_player->consumeOpenFileRequest(dropped_path)) {
+
+                    std::string error;
+
+                    if (tryResolveInteractiveMediaInput(dropped_path, replacement_playlist, replacement_input, error)) {
+
+                        replacement_requested = true;
+
+                        Logger::info("Dropped media will replace current playback: " + replacement_input);
+
+                        g_player->stop();
+
+                        break;
+
+                    }
+
+
+
+                    Logger::warning("Ignoring dropped input during playback: " + dropped_path + " reason=" + error);
+
+                }
+
+
+
+                if (g_player->consumeNextItemRequest()) {
+
+                    next_requested = true;
+
+                    break;
+
+                }
+
+                if (g_player->consumePreviousItemRequest()) {
+
+                    previous_requested = true;
+
+                    break;
+
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            }
+
+
+
+            g_player->stop();
+
+            g_player->close();
+
+
+
+            if (quit_requested || replacement_requested) {
+
+                break;
+
+            }
+
+
+
+            if (previous_requested) {
+
+                if (current_index > 0) {
+
+                    --current_index;
+
+                }
+
+                continue;
+
+            }
+
+
+
+            if (next_requested) {
+
+                if (current_index + 1 < playlist_manager.size()) {
+
+                    ++current_index;
+
+                    continue;
+
+                }
+
+                break;
+
+            }
+
+
 
             if (current_index + 1 < playlist_manager.size()) {
 
@@ -9565,84 +10552,6 @@ int main(int argc, char* argv[]) {
             break;
 
         }
-
-
-
-        opened_any_media = true;
-
-        Logger::info("Starting playback...");
-
-        std::cout << "Playing: " << item.uri << std::endl;
-
-
-
-        const std::string subtitle_path =
-
-            !cli_args.subtitle_file.empty() ? cli_args.subtitle_file : detectAutoSubtitlePath(item.uri);
-
-        if (!subtitle_path.empty()) {
-
-            if (g_player->loadExternalSubtitle(subtitle_path)) {
-
-                Logger::info("Loaded external subtitle: " + subtitle_path +
-
-                             " entries=" + std::to_string(g_player->externalSubtitleCount()));
-
-            } else {
-
-                Logger::warning("Failed to load external subtitle: " + subtitle_path);
-
-            }
-
-        }
-
-
-
-        g_player->play();
-
-
-
-        bool next_requested = false;
-
-        bool previous_requested = false;
-
-        while (g_player->isPlaying() || g_player->isPaused()) {
-
-            g_player->pumpEvents();
-
-            if (g_player->consumeQuitRequest()) {
-
-                quit_requested = true;
-
-                break;
-
-            }
-
-            if (g_player->consumeNextItemRequest()) {
-
-                next_requested = true;
-
-                break;
-
-            }
-
-            if (g_player->consumePreviousItemRequest()) {
-
-                previous_requested = true;
-
-                break;
-
-            }
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        }
-
-
-
-        g_player->stop();
-
-        g_player->close();
 
 
 
@@ -9654,45 +10563,33 @@ int main(int argc, char* argv[]) {
 
 
 
-        if (previous_requested) {
+        if (replacement_requested) {
 
-            if (current_index > 0) {
+            playlist_manager = std::move(replacement_playlist);
 
-                --current_index;
+            current_index = 0;
 
-            }
+            session_subtitle_override.clear();
+
+            Logger::info("Switching to dropped media playlist: " + replacement_input);
+
+            continue;
+
+        }
+
+
+
+        if (interactive_idle_mode) {
+
+            playlist_manager = playlist::PlaylistManager{};
+
+            current_index = 0;
 
             continue;
 
         }
 
 
-
-        if (next_requested) {
-
-            if (current_index + 1 < playlist_manager.size()) {
-
-                ++current_index;
-
-                continue;
-
-            }
-
-            break;
-
-        }
-
-
-
-        // Auto-next on EOF.
-
-        if (current_index + 1 < playlist_manager.size()) {
-
-            ++current_index;
-
-            continue;
-
-        }
 
         break;
 
@@ -9734,11 +10631,23 @@ int main(int argc, char* argv[]) {
 
     if (!opened_any_media) {
 
-        Logger::error("No media could be opened");
+        if (!interactive_idle_mode) {
+
+            Logger::error("No media could be opened");
+
+            Logger::shutdown();
+
+            return 1;
+
+        }
+
+
+
+        Logger::info("Player closed without opening media");
 
         Logger::shutdown();
 
-        return 1;
+        return 0;
 
     }
 

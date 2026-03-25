@@ -278,6 +278,22 @@ struct DiagnosticsSnapshot {
 
     uint64_t display_copy_time_us_max{0};
 
+    bool renderer_opengl_native_interop_active{false};
+
+    bool renderer_opengl_native_interop_startup_disabled{false};
+
+    std::string renderer_opengl_native_interop_disable_rule{"none"};
+
+    uint64_t renderer_opengl_native_interop_frames{0};
+
+    uint64_t renderer_opengl_native_interop_disable_events{0};
+
+    uint64_t renderer_opengl_present_wait_timeouts{0};
+
+    std::string renderer_opengl_present_mode_requested{"auto"};
+
+    std::string renderer_opengl_present_mode_active{"unknown"};
+
     size_t video_packet_queue_size{0};
 
     size_t audio_packet_queue_size{0};
@@ -359,6 +375,8 @@ public:
     bool consumeNextItemRequest();
 
     bool consumePreviousItemRequest();
+
+    bool consumeOpenFileRequest(std::string& path);
 
 
 
@@ -648,6 +666,9 @@ private:
     void clearLastRenderedFrame();
 
     void updateSubtitleOverlay(double position_seconds);
+    void setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path);
+    void clearEmbeddedSubtitles();
+    void refreshActiveSubtitleTrackLocked();
 
     bool transitionSessionState(SessionState next, const char* reason);
 
@@ -801,6 +822,12 @@ private:
 
     std::atomic<bool> previous_item_requested_{false};
 
+    std::mutex open_file_request_mutex_;
+
+    bool open_file_requested_{false};
+
+    std::string open_file_path_;
+
     std::vector<double> chapter_points_;
 
     std::atomic<bool> ab_repeat_enabled_{false};
@@ -930,8 +957,14 @@ private:
     mutable std::mutex subtitle_mutex_;
 
     std::vector<subtitle::SubtitleItem> subtitle_items_;
+    std::vector<subtitle::SubtitleItem> external_subtitle_items_;
+    std::vector<subtitle::SubtitleItem> embedded_subtitle_items_;
+
+    std::string current_media_source_path_;
 
     std::string subtitle_source_path_;
+    std::string external_subtitle_source_path_;
+    std::string embedded_subtitle_source_path_;
 
     std::vector<int> subtitle_active_indices_;
 
@@ -954,4 +987,3 @@ private:
 
 
 }  // namespace vp::core
-

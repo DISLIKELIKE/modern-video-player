@@ -1,4 +1,4 @@
-﻿#include "core/player_core.h"
+#include "core/player_core.h"
 
 
 
@@ -83,6 +83,10 @@ extern "C" {
 #include "logger.h"
 
 #include "render/renderer_factory.h"
+
+#include "subtitle/embedded_subtitle_loader.h"
+
+#include "subtitle/subtitle_font_registry.h"
 
 #include "subtitle/subtitle_timeline.h"
 
@@ -1693,6 +1697,11 @@ bool PlayerCore::open(const std::string& filename) {
 
     close();
 
+    {
+        std::lock_guard<std::mutex> lock(open_file_request_mutex_);
+        open_file_requested_ = false;
+        open_file_path_.clear();
+    }
 
 
     transitionSessionState(SessionState::Opening, "open requested");
@@ -1750,6 +1759,27 @@ bool PlayerCore::open(const std::string& filename) {
     }
 
 
+
+    current_media_source_path_ = filename;
+    const subtitle::SubtitleFontRegistrationSummary attachment_font_summary =
+        subtitle::ensureMediaAttachmentFontsRegistered(current_media_source_path_, demuxer_->getFormatContext());
+    LOG_INFO("Subtitle attachment font session: media=" << current_media_source_path_
+             << ", attachment_streams=" << attachment_font_summary.discovered_attachment_stream_count
+             << ", extracted=" << attachment_font_summary.extracted_file_count
+             << ", registered=" << attachment_font_summary.registered_file_count
+             << ", invalid=" << attachment_font_summary.invalid_attachment_stream_count
+             << ", cache="
+             << (attachment_font_summary.extraction_cache_path.empty()
+                     ? std::string("none")
+                     : attachment_font_summary.extraction_cache_path));
+
+    const subtitle::EmbeddedSubtitleLoadResult embedded_subtitle_result =
+        subtitle::loadBestEmbeddedSubtitleTrack(current_media_source_path_);
+    if (embedded_subtitle_result.loaded) {
+        setEmbeddedSubtitles(embedded_subtitle_result.items, embedded_subtitle_result.source_label);
+    } else {
+        clearEmbeddedSubtitles();
+    }
 
     const MediaInfo& info = demuxer_->getMediaInfo();
 
@@ -1983,6 +2013,11 @@ bool PlayerCore::open(const std::string& filename) {
 
 void PlayerCore::close() {
 
+    {
+        std::lock_guard<std::mutex> lock(open_file_request_mutex_);
+        open_file_requested_ = false;
+        open_file_path_.clear();
+    }
     const CoreStateSnapshot snapshot = getCoreStateSnapshot();
 
     if (snapshot.session_state == SessionState::Closed &&
@@ -2961,6 +2996,12 @@ void PlayerCore::pumpEvents() {
 
         }
 
+        std::string open_file_path;
+        if (video_renderer_->consumeOpenFileRequest(open_file_path) && !open_file_path.empty()) {
+            std::lock_guard<std::mutex> lock(open_file_request_mutex_);
+            open_file_path_ = std::move(open_file_path);
+            open_file_requested_ = true;
+        }
 
 
         if (video_renderer_->shouldQuit()) {
@@ -3467,6 +3508,18 @@ bool PlayerCore::consumePreviousItemRequest() {
 
 }
 
+bool PlayerCore::consumeOpenFileRequest(std::string& path) {
+
+    std::lock_guard<std::mutex> lock(open_file_request_mutex_);
+    if (!open_file_requested_) {
+        return false;
+    }
+    path = open_file_path_;
+    open_file_path_.clear();
+    open_file_requested_ = false;
+    return !path.empty();
+
+}
 
 
 PlaybackState PlayerCore::getState() const {
@@ -3669,6 +3722,22 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
 
     snapshot.display_copy_time_us_max = renderer_diagnostics.display_copy_time_us_max;
 
+    snapshot.renderer_opengl_native_interop_active = renderer_diagnostics.opengl_native_interop_active;
+
+    snapshot.renderer_opengl_native_interop_startup_disabled = renderer_diagnostics.opengl_native_interop_startup_disabled;
+
+    snapshot.renderer_opengl_native_interop_disable_rule = renderer_diagnostics.opengl_native_interop_disable_rule;
+
+    snapshot.renderer_opengl_native_interop_frames = renderer_diagnostics.opengl_native_interop_frames;
+
+    snapshot.renderer_opengl_native_interop_disable_events = renderer_diagnostics.opengl_native_interop_disable_events;
+
+    snapshot.renderer_opengl_present_wait_timeouts = renderer_diagnostics.opengl_present_wait_timeouts;
+
+    snapshot.renderer_opengl_present_mode_requested = renderer_diagnostics.opengl_present_mode_requested;
+
+    snapshot.renderer_opengl_present_mode_active = renderer_diagnostics.opengl_present_mode_active;
+
     snapshot.video_packet_queue_size = video_packet_queue_ ? video_packet_queue_->size() : 0;
 
     snapshot.audio_packet_queue_size = audio_packet_queue_ ? audio_packet_queue_->size() : 0;
@@ -3841,6 +3910,110 @@ std::string PlayerCore::videoRendererBackendName() const {
 
 }
 
+void PlayerCore::refreshActiveSubtitleTrackLocked() {
+
+    if (!external_subtitle_items_.empty()) {
+
+        subtitle_items_ = external_subtitle_items_;
+
+        subtitle_source_path_ = external_subtitle_source_path_;
+
+    } else {
+
+        subtitle_items_ = embedded_subtitle_items_;
+
+        subtitle_source_path_ = embedded_subtitle_source_path_;
+
+    }
+
+    subtitle_active_indices_.clear();
+
+}
+
+void PlayerCore::setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
+
+    std::sort(subtitles.begin(), subtitles.end(), [](const subtitle::SubtitleItem& lhs, const subtitle::SubtitleItem& rhs) {
+
+        if (lhs.start_seconds != rhs.start_seconds) {
+
+            return lhs.start_seconds < rhs.start_seconds;
+
+        }
+
+        if (lhs.layer != rhs.layer) {
+
+            return lhs.layer < rhs.layer;
+
+        }
+
+        if (lhs.end_seconds != rhs.end_seconds) {
+
+            return lhs.end_seconds < rhs.end_seconds;
+
+        }
+
+        return lhs.index < rhs.index;
+
+    });
+
+
+
+    size_t subtitle_count = 0;
+
+    std::string subtitle_path;
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        embedded_subtitle_items_ = std::move(subtitles);
+
+        embedded_subtitle_source_path_ = source_path;
+
+        refreshActiveSubtitleTrackLocked();
+
+        subtitle_count = embedded_subtitle_items_.size();
+
+        subtitle_path = embedded_subtitle_source_path_;
+
+    }
+
+
+
+    if (video_renderer_) {
+
+        video_renderer_->setSubtitleItems({});
+
+    }
+
+    LOG_INFO("Embedded subtitle track attached: path=" << subtitle_path << ", entries=" << subtitle_count);
+
+}
+
+void PlayerCore::clearEmbeddedSubtitles() {
+
+    {
+
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+        embedded_subtitle_items_.clear();
+
+        embedded_subtitle_source_path_.clear();
+
+        refreshActiveSubtitleTrackLocked();
+
+    }
+
+
+
+    if (video_renderer_) {
+
+        video_renderer_->setSubtitleItems({});
+
+    }
+
+}
+
 
 
 void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtitles, const std::string& source_path) {
@@ -3879,15 +4052,15 @@ void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtit
 
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
 
-        subtitle_items_ = std::move(subtitles);
+        external_subtitle_items_ = std::move(subtitles);
 
-        subtitle_source_path_ = source_path;
+        external_subtitle_source_path_ = source_path;
 
-        subtitle_active_indices_.clear();
+        refreshActiveSubtitleTrackLocked();
 
-        subtitle_count = subtitle_items_.size();
+        subtitle_count = external_subtitle_items_.size();
 
-        subtitle_path = subtitle_source_path_;
+        subtitle_path = external_subtitle_source_path_;
 
     }
 
@@ -3911,11 +4084,11 @@ void PlayerCore::clearExternalSubtitles() {
 
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
 
-        subtitle_items_.clear();
+        external_subtitle_items_.clear();
 
-        subtitle_source_path_.clear();
+        external_subtitle_source_path_.clear();
 
-        subtitle_active_indices_.clear();
+        refreshActiveSubtitleTrackLocked();
 
     }
 
@@ -3935,7 +4108,7 @@ bool PlayerCore::hasExternalSubtitles() const {
 
     std::lock_guard<std::mutex> lock(subtitle_mutex_);
 
-    return !subtitle_items_.empty();
+    return !external_subtitle_items_.empty();
 
 }
 
@@ -6110,6 +6283,11 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
 
     }
 
+    if (!current_media_source_path_.empty()) {
+        subtitle::releaseMediaAttachmentFonts(current_media_source_path_);
+        current_media_source_path_.clear();
+    }
+
     releaseDecoders();
 
     audio_player_.reset();
@@ -6127,6 +6305,8 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
     video_packet_queue_.reset();
 
     audio_packet_queue_.reset();
+
+    clearEmbeddedSubtitles();
 
     clearExternalSubtitles();
 
@@ -7517,6 +7697,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
 
 
     const double adjusted_position = std::max(0.0, position_seconds - subtitle_delay_seconds_.load());
+    video_renderer_->setSubtitleClock(adjusted_position);
 
 
 
@@ -7693,3 +7874,4 @@ void PlayerCore::emitError(ErrorCode code, const std::string& message) {
 
 
 }  // namespace vp::core
+

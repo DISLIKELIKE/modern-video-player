@@ -1,4 +1,18 @@
-﻿# 椤圭洰鐗堟湰璁板綍
+# 项目版本记录
+
+### 2026-03-24 更新：OpenGL 诊断快照、libass 差距清单与显示级 HDR 设计收敛
+- `OpenGLVideoRenderer` 新增 `OpenGLDiagnosticsSnapshot` 与 `OpenGLVideoRenderer::probeSystemDiagnostics()`，并提供 `--opengl-diagnostics` 机器可读输出。
+- OpenGL native interop 启动期策略已从零散判断收敛为 `hard blocker + quirk rule + env override` 三层决策，`force` 只允许覆盖 quirk，不覆盖真正的 hard blocker。
+- 已新增 `docs/analysis/PLAYERCORE_DAY27_OPENGL_LIBASS_GAP_AND_QUIRK_DIAGNOSTICS.md`，把当前 OpenGL 与 `libass/mpv` 的差距拆到 `shaping / karaoke / vector / font fallback / layout` 级别。
+- 已新增 `docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`，明确 Windows 下显示级 HDR 输出应走 `DXGI swapchain + HDR metadata` 桥接，而不是继续把 tone-map 当成完整 HDR 方案。
+- Release 验证通过：`--opengl-diagnostics=PASS`、`MVP_OPENGL_NATIVE_INTEROP=disable --opengl-diagnostics=PASS`、OpenGL `performance-log-check=PASS`、`subtitle-sync-check=PASS`、`delay-adjust-check=PASS`。
+
+### 2026-03-24 更新：OpenGL M1 成熟化收敛
+- `OpenGLVideoRenderer` 已从仅能播放的 `M0` 过渡后端，推进到带字幕、启动期 quirk 决策和基础 HDR/色彩处理的 `M1` 级别；当前仍保持 `opt-in`，不替代默认 `D3D11` 后端。
+- `ASS/SSA` 现阶段采用 `DirectWrite + D2D offscreen -> OpenGL texture` 路径，支持多 `SubtitleItem` 排序、item/run 分段样式、定位对齐、描边、阴影、背景框与填充；仍未达到 `libass/mpv` 的完整高级特效覆盖。
+- OpenGL 启动期新增 `MVP_OPENGL_NATIVE_INTEROP=auto|disable|force`，并对 `Microsoft / GDI Generic` 软件 GL 环境直接禁用 native interop；同时输出 `[diag:opengl-native]` 适配器、驱动、decoder profile 与最终规则日志。
+- GLSL/HLSL 色彩链路补齐 `BT.601 / BT.709 / BT.2020` 矩阵选择、`PQ / HLG` 检测、基础 SDR tone-map 和 `BT.2020 -> BT.709` gamut mapping，并输出 `[diag:opengl-color]`。
+- Release 验证通过：`OpenGL performance-log-check=PASS`、`subtitle-sync-check=PASS`、`delay-adjust-check=PASS`。
 
 ### 2026-03-24 更新：OpenGL M0 渲染链路落地
 - `OpenGLVideoRenderer` 已从 stub 变为可用后端，支持 `YUV420P / NV12` 直接帧、GLSL 120 色彩转换与基础键盘控制。
@@ -3823,3 +3837,104 @@ make -j$(nproc)
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
+
+## 2026-03-24 OpenGL ASS 样式链路增强
+- 字幕模型新增：`wrap_style`、`spacing`、`scale_x_percent`、`scale_y_percent`、`rotation_degrees`、`outline_x/y`、`shadow_x/y`。
+- `ASS parser` 新增 `WrapStyle`、style 字段与 `\q/\fsp/\fscx/\fscy/\fr/\frz/\xbord/\ybord/\xshad/\yshad` 支持。
+- OpenGL/D3D11 GPU 字幕渲染已消费上述字段：`DirectWrite character spacing + D2D transform + x/y outline/shadow`。
+- 新增 `--subtitle-style-check` 样式诊断 CLI。
+- 新增回归样本：`samples/subtitles/opengl_ass_style_validation.ass`。
+- 本地验证通过：`subtitle-style-check`、`subtitle-sync-check`、`opengl delay-adjust-check`、`opengl-diagnostics` 全部 `PASS`。
+
+## 2026-03-24 Subtitle Capability Update
+- Added ASS run-level subtitle support for `secondary color`, rectangular `clip`, basic rectangular `iclip`, and karaoke timing (`k/kf/ko/K`) across both D3D11 and OpenGL subtitle paths.
+- Added renderer subtitle clock propagation so animated subtitle content can invalidate and redraw correctly while paused or during clock changes.
+- Extended subtitle diagnostics output and added `samples/subtitles/opengl_ass_karaoke_clip_validation.ass`.
+- Local validation: `subtitle-style-check`, `subtitle-sync-check`, `delay-adjust-check`, `d3d11-diagnostics` and `opengl-diagnostics` all passed in Release.
+
+## 2026-03-24 ASS Animation Update
+- Added line-level ASS animation support for `move`, `fad` and `fade` across both D3D11 and OpenGL subtitle rendering paths.
+- Added `SubtitleStyleAnimation` / `SubtitleFadeMode` and subtitle-clock-driven animation evaluation.
+- Extended `--subtitle-style-check` with move/fade fields and added `samples/subtitles/opengl_ass_animation_validation.ass`.
+- Local validation: Release build plus `subtitle-style-check`, `subtitle-sync-check`, `delay-adjust-check`, `d3d11-diagnostics` and `opengl-diagnostics` all passed.
+
+
+## 2026-03-25 ASS Transform / Vector / Font Fallback Update
+- Added subtitle parser/model coverage for `\org`, `\fax`, `\fay`, `\frx`, `\fry`, vector clip payload, pure ASS drawing items, and subtitle source path reporting.
+- Added D3D11/OpenGL subtitle rendering for affine transform, vector drawing, vector clip, and subtitle-sidecar/private font fallback families.
+- Fixed the D2D layer push/pop balance regression that produced `OpenGL subtitle D2D draw failed: hr=-2003238890` during validation.
+- Validation: Release build plus `subtitle-style-check`, `subtitle-sync-check`, OpenGL `delay-adjust-check`, and D3D11 `delay-adjust-check` all passed.
+
+### 2026-03-25 Update: idle startup window and drag-drop playback
+- Added direct exe idle-window startup with no media arguments.
+- Added `consumeOpenFileRequest()` across renderer / player-core / video-player layers.
+- Added playback-time drag-drop replacement with path validation in `main.cpp`.
+- Idle-start sessions now return to the idle window after playback completes.
+- Validation: `cmake --build build --config Release --target modern-video-player` passed.
+- Follow-up manual test still recommended for GUI drag-drop behavior.
+
+### 2026-03-25 Update: OpenGL present pacing and stutter fix
+- OpenGL `present()` now waits for real render-thread display completion instead of returning immediately after async queue submit.
+- Added OpenGL submission/presentation IDs to align scheduler pacing with actual display completion.
+- OpenGL now prefers `swap interval=1` and falls back to immediate presents only when needed.
+- Removed the per-frame native interop `ID3D11DeviceContext::Flush()` call.
+- Validation: Release build, `--opengl-diagnostics`, OpenGL native `--performance-log-check`, and OpenGL copy-back `--performance-log-check` all passed.
+### 2026-03-25 Update: OpenGL runtime diagnostics export and 10-bit copy-back upload
+- Confirmed `--performance-log-check` exports `renderer_opengl_native_interop_active`, `renderer_opengl_native_interop_startup_disabled`, `renderer_opengl_native_interop_disable_rule`, `renderer_opengl_native_interop_frames`, `renderer_opengl_native_interop_disable_events`, and `renderer_opengl_present_wait_timeouts`.
+- Added OpenGL direct software upload support for `AV_PIX_FMT_P010LE` and `AV_PIX_FMT_P016LE`.
+- Added 16-bit normalized software color coefficients for the OpenGL semi-planar upload path.
+- Validation: OpenGL native regression PASS, OpenGL forced-copyback regression PASS, and forced-copyback 10-bit HEVC regression PASS with `video_swscale_frames=0`.
+
+### 2026-03-25 Update: OpenGL present override and gate script
+- Added `MVP_OPENGL_PRESENT_MODE=auto|paced|immediate`.
+- Added `renderer_opengl_present_mode_requested` and `renderer_opengl_present_mode_active` to `--performance-log-check`.
+- Added `tools/run_opengl_checks.ps1` to validate OpenGL diagnostics, native playback, copy-back playback, immediate present mode, 10-bit copy-back, and subtitle delay regression in one command.
+- Validation: auto present PASS, immediate present PASS, OpenGL gate script PASS.
+
+### 2026-03-25 Update: OpenGL HDR probe, quirk expansion, subtitle gate, and final gap matrix
+- Added `opengl-diagnostics.hdr_output.*` display-output capability probe fields.
+- Expanded the OpenGL quirk rule table for SwiftShader, llvmpipe, VMware, and Parallels software/virtual contexts, and added finer rule keys.
+- Expanded `tools/run_opengl_checks.ps1` to a 10-step OpenGL validation gate including ASS subtitle sample regressions.
+- Added a final backend-level OpenGL gap matrix against mature players.
+- Validation: `--opengl-diagnostics` PASS and `run_opengl_checks.ps1` PASS.
+
+### 2026-03-25 Update: OpenGL hotkey and control OSD interaction
+- Suppressed OpenGL `SDL_KEYDOWN repeat` handling to reduce hotkey-triggered seek/volume request storms.
+- Changed OpenGL hotkey OSD wakeup to unconditional redraw so progress/volume feedback is visible during active playback.
+- Added OpenGL mouse-driven control interaction for progress and volume bars, including seek preview and drag updates.
+- Added initial OSD wakeup on OpenGL renderer startup.
+- Validation: Release build PASS and `run_opengl_checks.ps1` PASS.
+
+### 2026-03-25 Update: ASS transform transition support
+- Added subtitle parser/model support for ASS `\t(...)` transitions, including nested-parenthesis-safe parsing and top-level comma splitting.
+- Added OpenGL and D3D11 runtime interpolation for transition-driven font scale, color, outline, shadow, spacing, rotation, shear, and rotation-origin fields.
+- Extended `--subtitle-style-check` to export `transition_count`, per-transition timing/accel/property names, and transition target style fields.
+- Added `samples/subtitles/opengl_ass_transform_transition_validation.ass` and folded it into `tools/run_opengl_checks.ps1`.
+- Validation: Release build PASS, `subtitle-style-check` PASS, OpenGL `delay-adjust-check` PASS, D3D11 `delay-adjust-check` PASS, OpenGL gate PASS.
+
+### 2026-03-25 Update: OpenGL bottom-bar player chrome
+- Expanded the OpenGL OSD into a bottom-bar player interface with a dedicated play/pause button, time text region, progress rail, and volume rail.
+- Added geometry-based OpenGL helpers for button shapes and segmented time text, avoiding a new font dependency on the OpenGL path.
+- Added hover-aware panel visibility so the bar remains visible while hovered or dragged and auto-hides with fade-out during idle playback.
+- Kept seek preview and volume drag on the new control layout, and wired play/pause button clicks into the existing request pipeline.
+- Validation: Release build PASS and OpenGL gate PASS; manual GUI smoke still recommended for hover timing and hit-testing feel.
+
+### 2026-03-25 Update: Container attachment font pipeline
+- Added media-scoped subtitle attachment font extraction and private registration from FFmpeg `AVMEDIA_TYPE_ATTACHMENT` streams.
+- Added temp-cache-based attachment font session management with cleanup on playback/session release.
+- Wired `PlayerCore::open()` / `applySessionReleaseSideEffects()` to register and release container font attachments automatically.
+- Added `--attachment-font-check <media_file>` for machine-readable validation of attachment extraction, registration, and cleanup.
+- Validation: Release build PASS, generated MKV-with-font-attachment sample PASS, `attachment-font-check.result=PASS`, cache cleanup PASS.
+
+### 2026-03-25 Update: OpenGL CPU / GPU / driver optimization matrix
+- Added `docs/plans/OPENGL_CPU_GPU_DRIVER_OPTIMIZATION_MATRIX.md`.
+- Consolidated the current OpenGL default strategy by CPU layer, GPU path, and driver/adapter rule handling.
+- Added a release-facing vendor strategy table for NVIDIA / AMD / Intel plus vendor-specific validation commands.
+- This is a documentation consolidation update; it does not change runtime behavior by itself.
+
+### 2026-03-25 Update: Embedded subtitle-track playback
+- Added automatic loading of supported embedded text subtitle streams during media open.
+- Added separate embedded/external subtitle ownership in `PlayerCore` with `external > embedded` selection and fallback when clearing sidecar subtitles.
+- Added in-memory `AssParser::parseText(...)` / `SrtParser::parseText(...)`, plus `--embedded-subtitle-check <media_file>`.
+- Expanded `tools/run_opengl_checks.ps1` to validate generated embedded ASS and embedded `mov_text` samples through both CLI checks and OpenGL playback.
+- Validation: Release build PASS, embedded ASS check PASS, embedded text check PASS, OpenGL gate PASS.
