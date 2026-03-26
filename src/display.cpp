@@ -447,6 +447,7 @@ Display::Display()
     , renderer_reset_requested_(false)
     , texture_reset_requested_(false)
     , fullscreen_toggle_requested_(false)
+    , event_thread_guard_reported_(false)
     , initialized_(false)
     , texture_width_(0)
     , texture_height_(0)
@@ -525,6 +526,8 @@ bool Display::init(int width, int height, const std::string& title) {
     toggle_pause_requested_.store(false);
     minimized_.store(false);
     fullscreen_toggle_requested_.store(false);
+    event_thread_id_ = std::this_thread::get_id();
+    event_thread_guard_reported_.store(false);
     renderer_reset_requested_.store(false);
     texture_reset_requested_.store(false);
     render_initialized_.store(false);
@@ -619,6 +622,8 @@ void Display::close() {
     texture_format_ = SDL_PIXELFORMAT_UNKNOWN;
     minimized_.store(false);
     fullscreen_toggle_requested_.store(false);
+    event_thread_id_ = std::thread::id{};
+    event_thread_guard_reported_.store(false);
     renderer_reset_requested_.store(false);
     texture_reset_requested_.store(false);
     render_initialized_.store(false);
@@ -1139,6 +1144,13 @@ void Display::renderLoop() {
 
 /// UI 线程事件泵；把键鼠事件翻译为一次性控制请求�?
 void Display::handleEvents() {
+    if (event_thread_id_ != std::thread::id{} && event_thread_id_ != std::this_thread::get_id()) {
+        if (!event_thread_guard_reported_.exchange(true)) {
+            std::cerr << "Display::handleEvents called from non-event thread; ignoring event pump" << std::endl;
+        }
+        return;
+    }
+
     SDL_Event event;
     
     while (SDL_PollEvent(&event)) {

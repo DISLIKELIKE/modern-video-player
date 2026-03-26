@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "input/playback_input_source.h"
+#include "render/render_overlay_sink.h"
 #include "render/video_renderer.h"
 
 namespace vp::render {
@@ -35,6 +37,26 @@ struct D3D11DecoderProfileSupport {
     bool av1_profile2_12bit_420{false};
 };
 
+struct D3D11HdrOutputSnapshot {
+    bool probe_succeeded{false};
+    std::string probe_error{};
+    bool adapter_matched{false};
+    uint32_t adapter_index{0};
+    bool output_found{false};
+    uint32_t output_index{0};
+    std::string output_name{"unknown"};
+    std::string output_device_name{"unknown"};
+    bool output_attached_to_desktop{false};
+    bool has_output6{false};
+    std::string color_space{"unknown"};
+    bool advanced_color_active{false};
+    bool hdr_active{false};
+    uint32_t bits_per_color{0};
+    double min_luminance_nits{0.0};
+    double max_luminance_nits{0.0};
+    double max_full_frame_luminance_nits{0.0};
+};
+
 struct D3D11DiagnosticsSnapshot {
     bool probe_succeeded{false};
     long create_device_hr{0};
@@ -62,9 +84,12 @@ struct D3D11DiagnosticsSnapshot {
     bool native_direct_startup_disabled{false};
     std::string native_direct_disable_rule{"none"};
     std::string native_direct_disable_reason{};
+    D3D11HdrOutputSnapshot hdr_output{};
 };
 
-class D3D11VideoRenderer final : public IVideoRenderer {
+class D3D11VideoRenderer final : public IVideoRenderer,
+                                 public input::IPlaybackInputSource,
+                                 public IRenderOverlaySink {
 public:
     D3D11VideoRenderer();
     ~D3D11VideoRenderer() override;
@@ -105,6 +130,8 @@ public:
     void setSubtitleText(const std::string& text) override;
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
+    RendererDiagnostics getDiagnostics() const override;
+    void resetDiagnostics() override;
     bool supportsNativeFrameFormat(AVPixelFormat format) const override;
     void* nativeDeviceHandle() const override;
     const char* rendererBackendName() const override;

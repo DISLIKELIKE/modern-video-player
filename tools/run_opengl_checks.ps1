@@ -11,6 +11,9 @@ param(
     [string]$EmbeddedAssSubtitleFile = "samples/subtitles/opengl_ass_transform_transition_validation.ass",
     [string]$EmbeddedAssMediaFile = "",
     [string]$EmbeddedTextMediaFile = "",
+    [string]$EmbeddedDvdMediaFile = "",
+    [string]$EmbeddedPgsSourceFile = "",
+    [string]$EmbeddedPgsMediaFile = "",
     [string[]]$SubtitleStyleFiles = @(
         "samples/subtitles/opengl_ass_style_validation.ass",
         "samples/subtitles/opengl_ass_karaoke_clip_validation.ass",
@@ -208,7 +211,7 @@ function Ensure-TenBitSample {
         New-Item -ItemType Directory -Force -Path $parent | Out-Null
     }
 
-    Write-Output ("Generating temporary 10-bit sample: " + $PathValue)
+    Write-Host ("Generating temporary 10-bit sample: " + $PathValue)
     $result = Invoke-ExternalCommand -Executable $ffmpegCommand.Source -Arguments @(
         "-y",
         "-f", "lavfi",
@@ -251,7 +254,7 @@ function Ensure-EmbeddedAssSample {
         New-Item -ItemType Directory -Force -Path $parent | Out-Null
     }
 
-    Write-Output ("Generating temporary embedded ASS sample: " + $PathValue)
+    Write-Host ("Generating temporary embedded ASS sample: " + $PathValue)
     $result = Invoke-ExternalCommand -Executable $ffmpegCommand.Source -Arguments @(
         "-y",
         "-i", $BaseMediaPath,
@@ -265,7 +268,7 @@ function Ensure-EmbeddedAssSample {
         $PathValue
     )
     if ($result.ExitCode -ne 0 -or -not (Test-Path $PathValue)) {
-        throw "Failed to generate embedded ASS validation sample: $PathValue`n$result.Output"
+        throw "Failed to generate embedded ASS validation sample: $PathValue`n$($result.Output)"
     }
     return $PathValue
 }
@@ -303,7 +306,7 @@ EMBEDDED TEXT PATH
 MOV_TEXT VALIDATION
 "@ | Set-Content -Path $subtitlePath -Encoding utf8
 
-    Write-Output ("Generating temporary embedded text subtitle sample: " + $PathValue)
+    Write-Host ("Generating temporary embedded text subtitle sample: " + $PathValue)
     $result = Invoke-ExternalCommand -Executable $ffmpegCommand.Source -Arguments @(
         "-y",
         "-i", $BaseMediaPath,
@@ -317,7 +320,100 @@ MOV_TEXT VALIDATION
         $PathValue
     )
     if ($result.ExitCode -ne 0 -or -not (Test-Path $PathValue)) {
-        throw "Failed to generate embedded text subtitle validation sample: $PathValue`n$result.Output"
+        throw "Failed to generate embedded text subtitle validation sample: $PathValue`n$($result.Output)"
+    }
+    return $PathValue
+}
+
+function Ensure-EmbeddedDvdSample {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue,
+        [Parameter(Mandatory = $true)]
+        [string]$BaseMediaPath
+    )
+
+    if (Test-Path $PathValue) {
+        return $PathValue
+    }
+
+    $parent = Split-Path -Parent $PathValue
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    $sourceUrl = "https://samples.ffmpeg.org/archive/extension/vob/mpeg+mpeg2video+ac3+dvdsub+Tr_Plan.vob"
+    Write-Host ("Downloading temporary DVD subtitle sample: " + $PathValue)
+    Invoke-WebRequest -Uri $sourceUrl -OutFile $PathValue
+    if (-not (Test-Path $PathValue)) {
+        throw "Failed to download DVD subtitle validation sample: $PathValue"
+    }
+    return $PathValue
+}
+
+function Ensure-DownloadedPgsSourceSample {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue
+    )
+
+    if (Test-Path $PathValue) {
+        return $PathValue
+    }
+
+    $parent = Split-Path -Parent $PathValue
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    $sourceUrl = "https://samples.ffmpeg.org/sub/PGS/supsample.mkv"
+    Write-Host ("Downloading temporary PGS subtitle source sample: " + $PathValue)
+    Invoke-WebRequest -Uri $sourceUrl -OutFile $PathValue
+    if (-not (Test-Path $PathValue)) {
+        throw "Failed to download PGS subtitle source sample: $PathValue"
+    }
+    return $PathValue
+}
+
+function Ensure-EmbeddedPgsSample {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$PathValue,
+        [Parameter(Mandatory = $true)]
+        [string]$BaseMediaPath,
+        [Parameter(Mandatory = $true)]
+        [string]$PgsSourcePath
+    )
+
+    if (Test-Path $PathValue) {
+        return $PathValue
+    }
+
+    $ffmpegCommand = Get-Command ffmpeg.exe -ErrorAction SilentlyContinue
+    if (-not $ffmpegCommand) {
+        throw "ffmpeg.exe not found in PATH, and no embedded PGS subtitle sample was provided."
+    }
+
+    $parent = Split-Path -Parent $PathValue
+    if (-not [string]::IsNullOrWhiteSpace($parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+
+    Write-Host ("Generating temporary embedded PGS subtitle sample: " + $PathValue)
+    $result = Invoke-ExternalCommand -Executable $ffmpegCommand.Source -Arguments @(
+        "-y",
+        "-i", $BaseMediaPath,
+        "-i", $PgsSourcePath,
+        "-map", "0:v",
+        "-map", "0:a?",
+        "-map", "1:s:0",
+        "-c:v", "copy",
+        "-c:a", "copy",
+        "-c:s", "copy",
+        $PathValue
+    )
+    if ($result.ExitCode -ne 0 -or -not (Test-Path $PathValue)) {
+        throw "Failed to generate embedded PGS subtitle validation sample: $PathValue`n$($result.Output)"
     }
     return $PathValue
 }
@@ -333,6 +429,10 @@ if (-not (Test-Path $exePath)) {
 $probePath = Resolve-ProjectPath -Root $repoRoot -PathValue $ProbeFile
 if (-not (Test-Path $probePath)) {
     throw "Probe file not found: $probePath"
+}
+$cubeLutPath = Resolve-ProjectPath -Root $repoRoot -PathValue "samples/lut/identity_2.cube"
+if (-not (Test-Path $cubeLutPath)) {
+    throw "Cube LUT file not found: $cubeLutPath"
 }
 
 $tenBitPath = $TenBitFile
@@ -380,6 +480,42 @@ if ($runEmbeddedTextCheck) {
     $embeddedTextMediaPath = Ensure-EmbeddedTextSample -PathValue $embeddedTextMediaPath -BaseMediaPath $embeddedSubtitleBaseMediaPath
 }
 
+$runEmbeddedDvdCheck = (Test-Path $embeddedSubtitleBaseMediaPath)
+$embeddedDvdMediaPath = ""
+if ($runEmbeddedDvdCheck) {
+    $embeddedDvdMediaPath = $EmbeddedDvdMediaFile
+    if ([string]::IsNullOrWhiteSpace($embeddedDvdMediaPath)) {
+        $embeddedDvdMediaPath = Resolve-ProjectPath -Root $repoRoot -PathValue "build/tmp/embedded-dvd-validation.mkv"
+    } else {
+        $embeddedDvdMediaPath = Resolve-ProjectPath -Root $repoRoot -PathValue $embeddedDvdMediaPath
+    }
+    $embeddedDvdMediaPath = Ensure-EmbeddedDvdSample -PathValue $embeddedDvdMediaPath -BaseMediaPath $embeddedSubtitleBaseMediaPath
+}
+
+$runEmbeddedPgsCheck = (Test-Path $embeddedSubtitleBaseMediaPath)
+$embeddedPgsSourcePath = ""
+$embeddedPgsMediaPath = ""
+if ($runEmbeddedPgsCheck) {
+    $embeddedPgsSourcePath = $EmbeddedPgsSourceFile
+    if ([string]::IsNullOrWhiteSpace($embeddedPgsSourcePath)) {
+        $embeddedPgsSourcePath = Resolve-ProjectPath -Root $repoRoot -PathValue "build/tmp/embedded-pgs-source.mkv"
+    } else {
+        $embeddedPgsSourcePath = Resolve-ProjectPath -Root $repoRoot -PathValue $embeddedPgsSourceFile
+    }
+    $embeddedPgsSourcePath = Ensure-DownloadedPgsSourceSample -PathValue $embeddedPgsSourcePath
+
+    $embeddedPgsMediaPath = $EmbeddedPgsMediaFile
+    if ([string]::IsNullOrWhiteSpace($embeddedPgsMediaPath)) {
+        $embeddedPgsMediaPath = Resolve-ProjectPath -Root $repoRoot -PathValue "build/tmp/embedded-pgs-validation.mkv"
+    } else {
+        $embeddedPgsMediaPath = Resolve-ProjectPath -Root $repoRoot -PathValue $embeddedPgsMediaPath
+    }
+    $embeddedPgsMediaPath = Ensure-EmbeddedPgsSample `
+        -PathValue $embeddedPgsMediaPath `
+        -BaseMediaPath $embeddedSubtitleBaseMediaPath `
+        -PgsSourcePath $embeddedPgsSourcePath
+}
+
 $checks = @(
     @{
         Name = "OpenGL diagnostics"
@@ -392,6 +528,16 @@ $checks = @(
         Summary = @("opengl-diagnostics\.", "result=")
     },
     @{
+        Name = "DirectWrite subtitle custom font collection"
+        Args = @("--directwrite-font-collection-check", $probePath)
+        Env = @{}
+        Required = @(
+            "directwrite-font-collection-check\.factory_ok=true",
+            "directwrite-font-collection-check\.result=PASS"
+        )
+        Summary = @("directwrite-font-collection-check\.", "result=")
+    },
+    @{
         Name = "OpenGL native playback"
         Args = @("--performance-log-check", $probePath, [string]$SampleMs)
         Env = @{ MVP_RENDERER_BACKEND = "opengl" }
@@ -400,6 +546,28 @@ $checks = @(
             "performance-log-check\.result=PASS"
         )
         Summary = @("renderer_backend=", "decoder_backend=", "renderer_opengl_present_mode_", "result=")
+    },
+    @{
+        Name = "OpenGL output color manual cube regression"
+        Args = @("--opengl-output-color-check", $probePath, $cubeLutPath, [string]$SampleMs)
+        Env = @{}
+        Required = @(
+            "opengl-output-color-check\.output_lut_source=cube",
+            "opengl-output-color-check\.output_lut_active=true",
+            "opengl-output-color-check\.result=PASS"
+        )
+        Summary = @("opengl-output-color-check\.", "result=")
+    },
+    @{
+        Name = "OpenGL output color auto ICC regression"
+        Args = @("--opengl-output-color-icc-check", $probePath, [string]$SampleMs)
+        Env = @{}
+        Required = @(
+            "opengl-output-color-icc-check\.output_lut_source=icc-",
+            "opengl-output-color-icc-check\.output_icc_profile_available=true",
+            "opengl-output-color-icc-check\.result=PASS"
+        )
+        Summary = @("opengl-output-color-icc-check\.", "result=")
     },
     @{
         Name = "OpenGL copy-back playback"
@@ -422,6 +590,17 @@ $checks = @(
             "performance-log-check\.result=PASS"
         )
         Summary = @("\[diag:opengl-present\]", "renderer_opengl_present_mode_", "result=")
+    },
+    @{
+        Name = "OpenGL interaction freeze stress"
+        Args = @("--interaction-freeze-check", $probePath, [string]$SampleMs)
+        Env = @{ MVP_RENDERER_BACKEND = "opengl" }
+        Required = @(
+            "interaction-freeze-check\.renderer_backend=OpenGL",
+            "interaction-freeze-check\.injected_events_total=[1-9]",
+            "interaction-freeze-check\.result=PASS"
+        )
+        Summary = @("interaction-freeze-check\.", "result=")
     },
     @{
         Name = "OpenGL 10-bit copy-back playback"
@@ -497,6 +676,82 @@ if ($runEmbeddedTextCheck) {
     )
 } else {
     Write-Output "Skipping embedded text subtitle regression because base media was not found."
+}
+
+if ($runEmbeddedDvdCheck) {
+    $checks += @(
+        @{
+            Name = "Embedded DVD bitmap subtitle CLI regression"
+            Args = @("--bitmap-subtitle-check", $embeddedDvdMediaPath)
+            Env = @{}
+            Required = @(
+                "bitmap-subtitle-check\.loaded=true",
+                "bitmap-subtitle-check\.codec_name=dvd_subtitle",
+                "bitmap-subtitle-check\.bitmap_item_count=[1-9]",
+                "bitmap-subtitle-check\.bitmap_rect_count=[1-9]",
+                "bitmap-subtitle-check\.result=PASS"
+            )
+            Summary = @("bitmap-subtitle-check\.", "result=")
+        },
+        @{
+            Name = "OpenGL embedded DVD bitmap subtitle playback regression"
+            Args = @("--performance-log-check", $embeddedDvdMediaPath, [string]$SampleMs)
+            Env = @{ MVP_RENDERER_BACKEND = "opengl" }
+            Required = @(
+                "Embedded subtitle track load: .*codec=dvd_subtitle.*loaded=true",
+                "Embedded subtitle track attached: path=embedded:",
+                "performance-log-check\.renderer_backend=OpenGL",
+                "performance-log-check\.result=PASS"
+            )
+            Summary = @("Embedded subtitle", "renderer_backend=", "decoder_backend=", "result=")
+        }
+    )
+} else {
+    Write-Output "Skipping embedded DVD subtitle regression because base media was not found."
+}
+
+if ($runEmbeddedPgsCheck) {
+    $checks += @(
+        @{
+            Name = "Embedded PGS bitmap subtitle CLI regression"
+            Args = @("--bitmap-subtitle-check", $embeddedPgsMediaPath)
+            Env = @{}
+            Required = @(
+                "bitmap-subtitle-check\.loaded=true",
+                "bitmap-subtitle-check\.codec_name=hdmv_pgs_subtitle",
+                "bitmap-subtitle-check\.bitmap_item_count=[1-9]",
+                "bitmap-subtitle-check\.bitmap_rect_count=[1-9]",
+                "bitmap-subtitle-check\.result=PASS"
+            )
+            Summary = @("bitmap-subtitle-check\.", "result=")
+        },
+        @{
+            Name = "OpenGL embedded PGS bitmap subtitle playback regression"
+            Args = @("--performance-log-check", $embeddedPgsMediaPath, [string]$SampleMs)
+            Env = @{ MVP_RENDERER_BACKEND = "opengl" }
+            Required = @(
+                "Embedded subtitle track load: .*codec=hdmv_pgs_subtitle.*loaded=true",
+                "Embedded subtitle track attached: path=embedded:",
+                "performance-log-check\.renderer_backend=OpenGL",
+                "performance-log-check\.result=PASS"
+            )
+            Summary = @("Embedded subtitle", "renderer_backend=", "decoder_backend=", "result=")
+        }
+    )
+} else {
+    Write-Output "Skipping embedded PGS subtitle regression because base media was not found."
+}
+
+$checks += @{
+    Name = "Bitmap subtitle multi-rect stress regression"
+    Args = @("--bitmap-subtitle-stress-check")
+    Env = @{}
+    Required = @(
+        "bitmap-subtitle-stress-check\.multi_rect_item_count=[1-9]",
+        "bitmap-subtitle-stress-check\.cache_reuse_candidate_count=[1-9]",
+        "bitmap-subtitle-stress-check\.result=PASS"
+    )
+    Summary = @("bitmap-subtitle-stress-check\.", "result=")
 }
 
 if ($runSubtitleCheck) {

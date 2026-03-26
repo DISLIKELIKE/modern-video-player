@@ -151,7 +151,7 @@ bool operator==(const SubtitleItem& lhs, const SubtitleItem& rhs) {
            lhs.drawing_scale == rhs.drawing_scale &&
            lhs.drawing_commands == rhs.drawing_commands &&
            lhs.is_bitmap == rhs.is_bitmap &&
-           lhs.bitmap == rhs.bitmap &&
+           lhs.bitmap_rects == rhs.bitmap_rects &&
            lhs.runs == rhs.runs;
 }
 

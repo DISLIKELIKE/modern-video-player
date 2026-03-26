@@ -9,7 +9,10 @@ namespace vp::decoder {
 enum class DecoderBackend {
     Software,
     CUDA,
-    D3D11VA
+    D3D11VA,
+    DXVA2,
+    VAAPI,
+    VideoToolbox
 };
 
 struct DecoderCapability {

@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "input/playback_input_source.h"
 #include "render/d3d11_video_renderer.h"
+#include "render/render_overlay_sink.h"
 #include "render/video_renderer.h"
 
 namespace vp::render {
@@ -27,6 +30,18 @@ struct OpenGLHdrOutputDiagnosticsSnapshot {
     double min_luminance_nits{0.0};
     double max_luminance_nits{0.0};
     double max_full_frame_luminance_nits{0.0};
+};
+
+struct OpenGLOutputDisplayDiagnosticsSnapshot {
+    bool binding_succeeded{false};
+    int sdl_display_index{-1};
+    std::string sdl_display_name{"unknown"};
+    std::string output_device_name{"unknown"};
+    bool icc_profile_available{false};
+    std::string icc_profile_source{"none"};
+    std::string icc_profile_path{"none"};
+    std::string icc_profile_description{"unknown"};
+    std::string binding_error{};
 };
 
 struct OpenGLDiagnosticsSnapshot {
@@ -52,9 +67,12 @@ struct OpenGLDiagnosticsSnapshot {
     std::string quirk_rule_reason{};
     bool env_force_overrode_quirk{false};
     OpenGLHdrOutputDiagnosticsSnapshot hdr_output{};
+    OpenGLOutputDisplayDiagnosticsSnapshot output_display{};
 };
 
-class OpenGLVideoRenderer final : public IVideoRenderer {
+class OpenGLVideoRenderer final : public IVideoRenderer,
+                                  public input::IPlaybackInputSource,
+                                  public IRenderOverlaySink {
 public:
     OpenGLVideoRenderer();
     ~OpenGLVideoRenderer() override;
@@ -95,6 +113,7 @@ public:
     void setSubtitleText(const std::string& text) override;
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) override;
     void setSubtitleTrackState(int current_ordinal, int track_count) override;
+    void setSubtitleTrackCatalog(const std::vector<std::string>& track_labels, int current_ordinal) override;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager) override;
     RendererDiagnostics getDiagnostics() const override;
     void resetDiagnostics() override;

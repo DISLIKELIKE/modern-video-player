@@ -42,6 +42,8 @@ struct SchedulerStats {
 
     uint64_t wait_events{0};
 
+    uint64_t render_wait_ms{0};
+
     uint64_t video_backpressure_events{0};
 
     uint64_t audio_backpressure_events{0};
@@ -296,6 +298,8 @@ private:
     std::atomic<uint64_t> dropped_late_frames_{0};
 
     std::atomic<uint64_t> wait_events_{0};
+
+    std::atomic<uint64_t> render_wait_ms_{0};
 
     std::atomic<uint64_t> video_backpressure_events_{0};
 

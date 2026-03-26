@@ -3,11 +3,15 @@
 #include <memory>
 
 #include "display.h"
+#include "input/playback_input_source.h"
+#include "render/render_overlay_sink.h"
 #include "render/video_renderer.h"
 
 namespace vp::render {
 
-class SdlVideoRenderer final : public IVideoRenderer {
+class SdlVideoRenderer final : public IVideoRenderer,
+                               public input::IPlaybackInputSource,
+                               public IRenderOverlaySink {
 public:
     SdlVideoRenderer();
     ~SdlVideoRenderer() override;

@@ -5,12 +5,14 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <cwchar>
 #include <cstring>
 #include <iomanip>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #if __has_include(<SDL2/SDL.h>)
@@ -36,10 +38,14 @@
 #include <dwrite.h>
 #include <dwrite_1.h>
 #include <dxgi1_2.h>
+#include <dxgi1_4.h>
+#include <dxgi1_5.h>
+#include <dxgi1_6.h>
 #include <wrl/client.h>
 
 extern "C" {
 #include <libavutil/hwcontext_d3d11va.h>
+#include <libavutil/mastering_display_metadata.h>
 #include <libavutil/pixdesc.h>
 }
 
@@ -71,6 +77,45 @@ constexpr float kSubtitleFontScale = 0.055f;
 constexpr float kSubtitleHorizontalPadding = 18.0f;
 constexpr float kSubtitleVerticalPadding = 10.0f;
 constexpr float kSubtitleShadowOffset = 2.0f;
+constexpr size_t kSubtitleBitmapCacheLimit = 32;
+
+uint64_t hashSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap) {
+    constexpr uint64_t kFnvOffset = 1469598103934665603ull;
+    constexpr uint64_t kFnvPrime = 1099511628211ull;
+
+    auto hash_bytes = [kFnvPrime](uint64_t seed, const uint8_t* data, size_t size) {
+        uint64_t hash = seed;
+        for (size_t i = 0; i < size; ++i) {
+            hash ^= static_cast<uint64_t>(data[i]);
+            hash *= kFnvPrime;
+        }
+        return hash;
+    };
+
+    uint64_t hash = kFnvOffset;
+    const std::array<int, 2> header = {bitmap.width, bitmap.height};
+    hash = hash_bytes(hash,
+                      reinterpret_cast<const uint8_t*>(header.data()),
+                      header.size() * sizeof(header[0]));
+    return hash_bytes(hash, bitmap.rgba.data(), bitmap.rgba.size());
+}
+
+std::vector<uint8_t> premultiplySubtitleBitmapBgra(const subtitle::SubtitleBitmap& bitmap) {
+    const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+    std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const uint8_t r = bitmap.rgba[i * 4u + 0u];
+        const uint8_t g = bitmap.rgba[i * 4u + 1u];
+        const uint8_t b = bitmap.rgba[i * 4u + 2u];
+        const uint8_t a = bitmap.rgba[i * 4u + 3u];
+        const uint16_t alpha = static_cast<uint16_t>(a);
+        premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 3u] = a;
+    }
+    return premul_bgra;
+}
 
 const char* dxgiFormatName(DXGI_FORMAT format) {
     switch (format) {
@@ -82,6 +127,10 @@ const char* dxgiFormatName(DXGI_FORMAT format) {
         return "P016";
     case DXGI_FORMAT_B8G8R8A8_UNORM:
         return "B8G8R8A8_UNORM";
+    case DXGI_FORMAT_R10G10B10A2_UNORM:
+        return "R10G10B10A2_UNORM";
+    case DXGI_FORMAT_R16G16B16A16_FLOAT:
+        return "R16G16B16A16_FLOAT";
     default:
         return "UNKNOWN";
     }
@@ -147,6 +196,20 @@ std::string utf8FromWide(const wchar_t* text) {
     std::string result(static_cast<size_t>(required - 1), '\0');
     WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), required, nullptr, nullptr);
     return result;
+}
+
+bool tryGetWindowHandle(SDL_Window* window, HWND& hwnd) {
+    hwnd = nullptr;
+    if (!window) {
+        return false;
+    }
+    SDL_SysWMinfo wm_info{};
+    SDL_VERSION(&wm_info.version);
+    if (!SDL_GetWindowWMInfo(window, &wm_info)) {
+        return false;
+    }
+    hwnd = wm_info.info.win.window;
+    return hwnd != nullptr;
 }
 
 uint64_t bytesToMiB(SIZE_T bytes) {
@@ -427,6 +490,184 @@ void applyNativeDirectStartupPolicy(D3D11DiagnosticsSnapshot& snapshot) {
     }
 }
 
+const char* dxgiColorSpaceName(DXGI_COLOR_SPACE_TYPE color_space) {
+    switch (color_space) {
+    case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709:
+        return "rgb_full_g22_p709";
+    case DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709:
+        return "rgb_full_g10_p709";
+    case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P709:
+        return "rgb_studio_g22_p709";
+    case DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P2020:
+        return "rgb_studio_g22_p2020";
+    case DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020:
+        return "rgb_full_pq_p2020";
+    case DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020:
+        return "rgb_studio_pq_p2020";
+    case DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020:
+        return "rgb_full_g22_p2020";
+    case DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020:
+        return "ycbcr_studio_pq_p2020";
+    case DXGI_COLOR_SPACE_YCBCR_STUDIO_GHLG_TOPLEFT_P2020:
+        return "ycbcr_studio_hlg_p2020";
+    case DXGI_COLOR_SPACE_YCBCR_FULL_GHLG_TOPLEFT_P2020:
+        return "ycbcr_full_hlg_p2020";
+    default:
+        return "unknown";
+    }
+}
+
+bool dxgiColorSpaceHdrActive(DXGI_COLOR_SPACE_TYPE color_space) {
+    return color_space == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_STUDIO_GHLG_TOPLEFT_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_FULL_GHLG_TOPLEFT_P2020;
+}
+
+bool dxgiColorSpaceAdvancedColorActive(DXGI_COLOR_SPACE_TYPE color_space) {
+    return color_space == DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709 ||
+           color_space == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_RGB_STUDIO_G2084_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_RGB_STUDIO_G22_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_STUDIO_GHLG_TOPLEFT_P2020 ||
+           color_space == DXGI_COLOR_SPACE_YCBCR_FULL_GHLG_TOPLEFT_P2020;
+}
+
+bool matchesD3D11DiagnosticsAdapter(const DXGI_ADAPTER_DESC1& desc, const D3D11DiagnosticsSnapshot& d3d11) {
+    if (desc.VendorId != d3d11.vendor_id || desc.DeviceId != d3d11.device_id) {
+        return false;
+    }
+    if (d3d11.subsystem_id != 0 && desc.SubSysId != d3d11.subsystem_id) {
+        return false;
+    }
+    if (d3d11.revision != 0 && desc.Revision != d3d11.revision) {
+        return false;
+    }
+    return true;
+}
+
+D3D11HdrOutputSnapshot probeD3D11HdrOutput(const D3D11DiagnosticsSnapshot& d3d11,
+                                           const wchar_t* preferred_device_name = nullptr) {
+    D3D11HdrOutputSnapshot snapshot;
+    if (!d3d11.probe_succeeded) {
+        snapshot.probe_error = "d3d11 diagnostics did not succeed";
+        return snapshot;
+    }
+
+    ComPtr<IDXGIFactory1> factory;
+    const HRESULT factory_hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf()));
+    if (FAILED(factory_hr) || !factory) {
+        snapshot.probe_error = "CreateDXGIFactory1 failed";
+        return snapshot;
+    }
+
+    for (UINT adapter_index = 0;; ++adapter_index) {
+        ComPtr<IDXGIAdapter1> adapter;
+        const HRESULT adapter_hr = factory->EnumAdapters1(adapter_index, adapter.GetAddressOf());
+        if (adapter_hr == DXGI_ERROR_NOT_FOUND) {
+            break;
+        }
+        if (FAILED(adapter_hr) || !adapter) {
+            continue;
+        }
+
+        DXGI_ADAPTER_DESC1 adapter_desc{};
+        if (FAILED(adapter->GetDesc1(&adapter_desc)) ||
+            !matchesD3D11DiagnosticsAdapter(adapter_desc, d3d11)) {
+            continue;
+        }
+
+        snapshot.adapter_matched = true;
+        snapshot.adapter_index = adapter_index;
+
+        ComPtr<IDXGIOutput> first_output;
+        UINT first_output_index = 0;
+        ComPtr<IDXGIOutput> matched_output;
+        UINT matched_output_index = 0;
+        for (UINT output_index = 0;; ++output_index) {
+            ComPtr<IDXGIOutput> output;
+            const HRESULT output_hr = adapter->EnumOutputs(output_index, output.GetAddressOf());
+            if (output_hr == DXGI_ERROR_NOT_FOUND) {
+                break;
+            }
+            if (FAILED(output_hr) || !output) {
+                continue;
+            }
+
+            DXGI_OUTPUT_DESC output_desc{};
+            if (FAILED(output->GetDesc(&output_desc))) {
+                continue;
+            }
+            if (!first_output) {
+                first_output = output;
+                first_output_index = output_index;
+            }
+            if (preferred_device_name &&
+                preferred_device_name[0] != L'\0' &&
+                std::wcscmp(output_desc.DeviceName, preferred_device_name) == 0) {
+                matched_output = output;
+                matched_output_index = output_index;
+                break;
+            }
+            if (!preferred_device_name && output_desc.AttachedToDesktop) {
+                matched_output = output;
+                matched_output_index = output_index;
+                break;
+            }
+        }
+
+        if (!matched_output) {
+            matched_output = first_output;
+            matched_output_index = first_output_index;
+        }
+        if (!matched_output) {
+            snapshot.probe_succeeded = true;
+            snapshot.probe_error = "matched adapter has no DXGI outputs";
+            return snapshot;
+        }
+
+        snapshot.output_found = true;
+        snapshot.output_index = matched_output_index;
+
+        DXGI_OUTPUT_DESC output_desc{};
+        if (SUCCEEDED(matched_output->GetDesc(&output_desc))) {
+            snapshot.output_name = utf8FromWide(output_desc.DeviceName);
+            snapshot.output_device_name = utf8FromWide(output_desc.DeviceName);
+            snapshot.output_attached_to_desktop = output_desc.AttachedToDesktop;
+        }
+
+        ComPtr<IDXGIOutput6> output6;
+        if (SUCCEEDED(matched_output.As(&output6)) && output6) {
+            snapshot.has_output6 = true;
+            DXGI_OUTPUT_DESC1 output_desc1{};
+            if (SUCCEEDED(output6->GetDesc1(&output_desc1))) {
+                snapshot.output_name = utf8FromWide(output_desc1.DeviceName);
+                snapshot.output_device_name = utf8FromWide(output_desc1.DeviceName);
+                snapshot.output_attached_to_desktop = output_desc1.AttachedToDesktop;
+                snapshot.color_space = dxgiColorSpaceName(output_desc1.ColorSpace);
+                snapshot.advanced_color_active = dxgiColorSpaceAdvancedColorActive(output_desc1.ColorSpace);
+                snapshot.hdr_active = dxgiColorSpaceHdrActive(output_desc1.ColorSpace);
+                snapshot.bits_per_color = output_desc1.BitsPerColor;
+                snapshot.min_luminance_nits = static_cast<double>(output_desc1.MinLuminance);
+                snapshot.max_luminance_nits = static_cast<double>(output_desc1.MaxLuminance);
+                snapshot.max_full_frame_luminance_nits =
+                    static_cast<double>(output_desc1.MaxFullFrameLuminance);
+            }
+        } else {
+            snapshot.probe_error = "IDXGIOutput6 unavailable; HDR output capability details are limited";
+        }
+
+        snapshot.probe_succeeded = true;
+        return snapshot;
+    }
+
+    snapshot.probe_error = "no DXGI adapter matched the D3D11 diagnostics adapter";
+    return snapshot;
+}
+
 D3D11DiagnosticsSnapshot buildD3D11DiagnosticsSnapshot(const D3D11DeviceProbeContext& probe) {
     D3D11DiagnosticsSnapshot snapshot;
     snapshot.create_device_hr = static_cast<long>(probe.create_device_hr);
@@ -488,6 +729,7 @@ D3D11DiagnosticsSnapshot buildD3D11DiagnosticsSnapshot(const D3D11DeviceProbeCon
     snapshot.p016_support = queryFormatSupport(probe.device.Get(), DXGI_FORMAT_P016);
     snapshot.decoder_profiles = probeDecoderProfiles(video_device.Get());
     applyNativeDirectStartupPolicy(snapshot);
+    snapshot.hdr_output = probeD3D11HdrOutput(snapshot);
     return snapshot;
 }
 
@@ -550,9 +792,26 @@ void logD3D11StartupDiagnostics(const D3D11DiagnosticsSnapshot& snapshot) {
     if (!snapshot.native_direct_allowed) {
         native_direct_log << " fallback=copyback-to-software";
         LOG_WARNING(native_direct_log.str());
-        return;
+    } else {
+        LOG_INFO(native_direct_log.str());
     }
-    LOG_INFO(native_direct_log.str());
+
+    std::ostringstream hdr_log;
+    hdr_log << "[diag:d3d11-hdr] probe_succeeded=" << boolName(snapshot.hdr_output.probe_succeeded)
+            << " adapter_matched=" << boolName(snapshot.hdr_output.adapter_matched)
+            << " output_found=" << boolName(snapshot.hdr_output.output_found)
+            << " output=\"" << snapshot.hdr_output.output_name << "\""
+            << " color_space=" << snapshot.hdr_output.color_space
+            << " advanced_color_active=" << boolName(snapshot.hdr_output.advanced_color_active)
+            << " hdr_active=" << boolName(snapshot.hdr_output.hdr_active)
+            << " bits_per_color=" << snapshot.hdr_output.bits_per_color
+            << " min_luminance_nits=" << snapshot.hdr_output.min_luminance_nits
+            << " max_luminance_nits=" << snapshot.hdr_output.max_luminance_nits
+            << " max_full_frame_luminance_nits=" << snapshot.hdr_output.max_full_frame_luminance_nits;
+    if (!snapshot.hdr_output.probe_error.empty()) {
+        hdr_log << " note=\"" << snapshot.hdr_output.probe_error << '"';
+    }
+    LOG_INFO(hdr_log.str());
 }
 
 D3D11DeviceProbeContext createD3D11DeviceProbeContext() {
@@ -647,7 +906,7 @@ struct ColorMatrixConstants {
     float coeff_r[4];
     float coeff_g[4];
     float coeff_b[4];
-    float reserved[4];
+    float color_config0[4];
 };
 
 WindowSize computeInitialWindowSize(int video_width, int video_height) {
@@ -720,30 +979,112 @@ bool isLimitedRange(const AVFrame* frame) {
     return !frame || frame->color_range != AVCOL_RANGE_JPEG;
 }
 
-bool useBt601Matrix(const AVFrame* frame) {
+enum class ColorMatrixKind {
+    Bt709 = 0,
+    Bt601 = 1,
+    Bt2020 = 2,
+};
+
+enum class ColorTransferMode {
+    Sdr = 0,
+    Pq = 1,
+    Hlg = 2,
+};
+
+enum class ColorGamutMode {
+    None = 0,
+    Bt2020ToBt709 = 1,
+};
+
+enum class D3D11HdrPresentMode {
+    Auto = 0,
+    Off = 1,
+    Force = 2,
+};
+
+ColorMatrixKind colorMatrixKind(const AVFrame* frame) {
     if (!frame) {
-        return false;
+        return ColorMatrixKind::Bt709;
     }
     switch (frame->colorspace) {
     case AVCOL_SPC_BT470BG:
     case AVCOL_SPC_SMPTE170M:
     case AVCOL_SPC_FCC:
-        return true;
+        return ColorMatrixKind::Bt601;
+    case AVCOL_SPC_BT2020_CL:
+    case AVCOL_SPC_BT2020_NCL:
+        return ColorMatrixKind::Bt2020;
     default:
-        return false;
+        return ColorMatrixKind::Bt709;
     }
 }
 
-ColorMatrixConstants buildColorMatrix(const AVFrame* frame, bool high_bit_depth) {
+bool useBt2020GamutMapping(const AVFrame* frame) {
+    if (!frame) {
+        return false;
+    }
+    return frame->colorspace == AVCOL_SPC_BT2020_CL ||
+           frame->colorspace == AVCOL_SPC_BT2020_NCL ||
+           frame->color_primaries == AVCOL_PRI_BT2020;
+}
+
+bool isPqTransfer(AVColorTransferCharacteristic transfer) {
+    return transfer == AVCOL_TRC_SMPTE2084;
+}
+
+bool isHlgTransfer(AVColorTransferCharacteristic transfer) {
+    return transfer == AVCOL_TRC_ARIB_STD_B67;
+}
+
+bool isHdrTransfer(AVColorTransferCharacteristic transfer) {
+    return isPqTransfer(transfer) || isHlgTransfer(transfer);
+}
+
+const char* transferName(AVColorTransferCharacteristic transfer) {
+    switch (transfer) {
+    case AVCOL_TRC_SMPTE2084:
+        return "smpte2084";
+    case AVCOL_TRC_ARIB_STD_B67:
+        return "arib-std-b67";
+    case AVCOL_TRC_BT709:
+        return "bt709";
+    case AVCOL_TRC_BT2020_10:
+        return "bt2020-10";
+    case AVCOL_TRC_BT2020_12:
+        return "bt2020-12";
+    default:
+        return "unspecified";
+    }
+}
+
+ColorMatrixConstants buildColorMatrix(const AVFrame* frame,
+                                      bool high_bit_depth,
+                                      bool hdr_output_active) {
     const bool limited = isLimitedRange(frame);
-    const bool bt601 = useBt601Matrix(frame);
     const float y_bias = limited ? (high_bit_depth ? (-64.0f / 1023.0f) : (-16.0f / 255.0f)) : 0.0f;
     const float uv_bias = limited ? (high_bit_depth ? (-512.0f / 1023.0f) : (-128.0f / 255.0f)) : -0.5f;
     const float y_scale = limited ? (high_bit_depth ? (1023.0f / 876.0f) : (255.0f / 219.0f)) : 1.0f;
-    const float rv = bt601 ? 1.596027f : 1.792741f;
-    const float gu = bt601 ? -0.391762f : -0.213249f;
-    const float gv = bt601 ? -0.812968f : -0.532909f;
-    const float bu = bt601 ? 2.017232f : 2.112402f;
+    float rv = 1.792741f;
+    float gu = -0.213249f;
+    float gv = -0.532909f;
+    float bu = 2.112402f;
+    switch (colorMatrixKind(frame)) {
+    case ColorMatrixKind::Bt601:
+        rv = 1.596027f;
+        gu = -0.391762f;
+        gv = -0.812968f;
+        bu = 2.017232f;
+        break;
+    case ColorMatrixKind::Bt2020:
+        rv = 1.474600f;
+        gu = -0.164553f;
+        gv = -0.571353f;
+        bu = 1.881400f;
+        break;
+    case ColorMatrixKind::Bt709:
+    default:
+        break;
+    }
 
     ColorMatrixConstants constants{};
     constants.coeff_r[0] = y_scale;
@@ -756,7 +1097,140 @@ ColorMatrixConstants buildColorMatrix(const AVFrame* frame, bool high_bit_depth)
     constants.coeff_b[0] = y_scale;
     constants.coeff_b[1] = bu;
     constants.coeff_b[3] = y_scale * y_bias + bu * uv_bias;
+    constants.color_config0[0] = isPqTransfer(frame ? frame->color_trc : AVCOL_TRC_UNSPECIFIED)
+                                     ? static_cast<float>(ColorTransferMode::Pq)
+                                     : (isHlgTransfer(frame ? frame->color_trc : AVCOL_TRC_UNSPECIFIED)
+                                            ? static_cast<float>(ColorTransferMode::Hlg)
+                                            : static_cast<float>(ColorTransferMode::Sdr));
+    constants.color_config0[1] = useBt2020GamutMapping(frame)
+                                     ? static_cast<float>(ColorGamutMode::Bt2020ToBt709)
+                                     : static_cast<float>(ColorGamutMode::None);
+    constants.color_config0[2] = hdr_output_active ? 1.0f : 0.0f;
     return constants;
+}
+
+std::optional<std::string> readEnvVar(const char* key) {
+    if (!key || key[0] == '\0') {
+        return std::nullopt;
+    }
+#if defined(_WIN32)
+    char* value = nullptr;
+    size_t length = 0;
+    if (_dupenv_s(&value, &length, key) != 0 || !value) {
+        return std::nullopt;
+    }
+    std::string result(value);
+    std::free(value);
+    return result;
+#else
+    if (const char* value = std::getenv(key)) {
+        return std::string(value);
+    }
+    return std::nullopt;
+#endif
+}
+
+std::string toLowerAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value;
+}
+
+D3D11HdrPresentMode readD3D11HdrPresentMode() {
+    const auto value = readEnvVar("MVP_D3D11_HDR_OUTPUT_MODE");
+    if (!value) {
+        return D3D11HdrPresentMode::Auto;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    if (normalized == "0" || normalized == "off" || normalized == "false" ||
+        normalized == "disable" || normalized == "disabled" || normalized == "sdr") {
+        return D3D11HdrPresentMode::Off;
+    }
+    if (normalized == "1" || normalized == "on" || normalized == "true" ||
+        normalized == "force" || normalized == "forced" || normalized == "hdr") {
+        return D3D11HdrPresentMode::Force;
+    }
+    return D3D11HdrPresentMode::Auto;
+}
+
+const char* d3d11HdrPresentModeName(D3D11HdrPresentMode value) {
+    switch (value) {
+    case D3D11HdrPresentMode::Off:
+        return "off";
+    case D3D11HdrPresentMode::Force:
+        return "force";
+    case D3D11HdrPresentMode::Auto:
+    default:
+        return "auto";
+    }
+}
+
+uint16_t encodeChromaticityCoordinate(const AVRational& value) {
+    const double normalized = av_q2d(value);
+    const long encoded = std::lround(std::clamp(normalized, 0.0, 1.0) * 50000.0);
+    return static_cast<uint16_t>(std::clamp<long>(encoded, 0, 50000));
+}
+
+uint32_t encodeHdr10MaxLuminance(const AVRational& value) {
+    const double nits = av_q2d(value);
+    const long long encoded = std::llround(std::max(0.0, nits));
+    return static_cast<uint32_t>(std::min<long long>(encoded, std::numeric_limits<uint32_t>::max()));
+}
+
+uint32_t encodeHdr10MinLuminance(const AVRational& value) {
+    const double nits = av_q2d(value);
+    const long long encoded = std::llround(std::max(0.0, nits) * 10000.0);
+    return static_cast<uint32_t>(std::min<long long>(encoded, std::numeric_limits<uint32_t>::max()));
+}
+
+bool extractHdr10Metadata(const AVFrame* frame,
+                          DXGI_HDR_METADATA_HDR10& out_metadata,
+                          std::string& source) {
+    std::memset(&out_metadata, 0, sizeof(out_metadata));
+    source = "none";
+    if (!frame) {
+        return false;
+    }
+
+    const AVFrameSideData* mastering_side_data =
+        av_frame_get_side_data(frame, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
+    const AVFrameSideData* content_light_side_data =
+        av_frame_get_side_data(frame, AV_FRAME_DATA_CONTENT_LIGHT_LEVEL);
+    const auto* mastering = mastering_side_data
+        ? reinterpret_cast<const AVMasteringDisplayMetadata*>(mastering_side_data->data)
+        : nullptr;
+    const auto* content_light = content_light_side_data
+        ? reinterpret_cast<const AVContentLightMetadata*>(content_light_side_data->data)
+        : nullptr;
+
+    bool any_metadata = false;
+    if (mastering && mastering->has_primaries) {
+        out_metadata.RedPrimary[0] = encodeChromaticityCoordinate(mastering->display_primaries[0][0]);
+        out_metadata.RedPrimary[1] = encodeChromaticityCoordinate(mastering->display_primaries[0][1]);
+        out_metadata.GreenPrimary[0] = encodeChromaticityCoordinate(mastering->display_primaries[1][0]);
+        out_metadata.GreenPrimary[1] = encodeChromaticityCoordinate(mastering->display_primaries[1][1]);
+        out_metadata.BluePrimary[0] = encodeChromaticityCoordinate(mastering->display_primaries[2][0]);
+        out_metadata.BluePrimary[1] = encodeChromaticityCoordinate(mastering->display_primaries[2][1]);
+        out_metadata.WhitePoint[0] = encodeChromaticityCoordinate(mastering->white_point[0]);
+        out_metadata.WhitePoint[1] = encodeChromaticityCoordinate(mastering->white_point[1]);
+        any_metadata = true;
+    }
+    if (mastering && mastering->has_luminance) {
+        out_metadata.MaxMasteringLuminance = encodeHdr10MaxLuminance(mastering->max_luminance);
+        out_metadata.MinMasteringLuminance = encodeHdr10MinLuminance(mastering->min_luminance);
+        any_metadata = true;
+    }
+    if (content_light) {
+        out_metadata.MaxContentLightLevel = content_light->MaxCLL;
+        out_metadata.MaxFrameAverageLightLevel = content_light->MaxFALL;
+        any_metadata = true;
+    }
+
+    if (any_metadata) {
+        source = "frame-side-data";
+    }
+    return any_metadata;
 }
 
 HRESULT compileShader(const char* source, const char* entry, const char* profile, ComPtr<ID3DBlob>& blob) {
@@ -1918,14 +2392,34 @@ public:
     void setSubtitleText(const std::string& text);
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
+    RendererDiagnostics getDiagnostics() const;
+    void resetDiagnostics();
     bool supportsNativeFrameFormat(AVPixelFormat format) const;
     void* nativeDeviceHandle() const;
 
 private:
+    struct SubtitleBitmapCacheEntry {
+        uint64_t key{0};
+        int width{0};
+        int height{0};
+        std::vector<uint8_t> premul_bgra;
+        ComPtr<ID2D1Bitmap1> d2d_bitmap;
+        uint64_t last_use_token{0};
+    };
+
     struct ControlLayout {
         SDL_Rect panel;
         SDL_Rect progress_track;
         SDL_Rect volume_track;
+    };
+
+    struct OutputDisplayBindingState {
+        bool binding_succeeded{false};
+        int sdl_display_index{-1};
+        std::string sdl_display_name{"unknown"};
+        std::string output_device_name{"unknown"};
+        std::string binding_error{};
+        D3D11HdrOutputSnapshot hdr_output{};
     };
 
     bool createDeviceResources();
@@ -1936,23 +2430,30 @@ private:
     bool createTextResources();
     bool createTextTarget();
     bool ensureSubtitleTextFormat(float font_size);
+    void clearSubtitleBitmapCache();
+    ID2D1Bitmap1* getCachedSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap);
     bool ensureSoftwareTextures(int width, int height);
     bool ensureOverlayBuffer(size_t vertex_count);
-    bool resizeSwapChainLocked(int width, int height);
+    bool resizeSwapChainLocked(int width, int height, DXGI_FORMAT format);
     void disableNativeDirectRendering(const char* reason,
                                       const D3D11_TEXTURE2D_DESC* texture_desc,
                                       intptr_t texture_index,
                                       HRESULT y_plane_hr = S_OK,
                                       HRESULT uv_plane_hr = S_OK);
     bool ensureNativeShaderResourcesLocked(ID3D11Texture2D* texture, intptr_t index, DXGI_FORMAT format);
-    bool bindSoftwareFrameLocked(const AVFrame* frame);
-    bool bindNativeFrameLocked(const AVFrame* frame);
+    bool bindSoftwareFrameLocked(const AVFrame* frame, bool hdr_output_active);
+    bool bindNativeFrameLocked(const AVFrame* frame, bool hdr_output_active);
     void appendRect(std::vector<ColorVertex>& vertices, int x, int y, int w, int h, Color color) const;
     ControlLayout computeControlLayout(int window_width, int window_height) const;
     void drawSubtitleLocked(const ControlLayout& layout);
+    bool refreshOutputBindingLocked();
+    bool updateHdrPresentationLocked(const AVFrame* frame);
+    void updatePresentTiming(uint64_t value_us);
+    void markHdrOutputDirty();
     bool renderLocked();
     void redrawIfPaused();
     void resetRequests();
+    void resetHdrDiagnosticsLocked();
     void toggleFullscreen();
 
     SDL_Window* window_{nullptr};
@@ -1961,6 +2462,8 @@ private:
     std::atomic<bool> should_quit_{false};
     std::atomic<bool> fullscreen_{false};
     std::atomic<bool> minimized_{false};
+    std::thread::id event_thread_id_{};
+    std::atomic<bool> event_thread_guard_reported_{false};
     bool initialized_{false};
 
     mutable std::mutex render_mutex_;
@@ -2016,6 +2519,8 @@ private:
     ComPtr<ID3D11DeviceContext> context_;
     ComPtr<ID3D11Device3> device3_;
     ComPtr<IDXGISwapChain1> swap_chain_;
+    ComPtr<IDXGISwapChain3> swap_chain3_;
+    ComPtr<IDXGISwapChain4> swap_chain4_;
     ComPtr<ID3D11RenderTargetView> render_target_view_;
     ComPtr<ID3D11VertexShader> video_vertex_shader_;
     ComPtr<ID3D11PixelShader> yuv420_pixel_shader_;
@@ -2041,6 +2546,8 @@ private:
     ComPtr<ID2D1SolidColorBrush> subtitle_shadow_brush_;
     ComPtr<ID2D1SolidColorBrush> subtitle_background_brush_;
     float subtitle_font_size_{0.0f};
+    std::vector<SubtitleBitmapCacheEntry> subtitle_bitmap_cache_;
+    uint64_t subtitle_bitmap_cache_use_token_{0};
 
     int software_width_{0};
     int software_height_{0};
@@ -2058,6 +2565,26 @@ private:
     ComPtr<ID3D11ShaderResourceView1> native_srv_uv_;
     std::atomic<bool> native_direct_rendering_disabled_{false};
     D3D11DiagnosticsSnapshot d3d11_diagnostics_{};
+    D3D11HdrPresentMode hdr_present_mode_{D3D11HdrPresentMode::Auto};
+    DXGI_FORMAT current_swapchain_format_{DXGI_FORMAT_B8G8R8A8_UNORM};
+    DXGI_COLOR_SPACE_TYPE current_output_color_space_{DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709};
+    OutputDisplayBindingState output_binding_{};
+    bool hdr_output_dirty_{true};
+    bool hdr_present_requested_{false};
+    bool hdr_present_active_{false};
+    bool hdr_content_detected_{false};
+    bool hdr_output_advanced_color_active_{false};
+    bool hdr_output_hdr_active_{false};
+    bool hdr_metadata_available_{false};
+    bool hdr_metadata_applied_{false};
+    std::string hdr_metadata_source_{"none"};
+    std::string hdr_present_decision_{"not-evaluated"};
+    std::string hdr_error_{};
+    std::atomic<uint64_t> hdr_state_reload_count_{0};
+    std::atomic<uint64_t> present_count_{0};
+    std::atomic<uint64_t> present_failures_{0};
+    std::atomic<uint64_t> present_time_us_total_{0};
+    std::atomic<uint64_t> present_time_us_max_{0};
 };
 bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
     close();
@@ -2086,6 +2613,10 @@ bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
     }
 
     resetRequests();
+    hdr_present_mode_ = readD3D11HdrPresentMode();
+    resetHdrDiagnosticsLocked();
+    event_thread_id_ = std::this_thread::get_id();
+    event_thread_guard_reported_.store(false);
     native_direct_rendering_disabled_.store(false);
     if (!createDeviceResources() || !createTextResources() || !createSwapChainForWindow() || !createBackBuffer() || !createShaders() ||
         !createBlendState()) {
@@ -2100,6 +2631,8 @@ bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
 void D3D11VideoRenderer::Impl::close() {
     std::lock_guard<std::mutex> render_lock(render_mutex_);
     initialized_ = false;
+    event_thread_id_ = std::thread::id{};
+    event_thread_guard_reported_.store(false);
     frame_available_ = false;
     subtitle_has_animated_content_.store(false);
     native_texture_ptr_ = nullptr;
@@ -2109,6 +2642,8 @@ void D3D11VideoRenderer::Impl::close() {
     native_srv_uv_.Reset();
     native_direct_rendering_disabled_.store(false);
     d3d11_diagnostics_ = {};
+    hdr_present_mode_ = D3D11HdrPresentMode::Auto;
+    resetHdrDiagnosticsLocked();
     tex_y_.Reset();
     tex_u_.Reset();
     tex_v_.Reset();
@@ -2119,6 +2654,7 @@ void D3D11VideoRenderer::Impl::close() {
     if (d2d_context_) {
         d2d_context_->SetTarget(nullptr);
     }
+    clearSubtitleBitmapCache();
     subtitle_background_brush_.Reset();
     subtitle_shadow_brush_.Reset();
     subtitle_fill_brush_.Reset();
@@ -2142,6 +2678,8 @@ void D3D11VideoRenderer::Impl::close() {
     nv12_pixel_shader_.Reset();
     video_vertex_shader_.Reset();
     render_target_view_.Reset();
+    swap_chain4_.Reset();
+    swap_chain3_.Reset();
     swap_chain_.Reset();
     context_.Reset();
     device3_.Reset();
@@ -2154,6 +2692,102 @@ void D3D11VideoRenderer::Impl::close() {
         window_ = nullptr;
     }
     SDL_Quit();
+}
+
+void D3D11VideoRenderer::Impl::clearSubtitleBitmapCache() {
+    subtitle_bitmap_cache_.clear();
+    subtitle_bitmap_cache_use_token_ = 0;
+}
+
+void D3D11VideoRenderer::Impl::resetHdrDiagnosticsLocked() {
+    current_swapchain_format_ = DXGI_FORMAT_B8G8R8A8_UNORM;
+    current_output_color_space_ = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+    output_binding_ = {};
+    hdr_output_dirty_ = true;
+    hdr_present_requested_ = false;
+    hdr_present_active_ = false;
+    hdr_content_detected_ = false;
+    hdr_output_advanced_color_active_ = false;
+    hdr_output_hdr_active_ = false;
+    hdr_metadata_available_ = false;
+    hdr_metadata_applied_ = false;
+    hdr_metadata_source_ = "none";
+    hdr_present_decision_ = "not-evaluated";
+    hdr_error_.clear();
+    hdr_state_reload_count_.store(0);
+    present_count_.store(0);
+    present_failures_.store(0);
+    present_time_us_total_.store(0);
+    present_time_us_max_.store(0);
+}
+
+void D3D11VideoRenderer::Impl::updatePresentTiming(uint64_t value_us) {
+    present_time_us_total_.fetch_add(value_us);
+    uint64_t current = present_time_us_max_.load();
+    while (value_us > current && !present_time_us_max_.compare_exchange_weak(current, value_us)) {
+    }
+}
+
+void D3D11VideoRenderer::Impl::markHdrOutputDirty() {
+    hdr_output_dirty_ = true;
+}
+
+bool D3D11VideoRenderer::Impl::refreshOutputBindingLocked() {
+    output_binding_ = {};
+    output_binding_.hdr_output = d3d11_diagnostics_.hdr_output;
+    if (!window_) {
+        output_binding_.binding_error = "window unavailable";
+        hdr_output_dirty_ = false;
+        return false;
+    }
+
+    const int display_index = SDL_GetWindowDisplayIndex(window_);
+    output_binding_.sdl_display_index = display_index;
+    if (display_index >= 0) {
+        output_binding_.binding_succeeded = true;
+        if (const char* display_name = SDL_GetDisplayName(display_index)) {
+            output_binding_.sdl_display_name = display_name;
+        }
+    } else {
+        output_binding_.binding_error = "SDL_GetWindowDisplayIndex failed";
+    }
+
+    HWND hwnd = nullptr;
+    if (!tryGetWindowHandle(window_, hwnd)) {
+        if (output_binding_.binding_error.empty()) {
+            output_binding_.binding_error = "failed to resolve HWND";
+        }
+        hdr_output_dirty_ = false;
+        return output_binding_.binding_succeeded;
+    }
+
+    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        if (output_binding_.binding_error.empty()) {
+            output_binding_.binding_error = "MonitorFromWindow failed";
+        }
+        hdr_output_dirty_ = false;
+        return output_binding_.binding_succeeded;
+    }
+
+    MONITORINFOEXW monitor_info{};
+    monitor_info.cbSize = sizeof(monitor_info);
+    if (!GetMonitorInfoW(monitor, &monitor_info)) {
+        if (output_binding_.binding_error.empty()) {
+            output_binding_.binding_error = "GetMonitorInfoW failed";
+        }
+        hdr_output_dirty_ = false;
+        return output_binding_.binding_succeeded;
+    }
+
+    output_binding_.output_device_name = utf8FromWide(monitor_info.szDevice);
+    output_binding_.hdr_output = probeD3D11HdrOutput(d3d11_diagnostics_, monitor_info.szDevice);
+    if (!output_binding_.hdr_output.probe_error.empty() && output_binding_.binding_error.empty()) {
+        output_binding_.binding_error = output_binding_.hdr_output.probe_error;
+    }
+
+    hdr_output_dirty_ = false;
+    return output_binding_.binding_succeeded;
 }
 
 bool D3D11VideoRenderer::Impl::createDeviceResources() {
@@ -2169,6 +2803,7 @@ bool D3D11VideoRenderer::Impl::createDeviceResources() {
     d3d11_diagnostics_ = buildD3D11DiagnosticsSnapshot(probe);
     logD3D11StartupDiagnostics(d3d11_diagnostics_);
     native_direct_rendering_disabled_.store(d3d11_diagnostics_.native_direct_startup_disabled);
+    output_binding_.hdr_output = d3d11_diagnostics_.hdr_output;
 
     D3D11_SAMPLER_DESC sampler_desc{};
     sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -2207,7 +2842,7 @@ bool D3D11VideoRenderer::Impl::createSwapChainForWindow() {
     DXGI_SWAP_CHAIN_DESC1 swap_desc{};
     swap_desc.Width = static_cast<UINT>(std::max(1, width_.load()));
     swap_desc.Height = static_cast<UINT>(std::max(1, height_.load()));
-    swap_desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    swap_desc.Format = current_swapchain_format_;
     swap_desc.SampleDesc.Count = 1;
     swap_desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
     swap_desc.BufferCount = 2;
@@ -2218,6 +2853,10 @@ bool D3D11VideoRenderer::Impl::createSwapChainForWindow() {
         LOG_ERROR("CreateSwapChainForHwnd failed");
         return false;
     }
+    swap_chain3_.Reset();
+    swap_chain4_.Reset();
+    swap_chain_.As(&swap_chain3_);
+    swap_chain_.As(&swap_chain4_);
     logD3D11SwapChainDiagnostics(swap_desc);
     const HRESULT window_assoc_hr = factory->MakeWindowAssociation(hwnd, DXGI_MWA_NO_ALT_ENTER);
     if (FAILED(window_assoc_hr)) {
@@ -2229,8 +2868,14 @@ bool D3D11VideoRenderer::Impl::createSwapChainForWindow() {
 bool D3D11VideoRenderer::Impl::createBackBuffer() {
     render_target_view_.Reset();
     ComPtr<ID3D11Texture2D> back_buffer;
-    if (FAILED(swap_chain_->GetBuffer(0, IID_PPV_ARGS(back_buffer.GetAddressOf()))) ||
-        FAILED(device_->CreateRenderTargetView(back_buffer.Get(), nullptr, render_target_view_.GetAddressOf()))) {
+    if (FAILED(swap_chain_->GetBuffer(0, IID_PPV_ARGS(back_buffer.GetAddressOf())))) {
+        LOG_ERROR("Failed to acquire D3D11 swap chain backbuffer");
+        return false;
+    }
+    D3D11_TEXTURE2D_DESC back_buffer_desc{};
+    back_buffer->GetDesc(&back_buffer_desc);
+    current_swapchain_format_ = back_buffer_desc.Format;
+    if (FAILED(device_->CreateRenderTargetView(back_buffer.Get(), nullptr, render_target_view_.GetAddressOf()))) {
         LOG_ERROR("Failed to create D3D11 render target view");
         return false;
     }
@@ -2238,7 +2883,7 @@ bool D3D11VideoRenderer::Impl::createBackBuffer() {
 }
 
 
-bool D3D11VideoRenderer::Impl::resizeSwapChainLocked(int width, int height) {
+bool D3D11VideoRenderer::Impl::resizeSwapChainLocked(int width, int height, DXGI_FORMAT format) {
     if (!swap_chain_) {
         return false;
     }
@@ -2249,7 +2894,7 @@ bool D3D11VideoRenderer::Impl::resizeSwapChainLocked(int width, int height) {
     d2d_target_bitmap_.Reset();
     render_target_view_.Reset();
     const HRESULT hr = swap_chain_->ResizeBuffers(0, static_cast<UINT>(std::max(1, width)),
-                                                  static_cast<UINT>(std::max(1, height)), DXGI_FORMAT_UNKNOWN, 0);
+                                                  static_cast<UINT>(std::max(1, height)), format, 0);
     if (FAILED(hr)) {
         LOG_ERROR("ResizeBuffers failed");
         return false;
@@ -2265,26 +2910,166 @@ struct VSOut { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 VSOut main(VSIn input) { VSOut output; output.pos = float4(input.pos, 0.0, 1.0); output.uv = input.uv; return output; }
 )";
     static const char* kYuv420Ps = R"(
-cbuffer ColorMatrix : register(b0) { float4 coeffR; float4 coeffG; float4 coeffB; float4 reserved; };
+cbuffer ColorMatrix : register(b0) { float4 coeffR; float4 coeffG; float4 coeffB; float4 colorConfig0; };
 Texture2D texY : register(t0); Texture2D texU : register(t1); Texture2D texV : register(t2); SamplerState samp : register(s0);
 struct PSIn { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float3 decodeGamma22(float3 value) {
+    return pow(max(value, float3(0.0, 0.0, 0.0)), float3(2.2, 2.2, 2.2));
+}
+
+float3 encodeGamma22(float3 value) {
+    return pow(max(value, float3(0.0, 0.0, 0.0)), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+}
+
+float3 decodePq(float3 value) {
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 vp = pow(max(value, float3(0.0, 0.0, 0.0)), float3(1.0 / m2, 1.0 / m2, 1.0 / m2));
+    float3 num = max(vp - float3(c1, c1, c1), float3(0.0, 0.0, 0.0));
+    float3 den = max(float3(c2, c2, c2) - float3(c3, c3, c3) * vp, float3(1e-6, 1e-6, 1e-6));
+    return pow(num / den, float3(1.0 / m1, 1.0 / m1, 1.0 / m1));
+}
+
+float3 decodeHlg(float3 value) {
+    float3 lower = (value * value) / 3.0;
+    float3 upper = (exp((value - float3(0.55991073, 0.55991073, 0.55991073)) /
+                        float3(0.17883277, 0.17883277, 0.17883277)) +
+                    float3(0.28466892, 0.28466892, 0.28466892)) / 12.0;
+    return float3(value.x <= 0.5 ? lower.x : upper.x,
+                  value.y <= 0.5 ? lower.y : upper.y,
+                  value.z <= 0.5 ? lower.z : upper.z);
+}
+
+float3 bt2020ToBt709(float3 value) {
+    return float3(
+        1.6605 * value.r + (-0.1246) * value.g + (-0.0182) * value.b,
+        (-0.5876) * value.r + 1.1329 * value.g + (-0.1006) * value.b,
+        (-0.0728) * value.r + (-0.0083) * value.g + 1.1187 * value.b
+    );
+}
+
+float3 postProcessRgb(float3 encodedRgb) {
+    const int transferMode = (int)(colorConfig0.x + 0.5);
+    const int gamutMode = (int)(colorConfig0.y + 0.5);
+    const bool hdrOutputActive = colorConfig0.z >= 0.5;
+    float3 working = max(encodedRgb, float3(0.0, 0.0, 0.0));
+    bool linearized = false;
+
+    if (transferMode == 1) {
+        working = decodePq(working) * float3(10000.0 / 80.0, 10000.0 / 80.0, 10000.0 / 80.0);
+        linearized = true;
+    } else if (transferMode == 2) {
+        working = decodeHlg(working) * float3(1000.0 / 80.0, 1000.0 / 80.0, 1000.0 / 80.0);
+        linearized = true;
+    }
+
+    if ((gamutMode == 1 || hdrOutputActive) && !linearized) {
+        working = decodeGamma22(working);
+        linearized = true;
+    }
+    if (gamutMode == 1) {
+        working = max(bt2020ToBt709(working), float3(0.0, 0.0, 0.0));
+    }
+    if (hdrOutputActive) {
+        return max(working, float3(0.0, 0.0, 0.0));
+    }
+    if (transferMode != 0) {
+        working = working / (float3(1.0, 1.0, 1.0) + working);
+    }
+    return saturate(linearized ? encodeGamma22(working) : working);
+}
+
 float4 main(PSIn input) : SV_Target {
     float y = texY.Sample(samp, input.uv).r;
     float u = texU.Sample(samp, input.uv).r;
     float v = texV.Sample(samp, input.uv).r;
     float3 rgb = float3(dot(float4(y, u, v, 1.0), coeffR), dot(float4(y, u, v, 1.0), coeffG), dot(float4(y, u, v, 1.0), coeffB));
-    return float4(saturate(rgb), 1.0);
+    return float4(postProcessRgb(rgb), 1.0);
 }
 )";
     static const char* kNv12Ps = R"(
-cbuffer ColorMatrix : register(b0) { float4 coeffR; float4 coeffG; float4 coeffB; float4 reserved; };
+cbuffer ColorMatrix : register(b0) { float4 coeffR; float4 coeffG; float4 coeffB; float4 colorConfig0; };
 Texture2D texY : register(t0); Texture2D texUV : register(t1); SamplerState samp : register(s0);
 struct PSIn { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
+
+float3 decodeGamma22(float3 value) {
+    return pow(max(value, float3(0.0, 0.0, 0.0)), float3(2.2, 2.2, 2.2));
+}
+
+float3 encodeGamma22(float3 value) {
+    return pow(max(value, float3(0.0, 0.0, 0.0)), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+}
+
+float3 decodePq(float3 value) {
+    const float m1 = 0.1593017578125;
+    const float m2 = 78.84375;
+    const float c1 = 0.8359375;
+    const float c2 = 18.8515625;
+    const float c3 = 18.6875;
+    float3 vp = pow(max(value, float3(0.0, 0.0, 0.0)), float3(1.0 / m2, 1.0 / m2, 1.0 / m2));
+    float3 num = max(vp - float3(c1, c1, c1), float3(0.0, 0.0, 0.0));
+    float3 den = max(float3(c2, c2, c2) - float3(c3, c3, c3) * vp, float3(1e-6, 1e-6, 1e-6));
+    return pow(num / den, float3(1.0 / m1, 1.0 / m1, 1.0 / m1));
+}
+
+float3 decodeHlg(float3 value) {
+    float3 lower = (value * value) / 3.0;
+    float3 upper = (exp((value - float3(0.55991073, 0.55991073, 0.55991073)) /
+                        float3(0.17883277, 0.17883277, 0.17883277)) +
+                    float3(0.28466892, 0.28466892, 0.28466892)) / 12.0;
+    return float3(value.x <= 0.5 ? lower.x : upper.x,
+                  value.y <= 0.5 ? lower.y : upper.y,
+                  value.z <= 0.5 ? lower.z : upper.z);
+}
+
+float3 bt2020ToBt709(float3 value) {
+    return float3(
+        1.6605 * value.r + (-0.1246) * value.g + (-0.0182) * value.b,
+        (-0.5876) * value.r + 1.1329 * value.g + (-0.1006) * value.b,
+        (-0.0728) * value.r + (-0.0083) * value.g + 1.1187 * value.b
+    );
+}
+
+float3 postProcessRgb(float3 encodedRgb) {
+    const int transferMode = (int)(colorConfig0.x + 0.5);
+    const int gamutMode = (int)(colorConfig0.y + 0.5);
+    const bool hdrOutputActive = colorConfig0.z >= 0.5;
+    float3 working = max(encodedRgb, float3(0.0, 0.0, 0.0));
+    bool linearized = false;
+
+    if (transferMode == 1) {
+        working = decodePq(working) * float3(10000.0 / 80.0, 10000.0 / 80.0, 10000.0 / 80.0);
+        linearized = true;
+    } else if (transferMode == 2) {
+        working = decodeHlg(working) * float3(1000.0 / 80.0, 1000.0 / 80.0, 1000.0 / 80.0);
+        linearized = true;
+    }
+
+    if ((gamutMode == 1 || hdrOutputActive) && !linearized) {
+        working = decodeGamma22(working);
+        linearized = true;
+    }
+    if (gamutMode == 1) {
+        working = max(bt2020ToBt709(working), float3(0.0, 0.0, 0.0));
+    }
+    if (hdrOutputActive) {
+        return max(working, float3(0.0, 0.0, 0.0));
+    }
+    if (transferMode != 0) {
+        working = working / (float3(1.0, 1.0, 1.0) + working);
+    }
+    return saturate(linearized ? encodeGamma22(working) : working);
+}
+
 float4 main(PSIn input) : SV_Target {
     float y = texY.Sample(samp, input.uv).r;
     float2 uv = texUV.Sample(samp, input.uv).rg;
     float3 rgb = float3(dot(float4(y, uv.x, uv.y, 1.0), coeffR), dot(float4(y, uv.x, uv.y, 1.0), coeffG), dot(float4(y, uv.x, uv.y, 1.0), coeffB));
-    return float4(saturate(rgb), 1.0);
+    return float4(postProcessRgb(rgb), 1.0);
 }
 )";
     static const char* kColorVs = R"(
@@ -2442,7 +3227,7 @@ bool D3D11VideoRenderer::Impl::createTextTarget() {
 
     const D2D1_BITMAP_PROPERTIES1 bitmap_props = D2D1::BitmapProperties1(
         D2D1_BITMAP_OPTIONS_TARGET | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
-        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
+        D2D1::PixelFormat(current_swapchain_format_, D2D1_ALPHA_MODE_IGNORE));
     if (FAILED(d2d_context_->CreateBitmapFromDxgiSurface(dxgi_surface.Get(),
                                                          &bitmap_props,
                                                          d2d_target_bitmap_.GetAddressOf())) ||
@@ -2454,6 +3239,198 @@ bool D3D11VideoRenderer::Impl::createTextTarget() {
     d2d_context_->SetTarget(d2d_target_bitmap_.Get());
     d2d_context_->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
     return true;
+}
+
+bool D3D11VideoRenderer::Impl::updateHdrPresentationLocked(const AVFrame* frame) {
+    if (hdr_output_dirty_) {
+        refreshOutputBindingLocked();
+    }
+
+    const bool content_hdr = frame && isHdrTransfer(frame->color_trc);
+    const bool request_hdr = hdr_present_mode_ != D3D11HdrPresentMode::Off &&
+                             (content_hdr || hdr_present_mode_ == D3D11HdrPresentMode::Force);
+    bool enable_hdr = false;
+    std::string decision = "not-evaluated";
+    hdr_error_.clear();
+
+    if (hdr_present_mode_ == D3D11HdrPresentMode::Off) {
+        decision = "disabled-by-mode";
+    } else if (!output_binding_.binding_succeeded) {
+        decision = "display-binding-unavailable";
+    } else if (!output_binding_.hdr_output.probe_succeeded ||
+               !output_binding_.hdr_output.output_found ||
+               !output_binding_.hdr_output.has_output6) {
+        decision = "probe-unavailable";
+    } else if (!(output_binding_.hdr_output.advanced_color_active || output_binding_.hdr_output.hdr_active)) {
+        decision = "display-hdr-inactive";
+    } else if (!content_hdr && hdr_present_mode_ != D3D11HdrPresentMode::Force) {
+        decision = "sdr-content";
+    } else {
+        enable_hdr = true;
+        decision = hdr_present_mode_ == D3D11HdrPresentMode::Force ? "force-enabled" : "auto-enabled";
+    }
+
+    DXGI_FORMAT desired_format = enable_hdr ? DXGI_FORMAT_R16G16B16A16_FLOAT
+                                            : DXGI_FORMAT_B8G8R8A8_UNORM;
+    DXGI_COLOR_SPACE_TYPE desired_color_space = enable_hdr
+        ? DXGI_COLOR_SPACE_RGB_FULL_G10_NONE_P709
+        : DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+
+    auto ensure_swapchain_format = [&](DXGI_FORMAT format) -> bool {
+        if (current_swapchain_format_ == format) {
+            return true;
+        }
+        if (!resizeSwapChainLocked(width_.load(), height_.load(), format)) {
+            return false;
+        }
+        hdr_state_reload_count_.fetch_add(1);
+        return true;
+    };
+
+    if (!ensure_swapchain_format(desired_format)) {
+        hdr_error_ = "ResizeBuffers failed";
+        enable_hdr = false;
+        decision = "swapchain-resize-failed";
+        desired_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desired_color_space = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+        ensure_swapchain_format(desired_format);
+    }
+
+    if (!swap_chain3_) {
+        if (enable_hdr) {
+            hdr_error_ = "IDXGISwapChain3 unavailable";
+            enable_hdr = false;
+            decision = "swapchain3-unavailable";
+            desired_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desired_color_space = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+            ensure_swapchain_format(desired_format);
+        }
+    } else {
+        UINT color_space_support = 0;
+        const HRESULT support_hr = swap_chain3_->CheckColorSpaceSupport(desired_color_space, &color_space_support);
+        const bool present_supported = SUCCEEDED(support_hr) &&
+            (color_space_support & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT) != 0;
+        if (!present_supported && enable_hdr) {
+            hdr_error_ = "CheckColorSpaceSupport failed";
+            enable_hdr = false;
+            decision = "swapchain-color-space-unsupported";
+            desired_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desired_color_space = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+            ensure_swapchain_format(desired_format);
+        }
+
+        if (SUCCEEDED(swap_chain3_->SetColorSpace1(desired_color_space))) {
+            current_output_color_space_ = desired_color_space;
+        } else if (enable_hdr) {
+            hdr_error_ = "SetColorSpace1 failed";
+            enable_hdr = false;
+            decision = "set-colorspace-failed";
+            desired_format = DXGI_FORMAT_B8G8R8A8_UNORM;
+            desired_color_space = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709;
+            ensure_swapchain_format(desired_format);
+            if (swap_chain3_) {
+                swap_chain3_->SetColorSpace1(desired_color_space);
+            }
+            current_output_color_space_ = desired_color_space;
+        }
+    }
+
+    hdr_metadata_available_ = false;
+    hdr_metadata_applied_ = false;
+    hdr_metadata_source_ = "none";
+    if (swap_chain4_) {
+        DXGI_HDR_METADATA_HDR10 hdr10_metadata{};
+        std::string metadata_source;
+        const bool metadata_available = enable_hdr &&
+            extractHdr10Metadata(frame, hdr10_metadata, metadata_source);
+        hdr_metadata_available_ = metadata_available;
+        hdr_metadata_source_ = metadata_available ? metadata_source : "none";
+        const HRESULT metadata_hr = metadata_available
+            ? swap_chain4_->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_HDR10,
+                                           sizeof(hdr10_metadata),
+                                           &hdr10_metadata)
+            : swap_chain4_->SetHDRMetaData(DXGI_HDR_METADATA_TYPE_NONE, 0, nullptr);
+        hdr_metadata_applied_ = metadata_available && SUCCEEDED(metadata_hr);
+        if (FAILED(metadata_hr) && enable_hdr && hdr_error_.empty()) {
+            hdr_error_ = "SetHDRMetaData failed";
+        }
+    } else if (enable_hdr) {
+        hdr_metadata_source_ = "swapchain4-unavailable";
+    }
+
+    hdr_present_requested_ = request_hdr;
+    hdr_present_active_ = enable_hdr;
+    hdr_content_detected_ = content_hdr;
+    hdr_output_advanced_color_active_ = output_binding_.hdr_output.advanced_color_active;
+    hdr_output_hdr_active_ = output_binding_.hdr_output.hdr_active;
+    hdr_present_decision_ = decision;
+
+    return true;
+}
+
+ID2D1Bitmap1* D3D11VideoRenderer::Impl::getCachedSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap) {
+    if (!d2d_context_ || bitmap.width <= 0 || bitmap.height <= 0) {
+        return nullptr;
+    }
+
+    const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+    if (bitmap.rgba.size() < pixel_count * 4u) {
+        return nullptr;
+    }
+
+    const uint64_t key = hashSubtitleBitmap(bitmap);
+    auto create_bitmap = [&](SubtitleBitmapCacheEntry& entry) -> bool {
+        if (entry.premul_bgra.empty()) {
+            entry.premul_bgra = premultiplySubtitleBitmapBgra(bitmap);
+        }
+        entry.d2d_bitmap.Reset();
+        const D2D1_BITMAP_PROPERTIES1 bitmap_props = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_NONE,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0f,
+            96.0f);
+        const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(entry.width) * 4u);
+        return SUCCEEDED(d2d_context_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(entry.width),
+                                                                static_cast<UINT32>(entry.height)),
+                                                    entry.premul_bgra.data(),
+                                                    pitch,
+                                                    &bitmap_props,
+                                                    entry.d2d_bitmap.GetAddressOf())) &&
+               entry.d2d_bitmap != nullptr;
+    };
+
+    for (SubtitleBitmapCacheEntry& entry : subtitle_bitmap_cache_) {
+        if (entry.key != key || entry.width != bitmap.width || entry.height != bitmap.height) {
+            continue;
+        }
+        entry.last_use_token = ++subtitle_bitmap_cache_use_token_;
+        if (!entry.d2d_bitmap && !create_bitmap(entry)) {
+            return nullptr;
+        }
+        return entry.d2d_bitmap.Get();
+    }
+
+    if (subtitle_bitmap_cache_.size() >= kSubtitleBitmapCacheLimit) {
+        auto lru_it = std::min_element(subtitle_bitmap_cache_.begin(),
+                                       subtitle_bitmap_cache_.end(),
+                                       [](const SubtitleBitmapCacheEntry& lhs, const SubtitleBitmapCacheEntry& rhs) {
+                                           return lhs.last_use_token < rhs.last_use_token;
+                                       });
+        if (lru_it != subtitle_bitmap_cache_.end()) {
+            subtitle_bitmap_cache_.erase(lru_it);
+        }
+    }
+
+    SubtitleBitmapCacheEntry entry;
+    entry.key = key;
+    entry.width = bitmap.width;
+    entry.height = bitmap.height;
+    entry.last_use_token = ++subtitle_bitmap_cache_use_token_;
+    if (!create_bitmap(entry)) {
+        return nullptr;
+    }
+    subtitle_bitmap_cache_.push_back(std::move(entry));
+    return subtitle_bitmap_cache_.back().d2d_bitmap.Get();
 }
 
 bool D3D11VideoRenderer::Impl::ensureSubtitleTextFormat(float font_size) {
@@ -2647,7 +3624,7 @@ bool D3D11VideoRenderer::Impl::ensureNativeShaderResourcesLocked(ID3D11Texture2D
     return true;
 }
 
-bool D3D11VideoRenderer::Impl::bindSoftwareFrameLocked(const AVFrame* frame) {
+bool D3D11VideoRenderer::Impl::bindSoftwareFrameLocked(const AVFrame* frame, bool hdr_output_active) {
     if (!frame || !frame->data[0] || !frame->data[1] || !frame->data[2] || frame->width <= 0 || frame->height <= 0) {
         return false;
     }
@@ -2657,7 +3634,7 @@ bool D3D11VideoRenderer::Impl::bindSoftwareFrameLocked(const AVFrame* frame) {
     context_->UpdateSubresource(tex_y_.Get(), 0, nullptr, frame->data[0], frame->linesize[0], 0);
     context_->UpdateSubresource(tex_u_.Get(), 0, nullptr, frame->data[1], frame->linesize[1], 0);
     context_->UpdateSubresource(tex_v_.Get(), 0, nullptr, frame->data[2], frame->linesize[2], 0);
-    const ColorMatrixConstants matrix = buildColorMatrix(frame, false);
+    const ColorMatrixConstants matrix = buildColorMatrix(frame, false, hdr_output_active);
     context_->UpdateSubresource(color_matrix_buffer_.Get(), 0, nullptr, &matrix, 0, 0);
 
     ID3D11ShaderResourceView* srvs[] = {srv_y_.Get(), srv_u_.Get(), srv_v_.Get()};
@@ -2667,7 +3644,7 @@ bool D3D11VideoRenderer::Impl::bindSoftwareFrameLocked(const AVFrame* frame) {
     return true;
 }
 
-bool D3D11VideoRenderer::Impl::bindNativeFrameLocked(const AVFrame* frame) {
+bool D3D11VideoRenderer::Impl::bindNativeFrameLocked(const AVFrame* frame, bool hdr_output_active) {
     if (!frame || !device3_ || frame->format != AV_PIX_FMT_D3D11 || !frame->data[0]) {
         return false;
     }
@@ -2687,7 +3664,9 @@ bool D3D11VideoRenderer::Impl::bindNativeFrameLocked(const AVFrame* frame) {
     if (!ensureNativeShaderResourcesLocked(texture, index, desc.Format)) {
         return false;
     }
-    const ColorMatrixConstants matrix = buildColorMatrix(frame, desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016);
+    const ColorMatrixConstants matrix = buildColorMatrix(frame,
+                                                         desc.Format == DXGI_FORMAT_P010 || desc.Format == DXGI_FORMAT_P016,
+                                                         hdr_output_active);
     context_->UpdateSubresource(color_matrix_buffer_.Get(), 0, nullptr, &matrix, 0, 0);
     ID3D11ShaderResourceView* srvs[] = {native_srv_y_.Get(), native_srv_uv_.Get()};
     context_->PSSetShader(nv12_pixel_shader_.Get(), nullptr, 0);
@@ -3054,13 +4033,7 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
         }
 
         if (item.is_bitmap) {
-            const subtitle::SubtitleBitmap& bitmap = item.bitmap;
-            if (bitmap.width <= 0 || bitmap.height <= 0) {
-                continue;
-            }
-
-            const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
-            if (bitmap.rgba.size() < pixel_count * 4u) {
+            if (item.bitmap_rects.empty()) {
                 continue;
             }
 
@@ -3070,55 +4043,36 @@ void D3D11VideoRenderer::Impl::drawSubtitleLocked(const ControlLayout& layout) {
             const float scale_y = item.play_res_y > 0
                 ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y)
                 : 1.0f;
-            const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
-            const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
-            const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
-            const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
-            if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
-                continue;
-            }
-
-            std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
-            for (size_t i = 0; i < pixel_count; ++i) {
-                const uint8_t r = bitmap.rgba[i * 4u + 0u];
-                const uint8_t g = bitmap.rgba[i * 4u + 1u];
-                const uint8_t b = bitmap.rgba[i * 4u + 2u];
-                const uint8_t a = bitmap.rgba[i * 4u + 3u];
-                const uint16_t alpha = static_cast<uint16_t>(a);
-                premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 3u] = a;
-            }
-
-            ComPtr<ID2D1Bitmap1> d2d_bitmap;
-            const D2D1_BITMAP_PROPERTIES1 bitmap_props = D2D1::BitmapProperties1(
-                D2D1_BITMAP_OPTIONS_NONE,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-                96.0f,
-                96.0f);
-            const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(bitmap.width) * 4u);
-            if (FAILED(d2d_context_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(bitmap.width),
-                                                              static_cast<UINT32>(bitmap.height)),
-                                                  premul_bgra.data(),
-                                                  pitch,
-                                                  &bitmap_props,
-                                                  d2d_bitmap.GetAddressOf())) ||
-                !d2d_bitmap) {
-                continue;
-            }
-
             d2d_context_->SetTransform(D2D1::Matrix3x2F::Identity());
-            const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
-                                                     0.0f,
-                                                     static_cast<float>(bitmap.width),
-                                                     static_cast<float>(bitmap.height));
-            const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
-            d2d_context_->DrawBitmap(d2d_bitmap.Get(),
-                                     &dst_rect,
-                                     1.0f,
-                                     D2D1_INTERPOLATION_MODE_LINEAR,
-                                     &src_rect);
+            for (const subtitle::SubtitleBitmap& bitmap : item.bitmap_rects) {
+                if (bitmap.width <= 0 || bitmap.height <= 0) {
+                    continue;
+                }
+
+                ID2D1Bitmap1* d2d_bitmap = getCachedSubtitleBitmap(bitmap);
+                if (!d2d_bitmap) {
+                    continue;
+                }
+
+                const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
+                const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
+                const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
+                const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
+                if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
+                    continue;
+                }
+
+                const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
+                                                         0.0f,
+                                                         static_cast<float>(bitmap.width),
+                                                         static_cast<float>(bitmap.height));
+                const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
+                d2d_context_->DrawBitmap(d2d_bitmap,
+                                         &dst_rect,
+                                         1.0f,
+                                         D2D1_INTERPOLATION_MODE_LINEAR,
+                                         &src_rect);
+            }
             continue;
         }
 
@@ -3671,6 +4625,10 @@ bool D3D11VideoRenderer::Impl::renderLocked() {
     if (!initialized_ || !swap_chain_ || !render_target_view_ || minimized_.load()) {
         return false;
     }
+    updateHdrPresentationLocked(frame_available_ ? current_frame_ : nullptr);
+    if (!render_target_view_) {
+        return false;
+    }
     D3D11_VIEWPORT viewport{};
     viewport.Width = static_cast<float>(std::max(1, width_.load()));
     viewport.Height = static_cast<float>(std::max(1, height_.load()));
@@ -3699,7 +4657,9 @@ bool D3D11VideoRenderer::Impl::renderLocked() {
             context_->IASetVertexBuffers(0, 1, video_vertex_buffer_.GetAddressOf(), &stride, &offset);
             context_->VSSetShader(video_vertex_shader_.Get(), nullptr, 0);
             context_->PSSetSamplers(0, 1, sampler_state_.GetAddressOf());
-            const bool bound = current_frame_->format == AV_PIX_FMT_D3D11 ? bindNativeFrameLocked(current_frame_) : bindSoftwareFrameLocked(current_frame_);
+            const bool bound = current_frame_->format == AV_PIX_FMT_D3D11
+                ? bindNativeFrameLocked(current_frame_, hdr_present_active_)
+                : bindSoftwareFrameLocked(current_frame_, hdr_present_active_);
             if (bound) {
                 context_->OMSetBlendState(nullptr, nullptr, 0xFFFFFFFFu);
                 context_->Draw(6, 0);
@@ -3765,7 +4725,14 @@ bool D3D11VideoRenderer::Impl::renderLocked() {
     context_->Flush();
     drawSubtitleLocked(layout);
 
+    const auto present_start = std::chrono::steady_clock::now();
     const HRESULT hr = swap_chain_->Present(1, 0);
+    present_count_.fetch_add(1);
+    updatePresentTiming(static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - present_start).count()));
+    if (FAILED(hr)) {
+        present_failures_.fetch_add(1);
+    }
     return SUCCEEDED(hr);
 }
 
@@ -3828,7 +4795,8 @@ void D3D11VideoRenderer::Impl::toggleFullscreen() {
     fullscreen_.store(next);
     updateWindowSizeFromSdl(window_, width_, height_);
     std::lock_guard<std::mutex> render_lock(render_mutex_);
-    resizeSwapChainLocked(width_.load(), height_.load());
+    markHdrOutputDirty();
+    resizeSwapChainLocked(width_.load(), height_.load(), current_swapchain_format_);
     renderLocked();
 }
 
@@ -3866,6 +4834,12 @@ void D3D11VideoRenderer::Impl::clear() {
 
 void D3D11VideoRenderer::Impl::handleEvents() {
     if (!window_) {
+        return;
+    }
+    if (event_thread_id_ != std::thread::id{} && event_thread_id_ != std::this_thread::get_id()) {
+        if (!event_thread_guard_reported_.exchange(true)) {
+            LOG_WARNING("D3D11 renderer handleEvents called from non-event thread; ignoring event pump");
+        }
         return;
     }
     bool needs_redraw = false;
@@ -3928,11 +4902,25 @@ void D3D11VideoRenderer::Impl::handleEvents() {
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED || event.window.event == SDL_WINDOWEVENT_HIDDEN) {
                 minimized_.store(true);
-            } else if (event.window.event == SDL_WINDOWEVENT_RESTORED || event.window.event == SDL_WINDOWEVENT_SHOWN || event.window.event == SDL_WINDOWEVENT_MAXIMIZED || event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+            } else if (event.window.event == SDL_WINDOWEVENT_MOVED ||
+                       event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED ||
+                       event.window.event == SDL_WINDOWEVENT_RESTORED ||
+                       event.window.event == SDL_WINDOWEVENT_SHOWN ||
+                       event.window.event == SDL_WINDOWEVENT_MAXIMIZED ||
+                       event.window.event == SDL_WINDOWEVENT_RESIZED ||
+                       event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 minimized_.store(false);
                 updateWindowSizeFromSdl(window_, width_, height_);
                 std::lock_guard<std::mutex> render_lock(render_mutex_);
-                resizeSwapChainLocked(width_.load(), height_.load());
+                markHdrOutputDirty();
+                resizeSwapChainLocked(width_.load(), height_.load(), current_swapchain_format_);
+                needs_redraw = true;
+            }
+            break;
+        case SDL_DISPLAYEVENT:
+            {
+                std::lock_guard<std::mutex> render_lock(render_mutex_);
+                markHdrOutputDirty();
                 needs_redraw = true;
             }
             break;
@@ -4044,6 +5032,36 @@ void D3D11VideoRenderer::Impl::setSubtitleItems(const std::vector<subtitle::Subt
     }
 }
 void D3D11VideoRenderer::Impl::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { std::lock_guard<std::mutex> request_lock(request_mutex_); hotkey_manager_ = hotkey_manager; }
+RendererDiagnostics D3D11VideoRenderer::Impl::getDiagnostics() const {
+    std::lock_guard<std::mutex> render_lock(render_mutex_);
+    RendererDiagnostics diagnostics;
+    diagnostics.d3d11_hdr_present_requested = hdr_present_requested_;
+    diagnostics.d3d11_hdr_present_active = hdr_present_active_;
+    diagnostics.d3d11_hdr_content_detected = hdr_content_detected_;
+    diagnostics.d3d11_hdr_present_mode = d3d11HdrPresentModeName(hdr_present_mode_);
+    diagnostics.d3d11_hdr_present_decision = hdr_present_decision_;
+    diagnostics.d3d11_hdr_swapchain_format = dxgiFormatName(current_swapchain_format_);
+    diagnostics.d3d11_hdr_output_color_space = dxgiColorSpaceName(current_output_color_space_);
+    diagnostics.d3d11_hdr_output_display_index = output_binding_.sdl_display_index;
+    diagnostics.d3d11_hdr_output_display_name = output_binding_.sdl_display_name;
+    diagnostics.d3d11_hdr_output_device_name = output_binding_.output_device_name;
+    diagnostics.d3d11_hdr_output_advanced_color_active = hdr_output_advanced_color_active_;
+    diagnostics.d3d11_hdr_output_hdr_active = hdr_output_hdr_active_;
+    diagnostics.d3d11_hdr_metadata_available = hdr_metadata_available_;
+    diagnostics.d3d11_hdr_metadata_applied = hdr_metadata_applied_;
+    diagnostics.d3d11_hdr_metadata_source = hdr_metadata_source_;
+    diagnostics.d3d11_hdr_state_reload_count = hdr_state_reload_count_.load();
+    diagnostics.d3d11_present_count = present_count_.load();
+    diagnostics.d3d11_present_failures = present_failures_.load();
+    diagnostics.d3d11_present_time_us_total = present_time_us_total_.load();
+    diagnostics.d3d11_present_time_us_max = present_time_us_max_.load();
+    diagnostics.d3d11_hdr_error = hdr_error_.empty() ? output_binding_.binding_error : hdr_error_;
+    return diagnostics;
+}
+void D3D11VideoRenderer::Impl::resetDiagnostics() {
+    std::lock_guard<std::mutex> render_lock(render_mutex_);
+    resetHdrDiagnosticsLocked();
+}
 bool D3D11VideoRenderer::Impl::supportsNativeFrameFormat(AVPixelFormat format) const { return format == AV_PIX_FMT_D3D11 && device3_ != nullptr && !native_direct_rendering_disabled_.load(); }
 void* D3D11VideoRenderer::Impl::nativeDeviceHandle() const { return device_.Get(); }
 
@@ -4086,6 +5104,8 @@ void D3D11VideoRenderer::setSubtitleClock(double subtitle_time_seconds) { impl_-
 void D3D11VideoRenderer::setSubtitleText(const std::string& text) { impl_->setSubtitleText(text); }
 void D3D11VideoRenderer::setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) { impl_->setSubtitleItems(items); }
 void D3D11VideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { impl_->setHotkeyManager(hotkey_manager); }
+RendererDiagnostics D3D11VideoRenderer::getDiagnostics() const { return impl_->getDiagnostics(); }
+void D3D11VideoRenderer::resetDiagnostics() { impl_->resetDiagnostics(); }
 bool D3D11VideoRenderer::supportsNativeFrameFormat(AVPixelFormat format) const { return impl_->supportsNativeFrameFormat(format); }
 void* D3D11VideoRenderer::nativeDeviceHandle() const { return impl_->nativeDeviceHandle(); }
 const char* D3D11VideoRenderer::rendererBackendName() const { return "D3D11"; }

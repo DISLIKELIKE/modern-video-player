@@ -385,6 +385,8 @@ void Scheduler::start() {
 
     wait_events_.store(0);
 
+    render_wait_ms_.store(0);
+
     video_backpressure_events_.store(0);
 
     audio_backpressure_events_.store(0);
@@ -520,6 +522,8 @@ SchedulerStats Scheduler::getStats() const {
     stats.dropped_late_frames = dropped_late_frames_.load();
 
     stats.wait_events = wait_events_.load();
+
+    stats.render_wait_ms = render_wait_ms_.load();
 
     stats.video_backpressure_events = video_backpressure_events_.load();
 
@@ -929,7 +933,12 @@ void Scheduler::pumpRenderOnce() {
 
                     wait_events_.fetch_add(1);
 
+                    const auto wait_start = std::chrono::steady_clock::now();
                     std::this_thread::sleep_for(std::chrono::duration<double>(wait_seconds));
+                    const auto waited_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                               std::chrono::steady_clock::now() - wait_start)
+                                               .count();
+                    render_wait_ms_.fetch_add(static_cast<uint64_t>(std::max<int64_t>(0, waited_ms)));
 
                     continue;
 

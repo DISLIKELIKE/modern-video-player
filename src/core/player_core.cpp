@@ -82,6 +82,8 @@ extern "C" {
 
 #include "logger.h"
 
+#include "platform/hw_device_factory.h"
+
 #include "render/renderer_factory.h"
 
 #include "subtitle/embedded_subtitle_loader.h"
@@ -212,6 +214,24 @@ bool envFlagEnabled(const char* key) {
 
 
 
+bool isHardwareDecoderBackend(decoder::DecoderBackend backend) {
+
+    switch (backend) {
+
+    case decoder::DecoderBackend::D3D11VA:
+
+    case decoder::DecoderBackend::VAAPI:
+
+        return true;
+
+    default:
+
+        return false;
+
+    }
+
+}
+
 size_t selectVideoFrameQueueCapacity(const MediaInfo& info, decoder::DecoderBackend backend) {
 
     const double fps = info.fps > 1.0 ? info.fps : 30.0;
@@ -248,9 +268,9 @@ size_t selectVideoFrameQueueCapacity(const MediaInfo& info, decoder::DecoderBack
 
     const size_t max_capacity =
 
-        backend == decoder::DecoderBackend::D3D11VA ? kMaxVideoFrameQueueCapacityHardware
+        isHardwareDecoderBackend(backend) ? kMaxVideoFrameQueueCapacityHardware
 
-                                                    : kMaxVideoFrameQueueCapacitySoftware;
+                                          : kMaxVideoFrameQueueCapacitySoftware;
 
     return clampValue<size_t>(requested, kMinVideoFrameQueueCapacity, max_capacity);
 
@@ -389,36 +409,6 @@ double framePtsSeconds(const AVFrame* frame, AVRational time_base) {
     }
 
     return static_cast<double>(pts) * av_q2d(time_base);
-
-}
-
-
-
-const char* rendererTypeName(render::VideoRendererType type) {
-
-    switch (type) {
-
-    case render::VideoRendererType::Auto:
-
-        return "Auto";
-
-    case render::VideoRendererType::SoftwareSDL:
-
-        return "SoftwareSDL";
-
-    case render::VideoRendererType::D3D11:
-
-        return "D3D11";
-
-    case render::VideoRendererType::OpenGL:
-
-        return "OpenGL";
-
-    default:
-
-        return "Unknown";
-
-    }
 
 }
 
@@ -599,6 +589,180 @@ std::string backendOrderToString(const std::vector<decoder::DecoderBackend>& ord
     }
 
     return result;
+
+}
+
+std::string rendererOrderToString(const std::vector<render::VideoRendererType>& order) {
+
+    if (order.empty()) {
+
+        return "none";
+
+    }
+
+    std::string result;
+
+    for (size_t i = 0; i < order.size(); ++i) {
+
+        if (i > 0) {
+
+            result += " -> ";
+
+        }
+
+        result += render::RendererFactory::rendererName(order[i]);
+
+    }
+
+    return result;
+
+}
+
+const char* boolName(bool value) {
+
+    return value ? "true" : "false";
+
+}
+
+std::string rendererSupportToString(const std::vector<platform::RendererSupport>& support_list) {
+
+    if (support_list.empty()) {
+
+        return "none";
+
+    }
+
+    std::string result;
+
+    for (size_t i = 0; i < support_list.size(); ++i) {
+
+        if (i > 0) {
+
+            result += ", ";
+
+        }
+
+        const platform::RendererSupport& support = support_list[i];
+
+        result += render::RendererFactory::rendererName(support.type);
+        result += "(compiled=";
+        result += boolName(support.compiled_in);
+        result += ",runtime=";
+        result += boolName(support.runtime_available);
+        result += ",priority=";
+        result += std::to_string(support.default_priority);
+        result += ")";
+
+    }
+
+    return result;
+
+}
+
+std::string decoderSupportToString(const std::vector<platform::DecoderBackendSupport>& support_list) {
+
+    if (support_list.empty()) {
+
+        return "none";
+
+    }
+
+    std::string result;
+
+    for (size_t i = 0; i < support_list.size(); ++i) {
+
+        if (i > 0) {
+
+            result += ", ";
+
+        }
+
+        const platform::DecoderBackendSupport& support = support_list[i];
+
+        result += decoder::DecoderFactory::backendName(support.backend);
+        result += "(compiled=";
+        result += boolName(support.compiled_in);
+        result += ",runtime=";
+        result += boolName(support.runtime_available);
+        result += ",hw=";
+        result += boolName(support.hardware_accelerated);
+        result += ",priority=";
+        result += std::to_string(support.default_priority);
+        result += ")";
+
+    }
+
+    return result;
+
+}
+
+std::string rendererAvailabilitySetToString(const std::vector<platform::RendererSupport>& support_list, bool runtime) {
+
+    std::string result;
+    bool first = true;
+    for (const platform::RendererSupport& support : support_list) {
+        if (!support.compiled_in) {
+            continue;
+        }
+        if (runtime && !support.runtime_available) {
+            continue;
+        }
+        if (!first) {
+            result += ", ";
+        }
+        result += render::RendererFactory::rendererName(support.type);
+        first = false;
+    }
+    return first ? "none" : result;
+
+}
+
+std::string decoderAvailabilitySetToString(const std::vector<platform::DecoderBackendSupport>& support_list, bool runtime) {
+
+    std::string result;
+    bool first = true;
+    for (const platform::DecoderBackendSupport& support : support_list) {
+        if (!support.compiled_in) {
+            continue;
+        }
+        if (runtime && !support.runtime_available) {
+            continue;
+        }
+        if (!first) {
+            result += ", ";
+        }
+        result += decoder::DecoderFactory::backendName(support.backend);
+        first = false;
+    }
+    return first ? "none" : result;
+
+}
+
+std::string probeVideoCodecName(AVFormatContext* fmt_ctx, const MediaInfo& info) {
+
+    if (!fmt_ctx || info.video_stream_idx < 0 || info.video_stream_idx >= static_cast<int>(fmt_ctx->nb_streams)) {
+
+        return "unknown";
+
+    }
+
+    AVStream* stream = fmt_ctx->streams[info.video_stream_idx];
+
+    if (!stream || !stream->codecpar) {
+
+        return "unknown";
+
+    }
+
+    const char* codec_name = avcodec_get_name(stream->codecpar->codec_id);
+
+    if (!codec_name || codec_name[0] == '\0') {
+
+        return "unknown";
+
+    }
+
+    return std::string(codec_name);
 
 }
 
@@ -1702,6 +1866,10 @@ bool PlayerCore::open(const std::string& filename) {
         open_file_requested_ = false;
         open_file_path_.clear();
     }
+    playback_input_source_ = nullptr;
+    render_overlay_sink_ = nullptr;
+    event_thread_id_ = std::this_thread::get_id();
+    event_thread_violation_logged_.store(false);
 
 
     transitionSessionState(SessionState::Opening, "open requested");
@@ -1783,6 +1951,11 @@ bool PlayerCore::open(const std::string& filename) {
     clearEmbeddedSubtitles();
 
     int target_embedded_stream = -1;
+    subtitle::EmbeddedSubtitleSelectionPolicy embedded_policy{};
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        embedded_policy = embedded_subtitle_selection_policy_;
+    }
     if (preferred_embedded_subtitle_stream_index_ >= 0) {
         const auto preferred_it = std::find_if(embedded_tracks.begin(),
                                                embedded_tracks.end(),
@@ -1798,98 +1971,130 @@ bool PlayerCore::open(const std::string& filename) {
         }
     }
     if (target_embedded_stream < 0) {
-        target_embedded_stream = subtitle::selectBestEmbeddedSubtitleStream(embedded_tracks);
+        target_embedded_stream = subtitle::selectBestEmbeddedSubtitleStream(embedded_tracks, embedded_policy);
     }
     if (target_embedded_stream >= 0 && !selectEmbeddedSubtitleStream(target_embedded_stream)) {
         LOG_WARNING("Failed to load selected embedded subtitle stream: stream_index=" << target_embedded_stream);
     }
 
     const MediaInfo& info = demuxer_->getMediaInfo();
+    AVFormatContext* fmt_ctx = demuxer_->getFormatContext();
+    const bool has_video_stream = info.video_stream_idx >= 0;
+    const bool has_audio_stream = info.audio_stream_idx >= 0;
+
+    const std::string video_codec_name = probeVideoCodecName(fmt_ctx, info);
+    const platform::PlatformCapabilities platform_capabilities = platform::PlatformCapabilitiesProbe::detect();
+
+    PlaybackPreferences preferences{};
+    preferences.prefer_hardware_decode = preferHardwareDecode();
+
+    PlaybackOpenRequest open_request{};
+    open_request.media_info = info;
+    open_request.video_codec_name = video_codec_name;
+    open_request.preferences = preferences;
+    open_request.platform_capabilities = platform_capabilities;
+
+    const PlaybackOpenPlan open_plan = PlaybackStrategy::buildOpenPlan(open_request);
+
+    startup_platform_ = platform::platformKindName(platform_capabilities.platform);
+    startup_renderer_capabilities_ = rendererSupportToString(platform_capabilities.renderer_support);
+    startup_decoder_capabilities_ = decoderSupportToString(platform_capabilities.decoder_support);
+    startup_renderer_compiled_set_ = rendererAvailabilitySetToString(platform_capabilities.renderer_support, false);
+    startup_renderer_runtime_set_ = rendererAvailabilitySetToString(platform_capabilities.renderer_support, true);
+    startup_decoder_compiled_set_ = decoderAvailabilitySetToString(platform_capabilities.decoder_support, false);
+    startup_decoder_runtime_set_ = decoderAvailabilitySetToString(platform_capabilities.decoder_support, true);
+    startup_renderer_candidates_ = rendererOrderToString(open_plan.renderer_candidates);
+    startup_decoder_candidates_ = backendOrderToString(open_plan.video_decoder_candidates);
+    startup_selected_renderer_ = "None";
+    startup_selected_decoder_ = "Unknown";
+    startup_renderer_fallback_reason_ = "none";
+    startup_decoder_fallback_reason_ = "none";
+
+    LOG_INFO("Startup strategy capabilities: platform=" << startup_platform_
+             << " renderer_support=[" << startup_renderer_capabilities_ << "]"
+             << " decoder_support=[" << startup_decoder_capabilities_ << "]");
+    LOG_INFO("Startup strategy availability sets: renderer_compiled=[" << startup_renderer_compiled_set_
+             << "] renderer_runtime=[" << startup_renderer_runtime_set_
+             << "] decoder_compiled=[" << startup_decoder_compiled_set_
+             << "] decoder_runtime=[" << startup_decoder_runtime_set_ << "]");
+    LOG_INFO("Startup strategy plan: renderer_candidates=[" << startup_renderer_candidates_
+             << "] decoder_candidates=[" << startup_decoder_candidates_
+             << "] renderer_reason=" << open_plan.renderer_plan_reason
+             << " decoder_reason=" << open_plan.decoder_plan_reason);
 
     rebuildChapterPoints();
 
-    if (info.video_stream_idx >= 0) {
-
-        const render::VideoRendererType selected_type = render::RendererFactory::detectBestRendererType();
+    if (has_video_stream) {
+        if (open_plan.renderer_candidates.empty()) {
+            startup_renderer_fallback_reason_ = "no-renderer-candidates";
+            return fail_open(ErrorCode::DisplayInitFailed,
+                             "failed to initialize video renderer",
+                             "open renderer candidates empty");
+        }
 
         render::VideoRendererConfig renderer_config{};
-
         renderer_config.width = info.width;
-
         renderer_config.height = info.height;
-
         renderer_config.title = "Video Player";
 
+        bool renderer_initialized = false;
+        bool renderer_fallback_triggered = false;
 
-
-        auto init_renderer = [&](render::VideoRendererType type) -> bool {
+        for (render::VideoRendererType type : open_plan.renderer_candidates) {
+            if (!render::RendererFactory::isSupported(type, platform_capabilities)) {
+                LOG_WARNING("Renderer candidate unsupported at runtime: " << render::RendererFactory::rendererName(type));
+                renderer_fallback_triggered = true;
+                continue;
+            }
 
             video_renderer_ = render::RendererFactory::create(type);
-
             if (!video_renderer_) {
-
-                return false;
-
+                LOG_WARNING("Renderer candidate creation failed: " << render::RendererFactory::rendererName(type));
+                renderer_fallback_triggered = true;
+                continue;
             }
 
             if (!video_renderer_->init(renderer_config)) {
-
+                LOG_WARNING("Renderer candidate init failed: " << render::RendererFactory::rendererName(type));
                 video_renderer_.reset();
-
-                return false;
-
+                renderer_fallback_triggered = true;
+                continue;
             }
 
-            LOG_INFO("Video renderer initialized: " << rendererTypeName(type));
-
-            return true;
-
-        };
-
-
-
-        if (!init_renderer(selected_type)) {
-
-            LOG_WARNING("Video renderer init failed: " << rendererTypeName(selected_type));
-
-            if (selected_type != render::VideoRendererType::SoftwareSDL) {
-
-                LOG_WARNING("Falling back to SoftwareSDL renderer");
-
-                if (!init_renderer(render::VideoRendererType::SoftwareSDL)) {
-
-                    return fail_open(ErrorCode::DisplayInitFailed,
-
-                                     "failed to initialize video renderer",
-
-                                     "open renderer failed");
-
-                }
-
-            } else {
-
-                return fail_open(ErrorCode::DisplayInitFailed,
-
-                                 "failed to initialize video renderer",
-
-                                 "open renderer failed");
-
-            }
-
+            startup_selected_renderer_ = render::RendererFactory::rendererName(type);
+            renderer_initialized = true;
+            break;
         }
 
+        if (!renderer_initialized) {
+            startup_renderer_fallback_reason_ = "all-renderer-candidates-failed";
+            return fail_open(ErrorCode::DisplayInitFailed,
+                             "failed to initialize video renderer",
+                             "open renderer failed");
+        }
 
+        if (renderer_fallback_triggered) {
+            startup_renderer_fallback_reason_ = "fallback-after-renderer-failure";
+        }
 
-        video_renderer_->setHotkeyManager(hotkey_manager_);
+        playback_input_source_ = dynamic_cast<input::IPlaybackInputSource*>(video_renderer_.get());
+        render_overlay_sink_ = dynamic_cast<render::IRenderOverlaySink*>(video_renderer_.get());
+        if (!playback_input_source_) {
+            LOG_WARNING("Selected renderer does not implement playback input source: " << startup_selected_renderer_);
+        }
+        if (!render_overlay_sink_) {
+            LOG_WARNING("Selected renderer does not implement overlay sink: " << startup_selected_renderer_);
+        }
+        if (playback_input_source_) {
+            playback_input_source_->setHotkeyManager(hotkey_manager_);
+        }
+        event_thread_id_ = std::this_thread::get_id();
+        event_thread_violation_logged_.store(false);
         updateSubtitleTrackOverlayState();
-
+    } else {
+        startup_selected_renderer_ = "None";
+        startup_renderer_fallback_reason_ = "no-video-stream";
     }
-
-
-
-    const bool has_video_stream = info.video_stream_idx >= 0;
-
-    const bool has_audio_stream = info.audio_stream_idx >= 0;
 
     const bool disable_audio_output = envFlagEnabled("MVP_DISABLE_AUDIO_OUTPUT");
 
@@ -1944,7 +2149,7 @@ bool PlayerCore::open(const std::string& filename) {
 
     // Decoder init is required for playback; fail fast if it cannot be set up.
 
-    if (!initDecoders()) {
+    if (!initDecoders(open_plan)) {
 
         return fail_open(ErrorCode::DecoderInitFailed, "failed to initialize decoders", "open decoder init failed");
 
@@ -2843,13 +3048,22 @@ void PlayerCore::pumpEvents() {
 
     serviceDeferredStop();
 
-    if (video_renderer_) {
+    if (playback_input_source_) {
+        if (event_thread_id_ != std::thread::id{} &&
+            event_thread_id_ != std::this_thread::get_id()) {
+            if (!event_thread_violation_logged_.exchange(true)) {
+                LOG_WARNING("PlayerCore::pumpEvents ignored from non-event thread: expected="
+                            << event_thread_id_ << " actual=" << std::this_thread::get_id());
+            }
+            handleABRepeatLoop();
+            return;
+        }
 
-        video_renderer_->handleEvents();
+        playback_input_source_->handleEvents();
 
 
 
-        if (video_renderer_->consumeTogglePauseRequest()) {
+        if (playback_input_source_->consumeTogglePauseRequest()) {
 
             if (state_.load() == PlaybackState::Playing) {
 
@@ -2867,7 +3081,7 @@ void PlayerCore::pumpEvents() {
 
         double seek_ratio = 0.0;
 
-        if (video_renderer_->consumeSeekRequest(seek_ratio)) {
+        if (playback_input_source_->consumeSeekRequest(seek_ratio)) {
 
             const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
 
@@ -2883,7 +3097,7 @@ void PlayerCore::pumpEvents() {
 
         double seek_delta_seconds = 0.0;
 
-        if (video_renderer_->consumeSeekDeltaRequest(seek_delta_seconds) && seek_delta_seconds != 0.0) {
+        if (playback_input_source_->consumeSeekDeltaRequest(seek_delta_seconds) && seek_delta_seconds != 0.0) {
 
             const double duration = demuxer_ ? demuxer_->getMediaInfo().duration : 0.0;
 
@@ -2901,7 +3115,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeNextChapterRequest()) {
+        if (playback_input_source_->consumeNextChapterRequest()) {
 
             seekToNextChapter();
 
@@ -2909,7 +3123,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumePreviousChapterRequest()) {
+        if (playback_input_source_->consumePreviousChapterRequest()) {
 
             seekToPreviousChapter();
 
@@ -2919,7 +3133,7 @@ void PlayerCore::pumpEvents() {
 
         float volume_request = 0.0f;
 
-        if (video_renderer_->consumeVolumeChangeRequest(volume_request)) {
+        if (playback_input_source_->consumeVolumeChangeRequest(volume_request)) {
 
             setVolume(volume_request);
 
@@ -2929,13 +3143,13 @@ void PlayerCore::pumpEvents() {
 
         double speed_delta = 0.0;
 
-        if (video_renderer_->consumeSpeedChangeRequest(speed_delta) && speed_delta != 0.0) {
+        if (playback_input_source_->consumeSpeedChangeRequest(speed_delta) && speed_delta != 0.0) {
 
             setPlaybackSpeed(getPlaybackSpeed() + speed_delta);
 
         }
 
-        if (video_renderer_->consumeResetSpeedRequest()) {
+        if (playback_input_source_->consumeResetSpeedRequest()) {
 
             setPlaybackSpeed(1.0);
 
@@ -2945,7 +3159,7 @@ void PlayerCore::pumpEvents() {
 
         double subtitle_delay_delta = 0.0;
 
-        if (video_renderer_->consumeSubtitleDelayChangeRequest(subtitle_delay_delta) && subtitle_delay_delta != 0.0) {
+        if (playback_input_source_->consumeSubtitleDelayChangeRequest(subtitle_delay_delta) && subtitle_delay_delta != 0.0) {
 
             setSubtitleDelay(getSubtitleDelay() + subtitle_delay_delta);
 
@@ -2955,7 +3169,7 @@ void PlayerCore::pumpEvents() {
 
         double audio_delay_delta = 0.0;
 
-        if (video_renderer_->consumeAudioDelayChangeRequest(audio_delay_delta) && audio_delay_delta != 0.0) {
+        if (playback_input_source_->consumeAudioDelayChangeRequest(audio_delay_delta) && audio_delay_delta != 0.0) {
 
             setAudioDelay(getAudioDelay() + audio_delay_delta);
 
@@ -2963,7 +3177,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeToggleSubtitleRequest()) {
+        if (playback_input_source_->consumeToggleSubtitleRequest()) {
 
             toggleSubtitleEnabled();
 
@@ -2971,7 +3185,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeSetABRepeatStartRequest()) {
+        if (playback_input_source_->consumeSetABRepeatStartRequest()) {
 
             setABRepeatStart();
 
@@ -2979,7 +3193,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeSetABRepeatEndRequest()) {
+        if (playback_input_source_->consumeSetABRepeatEndRequest()) {
 
             setABRepeatEnd();
 
@@ -2987,7 +3201,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeClearABRepeatRequest()) {
+        if (playback_input_source_->consumeClearABRepeatRequest()) {
 
             clearABRepeat();
 
@@ -2995,7 +3209,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeScreenshotRequest() && !requestScreenshot()) {
+        if (playback_input_source_->consumeScreenshotRequest() && !requestScreenshot()) {
 
             LOG_WARNING("Screenshot request failed");
 
@@ -3003,7 +3217,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeStepFrameBackwardRequest() && !stepFrameBackward()) {
+        if (playback_input_source_->consumeStepFrameBackwardRequest() && !stepFrameBackward()) {
 
             LOG_WARNING("Frame step backward request failed");
 
@@ -3011,19 +3225,19 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeStepFrameForwardRequest() && !stepFrameForward()) {
+        if (playback_input_source_->consumeStepFrameForwardRequest() && !stepFrameForward()) {
 
             LOG_WARNING("Frame step forward request failed");
 
         }
 
-        if (video_renderer_->consumePreviousSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(-1)) {
+        if (playback_input_source_->consumePreviousSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(-1)) {
 
             LOG_WARNING("Previous embedded subtitle track request failed");
 
         }
 
-        if (video_renderer_->consumeNextSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(1)) {
+        if (playback_input_source_->consumeNextSubtitleTrackRequest() && !cycleEmbeddedSubtitleTrack(1)) {
 
             LOG_WARNING("Next embedded subtitle track request failed");
 
@@ -3031,7 +3245,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumeNextItemRequest()) {
+        if (playback_input_source_->consumeNextItemRequest()) {
 
             next_item_requested_.store(true);
 
@@ -3041,7 +3255,7 @@ void PlayerCore::pumpEvents() {
 
 
 
-        if (video_renderer_->consumePreviousItemRequest()) {
+        if (playback_input_source_->consumePreviousItemRequest()) {
 
             previous_item_requested_.store(true);
 
@@ -3050,14 +3264,14 @@ void PlayerCore::pumpEvents() {
         }
 
         std::string open_file_path;
-        if (video_renderer_->consumeOpenFileRequest(open_file_path) && !open_file_path.empty()) {
+        if (playback_input_source_->consumeOpenFileRequest(open_file_path) && !open_file_path.empty()) {
             std::lock_guard<std::mutex> lock(open_file_request_mutex_);
             open_file_path_ = std::move(open_file_path);
             open_file_requested_ = true;
         }
 
 
-        if (video_renderer_->shouldQuit()) {
+        if (playback_input_source_->shouldQuit()) {
 
             quit_requested_.store(true);
 
@@ -3645,6 +3859,28 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
 
     snapshot.audio_init_detail = audio_init_detail_;
 
+    snapshot.startup_platform = startup_platform_;
+
+    snapshot.startup_renderer_capabilities = startup_renderer_capabilities_;
+
+    snapshot.startup_decoder_capabilities = startup_decoder_capabilities_;
+    snapshot.startup_renderer_compiled_set = startup_renderer_compiled_set_;
+    snapshot.startup_renderer_runtime_set = startup_renderer_runtime_set_;
+    snapshot.startup_decoder_compiled_set = startup_decoder_compiled_set_;
+    snapshot.startup_decoder_runtime_set = startup_decoder_runtime_set_;
+
+    snapshot.startup_renderer_candidates = startup_renderer_candidates_;
+
+    snapshot.startup_decoder_candidates = startup_decoder_candidates_;
+
+    snapshot.startup_selected_renderer = startup_selected_renderer_;
+
+    snapshot.startup_selected_decoder = startup_selected_decoder_;
+
+    snapshot.startup_renderer_fallback_reason = startup_renderer_fallback_reason_;
+
+    snapshot.startup_decoder_fallback_reason = startup_decoder_fallback_reason_;
+
     const SchedulerControlSnapshot scheduler_control = makeSchedulerControlSnapshot();
 
     snapshot.scheduler_clock_policy = scheduler_control.clock_policy;
@@ -3733,6 +3969,8 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
 
     snapshot.scheduler_wait_events = scheduler_stats.wait_events;
 
+    snapshot.scheduler_render_wait_ms = scheduler_stats.render_wait_ms;
+
     snapshot.scheduler_video_backpressure_events = scheduler_stats.video_backpressure_events;
 
     snapshot.scheduler_audio_backpressure_events = scheduler_stats.audio_backpressure_events;
@@ -3762,6 +4000,29 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.illegal_run_transitions = illegal_run_transitions_.load();
 
     snapshot.illegal_pipeline_transitions = illegal_pipeline_transitions_.load();
+
+    snapshot.runtime_drop_total = snapshot.demux_queue_drop_packets +
+                                  snapshot.stale_video_packets_dropped +
+                                  snapshot.stale_audio_packets_dropped +
+                                  snapshot.stale_video_frames_dropped +
+                                  snapshot.stale_audio_frames_dropped +
+                                  snapshot.stale_audio_submit_frames_dropped +
+                                  snapshot.stale_render_frames_dropped +
+                                  snapshot.stale_paused_render_frames_dropped +
+                                  snapshot.scheduler_late_drops;
+    {
+        std::ostringstream oss;
+        oss << "demux_queue=" << snapshot.demux_queue_drop_packets
+            << ",stale_video_packet=" << snapshot.stale_video_packets_dropped
+            << ",stale_audio_packet=" << snapshot.stale_audio_packets_dropped
+            << ",stale_video_frame=" << snapshot.stale_video_frames_dropped
+            << ",stale_audio_frame=" << snapshot.stale_audio_frames_dropped
+            << ",stale_audio_submit=" << snapshot.stale_audio_submit_frames_dropped
+            << ",stale_render=" << snapshot.stale_render_frames_dropped
+            << ",stale_paused_render=" << snapshot.stale_paused_render_frames_dropped
+            << ",late_render=" << snapshot.scheduler_late_drops;
+        snapshot.runtime_drop_summary = oss.str();
+    }
 
     snapshot.video_copy_back_time_us_total = video_copy_back_time_us_total_.load();
 
@@ -3816,6 +4077,70 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.renderer_opengl_output_lut_path = renderer_diagnostics.opengl_output_lut_path;
 
     snapshot.renderer_opengl_output_lut_error = renderer_diagnostics.opengl_output_lut_error;
+
+    snapshot.renderer_opengl_output_lut_source = renderer_diagnostics.opengl_output_lut_source;
+
+    snapshot.renderer_opengl_output_lut_reload_count = renderer_diagnostics.opengl_output_lut_reload_count;
+
+    snapshot.renderer_opengl_output_display_index = renderer_diagnostics.opengl_output_display_index;
+
+    snapshot.renderer_opengl_output_display_name = renderer_diagnostics.opengl_output_display_name;
+
+    snapshot.renderer_opengl_output_display_device_name = renderer_diagnostics.opengl_output_display_device_name;
+
+    snapshot.renderer_opengl_output_icc_profile_available = renderer_diagnostics.opengl_output_icc_profile_available;
+
+    snapshot.renderer_opengl_output_icc_profile_source = renderer_diagnostics.opengl_output_icc_profile_source;
+
+    snapshot.renderer_opengl_output_icc_profile_path = renderer_diagnostics.opengl_output_icc_profile_path;
+
+    snapshot.renderer_opengl_output_icc_profile_description = renderer_diagnostics.opengl_output_icc_profile_description;
+
+    snapshot.renderer_opengl_output_binding_error = renderer_diagnostics.opengl_output_binding_error;
+
+    snapshot.renderer_d3d11_hdr_present_requested = renderer_diagnostics.d3d11_hdr_present_requested;
+
+    snapshot.renderer_d3d11_hdr_present_active = renderer_diagnostics.d3d11_hdr_present_active;
+
+    snapshot.renderer_d3d11_hdr_content_detected = renderer_diagnostics.d3d11_hdr_content_detected;
+
+    snapshot.renderer_d3d11_hdr_present_mode = renderer_diagnostics.d3d11_hdr_present_mode;
+
+    snapshot.renderer_d3d11_hdr_present_decision = renderer_diagnostics.d3d11_hdr_present_decision;
+
+    snapshot.renderer_d3d11_hdr_swapchain_format = renderer_diagnostics.d3d11_hdr_swapchain_format;
+
+    snapshot.renderer_d3d11_hdr_output_color_space = renderer_diagnostics.d3d11_hdr_output_color_space;
+
+    snapshot.renderer_d3d11_hdr_output_display_index = renderer_diagnostics.d3d11_hdr_output_display_index;
+
+    snapshot.renderer_d3d11_hdr_output_display_name = renderer_diagnostics.d3d11_hdr_output_display_name;
+
+    snapshot.renderer_d3d11_hdr_output_device_name = renderer_diagnostics.d3d11_hdr_output_device_name;
+
+    snapshot.renderer_d3d11_hdr_output_advanced_color_active =
+        renderer_diagnostics.d3d11_hdr_output_advanced_color_active;
+
+    snapshot.renderer_d3d11_hdr_output_hdr_active =
+        renderer_diagnostics.d3d11_hdr_output_hdr_active;
+
+    snapshot.renderer_d3d11_hdr_metadata_available = renderer_diagnostics.d3d11_hdr_metadata_available;
+
+    snapshot.renderer_d3d11_hdr_metadata_applied = renderer_diagnostics.d3d11_hdr_metadata_applied;
+
+    snapshot.renderer_d3d11_hdr_metadata_source = renderer_diagnostics.d3d11_hdr_metadata_source;
+
+    snapshot.renderer_d3d11_hdr_state_reload_count = renderer_diagnostics.d3d11_hdr_state_reload_count;
+
+    snapshot.renderer_d3d11_present_count = renderer_diagnostics.d3d11_present_count;
+
+    snapshot.renderer_d3d11_present_failures = renderer_diagnostics.d3d11_present_failures;
+
+    snapshot.renderer_d3d11_present_time_us_total = renderer_diagnostics.d3d11_present_time_us_total;
+
+    snapshot.renderer_d3d11_present_time_us_max = renderer_diagnostics.d3d11_present_time_us_max;
+
+    snapshot.renderer_d3d11_hdr_error = renderer_diagnostics.d3d11_hdr_error;
 
     snapshot.video_packet_queue_size = video_packet_queue_ ? video_packet_queue_->size() : 0;
 
@@ -4034,7 +4359,7 @@ int PlayerCore::selectedEmbeddedSubtitleTrackOrdinalLocked() const {
 
 void PlayerCore::updateSubtitleTrackOverlayState() {
 
-    if (!video_renderer_) {
+    if (!render_overlay_sink_) {
 
         return;
 
@@ -4043,23 +4368,39 @@ void PlayerCore::updateSubtitleTrackOverlayState() {
     int current_ordinal = 0;
 
     int track_count = 0;
+    std::vector<std::string> track_labels;
 
     {
 
         std::lock_guard<std::mutex> lock(subtitle_mutex_);
 
-        track_count = static_cast<int>(std::count_if(
-            embedded_subtitle_tracks_.begin(),
-            embedded_subtitle_tracks_.end(),
-            [](const subtitle::EmbeddedSubtitleTrackInfo& track) {
-                return track.supported_codec;
-            }));
+        track_labels.reserve(embedded_subtitle_tracks_.size());
+        for (const auto& track : embedded_subtitle_tracks_) {
+            if (!track.supported_codec) {
+                continue;
+            }
+
+            std::ostringstream label;
+            label << (track.language.empty() ? std::string("und") : track.language);
+            if (!track.title.empty()) {
+                label << " " << track.title;
+            }
+            if (track.is_forced) {
+                label << " [forced]";
+            }
+            if (track.is_hearing_impaired) {
+                label << " [sdh]";
+            }
+            track_labels.push_back(label.str());
+        }
+        track_count = static_cast<int>(track_labels.size());
 
         current_ordinal = selectedEmbeddedSubtitleTrackOrdinalLocked();
 
     }
 
-    video_renderer_->setSubtitleTrackState(current_ordinal, track_count);
+    render_overlay_sink_->setSubtitleTrackState(current_ordinal, track_count);
+    render_overlay_sink_->setSubtitleTrackCatalog(track_labels, current_ordinal);
 
 }
 
@@ -4213,10 +4554,8 @@ void PlayerCore::setEmbeddedSubtitles(std::vector<subtitle::SubtitleItem> subtit
 
 
 
-    if (video_renderer_) {
-
-        video_renderer_->setSubtitleItems({});
-
+    if (render_overlay_sink_) {
+        render_overlay_sink_->setSubtitleItems({});
     }
 
     updateSubtitleTrackOverlayState();
@@ -4241,10 +4580,8 @@ void PlayerCore::clearEmbeddedSubtitles() {
 
 
 
-    if (video_renderer_) {
-
-        video_renderer_->setSubtitleItems({});
-
+    if (render_overlay_sink_) {
+        render_overlay_sink_->setSubtitleItems({});
     }
 
     updateSubtitleTrackOverlayState();
@@ -4303,9 +4640,9 @@ void PlayerCore::setExternalSubtitles(std::vector<subtitle::SubtitleItem> subtit
 
 
 
-    if (video_renderer_) {
+    if (render_overlay_sink_) {
 
-        video_renderer_->setSubtitleItems({});
+        render_overlay_sink_->setSubtitleItems({});
 
     }
 
@@ -4331,9 +4668,9 @@ void PlayerCore::clearExternalSubtitles() {
 
 
 
-    if (video_renderer_) {
+    if (render_overlay_sink_) {
 
-        video_renderer_->setSubtitleItems({});
+        render_overlay_sink_->setSubtitleItems({});
 
     }
 
@@ -4469,6 +4806,38 @@ int PlayerCore::preferredEmbeddedSubtitleStreamIndex() const {
 
 }
 
+void PlayerCore::setEmbeddedSubtitleSelectionPolicy(const subtitle::EmbeddedSubtitleSelectionPolicy& policy) {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    embedded_subtitle_selection_policy_ = policy;
+
+}
+
+subtitle::EmbeddedSubtitleSelectionPolicy PlayerCore::embeddedSubtitleSelectionPolicy() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return embedded_subtitle_selection_policy_;
+
+}
+
+std::string PlayerCore::activeSubtitleSourcePath() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return subtitle_source_path_;
+
+}
+
+size_t PlayerCore::activeSubtitleItemCount() const {
+
+    std::lock_guard<std::mutex> lock(subtitle_mutex_);
+
+    return subtitle_items_.size();
+
+}
+
 
 
 void PlayerCore::setSubtitleEnabled(bool enabled) {
@@ -4507,11 +4876,11 @@ void PlayerCore::setSubtitleEnabled(bool enabled) {
 
 
 
-    if (video_renderer_) {
+    if (render_overlay_sink_) {
 
         if (!enabled) {
 
-            video_renderer_->setSubtitleItems({});
+            render_overlay_sink_->setSubtitleItems({});
 
         } else {
 
@@ -4561,10 +4930,8 @@ void PlayerCore::setHotkeyManager(const input::HotkeyManager& hotkey_manager) {
 
     hotkey_manager_ = hotkey_manager;
 
-    if (video_renderer_) {
-
-        video_renderer_->setHotkeyManager(hotkey_manager_);
-
+    if (playback_input_source_) {
+        playback_input_source_->setHotkeyManager(hotkey_manager_);
     }
 
 }
@@ -4621,7 +4988,7 @@ void PlayerCore::onFrameRendered(FrameCallback callback) {
 
 /// 初始化音视频解码器，并按配置选择硬解或软解后端。
 
-bool PlayerCore::initDecoders() {
+bool PlayerCore::initDecoders(const PlaybackOpenPlan& plan) {
 
     if (!demuxer_) {
 
@@ -4769,7 +5136,9 @@ bool PlayerCore::initDecoders() {
 
             case decoder::DecoderBackend::D3D11VA:
 
-                backend_ready = tryConfigureD3D11HardwareDecode(codec, video_codec_ctx_);
+            case decoder::DecoderBackend::VAAPI:
+
+                backend_ready = tryConfigureHardwareDecode(codec, video_codec_ctx_, backend);
 
                 break;
 
@@ -4797,7 +5166,7 @@ bool PlayerCore::initDecoders() {
 
 
 
-            if (backend == decoder::DecoderBackend::D3D11VA) {
+            if (isHardwareDecoderBackend(backend)) {
 
                 const size_t planned_queue_capacity = selectVideoFrameQueueCapacity(info, backend);
 
@@ -4809,7 +5178,8 @@ bool PlayerCore::initDecoders() {
 
                     16));
 
-                LOG_INFO("Configuring D3D11VA decoder with extra_hw_frames="
+                LOG_INFO("Configuring " << decoder::DecoderFactory::backendName(backend)
+                         << " decoder with extra_hw_frames="
 
                          << video_codec_ctx_->extra_hw_frames
 
@@ -4835,11 +5205,13 @@ bool PlayerCore::initDecoders() {
 
 
 
-            if (backend == decoder::DecoderBackend::D3D11VA &&
+            if (isHardwareDecoderBackend(backend) &&
+                video_decoder_backend_ != backend) {
 
-                video_decoder_backend_ != decoder::DecoderBackend::D3D11VA) {
-
-                LOG_WARNING("D3D11VA decoder initialization downgraded to software backend during format negotiation");
+                LOG_WARNING(decoder::DecoderFactory::backendName(backend)
+                            << " decoder initialization downgraded to "
+                            << decoder::DecoderFactory::backendName(video_decoder_backend_)
+                            << " during format negotiation");
 
             }
 
@@ -4862,29 +5234,29 @@ bool PlayerCore::initDecoders() {
 
 
         const std::string codec_name = codec->name ? codec->name : "unknown";
+        std::vector<decoder::DecoderBackend> backend_order = plan.video_decoder_candidates;
+        if (backend_order.empty()) {
+            backend_order.push_back(decoder::DecoderBackend::Software);
+        }
 
-        const std::vector<decoder::DecoderBackend> backend_order =
-
-            decoder::DecoderFactory::selectBackendOrder(codec_name, preferHardwareDecode());
+        startup_decoder_candidates_ = backendOrderToString(backend_order);
 
         LOG_INFO("Video decoder backend candidates for codec " << codec_name
-
                  << ": " << backendOrderToString(backend_order));
 
-
-
         bool opened_video_decoder = false;
+        bool decoder_fallback_triggered = false;
 
-        for (decoder::DecoderBackend backend : backend_order) {
-
+        for (size_t index = 0; index < backend_order.size(); ++index) {
+            const decoder::DecoderBackend backend = backend_order[index];
             if (try_open_video_decoder_with_backend(backend)) {
-
                 opened_video_decoder = true;
-
+                if (index > 0) {
+                    decoder_fallback_triggered = true;
+                }
                 break;
-
             }
-
+            decoder_fallback_triggered = true;
         }
 
         if (!opened_video_decoder) {
@@ -4903,6 +5275,10 @@ bool PlayerCore::initDecoders() {
 
         }
 
+        startup_selected_decoder_ = decoder::DecoderFactory::backendName(video_decoder_backend_);
+        startup_decoder_fallback_reason_ =
+            decoder_fallback_triggered ? "fallback-after-decoder-failure" : "none";
+
 
 
         if (video_decoder_backend_ == decoder::DecoderBackend::Software && !preferHardwareDecode()) {
@@ -4913,7 +5289,7 @@ bool PlayerCore::initDecoders() {
 
 
 
-        if (video_codec_ctx_ && video_decoder_backend_ != decoder::DecoderBackend::D3D11VA) {
+        if (video_codec_ctx_ && !isHardwareDecoderBackend(video_decoder_backend_)) {
 
             if (video_codec_ctx_->hw_device_ctx) {
 
@@ -4931,6 +5307,10 @@ bool PlayerCore::initDecoders() {
 
         video_time_base_ = vs->time_base;
 
+    }
+    if (info.video_stream_idx < 0) {
+        startup_selected_decoder_ = "None";
+        startup_decoder_fallback_reason_ = "no-video-stream";
     }
 
 
@@ -5151,143 +5531,100 @@ bool PlayerCore::configureD3D11HardwareFramesContext(AVCodecContext* codec_ctx) 
 #endif
 
 }
-bool PlayerCore::tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx) {
+bool PlayerCore::configureHardwareFramesContext(AVCodecContext* codec_ctx) {
 
-#if defined(_WIN32)
+    if (video_decoder_backend_ == decoder::DecoderBackend::D3D11VA) {
 
-    if (!codec || !codec_ctx) {
-
-        return false;
+        return configureD3D11HardwareFramesContext(codec_ctx);
 
     }
-
-
-
-    const std::string codec_name = codec->name ? codec->name : "";
-
-
-
-    video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
-
-    for (int i = 0;; ++i) {
-
-        const AVCodecHWConfig* hw_config = avcodec_get_hw_config(codec, i);
-
-        if (!hw_config) {
-
-            break;
-
-        }
-
-        if ((hw_config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) &&
-
-            hw_config->device_type == AV_HWDEVICE_TYPE_D3D11VA) {
-
-            video_hw_pixel_fmt_ = hw_config->pix_fmt;
-
-            break;
-
-        }
-
-    }
-
-
-
-    if (video_hw_pixel_fmt_ == AV_PIX_FMT_NONE) {
-
-        LOG_WARNING("Codec " << codec_name << " has no D3D11VA HW config, fallback to software decode");
-
-        return false;
-
-    }
-
-
-
-    void* native_device_handle = video_renderer_ ? video_renderer_->nativeDeviceHandle() : nullptr;
-
-    if (native_device_handle) {
-
-        video_hw_device_ctx_ = av_hwdevice_ctx_alloc(AV_HWDEVICE_TYPE_D3D11VA);
-
-        if (!video_hw_device_ctx_) {
-
-            LOG_WARNING("Failed to allocate shared D3D11VA device context, fallback to software decode");
-
-            return false;
-
-        }
-
-
-
-        auto* device_ctx = reinterpret_cast<AVHWDeviceContext*>(video_hw_device_ctx_->data);
-
-        auto* d3d11_ctx = reinterpret_cast<AVD3D11VADeviceContext*>(device_ctx->hwctx);
-
-        auto* d3d11_device = static_cast<ID3D11Device*>(native_device_handle);
-
-        d3d11_device->AddRef();
-
-        d3d11_ctx->device = d3d11_device;
-
-        if (av_hwdevice_ctx_init(video_hw_device_ctx_) < 0) {
-
-            LOG_WARNING("Failed to initialize shared D3D11VA device context, fallback to software decode");
-
-            av_buffer_unref(&video_hw_device_ctx_);
-
-            video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
-
-            return false;
-
-        }
-
-        LOG_INFO("D3D11VA decoder bound to renderer-owned D3D11 device");
-
-    } else if (av_hwdevice_ctx_create(&video_hw_device_ctx_, AV_HWDEVICE_TYPE_D3D11VA, nullptr, nullptr, 0) < 0 ||
-
-               !video_hw_device_ctx_) {
-
-        LOG_WARNING("Failed to create D3D11VA device context, fallback to software decode");
-
-        return false;
-
-    }
-
-
-
-    codec_ctx->get_format = &PlayerCore::selectVideoPixelFormat;
-
-    codec_ctx->opaque = this;
-
-    codec_ctx->hw_device_ctx = av_buffer_ref(video_hw_device_ctx_);
-
-    if (!codec_ctx->hw_device_ctx) {
-
-        LOG_WARNING("Failed to attach D3D11VA device context, fallback to software decode");
-
-        av_buffer_unref(&video_hw_device_ctx_);
-
-        video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
-
-        return false;
-
-    }
-
-
-
-    video_decoder_backend_ = decoder::DecoderBackend::D3D11VA;
 
     return true;
 
-#else
+}
 
-    (void)codec;
+bool PlayerCore::tryConfigureHardwareDecode(const AVCodec* codec,
+                                            AVCodecContext* codec_ctx,
+                                            decoder::DecoderBackend backend) {
 
-    (void)codec_ctx;
+    if (!codec || !codec_ctx || !platform::HwDeviceFactory::supportsBackend(backend)) {
 
-    return false;
+        return false;
 
+    }
+
+    const std::string codec_name = codec->name ? codec->name : "unknown";
+    std::string probe_detail;
+    video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+    if (!platform::HwDeviceFactory::findCodecHardwarePixelFormat(
+            codec, backend, &video_hw_pixel_fmt_, &probe_detail) ||
+        video_hw_pixel_fmt_ == AV_PIX_FMT_NONE) {
+
+        LOG_WARNING("Codec " << codec_name
+                    << " has no " << decoder::DecoderFactory::backendName(backend)
+                    << " HW config (" << probe_detail << "), fallback to software decode");
+        return false;
+
+    }
+
+    void* native_device_handle = nullptr;
+    if (backend == decoder::DecoderBackend::D3D11VA) {
+
+        native_device_handle = video_renderer_ ? video_renderer_->nativeDeviceHandle() : nullptr;
+
+    }
+
+    const char* requested_device_name = nullptr;
+#if defined(__linux__)
+    if (backend == decoder::DecoderBackend::VAAPI) {
+
+        const char* env_device = std::getenv("MVP_VAAPI_DEVICE");
+        if (env_device && env_device[0] != '\0') {
+
+            requested_device_name = env_device;
+
+        }
+
+    }
 #endif
+
+    platform::HardwareDeviceCreateResult create_result{};
+    const bool create_ok = platform::HwDeviceFactory::createHardwareDeviceContext(
+        {backend, native_device_handle, requested_device_name}, &create_result);
+    if (!create_ok || !create_result.device_context) {
+
+        LOG_WARNING("Failed to create "
+                    << decoder::DecoderFactory::backendName(backend)
+                    << " device context, fallback to software decode: "
+                    << create_result.detail);
+        video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+        return false;
+
+    }
+
+    video_hw_device_ctx_ = create_result.device_context;
+    codec_ctx->get_format = &PlayerCore::selectVideoPixelFormat;
+    codec_ctx->opaque = this;
+    codec_ctx->hw_device_ctx = av_buffer_ref(video_hw_device_ctx_);
+    if (!codec_ctx->hw_device_ctx) {
+
+        LOG_WARNING("Failed to attach "
+                    << decoder::DecoderFactory::backendName(backend)
+                    << " device context, fallback to software decode");
+        av_buffer_unref(&video_hw_device_ctx_);
+        video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
+        return false;
+
+    }
+
+    video_decoder_backend_ = backend;
+    LOG_INFO(decoder::DecoderFactory::backendName(backend)
+             << " decoder hardware device context prepared: mode="
+             << create_result.detail
+             << " hw_pixel_format="
+             << (av_get_pix_fmt_name(video_hw_pixel_fmt_) ? av_get_pix_fmt_name(video_hw_pixel_fmt_) : "unknown")
+             << (requested_device_name ? std::string(" device=") + requested_device_name : std::string()));
+    return true;
 
 }
 
@@ -5315,7 +5652,8 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
 
                     if (!self->video_hw_device_ctx_) {
 
-                        LOG_WARNING("D3D11VA device context is missing during get_format, fallback to software decode backend");
+                        LOG_WARNING(decoder::DecoderFactory::backendName(self->video_decoder_backend_)
+                                    << " device context is missing during get_format, fallback to software decode backend");
 
                         self->video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
 
@@ -5325,9 +5663,9 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
 
                     }
 
-                    if (!self->configureD3D11HardwareFramesContext(ctx)) {
+                    if (!self->configureHardwareFramesContext(ctx)) {
 
-                        LOG_WARNING("Continuing with decoder-owned D3D11VA surfaces because shader-resource pool setup failed");
+                        LOG_WARNING("Continuing with decoder-owned hardware surfaces because frames context setup failed");
 
                     }
 
@@ -5337,7 +5675,11 @@ AVPixelFormat PlayerCore::selectVideoPixelFormat(AVCodecContext* ctx, const AVPi
 
             }
 
-            LOG_WARNING("Requested D3D11VA pixel format not offered by decoder, fallback to software decode backend");
+            LOG_WARNING("Requested hardware pixel format "
+                        << (av_get_pix_fmt_name(self->video_hw_pixel_fmt_)
+                                ? av_get_pix_fmt_name(self->video_hw_pixel_fmt_)
+                                : "unknown")
+                        << " not offered by decoder, fallback to software decode backend");
 
             self->video_hw_pixel_fmt_ = AV_PIX_FMT_NONE;
 
@@ -6650,6 +6992,8 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
     audio_player_.reset();
 
     video_renderer_.reset();
+    playback_input_source_ = nullptr;
+    render_overlay_sink_ = nullptr;
 
     if (demuxer_) {
 
@@ -6692,6 +7036,22 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
     }
 
     opened_.store(false);
+    event_thread_id_ = std::thread::id{};
+    event_thread_violation_logged_.store(false);
+
+    startup_platform_ = "Unknown";
+    startup_renderer_capabilities_ = "none";
+    startup_decoder_capabilities_ = "none";
+    startup_renderer_compiled_set_ = "none";
+    startup_renderer_runtime_set_ = "none";
+    startup_decoder_compiled_set_ = "none";
+    startup_decoder_runtime_set_ = "none";
+    startup_renderer_candidates_ = "none";
+    startup_decoder_candidates_ = "none";
+    startup_selected_renderer_ = "None";
+    startup_selected_decoder_ = "Unknown";
+    startup_renderer_fallback_reason_ = "none";
+    startup_decoder_fallback_reason_ = "none";
 
     LOG_INFO("PlayerCore applied session-release side effects"
 
@@ -7923,7 +8283,9 @@ bool PlayerCore::renderFrame(VideoFrame&& frame) {
 
     updateSubtitleOverlay(frame.pts);
 
-    video_renderer_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
+    if (render_overlay_sink_) {
+        render_overlay_sink_->setOverlayState(position_.load(), duration, volume_.load(), state_.load() == PlaybackState::Paused);
+    }
 
     if (!isHardwarePixelFormat(frame.getFormat())) {
 
@@ -8051,7 +8413,7 @@ void PlayerCore::onRenderIdle() {
 
 void PlayerCore::updateSubtitleOverlay(double position_seconds) {
 
-    if (!video_renderer_) {
+    if (!render_overlay_sink_) {
 
         return;
 
@@ -8060,7 +8422,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
 
 
     const double adjusted_position = std::max(0.0, position_seconds - subtitle_delay_seconds_.load());
-    video_renderer_->setSubtitleClock(adjusted_position);
+    render_overlay_sink_->setSubtitleClock(adjusted_position);
 
 
 
@@ -8116,7 +8478,7 @@ void PlayerCore::updateSubtitleOverlay(double position_seconds) {
 
     if (subtitle_changed) {
 
-        video_renderer_->setSubtitleItems(active_items);
+        render_overlay_sink_->setSubtitleItems(active_items);
 
     }
 

@@ -1,0 +1,173 @@
+name: Cross Platform Gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            build_dir: build
+            executable: build/Release/modern-video-player.exe
+            probe_file: samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4
+          - os: ubuntu-22.04
+            platform: linux
+            build_dir: build-linux
+            executable: build-linux/modern-video-player
+            probe_file: samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Windows dependencies
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $externalRoot = Join-Path $PWD "external"
+          if (Test-Path $externalRoot) {
+            Remove-Item -Path $externalRoot -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
+
+          $sdlZip = Join-Path $env:RUNNER_TEMP "sdl2.zip"
+          $sdlExtract = Join-Path $env:RUNNER_TEMP "sdl2_extract"
+          Invoke-WebRequest -Uri "https://github.com/libsdl-org/SDL/releases/download/release-2.30.11/SDL2-devel-2.30.11-VC.zip" -OutFile $sdlZip
+          if (Test-Path $sdlExtract) {
+            Remove-Item -Path $sdlExtract -Recurse -Force
+          }
+          Expand-Archive -Path $sdlZip -DestinationPath $sdlExtract -Force
+          $sdlRoot = Get-ChildItem -Path $sdlExtract -Directory | Select-Object -First 1
+          if (-not $sdlRoot) {
+            throw "SDL archive extraction did not produce a top-level directory."
+          }
+          Move-Item -Path $sdlRoot.FullName -Destination (Join-Path $externalRoot "SDL2") -Force
+
+          $ffmpegZip = Join-Path $env:RUNNER_TEMP "ffmpeg.zip"
+          $ffmpegExtract = Join-Path $env:RUNNER_TEMP "ffmpeg_extract"
+          Invoke-WebRequest -Uri "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip" -OutFile $ffmpegZip
+          if (Test-Path $ffmpegExtract) {
+            Remove-Item -Path $ffmpegExtract -Recurse -Force
+          }
+          Expand-Archive -Path $ffmpegZip -DestinationPath $ffmpegExtract -Force
+          $ffmpegRoot = Get-ChildItem -Path $ffmpegExtract -Directory | Select-Object -First 1
+          if (-not $ffmpegRoot) {
+            throw "FFmpeg archive extraction did not produce a top-level directory."
+          }
+          Move-Item -Path $ffmpegRoot.FullName -Destination (Join-Path $externalRoot "ffmpeg") -Force
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            cmake \
+            pkg-config \
+            xvfb \
+            ffmpeg \
+            libsdl2-dev \
+            libavformat-dev \
+            libavcodec-dev \
+            libavutil-dev \
+            libswscale-dev \
+            libswresample-dev \
+            libass-dev \
+            libfontconfig1-dev \
+            libfreetype6-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            libva-dev
+
+      - name: Configure Windows build
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          cmake -S . -B ${{ matrix.build_dir }} -G "Visual Studio 17 2022" -A x64 -DDEBUG_MODE=ON
+
+      - name: Configure Linux build
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          cmake -S . -B "${{ matrix.build_dir }}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DDEBUG_MODE=OFF \
+            -DENABLE_D3D11_RENDERER=OFF \
+            -DENABLE_D3D11VA=OFF \
+            -DENABLE_DXVA2=OFF \
+            -DENABLE_OPENGL_RENDERER=ON \
+            -DENABLE_SDL_RENDERER=ON \
+            -DENABLE_VAAPI=ON \
+            -DENABLE_VIDEOTOOLBOX=OFF
+
+      - name: Build Windows Release
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: cmake --build ${{ matrix.build_dir }} --config Release --target modern-video-player
+
+      - name: Build Linux Release
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: cmake --build "${{ matrix.build_dir }}" --parallel --target modern-video-player
+
+      - name: Run Windows gate
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $env:Path = (Join-Path (Get-Location) 'external/ffmpeg/bin') + ';' + $env:Path
+          .\${{ matrix.executable }} --d3d11-diagnostics
+          .\${{ matrix.executable }} --d3d11-hdr-output-check .\${{ matrix.probe_file }} 1200
+          $env:MVP_RENDERER_BACKEND = 'd3d11'
+          .\${{ matrix.executable }} --performance-log-check .\${{ matrix.probe_file }} 1200
+          Remove-Item Env:MVP_RENDERER_BACKEND -ErrorAction SilentlyContinue
+          powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath '${{ matrix.executable }}' -ProbeFile '${{ matrix.probe_file }}'
+          powershell -ExecutionPolicy Bypass -File .\tools\collect_driver_quirk_sample.ps1 -ExecutablePath '${{ matrix.executable }}' -OutputCsvPath 'build/driver_quirk_samples.csv' -HostLabel 'github-actions-windows' -Notes 'GitHub Actions Windows runner sample'
+          powershell -ExecutionPolicy Bypass -File .\tools\package_windows.ps1 -BuildDir '${{ matrix.build_dir }}' -Configuration Release -SkipBuild
+
+      - name: Run Linux gate
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./tools/run_linux_mvp_checks.sh ./tools/package_linux.sh
+          mkdir -p logs
+          xvfb-run -a bash ./tools/run_linux_mvp_checks.sh \
+            "./${{ matrix.executable }}" \
+            "./${{ matrix.probe_file }}" \
+            1800 \
+            "samples/subtitles/opengl_ass_style_validation.ass" \
+            "build-linux/tmp/embedded-ass-validation.mkv" \
+            120 \
+            1 \
+            "./${{ matrix.probe_file }}" \
+            "samples/subtitles/opengl_ass_transform_transition_validation.ass" \
+            "logs/linux-mvp-gate-summary.env" \
+            2>&1 | tee "logs/linux-mvp-gate.log"
+          bash ./tools/package_linux.sh "${{ matrix.build_dir }}"
+
+      - name: Upload gate artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-platform-gate-${{ matrix.platform }}
+          if-no-files-found: warn
+          path: |
+            build/*.zip
+            build/driver_quirk_samples.csv
+            build-linux/*.deb
+            build-linux/*.tar.gz
+            logs/*.log
+            logs/*.env

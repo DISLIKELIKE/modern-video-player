@@ -29,9 +29,11 @@
 
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 #include <SDL2/SDL_opengl.h>
 #elif __has_include(<SDL.h>)
 #include <SDL.h>
+#include <SDL_syswm.h>
 #include <SDL_opengl.h>
 #else
 #error "SDL2 headers not found"
@@ -58,8 +60,9 @@ extern "C" {
 }
 
 #include "logger.h"
-#include "subtitle/subtitle_font_registry.h"
+#include "render/output_color_profile.h"
 #include "render/d3d11_video_renderer.h"
+#include "subtitle/subtitle_font_registry.h"
 
 namespace vp::render {
 
@@ -876,6 +879,7 @@ const char* boolName(bool value) { return value ? "true" : "false"; }
 
 #if defined(_WIN32)
 using Microsoft::WRL::ComPtr;
+constexpr size_t kSubtitleBitmapCacheLimit = 32;
 
 struct ColorMatrixConstants {
     float coeff_r[4];
@@ -883,6 +887,44 @@ struct ColorMatrixConstants {
     float coeff_b[4];
     float color_config0[4];
 };
+
+uint64_t hashSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap) {
+    constexpr uint64_t kFnvOffset = 1469598103934665603ull;
+    constexpr uint64_t kFnvPrime = 1099511628211ull;
+
+    auto hash_bytes = [kFnvPrime](uint64_t seed, const uint8_t* data, size_t size) {
+        uint64_t hash = seed;
+        for (size_t i = 0; i < size; ++i) {
+            hash ^= static_cast<uint64_t>(data[i]);
+            hash *= kFnvPrime;
+        }
+        return hash;
+    };
+
+    uint64_t hash = kFnvOffset;
+    const std::array<int, 2> header = {bitmap.width, bitmap.height};
+    hash = hash_bytes(hash,
+                      reinterpret_cast<const uint8_t*>(header.data()),
+                      header.size() * sizeof(header[0]));
+    return hash_bytes(hash, bitmap.rgba.data(), bitmap.rgba.size());
+}
+
+std::vector<uint8_t> premultiplySubtitleBitmapBgra(const subtitle::SubtitleBitmap& bitmap) {
+    const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+    std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
+    for (size_t i = 0; i < pixel_count; ++i) {
+        const uint8_t r = bitmap.rgba[i * 4u + 0u];
+        const uint8_t g = bitmap.rgba[i * 4u + 1u];
+        const uint8_t b = bitmap.rgba[i * 4u + 2u];
+        const uint8_t a = bitmap.rgba[i * 4u + 3u];
+        const uint16_t alpha = static_cast<uint16_t>(a);
+        premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
+        premul_bgra[i * 4u + 3u] = a;
+    }
+    return premul_bgra;
+}
 
 ColorMatrixConstants buildNativeColorMatrix(const AVFrame* frame, bool high_bit_depth, bool hdr_output_bridge_active) {
     const ColorPipelineConfig pipeline = buildColorPipelineConfig(frame ? frame->color_range : AVCOL_RANGE_UNSPECIFIED,
@@ -2090,6 +2132,24 @@ OpenGLNativeInteropOverride readOpenGLNativeInteropOverride() {
     return OpenGLNativeInteropOverride::Auto;
 }
 
+bool readOpenGLForceInitFail() {
+    const auto value = readEnvVar("MVP_OPENGL_FORCE_INIT_FAIL");
+    if (!value) {
+        return false;
+    }
+    std::string normalized = toLowerAscii(*value);
+    normalized.erase(
+        std::remove_if(normalized.begin(), normalized.end(), [](unsigned char ch) {
+            return std::isspace(ch) != 0;
+        }),
+        normalized.end());
+    return normalized == "1" ||
+           normalized == "true" ||
+           normalized == "yes" ||
+           normalized == "on" ||
+           normalized == "force";
+}
+
 const char* nativeInteropOverrideName(OpenGLNativeInteropOverride value) {
     switch (value) {
     case OpenGLNativeInteropOverride::Disable:
@@ -2182,6 +2242,22 @@ std::string readOpenGLOutputLutPath() {
     return value ? *value : std::string{};
 }
 
+std::string readOpenGLIccProfilePath() {
+    const auto value = readEnvVar("MVP_OPENGL_ICC_PROFILE_FILE");
+    return value ? *value : std::string{};
+}
+
+bool readOpenGLAutoIccProfileEnabled() {
+    const auto value = readEnvVar("MVP_OPENGL_AUTO_ICC");
+    if (!value) {
+        return false;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    return normalized == "1" || normalized == "true" || normalized == "on" ||
+           normalized == "yes" || normalized == "auto" || normalized == "enable" ||
+           normalized == "enabled";
+}
+
 std::string describeOpenGLSwapInterval(int interval) {
     switch (interval) {
     case 1:
@@ -2236,116 +2312,15 @@ bool tryParseIntToken(const std::string& token, int& out) {
     return true;
 }
 
-struct CubeLut3DData {
-    int size{0};
-    std::vector<uint8_t> rgb8;
+struct OutputDisplayBindingState {
+    bool binding_succeeded{false};
+    int sdl_display_index{-1};
+    std::string sdl_display_name{"unknown"};
+    std::string output_device_name{"unknown"};
+    bool icc_profile_available{false};
+    std::string icc_profile_path{};
+    std::string binding_error{};
 };
-
-bool loadCubeLut3D(const std::string& path, CubeLut3DData& out, std::string& error) {
-    out = CubeLut3DData{};
-    std::ifstream input(path);
-    if (!input.is_open()) {
-        error = "failed to open file";
-        return false;
-    }
-
-    int lut_size = 0;
-    float domain_min[3] = {0.0f, 0.0f, 0.0f};
-    float domain_max[3] = {1.0f, 1.0f, 1.0f};
-    std::vector<float> values;
-    std::string line;
-    while (std::getline(input, line)) {
-        const size_t comment_pos = line.find('#');
-        const std::string no_comment = trimAscii(line.substr(0, comment_pos));
-        if (no_comment.empty()) {
-            continue;
-        }
-
-        std::istringstream iss(no_comment);
-        std::vector<std::string> tokens;
-        std::string token;
-        while (iss >> token) {
-            tokens.push_back(token);
-        }
-        if (tokens.empty()) {
-            continue;
-        }
-
-        const std::string directive = toLowerAscii(tokens[0]);
-        if (directive == "title") {
-            continue;
-        }
-        if (directive == "lut_3d_size") {
-            if (tokens.size() < 2 || !tryParseIntToken(tokens[1], lut_size) || lut_size < 2 || lut_size > 128) {
-                error = "invalid LUT_3D_SIZE";
-                return false;
-            }
-            continue;
-        }
-        if (directive == "domain_min" || directive == "domain_max") {
-            if (tokens.size() < 4) {
-                error = "invalid DOMAIN_* line";
-                return false;
-            }
-            float parsed[3] = {0.0f, 0.0f, 0.0f};
-            if (!tryParseFloatToken(tokens[1], parsed[0]) ||
-                !tryParseFloatToken(tokens[2], parsed[1]) ||
-                !tryParseFloatToken(tokens[3], parsed[2])) {
-                error = "invalid DOMAIN_* values";
-                return false;
-            }
-            float* target = directive == "domain_min" ? domain_min : domain_max;
-            target[0] = parsed[0];
-            target[1] = parsed[1];
-            target[2] = parsed[2];
-            continue;
-        }
-
-        if (tokens.size() < 3) {
-            error = "invalid LUT sample line";
-            return false;
-        }
-        float rgb[3] = {0.0f, 0.0f, 0.0f};
-        if (!tryParseFloatToken(tokens[0], rgb[0]) ||
-            !tryParseFloatToken(tokens[1], rgb[1]) ||
-            !tryParseFloatToken(tokens[2], rgb[2])) {
-            error = "invalid LUT sample values";
-            return false;
-        }
-        values.push_back(rgb[0]);
-        values.push_back(rgb[1]);
-        values.push_back(rgb[2]);
-    }
-
-    if (lut_size < 2) {
-        error = "LUT_3D_SIZE missing";
-        return false;
-    }
-
-    const size_t expected_samples = static_cast<size_t>(lut_size) * static_cast<size_t>(lut_size) *
-                                    static_cast<size_t>(lut_size);
-    if (values.size() / 3u != expected_samples) {
-        error = "LUT sample count does not match LUT_3D_SIZE";
-        return false;
-    }
-
-    out.size = lut_size;
-    out.rgb8.resize(expected_samples * 3u, 0u);
-    for (size_t sample_index = 0; sample_index < expected_samples; ++sample_index) {
-        for (int channel = 0; channel < 3; ++channel) {
-            const float min_value = domain_min[channel];
-            const float max_value = domain_max[channel];
-            const float denom = std::max(1e-6f, max_value - min_value);
-            const float normalized = std::clamp((values[sample_index * 3u + static_cast<size_t>(channel)] - min_value) / denom,
-                                                0.0f,
-                                                1.0f);
-            out.rgb8[sample_index * 3u + static_cast<size_t>(channel)] =
-                static_cast<uint8_t>(std::lround(normalized * 255.0f));
-        }
-    }
-    error.clear();
-    return true;
-}
 
 #if defined(_WIN32)
 std::string utf8FromWide(const wchar_t* text) {
@@ -2359,6 +2334,93 @@ std::string utf8FromWide(const wchar_t* text) {
     std::string result(static_cast<size_t>(needed - 1), '\0');
     WideCharToMultiByte(CP_UTF8, 0, text, -1, result.data(), needed, nullptr, nullptr);
     return result;
+}
+
+bool tryGetWindowHandle(SDL_Window* window, HWND& hwnd) {
+    hwnd = nullptr;
+    if (!window) {
+        return false;
+    }
+    SDL_SysWMinfo wm_info{};
+    SDL_VERSION(&wm_info.version);
+    if (!SDL_GetWindowWMInfo(window, &wm_info)) {
+        return false;
+    }
+    hwnd = wm_info.info.win.window;
+    return hwnd != nullptr;
+}
+
+OutputDisplayBindingState resolveOutputDisplayBinding(SDL_Window* window) {
+    OutputDisplayBindingState state;
+    if (!window) {
+        state.binding_error = "window unavailable";
+        return state;
+    }
+
+    const int display_index = SDL_GetWindowDisplayIndex(window);
+    state.sdl_display_index = display_index;
+    if (display_index >= 0) {
+        state.binding_succeeded = true;
+        if (const char* display_name = SDL_GetDisplayName(display_index)) {
+            state.sdl_display_name = display_name;
+        }
+    } else {
+        state.binding_error = "SDL_GetWindowDisplayIndex failed";
+    }
+
+    HWND hwnd = nullptr;
+    if (!tryGetWindowHandle(window, hwnd)) {
+        if (state.binding_error.empty()) {
+            state.binding_error = "failed to resolve HWND";
+        }
+        return state;
+    }
+
+    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    if (!monitor) {
+        if (state.binding_error.empty()) {
+            state.binding_error = "MonitorFromWindow failed";
+        }
+        return state;
+    }
+
+    MONITORINFOEXW monitor_info{};
+    monitor_info.cbSize = sizeof(monitor_info);
+    if (!GetMonitorInfoW(monitor, &monitor_info)) {
+        if (state.binding_error.empty()) {
+            state.binding_error = "GetMonitorInfoW failed";
+        }
+        return state;
+    }
+    state.output_device_name = utf8FromWide(monitor_info.szDevice);
+
+    HDC display_dc = CreateDCW(L"DISPLAY", monitor_info.szDevice, nullptr, nullptr);
+    if (!display_dc) {
+        if (state.binding_error.empty()) {
+            state.binding_error = "CreateDCW failed";
+        }
+        return state;
+    }
+
+    DWORD chars = MAX_PATH;
+    std::vector<wchar_t> profile_path(chars, L'\0');
+    BOOL profile_ok = GetICMProfileW(display_dc, &chars, profile_path.data());
+    if (!profile_ok && chars > profile_path.size()) {
+        profile_path.assign(chars, L'\0');
+        profile_ok = GetICMProfileW(display_dc, &chars, profile_path.data());
+    }
+    DeleteDC(display_dc);
+
+    if (!profile_ok) {
+        if (state.binding_error.empty()) {
+            state.binding_error = "GetICMProfileW failed";
+        }
+        return state;
+    }
+
+    state.icc_profile_available = true;
+    state.icc_profile_path = utf8FromWide(profile_path.data());
+    return state;
 }
 
 const char* dxgiColorSpaceName(DXGI_COLOR_SPACE_TYPE color_space) {
@@ -2420,7 +2482,7 @@ bool matchesD3D11DiagnosticsAdapter(const DXGI_ADAPTER_DESC1& desc, const D3D11D
     return true;
 }
 
-OpenGLHdrOutputDiagnosticsSnapshot probeOpenGLHdrOutput(const D3D11DiagnosticsSnapshot& d3d11) {
+static OpenGLHdrOutputDiagnosticsSnapshot probeOpenGLHdrOutput(const D3D11DiagnosticsSnapshot& d3d11) {
     OpenGLHdrOutputDiagnosticsSnapshot snapshot;
     if (!d3d11.probe_succeeded) {
         snapshot.probe_error = "d3d11 diagnostics did not succeed";
@@ -2528,6 +2590,29 @@ OpenGLHdrOutputDiagnosticsSnapshot probeOpenGLHdrOutput(const D3D11DiagnosticsSn
 }
 #endif
 
+#if !defined(_WIN32)
+OutputDisplayBindingState resolveOutputDisplayBinding(SDL_Window* window) {
+    OutputDisplayBindingState state;
+    if (!window) {
+        state.binding_error = "window unavailable";
+        return state;
+    }
+
+    const int display_index = SDL_GetWindowDisplayIndex(window);
+    state.sdl_display_index = display_index;
+    if (display_index >= 0) {
+        state.binding_succeeded = true;
+        if (const char* display_name = SDL_GetDisplayName(display_index)) {
+            state.sdl_display_name = display_name;
+            state.output_device_name = display_name;
+        }
+    } else {
+        state.binding_error = "SDL_GetWindowDisplayIndex failed";
+    }
+    return state;
+}
+#endif
+
 void configureOpenGLContextAttributes() {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
@@ -2583,6 +2668,10 @@ const OpenGLNativeInteropRule* findMatchingOpenGLNativeRule(const OpenGLNativeIn
     }
     return nullptr;
 }
+
+#if defined(_WIN32)
+static OpenGLHdrOutputDiagnosticsSnapshot probeOpenGLHdrOutput(const D3D11DiagnosticsSnapshot& d3d11);
+#endif
 
 OpenGLDiagnosticsSnapshot buildOpenGLDiagnosticsSnapshot(const OpenGLProbeContext& probe,
                                                          OpenGLNativeInteropOverride override_mode) {
@@ -2667,6 +2756,14 @@ OpenGLDiagnosticsSnapshot buildOpenGLDiagnosticsSnapshot(const OpenGLProbeContex
     return snapshot;
 }
 
+D3D11DiagnosticsSnapshot probeD3D11DiagnosticsIfAvailable() {
+#if defined(MVP_HAVE_D3D11_RENDERER) && MVP_HAVE_D3D11_RENDERER
+    return D3D11VideoRenderer::probeSystemDiagnostics();
+#else
+    return {};
+#endif
+}
+
 OpenGLDiagnosticsSnapshot probeOpenGLDiagnosticsWithCurrentContext(OpenGLNativeInteropOverride override_mode) {
     OpenGLProbeContext probe;
     probe.gl_context_created = true;
@@ -2680,13 +2777,14 @@ OpenGLDiagnosticsSnapshot probeOpenGLDiagnosticsWithCurrentContext(OpenGLNativeI
         probe.gl_version = reinterpret_cast<const char*>(version);
     }
     probe.has_wgl_dx_interop = hasRequiredWglDXInteropEntryPoints();
-    probe.d3d11 = D3D11VideoRenderer::probeSystemDiagnostics();
+    probe.d3d11 = probeD3D11DiagnosticsIfAvailable();
     return buildOpenGLDiagnosticsSnapshot(probe, override_mode);
 }
 
 OpenGLDiagnosticsSnapshot probeOpenGLDiagnosticsWithTemporaryContext(OpenGLNativeInteropOverride override_mode) {
     OpenGLProbeContext probe;
-    probe.d3d11 = D3D11VideoRenderer::probeSystemDiagnostics();
+    probe.d3d11 = probeD3D11DiagnosticsIfAvailable();
+    OpenGLOutputDisplayDiagnosticsSnapshot output_display_snapshot;
 
     const Uint32 sdl_state = SDL_WasInit(0);
     const bool video_initialized_before = (SDL_WasInit(SDL_INIT_VIDEO) & SDL_INIT_VIDEO) != 0;
@@ -2736,8 +2834,20 @@ OpenGLDiagnosticsSnapshot probeOpenGLDiagnosticsWithTemporaryContext(OpenGLNativ
                 probe.gl_version = reinterpret_cast<const char*>(version);
             }
             probe.has_wgl_dx_interop = hasRequiredWglDXInteropEntryPoints();
+            const OutputDisplayBindingState binding = resolveOutputDisplayBinding(probe_window);
+            output_display_snapshot.binding_succeeded = binding.binding_succeeded;
+            output_display_snapshot.sdl_display_index = binding.sdl_display_index;
+            output_display_snapshot.sdl_display_name = binding.sdl_display_name;
+            output_display_snapshot.output_device_name = binding.output_device_name.empty() ? std::string("unknown") : binding.output_device_name;
+            output_display_snapshot.icc_profile_available = binding.icc_profile_available;
+            output_display_snapshot.icc_profile_source = binding.icc_profile_available ? std::string("display-auto") : std::string("none");
+            output_display_snapshot.icc_profile_path = binding.icc_profile_available ? binding.icc_profile_path : std::string("none");
+            output_display_snapshot.binding_error = binding.binding_error;
         }
     }
+
+    OpenGLDiagnosticsSnapshot snapshot = buildOpenGLDiagnosticsSnapshot(probe, override_mode);
+    snapshot.output_display = output_display_snapshot;
 
     if (probe_context) {
         SDL_GL_DeleteContext(probe_context);
@@ -2751,7 +2861,7 @@ OpenGLDiagnosticsSnapshot probeOpenGLDiagnosticsWithTemporaryContext(OpenGLNativ
         SDL_Quit();
     }
 
-    return buildOpenGLDiagnosticsSnapshot(probe, override_mode);
+    return snapshot;
 }
 
 void logOpenGLStartupDiagnostics(const OpenGLDiagnosticsSnapshot& snapshot) {
@@ -2790,6 +2900,14 @@ void logOpenGLStartupDiagnostics(const OpenGLDiagnosticsSnapshot& snapshot) {
              << " max_luminance_nits=" << snapshot.hdr_output.max_luminance_nits
              << " max_full_frame_luminance_nits=" << snapshot.hdr_output.max_full_frame_luminance_nits
              << " note=\"" << snapshot.hdr_output.probe_error << '"');
+    LOG_INFO("[diag:opengl-output-display] binding_succeeded=" << boolName(snapshot.output_display.binding_succeeded)
+             << " sdl_display_index=" << snapshot.output_display.sdl_display_index
+             << " sdl_display_name=\"" << snapshot.output_display.sdl_display_name << "\""
+             << " output_device_name=\"" << snapshot.output_display.output_device_name << "\""
+             << " icc_profile_available=" << boolName(snapshot.output_display.icc_profile_available)
+             << " icc_profile_source=" << snapshot.output_display.icc_profile_source
+             << " icc_profile_path=\"" << snapshot.output_display.icc_profile_path << "\""
+             << " note=\"" << snapshot.output_display.binding_error << '"');
 }
 
 struct GdiSurface {
@@ -2948,6 +3066,7 @@ public:
     void setSubtitleText(const std::string& text);
     void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items);
     void setSubtitleTrackState(int current_ordinal, int track_count);
+    void setSubtitleTrackCatalog(const std::vector<std::string>& track_labels, int current_ordinal);
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
     RendererDiagnostics getDiagnostics() const;
     void resetDiagnostics();
@@ -3111,8 +3230,13 @@ private:
     void renderSoftwareFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height);
     void renderNativeFrame(const PendingVideoFrame& frame, int drawable_width, int drawable_height);
     OutputColorState evaluateOutputColorState(const PendingVideoFrame& frame);
-    bool initializeOutputLutTexture();
+    bool initializeOutputLutTexture(const std::string& lut_source,
+                                    const std::string& lut_path,
+                                    std::string& profile_description,
+                                    std::string& lut_error);
     void resetOutputLutTexture();
+    void markOutputColorBindingDirty();
+    void refreshOutputColorBinding(bool force_reload = false);
     void logColorPipelineIfChanged(const PendingVideoFrame& frame, bool native_path);
     void drawAspectQuad(int drawable_width, int drawable_height, int frame_width, int frame_height);
     void drawFilledRect(int drawable_width, int drawable_height, int x, int y, int w, int h, float r, float g, float b, float a);
@@ -3158,6 +3282,14 @@ private:
 
 #if defined(_WIN32)
     struct NativeVideoVertex { float x; float y; float u; float v; };
+    struct SubtitleBitmapCacheEntry {
+        uint64_t key{0};
+        int width{0};
+        int height{0};
+        std::vector<uint8_t> premul_bgra;
+        ComPtr<ID2D1Bitmap> d2d_bitmap;
+        uint64_t last_use_token{0};
+    };
     bool initializeNativeInterop();
     void destroyNativeInterop();
     bool loadWglInteropFunctions();
@@ -3169,6 +3301,8 @@ private:
     bool updateNativeGlTexture(const AVFrame* frame, bool hdr_bridge_active);
     bool ensureSubtitleTextResources();
     void resetSubtitleTextResources();
+    void clearSubtitleBitmapCache();
+    ID2D1Bitmap* getCachedSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap);
     bool renderSubtitleItemsWithD2D(const std::vector<subtitle::SubtitleItem>& items, const PendingVideoFrame* frame, int drawable_width, int drawable_height, const SDL_Rect& video_rect);
     void disableNativeInterop(const char* reason,
                               const D3D11_TEXTURE2D_DESC* texture_desc = nullptr,
@@ -3182,6 +3316,8 @@ private:
     void* gl_context_{nullptr};
     std::atomic<int> width_{0};
     std::atomic<int> height_{0};
+    std::thread::id event_thread_id_{};
+    std::atomic<bool> event_thread_guard_reported_{false};
     std::atomic<bool> should_quit_{false};
     std::atomic<bool> fullscreen_{false};
     std::atomic<bool> minimized_{false};
@@ -3233,6 +3369,9 @@ private:
     std::atomic<bool> subtitle_has_animated_content_{false};
     std::atomic<int> subtitle_track_current_ordinal_{0};
     std::atomic<int> subtitle_track_count_{0};
+    std::vector<std::string> subtitle_track_labels_;
+    std::string subtitle_track_feedback_text_;
+    std::atomic<uint64_t> subtitle_track_feedback_until_ms_{0};
     input::HotkeyManager hotkey_manager_{};
 
     GLuint yuv420_program_{0};
@@ -3294,11 +3433,26 @@ private:
     std::atomic<bool> hdr_bridge_requested_{false};
     std::atomic<bool> hdr_bridge_active_{false};
     std::atomic<int> hdr_bridge_decision_{static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated)};
+    mutable std::mutex output_color_mutex_;
+    std::string configured_cube_lut_path_;
+    std::string configured_manual_icc_profile_path_;
+    bool output_auto_icc_enabled_{false};
     std::string output_lut_path_;
     std::string output_lut_error_;
+    std::string output_lut_source_{"none"};
+    std::string output_display_name_{"unknown"};
+    std::string output_display_device_name_{"unknown"};
+    std::string output_icc_profile_source_{"none"};
+    std::string output_icc_profile_path_;
+    std::string output_icc_profile_description_{"unknown"};
+    std::string output_binding_error_;
     std::atomic<bool> output_lut_configured_{false};
     std::atomic<bool> output_lut_active_{false};
     std::atomic<int> output_lut_size_{0};
+    std::atomic<uint64_t> output_lut_reload_count_{0};
+    std::atomic<int> output_display_index_{-1};
+    std::atomic<bool> output_icc_profile_available_{false};
+    std::atomic<bool> output_color_binding_dirty_{true};
 
 #if defined(_WIN32)
     ComPtr<ID3D11Device> native_d3d_device_;
@@ -3340,11 +3494,17 @@ private:
     ComPtr<ID2D1SolidColorBrush> subtitle_fill_brush_;
     ComPtr<ID2D1SolidColorBrush> subtitle_shadow_brush_;
     ComPtr<ID2D1SolidColorBrush> subtitle_background_brush_;
+    std::vector<SubtitleBitmapCacheEntry> subtitle_bitmap_cache_;
+    uint64_t subtitle_bitmap_cache_use_token_{0};
 #endif
 };
 
 bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
     close();
+    if (readOpenGLForceInitFail()) {
+        LOG_WARNING("OpenGL renderer init force-failed by MVP_OPENGL_FORCE_INIT_FAIL");
+        return false;
+    }
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) != 0) {
         LOG_ERROR("SDL init failed for OpenGL renderer: " << SDL_GetError());
         return false;
@@ -3373,6 +3533,8 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
     SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
 
     should_quit_.store(false);
+    event_thread_id_ = std::this_thread::get_id();
+    event_thread_guard_reported_.store(false);
     fullscreen_.store(false);
     minimized_.store(false);
     render_running_.store(true);
@@ -3384,6 +3546,12 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
     osd_visible_until_ms_.store(0);
     subtitle_track_current_ordinal_.store(0);
     subtitle_track_count_.store(0);
+    subtitle_track_feedback_until_ms_.store(0);
+    {
+        std::lock_guard<std::mutex> subtitle_lock(subtitle_mutex_);
+        subtitle_track_labels_.clear();
+        subtitle_track_feedback_text_.clear();
+    }
     pending_frame_.reset();
     pending_frame_ready_ = false;
     last_submitted_frame_id_ = 0;
@@ -3415,11 +3583,25 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
     hdr_bridge_requested_.store(false);
     hdr_bridge_active_.store(false);
     hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
-    output_lut_path_ = trimAscii(readOpenGLOutputLutPath());
+    configured_cube_lut_path_ = trimAscii(readOpenGLOutputLutPath());
+    configured_manual_icc_profile_path_ = trimAscii(readOpenGLIccProfilePath());
+    output_auto_icc_enabled_ = readOpenGLAutoIccProfileEnabled();
+    output_lut_path_.clear();
     output_lut_error_.clear();
+    output_lut_source_ = "none";
+    output_display_index_.store(-1);
+    output_display_name_ = "unknown";
+    output_display_device_name_ = "unknown";
+    output_icc_profile_available_.store(false);
+    output_icc_profile_source_ = "none";
+    output_icc_profile_path_.clear();
+    output_icc_profile_description_ = "unknown";
+    output_binding_error_.clear();
     output_lut_configured_.store(false);
     output_lut_active_.store(false);
     output_lut_size_.store(0);
+    output_lut_reload_count_.store(0);
+    output_color_binding_dirty_.store(true);
 
     render_thread_ = std::thread(&Impl::renderLoop, this);
     for (int i = 0; i < 200 && !render_initialized_.load(); ++i) {
@@ -3458,6 +3640,8 @@ void OpenGLVideoRenderer::Impl::close() {
     width_.store(0);
     height_.store(0);
     should_quit_.store(false);
+    event_thread_id_ = std::thread::id{};
+    event_thread_guard_reported_.store(false);
     fullscreen_.store(false);
     minimized_.store(false);
     render_initialized_.store(false);
@@ -3482,14 +3666,28 @@ void OpenGLVideoRenderer::Impl::close() {
     gl_renderer_.clear();
     gl_version_.clear();
     hdr_bridge_mode_ = OpenGLHdrBridgeMode::Auto;
+    configured_cube_lut_path_.clear();
+    configured_manual_icc_profile_path_.clear();
+    output_auto_icc_enabled_ = false;
     hdr_bridge_requested_.store(false);
     hdr_bridge_active_.store(false);
     hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
     output_lut_path_.clear();
     output_lut_error_.clear();
+    output_lut_source_ = "none";
     output_lut_configured_.store(false);
     output_lut_active_.store(false);
     output_lut_size_.store(0);
+    output_lut_reload_count_.store(0);
+    output_display_index_.store(-1);
+    output_display_name_ = "unknown";
+    output_display_device_name_ = "unknown";
+    output_icc_profile_available_.store(false);
+    output_icc_profile_source_ = "none";
+    output_icc_profile_path_.clear();
+    output_icc_profile_description_ = "unknown";
+    output_binding_error_.clear();
+    output_color_binding_dirty_.store(true);
 #if defined(_WIN32)
     native_startup_allowed_.store(false);
     native_session_disabled_.store(false);
@@ -3865,13 +4063,14 @@ bool OpenGLVideoRenderer::Impl::createGlContext() {
     glDisable(GL_CULL_FACE);
     glDisable(GL_BLEND);
     glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-    if (!initializeOutputLutTexture()) {
-        LOG_WARNING("OpenGL output LUT initialization failed: " << output_lut_error_);
-    }
+    refreshOutputColorBinding(true);
     LOG_INFO("[diag:opengl-output] hdr_mode=" << openGLHdrBridgeModeName(hdr_bridge_mode_)
              << " lut_configured=" << boolName(output_lut_configured_.load())
              << " lut_size=" << output_lut_size_.load()
-             << " lut_path=" << (output_lut_path_.empty() ? std::string("none") : output_lut_path_));
+             << " lut_source=" << output_lut_source_
+             << " lut_path=" << (output_lut_path_.empty() ? std::string("none") : output_lut_path_)
+             << " display=" << output_display_name_
+             << " icc_source=" << output_icc_profile_source_);
 
 #if defined(_WIN32)
     if (!initializeNativeInterop()) {
@@ -4033,29 +4232,41 @@ void OpenGLVideoRenderer::Impl::resetOutputLutTexture() {
     output_lut_active_.store(false);
 }
 
-bool OpenGLVideoRenderer::Impl::initializeOutputLutTexture() {
+bool OpenGLVideoRenderer::Impl::initializeOutputLutTexture(const std::string& lut_source,
+                                                           const std::string& lut_path,
+                                                           std::string& profile_description,
+                                                           std::string& lut_error) {
     resetOutputLutTexture();
     output_lut_configured_.store(false);
     output_lut_active_.store(false);
     output_lut_size_.store(0);
-    if (output_lut_path_.empty()) {
-        output_lut_error_.clear();
+    profile_description = "unknown";
+    lut_error.clear();
+    if (lut_source == "none" || lut_path.empty()) {
         return true;
     }
 
-    CubeLut3DData lut_data;
-    if (!loadCubeLut3D(output_lut_path_, lut_data, output_lut_error_)) {
-        return false;
+    OutputLut3DData lut_data;
+    if (lut_source == "cube") {
+        if (!loadCubeLut3D(lut_path, lut_data, lut_error)) {
+            return false;
+        }
+    } else {
+        IccProfileSummary summary;
+        if (!generateIccProfileLut(lut_path, 17, lut_data, summary, lut_error)) {
+            return false;
+        }
+        profile_description = summary.description;
     }
 
     if (!g_gl.TexImage3D) {
-        output_lut_error_ = "glTexImage3D unavailable";
+        lut_error = "glTexImage3D unavailable";
         return false;
     }
 
     glGenTextures(1, &output_lut_texture_);
     if (output_lut_texture_ == 0) {
-        output_lut_error_ = "glGenTextures failed";
+        lut_error = "glGenTextures failed";
         return false;
     }
 
@@ -4081,15 +4292,104 @@ bool OpenGLVideoRenderer::Impl::initializeOutputLutTexture() {
     g_gl.ActiveTexture(GL_TEXTURE0);
 
     if (lut_upload_error != GL_NO_ERROR) {
-        output_lut_error_ = "glTexImage3D upload failed";
+        lut_error = "glTexImage3D upload failed";
         resetOutputLutTexture();
         return false;
     }
 
     output_lut_configured_.store(true);
     output_lut_size_.store(lut_data.size);
-    output_lut_error_.clear();
     return true;
+}
+
+void OpenGLVideoRenderer::Impl::markOutputColorBindingDirty() {
+    output_color_binding_dirty_.store(true);
+}
+
+void OpenGLVideoRenderer::Impl::refreshOutputColorBinding(bool force_reload) {
+    if (force_reload) {
+        output_color_binding_dirty_.store(false);
+    } else if (!output_color_binding_dirty_.exchange(false)) {
+        return;
+    }
+
+    const OutputDisplayBindingState binding = resolveOutputDisplayBinding(window_);
+
+    const std::string selected_lut_source =
+        !configured_cube_lut_path_.empty() ? std::string("cube")
+        : !configured_manual_icc_profile_path_.empty() ? std::string("icc-manual")
+        : (output_auto_icc_enabled_ && binding.icc_profile_available && !binding.icc_profile_path.empty())
+              ? std::string("icc-display")
+              : std::string("none");
+
+    const std::string selected_lut_path =
+        selected_lut_source == "cube" ? configured_cube_lut_path_
+        : selected_lut_source == "icc-manual" ? configured_manual_icc_profile_path_
+        : selected_lut_source == "icc-display" ? binding.icc_profile_path
+        : std::string{};
+
+    const bool selected_icc_available =
+        selected_lut_source == "icc-manual" ||
+        selected_lut_source == "icc-display";
+    const std::string selected_icc_source =
+        selected_lut_source == "icc-manual" ? std::string("manual")
+        : selected_lut_source == "icc-display" ? std::string("display-auto")
+        : std::string("none");
+
+    std::string current_lut_path;
+    std::string current_lut_source;
+    std::string current_display_name;
+    std::string current_display_device_name;
+    std::string current_icc_profile_source;
+    std::string current_binding_error;
+    {
+        std::lock_guard<std::mutex> lock(output_color_mutex_);
+        current_lut_path = output_lut_path_;
+        current_lut_source = output_lut_source_;
+        current_display_name = output_display_name_;
+        current_display_device_name = output_display_device_name_;
+        current_icc_profile_source = output_icc_profile_source_;
+        current_binding_error = output_binding_error_;
+    }
+
+    const bool changed = force_reload ||
+                         selected_lut_path != current_lut_path ||
+                         selected_lut_source != current_lut_source ||
+                         binding.sdl_display_index != output_display_index_.load() ||
+                         binding.sdl_display_name != current_display_name ||
+                         binding.output_device_name != current_display_device_name ||
+                         selected_icc_source != current_icc_profile_source ||
+                         binding.binding_error != current_binding_error;
+
+    if (!changed) {
+        return;
+    }
+
+    std::string profile_description = "unknown";
+    std::string lut_error;
+    const bool lut_ready = initializeOutputLutTexture(selected_lut_source, selected_lut_path, profile_description, lut_error);
+
+    {
+        std::lock_guard<std::mutex> lock(output_color_mutex_);
+        output_lut_path_ = selected_lut_path;
+        output_lut_error_ = lut_error;
+        output_lut_source_ = selected_lut_source;
+        output_display_name_ = binding.sdl_display_name;
+        output_display_device_name_ = binding.output_device_name.empty() ? std::string("unknown") : binding.output_device_name;
+        output_icc_profile_source_ = selected_icc_source;
+        output_icc_profile_path_ = selected_icc_available ? selected_lut_path : std::string{};
+        output_icc_profile_description_ = selected_icc_available ? profile_description : std::string("unknown");
+        output_binding_error_ = binding.binding_error;
+    }
+    output_display_index_.store(binding.sdl_display_index);
+    output_icc_profile_available_.store(selected_icc_available);
+    output_lut_reload_count_.fetch_add(1);
+
+    if (!lut_ready) {
+        LOG_WARNING("OpenGL output LUT refresh failed: source=" << selected_lut_source
+                    << " path=" << (selected_lut_path.empty() ? std::string("none") : selected_lut_path)
+                    << " error=" << lut_error);
+    }
 }
 
 OpenGLVideoRenderer::Impl::OutputColorState OpenGLVideoRenderer::Impl::evaluateOutputColorState(const PendingVideoFrame& frame) {
@@ -4461,6 +4761,7 @@ void OpenGLVideoRenderer::Impl::renderNativeFrame(const PendingVideoFrame& frame
 void OpenGLVideoRenderer::Impl::renderCurrentFrame(const PendingVideoFrame* frame) {
     if (!window_ || !gl_context_) return;
     SDL_GL_MakeCurrent(window_, gl_context_);
+    refreshOutputColorBinding(false);
 
     int drawable_width = 0;
     int drawable_height = 0;
@@ -4546,6 +4847,7 @@ bool OpenGLVideoRenderer::Impl::ensureSubtitleTextResources() {
 }
 
 void OpenGLVideoRenderer::Impl::resetSubtitleTextResources() {
+    clearSubtitleBitmapCache();
     subtitle_background_brush_.Reset();
     subtitle_shadow_brush_.Reset();
     subtitle_fill_brush_.Reset();
@@ -4554,6 +4856,75 @@ void OpenGLVideoRenderer::Impl::resetSubtitleTextResources() {
     subtitle_dwrite_factory_.Reset();
     subtitle_d2d_factory_.Reset();
     rendered_subtitle_clock_seconds_ = -1.0;
+}
+
+void OpenGLVideoRenderer::Impl::clearSubtitleBitmapCache() {
+    subtitle_bitmap_cache_.clear();
+    subtitle_bitmap_cache_use_token_ = 0;
+}
+
+ID2D1Bitmap* OpenGLVideoRenderer::Impl::getCachedSubtitleBitmap(const subtitle::SubtitleBitmap& bitmap) {
+    if (!subtitle_d2d_target_ || bitmap.width <= 0 || bitmap.height <= 0) {
+        return nullptr;
+    }
+
+    const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
+    if (bitmap.rgba.size() < pixel_count * 4u) {
+        return nullptr;
+    }
+
+    const uint64_t key = hashSubtitleBitmap(bitmap);
+    auto create_bitmap = [&](SubtitleBitmapCacheEntry& entry) -> bool {
+        if (entry.premul_bgra.empty()) {
+            entry.premul_bgra = premultiplySubtitleBitmapBgra(bitmap);
+        }
+        entry.d2d_bitmap.Reset();
+        const D2D1_BITMAP_PROPERTIES bitmap_props = D2D1::BitmapProperties(
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0f,
+            96.0f);
+        const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(entry.width) * 4u);
+        return SUCCEEDED(subtitle_d2d_target_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(entry.width),
+                                                                        static_cast<UINT32>(entry.height)),
+                                                            entry.premul_bgra.data(),
+                                                            pitch,
+                                                            &bitmap_props,
+                                                            entry.d2d_bitmap.GetAddressOf())) &&
+               entry.d2d_bitmap != nullptr;
+    };
+
+    for (SubtitleBitmapCacheEntry& entry : subtitle_bitmap_cache_) {
+        if (entry.key != key || entry.width != bitmap.width || entry.height != bitmap.height) {
+            continue;
+        }
+        entry.last_use_token = ++subtitle_bitmap_cache_use_token_;
+        if (!entry.d2d_bitmap && !create_bitmap(entry)) {
+            return nullptr;
+        }
+        return entry.d2d_bitmap.Get();
+    }
+
+    if (subtitle_bitmap_cache_.size() >= kSubtitleBitmapCacheLimit) {
+        auto lru_it = std::min_element(subtitle_bitmap_cache_.begin(),
+                                       subtitle_bitmap_cache_.end(),
+                                       [](const SubtitleBitmapCacheEntry& lhs, const SubtitleBitmapCacheEntry& rhs) {
+                                           return lhs.last_use_token < rhs.last_use_token;
+                                       });
+        if (lru_it != subtitle_bitmap_cache_.end()) {
+            subtitle_bitmap_cache_.erase(lru_it);
+        }
+    }
+
+    SubtitleBitmapCacheEntry entry;
+    entry.key = key;
+    entry.width = bitmap.width;
+    entry.height = bitmap.height;
+    entry.last_use_token = ++subtitle_bitmap_cache_use_token_;
+    if (!create_bitmap(entry)) {
+        return nullptr;
+    }
+    subtitle_bitmap_cache_.push_back(std::move(entry));
+    return subtitle_bitmap_cache_.back().d2d_bitmap.Get();
 }
 
 bool OpenGLVideoRenderer::Impl::renderSubtitleItemsWithD2D(const std::vector<subtitle::SubtitleItem>& items,
@@ -4880,13 +5251,7 @@ bool OpenGLVideoRenderer::Impl::renderSubtitleItemsWithD2D(const std::vector<sub
         }
 
         if (item.is_bitmap) {
-            const subtitle::SubtitleBitmap& bitmap = item.bitmap;
-            if (bitmap.width <= 0 || bitmap.height <= 0) {
-                continue;
-            }
-
-            const size_t pixel_count = static_cast<size_t>(bitmap.width) * static_cast<size_t>(bitmap.height);
-            if (bitmap.rgba.size() < pixel_count * 4u) {
+            if (item.bitmap_rects.empty()) {
                 continue;
             }
 
@@ -4896,54 +5261,36 @@ bool OpenGLVideoRenderer::Impl::renderSubtitleItemsWithD2D(const std::vector<sub
             const float scale_y = item.play_res_y > 0
                 ? static_cast<float>(video_rect.h) / static_cast<float>(item.play_res_y)
                 : 1.0f;
-            const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
-            const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
-            const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
-            const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
-            if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
-                continue;
-            }
-
-            std::vector<uint8_t> premul_bgra(pixel_count * 4u, 0u);
-            for (size_t i = 0; i < pixel_count; ++i) {
-                const uint8_t r = bitmap.rgba[i * 4u + 0u];
-                const uint8_t g = bitmap.rgba[i * 4u + 1u];
-                const uint8_t b = bitmap.rgba[i * 4u + 2u];
-                const uint8_t a = bitmap.rgba[i * 4u + 3u];
-                const uint16_t alpha = static_cast<uint16_t>(a);
-                premul_bgra[i * 4u + 0u] = static_cast<uint8_t>((static_cast<uint16_t>(b) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 1u] = static_cast<uint8_t>((static_cast<uint16_t>(g) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 2u] = static_cast<uint8_t>((static_cast<uint16_t>(r) * alpha + 127u) / 255u);
-                premul_bgra[i * 4u + 3u] = a;
-            }
-
-            ComPtr<ID2D1Bitmap> d2d_bitmap;
-            const D2D1_BITMAP_PROPERTIES bitmap_props = D2D1::BitmapProperties(
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED),
-                96.0f,
-                96.0f);
-            const UINT32 pitch = static_cast<UINT32>(static_cast<size_t>(bitmap.width) * 4u);
-            if (FAILED(subtitle_d2d_target_->CreateBitmap(D2D1::SizeU(static_cast<UINT32>(bitmap.width),
-                                                                       static_cast<UINT32>(bitmap.height)),
-                                                           premul_bgra.data(),
-                                                           pitch,
-                                                           &bitmap_props,
-                                                           d2d_bitmap.GetAddressOf())) ||
-                !d2d_bitmap) {
-                continue;
-            }
-
             subtitle_d2d_target_->SetTransform(D2D1::Matrix3x2F::Identity());
-            const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
-                                                     0.0f,
-                                                     static_cast<float>(bitmap.width),
-                                                     static_cast<float>(bitmap.height));
-            const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
-            subtitle_d2d_target_->DrawBitmap(d2d_bitmap.Get(),
-                                             &dst_rect,
-                                             1.0f,
-                                             D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                                             &src_rect);
+            for (const subtitle::SubtitleBitmap& bitmap : item.bitmap_rects) {
+                if (bitmap.width <= 0 || bitmap.height <= 0) {
+                    continue;
+                }
+
+                ID2D1Bitmap* d2d_bitmap = getCachedSubtitleBitmap(bitmap);
+                if (!d2d_bitmap) {
+                    continue;
+                }
+
+                const float dst_left = static_cast<float>(video_rect.x) + static_cast<float>(bitmap.x) * scale_x;
+                const float dst_top = static_cast<float>(video_rect.y) + static_cast<float>(bitmap.y) * scale_y;
+                const float dst_right = dst_left + static_cast<float>(bitmap.width) * scale_x;
+                const float dst_bottom = dst_top + static_cast<float>(bitmap.height) * scale_y;
+                if (dst_right <= dst_left + 0.5f || dst_bottom <= dst_top + 0.5f) {
+                    continue;
+                }
+
+                const D2D1_RECT_F src_rect = D2D1::RectF(0.0f,
+                                                         0.0f,
+                                                         static_cast<float>(bitmap.width),
+                                                         static_cast<float>(bitmap.height));
+                const D2D1_RECT_F dst_rect = D2D1::RectF(dst_left, dst_top, dst_right, dst_bottom);
+                subtitle_d2d_target_->DrawBitmap(d2d_bitmap,
+                                                 &dst_rect,
+                                                 1.0f,
+                                                 D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                                                 &src_rect);
+            }
             continue;
         }
 
@@ -5732,12 +6079,41 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
     const float volume = dragging_volume ? clampVolume(preview_volume) : clampVolume(overlay_volume_.load());
     const ControlLayout layout = computeControlLayout(drawable_width, drawable_height);
     const std::string time_text = formatOverlayTimeText(display_position, duration);
+    std::vector<std::string> subtitle_track_labels;
+    std::string subtitle_track_feedback_text;
+    {
+        std::lock_guard<std::mutex> subtitle_lock(subtitle_mutex_);
+        subtitle_track_labels = subtitle_track_labels_;
+        subtitle_track_feedback_text = subtitle_track_feedback_text_;
+    }
     const int subtitle_track_count = std::max(0, subtitle_track_count_.load());
     const int subtitle_track_current_ordinal = subtitle_track_count > 0
                                                    ? std::clamp(subtitle_track_current_ordinal_.load(), 1, subtitle_track_count)
                                                    : 0;
-    const std::string subtitle_track_text =
+    std::string subtitle_track_text =
         std::to_string(subtitle_track_current_ordinal) + " / " + std::to_string(subtitle_track_count);
+    if (subtitle_track_current_ordinal > 0 &&
+        subtitle_track_current_ordinal <= static_cast<int>(subtitle_track_labels.size())) {
+        const std::string& current_label =
+            subtitle_track_labels[static_cast<size_t>(subtitle_track_current_ordinal - 1)];
+        if (!current_label.empty()) {
+            subtitle_track_text += "  " + current_label;
+        }
+    }
+    std::string subtitle_track_list_text;
+    if (!subtitle_track_labels.empty()) {
+        const size_t kMaxLabelCount = 4;
+        for (size_t i = 0; i < subtitle_track_labels.size() && i < kMaxLabelCount; ++i) {
+            if (!subtitle_track_list_text.empty()) {
+                subtitle_track_list_text += " | ";
+            }
+            const bool is_current = static_cast<int>(i + 1) == subtitle_track_current_ordinal;
+            subtitle_track_list_text += (is_current ? "*" : "") + std::to_string(i + 1) + ":" + subtitle_track_labels[i];
+        }
+        if (subtitle_track_labels.size() > kMaxLabelCount) {
+            subtitle_track_list_text += " | ...";
+        }
+    }
     int glyph_height = std::max(12, layout.time_text.h - 10);
     while (glyph_height > 10 && measureOverlayTextWidth(time_text, glyph_height) > layout.time_text.w) {
         --glyph_height;
@@ -5753,6 +6129,8 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
                                 std::max(0, (layout.subtitle_text.w - subtitle_text_width) / 2);
     const int subtitle_text_y = layout.subtitle_text.y +
                                 std::max(0, (layout.subtitle_text.h - subtitle_glyph_height) / 2);
+    const bool show_track_feedback =
+        !subtitle_track_feedback_text.empty() && now_ms <= subtitle_track_feedback_until_ms_.load();
     const int progress_fill_width =
         std::max(0, static_cast<int>(std::lround(progress * static_cast<double>(layout.progress_track.w))));
     const int volume_fill_width =
@@ -5951,6 +6329,42 @@ void OpenGLVideoRenderer::Impl::drawOsdOverlay(const PendingVideoFrame* frame, i
                         subtitle_track_count > 0 ? 0.92f : 0.62f,
                         subtitle_track_count > 0 ? 0.92f : 0.62f,
                         0.90f * overlay_alpha);
+
+        if (!subtitle_track_list_text.empty()) {
+            const int subtitle_list_glyph_height = std::max(8, subtitle_glyph_height - 2);
+            const int subtitle_list_text_width = measureOverlayTextWidth(subtitle_track_list_text, subtitle_list_glyph_height);
+            const int subtitle_list_text_x = std::max(8,
+                                                      std::min(layout.panel.x + layout.panel.w - subtitle_list_text_width - 8,
+                                                               layout.subtitle_text.x));
+            const int subtitle_list_text_y = std::max(8, layout.panel.y - subtitle_list_glyph_height - 8);
+            drawOverlayText(drawable_width,
+                            drawable_height,
+                            subtitle_list_text_x,
+                            subtitle_list_text_y,
+                            subtitle_list_glyph_height,
+                            subtitle_track_list_text,
+                            0.82f,
+                            0.84f,
+                            0.88f,
+                            0.86f * overlay_alpha);
+        }
+    }
+
+    if (show_track_feedback) {
+        const int feedback_glyph_height = std::max(11, subtitle_glyph_height);
+        const int feedback_text_width = measureOverlayTextWidth(subtitle_track_feedback_text, feedback_glyph_height);
+        const int feedback_text_x = std::max(10, (drawable_width - feedback_text_width) / 2);
+        const int feedback_text_y = std::max(10, layout.panel.y - feedback_glyph_height - 30);
+        drawOverlayText(drawable_width,
+                        drawable_height,
+                        feedback_text_x,
+                        feedback_text_y,
+                        feedback_glyph_height,
+                        subtitle_track_feedback_text,
+                        0.98f,
+                        0.78f,
+                        0.35f,
+                        0.96f * overlay_alpha);
     }
 
     drawOverlayText(drawable_width,
@@ -6120,8 +6534,19 @@ void OpenGLVideoRenderer::Impl::pumpEvents() {
             if (event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                 event.window.event == SDL_WINDOWEVENT_MAXIMIZED || event.window.event == SDL_WINDOWEVENT_RESTORED) {
                 updateWindowSizeFromSdl(window_, width_, height_);
+                markOutputColorBindingDirty();
                 requestRedraw();
             }
+            if (event.window.event == SDL_WINDOWEVENT_MOVED || event.window.event == SDL_WINDOWEVENT_SHOWN ||
+                event.window.event == SDL_WINDOWEVENT_RESTORED || event.window.event == SDL_WINDOWEVENT_MAXIMIZED) {
+                markOutputColorBindingDirty();
+            }
+#if defined(SDL_WINDOWEVENT_DISPLAY_CHANGED)
+            if (event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED) {
+                markOutputColorBindingDirty();
+                requestRedraw();
+            }
+#endif
             if (event.window.event == SDL_WINDOWEVENT_LEAVE || event.window.event == SDL_WINDOWEVENT_HIDDEN) {
                 {
                     std::lock_guard<std::mutex> lock(request_mutex_);
@@ -6167,6 +6592,12 @@ void OpenGLVideoRenderer::Impl::handleEvents() {
     if (!window_) {
         return;
     }
+    if (event_thread_id_ != std::thread::id{} && event_thread_id_ != std::this_thread::get_id()) {
+        if (!event_thread_guard_reported_.exchange(true)) {
+            LOG_WARNING("OpenGL renderer handleEvents called from non-event thread; ignoring event pump");
+        }
+        return;
+    }
 
     // SDL events are pumped on the main thread to avoid thread-affinity stalls
     // during mouse/window interaction on some platforms.
@@ -6181,6 +6612,7 @@ void OpenGLVideoRenderer::Impl::handleEvents() {
         }
         updateWindowSizeFromSdl(window_, width_, height_);
         minimized_.store(false);
+        markOutputColorBindingDirty();
         requestRedraw();
     }
 }
@@ -6482,8 +6914,43 @@ void OpenGLVideoRenderer::Impl::setSubtitleItems(const std::vector<subtitle::Sub
 void OpenGLVideoRenderer::Impl::setSubtitleTrackState(int current_ordinal, int track_count) {
     const int safe_track_count = std::max(0, track_count);
     const int safe_current_ordinal = safe_track_count > 0 ? std::clamp(current_ordinal, 1, safe_track_count) : 0;
+    const int previous_current_ordinal = subtitle_track_current_ordinal_.load();
+    const int previous_track_count = subtitle_track_count_.load();
     subtitle_track_current_ordinal_.store(safe_current_ordinal);
     subtitle_track_count_.store(safe_track_count);
+    if (safe_current_ordinal != previous_current_ordinal || safe_track_count != previous_track_count) {
+        std::string feedback_text = "Subtitle Track: none";
+        if (safe_current_ordinal > 0 && safe_track_count > 0) {
+            feedback_text = "Subtitle Track " + std::to_string(safe_current_ordinal) + "/" +
+                            std::to_string(safe_track_count);
+            std::lock_guard<std::mutex> lock(subtitle_mutex_);
+            if (safe_current_ordinal <= static_cast<int>(subtitle_track_labels_.size())) {
+                const std::string& label = subtitle_track_labels_[static_cast<size_t>(safe_current_ordinal - 1)];
+                if (!label.empty()) {
+                    feedback_text += ": " + label;
+                }
+            }
+            subtitle_track_feedback_text_ = feedback_text;
+        } else {
+            std::lock_guard<std::mutex> lock(subtitle_mutex_);
+            subtitle_track_feedback_text_ = feedback_text;
+        }
+        subtitle_track_feedback_until_ms_.store(monotonicMsNow() + 1600);
+        showOsdFor();
+    }
+    requestRedrawIfPaused();
+}
+
+void OpenGLVideoRenderer::Impl::setSubtitleTrackCatalog(const std::vector<std::string>& track_labels, int current_ordinal) {
+    const int safe_track_count = static_cast<int>(track_labels.size());
+    const int safe_current_ordinal =
+        safe_track_count > 0 ? std::clamp(current_ordinal, 1, safe_track_count) : 0;
+    {
+        std::lock_guard<std::mutex> lock(subtitle_mutex_);
+        subtitle_track_labels_ = track_labels;
+    }
+    subtitle_track_count_.store(safe_track_count);
+    subtitle_track_current_ordinal_.store(safe_current_ordinal);
     requestRedrawIfPaused();
 }
 
@@ -6516,8 +6983,21 @@ RendererDiagnostics OpenGLVideoRenderer::Impl::getDiagnostics() const {
     diagnostics.opengl_output_lut_configured = output_lut_configured_.load();
     diagnostics.opengl_output_lut_active = output_lut_active_.load();
     diagnostics.opengl_output_lut_size = output_lut_size_.load();
-    diagnostics.opengl_output_lut_path = output_lut_path_.empty() ? std::string("none") : output_lut_path_;
-    diagnostics.opengl_output_lut_error = output_lut_error_.empty() ? std::string("none") : output_lut_error_;
+    diagnostics.opengl_output_lut_reload_count = output_lut_reload_count_.load();
+    diagnostics.opengl_output_display_index = output_display_index_.load();
+    diagnostics.opengl_output_icc_profile_available = output_icc_profile_available_.load();
+    {
+        std::lock_guard<std::mutex> lock(output_color_mutex_);
+        diagnostics.opengl_output_lut_path = output_lut_path_.empty() ? std::string("none") : output_lut_path_;
+        diagnostics.opengl_output_lut_error = output_lut_error_.empty() ? std::string("none") : output_lut_error_;
+        diagnostics.opengl_output_lut_source = output_lut_source_;
+        diagnostics.opengl_output_display_name = output_display_name_;
+        diagnostics.opengl_output_display_device_name = output_display_device_name_;
+        diagnostics.opengl_output_icc_profile_source = output_icc_profile_source_;
+        diagnostics.opengl_output_icc_profile_path = output_icc_profile_path_.empty() ? std::string("none") : output_icc_profile_path_;
+        diagnostics.opengl_output_icc_profile_description = output_icc_profile_description_;
+        diagnostics.opengl_output_binding_error = output_binding_error_.empty() ? std::string("none") : output_binding_error_;
+    }
     return diagnostics;
 }
 
@@ -6533,6 +7013,7 @@ void OpenGLVideoRenderer::Impl::resetDiagnostics() {
     hdr_bridge_active_.store(false);
     hdr_bridge_decision_.store(static_cast<int>(OpenGLHdrBridgeDecision::NotEvaluated));
     output_lut_active_.store(false);
+    output_lut_reload_count_.store(0);
 }
 
 bool OpenGLVideoRenderer::Impl::supportsNativeFrameFormat(AVPixelFormat format) const {
@@ -6956,6 +7437,9 @@ void OpenGLVideoRenderer::setSubtitleClock(double subtitle_time_seconds) { impl_
 void OpenGLVideoRenderer::setSubtitleText(const std::string& text) { impl_->setSubtitleText(text); }
 void OpenGLVideoRenderer::setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) { impl_->setSubtitleItems(items); }
 void OpenGLVideoRenderer::setSubtitleTrackState(int current_ordinal, int track_count) { impl_->setSubtitleTrackState(current_ordinal, track_count); }
+void OpenGLVideoRenderer::setSubtitleTrackCatalog(const std::vector<std::string>& track_labels, int current_ordinal) {
+    impl_->setSubtitleTrackCatalog(track_labels, current_ordinal);
+}
 void OpenGLVideoRenderer::setHotkeyManager(const input::HotkeyManager& hotkey_manager) { impl_->setHotkeyManager(hotkey_manager); }
 RendererDiagnostics OpenGLVideoRenderer::getDiagnostics() const { return impl_->getDiagnostics(); }
 void OpenGLVideoRenderer::resetDiagnostics() { impl_->resetDiagnostics(); }

@@ -23,6 +23,9 @@
 #include <dwrite_3.h>
 #include <wrl/client.h>
 #endif
+#if defined(__linux__)
+#include <fontconfig/fontconfig.h>
+#endif
 
 extern "C" {
 #include <libavformat/avformat.h>
@@ -168,6 +171,64 @@ bool registerPrivateFontFile(const Path& font_path) {
 
 bool unregisterPrivateFontFile(const Path& font_path) {
     return RemoveFontResourceExW(font_path.c_str(), FR_PRIVATE, nullptr) != 0;
+}
+#elif defined(__linux__)
+FcConfig* currentFontConfig() {
+    FcConfig* config = FcConfigGetCurrent();
+    if (!config) {
+        if (FcInit() == FcFalse) {
+            return nullptr;
+        }
+        config = FcConfigGetCurrent();
+    }
+    return config;
+}
+
+bool addAppFontFile(FcConfig* config, const Path& font_path) {
+    if (!config) {
+        return false;
+    }
+    const std::string utf8_path = font_path.u8string();
+    if (utf8_path.empty()) {
+        return false;
+    }
+    return FcConfigAppFontAddFile(config,
+                                  reinterpret_cast<const FcChar8*>(utf8_path.c_str())) == FcTrue;
+}
+
+bool rebuildLinuxAppFontCollection(const std::vector<Path>& font_files) {
+    FcConfig* config = currentFontConfig();
+    if (!config) {
+        return false;
+    }
+
+    FcConfigAppFontClear(config);
+    bool add_ok = true;
+    for (const Path& font_file : font_files) {
+        if (!addAppFontFile(config, font_file)) {
+            add_ok = false;
+        }
+    }
+
+    const bool build_ok = FcConfigBuildFonts(config) == FcTrue;
+    return add_ok && build_ok;
+}
+
+bool registerPrivateFontFile(const Path& font_path) {
+    FcConfig* config = currentFontConfig();
+    if (!config) {
+        return false;
+    }
+    if (!addAppFontFile(config, font_path)) {
+        return false;
+    }
+    return FcConfigBuildFonts(config) == FcTrue;
+}
+
+bool unregisterPrivateFontFile(const Path&) {
+    // Fontconfig has no per-file remove API for app fonts; callers should rebuild
+    // the app font collection from the remaining registry set.
+    return true;
 }
 #else
 bool registerPrivateFontFile(const Path&) {
@@ -389,6 +450,13 @@ std::vector<Path> collectRegisteredPrivateFontFilesLocked(const SubtitleFontRegi
     return files;
 }
 
+#if defined(__linux__)
+void rebuildLinuxAppFontCollectionLocked(const SubtitleFontRegistryState& state) {
+    const std::vector<Path> registered_font_files = collectRegisteredPrivateFontFilesLocked(state);
+    rebuildLinuxAppFontCollection(registered_font_files);
+}
+#endif
+
 }  // namespace
 
 SubtitleFontRegistrationSummary ensureSubtitleFontsRegistered(const std::string& subtitle_source_path) {
@@ -507,12 +575,17 @@ SubtitleFontRegistrationSummary ensureMediaAttachmentFontsRegistered(const std::
         ++session.summary.extracted_file_count;
 
         const std::string file_key = normalizeFileKey(output_path);
-        if (state.registered_font_files.find(file_key) != state.registered_font_files.end()) {
-            continue;
+        bool inserted = false;
+        {
+            std::lock_guard<std::mutex> lock(state.mutex);
+            if (state.registered_font_files.find(file_key) == state.registered_font_files.end() &&
+                registerPrivateFontFile(output_path)) {
+                state.registered_font_files.emplace(file_key, output_path);
+                inserted = true;
+            }
         }
 
-        if (registerPrivateFontFile(output_path)) {
-            state.registered_font_files.emplace(file_key, output_path);
+        if (inserted) {
             session.registered_files.push_back(output_path);
             session.summary.registered_font_files.push_back(output_path.u8string());
             ++session.summary.registered_file_count;
@@ -531,6 +604,7 @@ void releaseMediaAttachmentFonts(const std::string& media_source_path) {
     SubtitleFontRegistryState& state = registryState();
     const std::string media_key = normalizePathKey(media_source_path);
     MediaAttachmentFontSession session;
+    bool registry_changed = false;
 
     {
         std::lock_guard<std::mutex> lock(state.mutex);
@@ -540,12 +614,17 @@ void releaseMediaAttachmentFonts(const std::string& media_source_path) {
         }
         session = std::move(it->second);
         state.media_sessions.erase(it);
-    }
 
-    for (const Path& font_path : session.registered_files) {
-        unregisterPrivateFontFile(font_path);
-        std::lock_guard<std::mutex> lock(state.mutex);
-        state.registered_font_files.erase(normalizeFileKey(font_path));
+        for (const Path& font_path : session.registered_files) {
+            unregisterPrivateFontFile(font_path);
+            registry_changed = state.registered_font_files.erase(normalizeFileKey(font_path)) > 0 || registry_changed;
+        }
+
+#if defined(__linux__)
+        if (registry_changed) {
+            rebuildLinuxAppFontCollectionLocked(state);
+        }
+#endif
     }
 
     std::error_code ec;

@@ -1,172 +1,329 @@
-# 项目版本记录
+﻿# VERSION
 
-### 2026-03-24 更新：OpenGL 诊断快照、libass 差距清单与显示级 HDR 设计收敛
-- `OpenGLVideoRenderer` 新增 `OpenGLDiagnosticsSnapshot` 与 `OpenGLVideoRenderer::probeSystemDiagnostics()`，并提供 `--opengl-diagnostics` 机器可读输出。
-- OpenGL native interop 启动期策略已从零散判断收敛为 `hard blocker + quirk rule + env override` 三层决策，`force` 只允许覆盖 quirk，不覆盖真正的 hard blocker。
-- 已新增 `docs/analysis/PLAYERCORE_DAY27_OPENGL_LIBASS_GAP_AND_QUIRK_DIAGNOSTICS.md`，把当前 OpenGL 与 `libass/mpv` 的差距拆到 `shaping / karaoke / vector / font fallback / layout` 级别。
-- 已新增 `docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`，明确 Windows 下显示级 HDR 输出应走 `DXGI swapchain + HDR metadata` 桥接，而不是继续把 tone-map 当成完整 HDR 方案。
-- Release 验证通过：`--opengl-diagnostics=PASS`、`MVP_OPENGL_NATIVE_INTEROP=disable --opengl-diagnostics=PASS`、OpenGL `performance-log-check=PASS`、`subtitle-sync-check=PASS`、`delay-adjust-check=PASS`。
+### 2026-03-26 Update: Linux gate reporting/artifact closure
+- Added machine-readable Linux gate report contract in `tools/run_linux_mvp_checks.sh`:
+  - arg #10 / env `MVP_LINUX_GATE_REPORT_FILE`
+  - per-check output `check.<id>.*`
+  - gate-level output `gate.*`, including explicit fail reason/result
+- Added stable check IDs in Linux gate execution path for CI parser stability.
+- Updated `.github/workflows/cross-platform-gate.yml` Linux lane:
+  - `set -euo pipefail`
+  - tee Linux gate output to `logs/linux-mvp-gate.log`
+  - write Linux gate summary to `logs/linux-mvp-gate-summary.env`
+  - upload `logs/*.env` artifacts
+- Synced tasklist/docs indexes and round documents:
+  - analysis: `PLAYERCORE_DAY58_LINUX_GATE_REPORTING_AND_CI_ARTIFACT_CLOSURE.md`
+  - design: `CROSS_PLATFORM_LINUX_GATE_REPORTING_AND_ARTIFACT_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_LINUX_GATE_REPORTING_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_LINUX_GATE_REPORTING_LOCAL_CHECK.md`
+- Local validation:
+  - Linux gate script syntax check PASS
+  - Linux gate runtime dispatch expected non-Linux FAIL on Windows host
+  - Release build PASS
+  - `--performance-log-check` PASS
+  - `--embedded-subtitle-live-packet-check` PASS
+  - `--d3d11-diagnostics` PASS
+- Full Linux runtime PASS evidence still requires Linux host/CI execution.
 
-### 2026-03-24 更新：OpenGL M1 成熟化收敛
-- `OpenGLVideoRenderer` 已从仅能播放的 `M0` 过渡后端，推进到带字幕、启动期 quirk 决策和基础 HDR/色彩处理的 `M1` 级别；当前仍保持 `opt-in`，不替代默认 `D3D11` 后端。
-- `ASS/SSA` 现阶段采用 `DirectWrite + D2D offscreen -> OpenGL texture` 路径，支持多 `SubtitleItem` 排序、item/run 分段样式、定位对齐、描边、阴影、背景框与填充；仍未达到 `libass/mpv` 的完整高级特效覆盖。
-- OpenGL 启动期新增 `MVP_OPENGL_NATIVE_INTEROP=auto|disable|force`，并对 `Microsoft / GDI Generic` 软件 GL 环境直接禁用 native interop；同时输出 `[diag:opengl-native]` 适配器、驱动、decoder profile 与最终规则日志。
-- GLSL/HLSL 色彩链路补齐 `BT.601 / BT.709 / BT.2020` 矩阵选择、`PQ / HLG` 检测、基础 SDR tone-map 和 `BT.2020 -> BT.709` gamut mapping，并输出 `[diag:opengl-color]`。
-- Release 验证通过：`OpenGL performance-log-check=PASS`、`subtitle-sync-check=PASS`、`delay-adjust-check=PASS`。
+### 2026-03-26 Update: Linux gate strict optional checks closure (`CP-507` / `CP-508` coverage hardening)
+- Hardened Linux gate script `tools/run_linux_mvp_checks.sh` for deterministic subtitle backlog coverage:
+  - auto-generate CP-508 embedded ASS fixture when absent (via `ffmpeg`)
+  - strict optional-check mode (`REQUIRE_OPTIONAL_CHECKS` arg or `MVP_REQUIRE_OPTIONAL_CHECKS` env)
+  - explicit generation inputs for base media + ASS subtitle path
+- Updated CI workflow `.github/workflows/cross-platform-gate.yml` Linux lane:
+  - install `ffmpeg`
+  - run Linux gate in strict mode so `CP-507` / `CP-508` cannot be silently skipped
+- Updated tasklist/docs indexes and added round documents:
+  - analysis: `PLAYERCORE_DAY57_LINUX_GATE_STRICT_OPTIONAL_CHECKS_CLOSURE.md`
+  - design: `CROSS_PLATFORM_LINUX_GATE_STRICT_OPTIONAL_CHECKS_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_LINUX_GATE_STRICT_OPTIONAL_CHECKS_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_LINUX_GATE_STRICT_OPTIONAL_LOCAL_CHECK.md`
+- Local validation:
+  - Release build PASS
+  - `--performance-log-check` PASS
+  - `--embedded-subtitle-live-packet-check` PASS
+  - Linux gate script syntax check PASS (`C:\Program Files\Git\bin\bash.exe -n tools/run_linux_mvp_checks.sh`)
+  - Linux gate script runtime dispatch expected FAIL on Windows host (`This gate script only supports Linux.`)
+- Full Linux runtime gate execution still requires Linux host/CI.
 
-### 2026-03-24 更新：OpenGL M0 渲染链路落地
-- `OpenGLVideoRenderer` 已从 stub 变为可用后端，支持 `YUV420P / NV12` 直接帧、GLSL 120 色彩转换与基础键盘控制。
-- 当前策略保持保守：默认后端仍为 `D3D11` / `SoftwareSDL` 回退，`OpenGL` 需通过 `MVP_RENDERER_BACKEND=opengl` 显式启用。
-- 本地 `Release` 验证：`--performance-log-check .\juren-30s.mp4 2000` 输出 `renderer_backend=OpenGL`、`result=PASS`。
-- 当前 `OpenGL` 路径定位为 M0，不等同于成熟播放器 GPU 后端；字幕/OSD 叠加、原生硬件表面互操作、进阶色彩管理仍未补齐。
+### 2026-03-26 Update: CP-507 and CP-508 Linux subtitle backlog closure
+- Landed `CP-507` Linux libass shaping/layout probe baseline:
+  - new module `subtitle/libass_probe`
+  - command `--libass-shaping-check <subtitle.(ass|ssa)>`
+  - machine-readable fields for libass init/track/events/render output
+- Landed `CP-508` embedded subtitle live packet probe baseline:
+  - new loader API `probeEmbeddedSubtitleLivePacketPath(...)`
+  - command `--embedded-subtitle-live-packet-check <media_file> [stream_index] [max_packets]`
+  - packet counters, timestamp monotonicity, decode output diagnostics
+- Linux gate script updated with optional CP-507/CP-508 stages:
+  - `tools/run_linux_mvp_checks.sh`
+- Updated `CROSS_PLATFORM_MASTER_TASKLIST.md`: `CP-507` and `CP-508` moved to `DONE`.
+- Local validation:
+  - Release build PASS
+  - `--performance-log-check` PASS
+  - `--d3d11-diagnostics` PASS
+  - `--embedded-subtitle-live-packet-check` PASS
+  - `--libass-shaping-check` returns expected non-Linux FAIL on this Windows host.
+# 椤圭洰鐗堟湰璁板綍
+
+### 2026-03-26 Update: CP-801 and CP-901 ~ CP-905 HDR present / observability / CI closure
+- Landed the real D3D11 HDR present/runtime diagnostics closure:
+  - D3D11 DXGI HDR output probe surface
+  - HDR-aware swapchain/color-space decisions
+  - `--d3d11-hdr-output-check`
+  - D3D11 present timing fields in `--performance-log-check`
+- Landed Phase 9 closure assets:
+  - `tools/collect_driver_quirk_sample.ps1`
+  - `docs/reference/DRIVER_QUIRK_SAMPLE_LIBRARY.csv`
+  - upgraded `tools/run_linux_mvp_checks.sh`
+  - `.github/workflows/cross-platform-gate.yml`
+  - `tools/package_windows.ps1`
+- Added/updated docs:
+  - `docs/analysis/PLAYERCORE_DAY54_CP801_CP901_CP905_HDR_PRESENT_AND_CI_CLOSURE.md`
+  - `docs/design/CROSS_PLATFORM_HDR_PRESENT_OBSERVABILITY_AND_CI_DESIGN_2026-03-26.md`
+  - `docs/plans/CROSS_PLATFORM_PHASE9_OBSERVABILITY_CI_PLAN_2026-03-26.md`
+  - `docs/reports/CROSS_PLATFORM_PHASE8_LOCAL_CHECK.md`
+  - `docs/reports/CROSS_PLATFORM_PHASE9_LOCAL_CHECK.md`
+- Updated `CROSS_PLATFORM_MASTER_TASKLIST.md` status for `CP-801` and `CP-901~CP-905` to `DONE`.
+- Local validation: Release build PASS, `--d3d11-diagnostics` PASS, `--d3d11-hdr-output-check` PASS, D3D11 `--performance-log-check` PASS, driver sample collection PASS, Windows ZIP packaging PASS.
+
+### 2026-03-26 Update: CP-501 ~ CP-506 subtitle/font platform closure
+- Landed embedded subtitle policy closure with policy merge checks and ownership hardening (`external > embedded` with embedded fallback).
+- Closed Phase-5 font paths:
+  - Linux fontconfig app-font register/rebuild/cleanup flow in `subtitle_font_registry`
+  - Windows DirectWrite custom collection check integrated into `tools/run_opengl_checks.ps1`
+- Added/updated docs:
+  - `docs/analysis/PLAYERCORE_DAY51_CP501_CP506_SUBTITLE_FONT_PLATFORM_CLOSURE.md`
+  - `docs/design/CROSS_PLATFORM_SUBTITLE_FONT_PLATFORM_CLOSURE_DESIGN_2026-03-26.md`
+  - `docs/reports/CROSS_PLATFORM_PHASE5_LOCAL_CHECK.md`
+  - `docs/plans/CROSS_PLATFORM_PHASE5_SUBTITLE_FONT_CLOSURE_PLAN_2026-03-26.md`
+- Updated `CROSS_PLATFORM_MASTER_TASKLIST.md` status for `CP-501~CP-506` to `DONE`.
+- Local validation: Release build PASS, Phase-5 CLI checks PASS, OpenGL gate PASS (`18/18`, includes DirectWrite check).
+
+### 2026-03-26 Update: CP-401 ~ CP-406 Linux MVP playback closure
+- Added the Phase-4 Linux MVP gate command set:
+  - `--linux-software-audio-check`
+  - `--linux-opengl-playback-check`
+  - `--linux-opengl-fallback-check`
+  - `--linux-audio-backend-smoke`
+  - `--core-playback-behavior-check`
+  - `--ui-interaction-check`
+- Added `MVP_OPENGL_FORCE_INIT_FAIL=1` so `OpenGL -> SoftwareSDL` fallback validation is deterministic.
+- Added `tools/run_linux_mvp_checks.sh` as the Linux MVP gate baseline.
+- Updated `CROSS_PLATFORM_MASTER_TASKLIST.md` status for `CP-401~CP-406` to `DONE`.
+- Local validation: configure/build PASS; shared playback checks (`performance-log-check`, `renderer-fallback-check`, `interaction-freeze-check`) PASS. Linux host runtime execution remains pending on a Linux machine.
+
+### 2026-03-26 Update: CP-301 ~ CP-305 build switch platformization and Linux packaging baseline
+- Added explicit backend feature switches in `CMakeLists.txt`:
+  - `ENABLE_D3D11_RENDERER`, `ENABLE_OPENGL_RENDERER`, `ENABLE_SDL_RENDERER`
+  - `ENABLE_D3D11VA`, `ENABLE_DXVA2`, `ENABLE_VAAPI`, `ENABLE_VIDEOTOOLBOX`
+- Added platform force-off rules and switch-aware renderer/decoder source boundaries.
+- Extended startup diagnostics with compiled/runtime backend sets for renderer and decoder.
+- Added Linux dependency closure/package baseline:
+  - CPack generators `DEB;TGZ`
+  - `tools/package_linux.sh`
+- Local validation: default build PASS, switch-matrix builds PASS, switch-aware diagnostics commands PASS.
+
+### 2026-03-26 Update: CP-201 ~ CP-205 renderer/input/overlay boundary closure
+- Split renderer-adjacent responsibilities into explicit role interfaces:
+  - `input::IPlaybackInputSource`
+  - `render::IRenderOverlaySink`
+- Shrunk `IVideoRenderer` back to rendering-focused responsibilities and rewired `PlayerCore` / idle window paths to the new roles.
+- Added owner-thread guardrails for event pumping across `PlayerCore`, `Display`, `D3D11`, and `OpenGL` paths.
+- Added `--interaction-freeze-check` and integrated it into `tools/run_opengl_checks.ps1`.
+- Local validation: Release build PASS, `performance-log-check` PASS, `renderer-fallback-check` PASS, `interaction-freeze-check` PASS, OpenGL gate PASS.
+
+### 2026-03-25 Update: CP-101 ~ CP-106 startup strategy/capability extraction
+- Added `platform_capabilities` to unify platform/backend capability probing.
+- Added `playback_strategy` planning so `PlayerCore::open()` consumes an explicit startup plan instead of embedding policy logic.
+- Moved default policy responsibilities out of `RendererFactory` / `DecoderFactory` and into strategy planning.
+- Extended `--performance-log-check` with machine-readable startup strategy fields: capabilities, candidates, selected path, and fallback reason.
+- Local validation: Release build PASS, `performance-log-check` PASS, `renderer-fallback-check` PASS.
+
+### 2026-03-26 Update: Cross-platform Phase 8 ICC/profile-driven output LUT closure (`CP-802 ~ CP-805`)
+- Added reusable output color helper:
+  - `.cube` parser moved into shared output-color helper
+  - ICC matrix/TRC profile -> sampled 3D LUT generation
+- Added OpenGL display/output binding state with:
+  - display index / display name / display device name
+  - auto ICC resolution from current display on Windows
+  - render-thread LUT reload on display/output binding changes
+- Added new env / CLI surfaces:
+  - `MVP_OPENGL_ICC_PROFILE_FILE`
+  - `MVP_OPENGL_AUTO_ICC`
+  - `--opengl-icc-profile <icc_profile_file>`
+  - `--opengl-auto-icc`
+  - `--opengl-output-color-icc-check <media_file> [sample_ms]`
+- Extended diagnostics:
+  - `renderer_opengl_output_lut_source`
+  - `renderer_opengl_output_lut_reload_count`
+  - `renderer_opengl_output_display_*`
+  - `renderer_opengl_output_icc_profile_*`
+  - `renderer_opengl_output_binding_error`
+  - `opengl-diagnostics.output_display.*`
+- Expanded `tools/run_opengl_checks.ps1` to `25` checks with manual cube and auto ICC output-color regressions.
+- Validation: Release build PASS, manual output-color check PASS, auto ICC output-color check PASS, OpenGL diagnostics PASS, OpenGL gate PASS (`25/25`).
+- Scope note: at the time of this Phase-8 partial closure, `CP-801` still remained open; it is closed by the later 2026-03-26 HDR present update above.
+
+### 2026-03-26 Update: Cross-platform Phase 6 bitmap subtitle pipeline closure (`CP-601 ~ CP-605`)
+- Upgraded bitmap subtitle modeling from single-rect items to packet-level items with `bitmap_rects` aggregation.
+- Added bitmap loader statistics:
+  - `bitmap_rect_count`
+  - `bitmap_multi_rect_item_count`
+  - `bitmap_max_rects_per_item`
+- Hardened bitmap subtitle timing fallback against invalid / oversized display-window metadata from real PGS samples.
+- Added renderer-side bitmap cache/reuse for OpenGL and D3D11 subtitle D2D paths.
+- Added machine-readable bitmap regression commands:
+  - `--bitmap-subtitle-check <media_file> [stream_index]`
+  - `--bitmap-subtitle-stress-check`
+- Expanded `tools/run_opengl_checks.ps1` to `23` checks with DVD / PGS bitmap CLI + playback regression and multi-rect stress coverage.
+- Validation: Release build PASS, DVD bitmap check PASS, PGS bitmap check PASS, bitmap stress check PASS, OpenGL gate PASS (`23/23`).
+
+### 2026-03-24 鏇存柊锛歄penGL 璇婃柇蹇収銆乴ibass 宸窛娓呭崟涓庢樉绀虹骇 HDR 璁捐鏀舵暃
+- `OpenGLVideoRenderer` 鏂板 `OpenGLDiagnosticsSnapshot` 涓?`OpenGLVideoRenderer::probeSystemDiagnostics()`锛屽苟鎻愪緵 `--opengl-diagnostics` 鏈哄櫒鍙杈撳嚭銆?- OpenGL native interop 鍚姩鏈熺瓥鐣ュ凡浠庨浂鏁ｅ垽鏂敹鏁涗负 `hard blocker + quirk rule + env override` 涓夊眰鍐崇瓥锛宍force` 鍙厑璁歌鐩?quirk锛屼笉瑕嗙洊鐪熸鐨?hard blocker銆?- 宸叉柊澧?`docs/analysis/PLAYERCORE_DAY27_OPENGL_LIBASS_GAP_AND_QUIRK_DIAGNOSTICS.md`锛屾妸褰撳墠 OpenGL 涓?`libass/mpv` 鐨勫樊璺濇媶鍒?`shaping / karaoke / vector / font fallback / layout` 绾у埆銆?- 宸叉柊澧?`docs/design/OPENGL_DISPLAY_HDR_OUTPUT_DESIGN.md`锛屾槑纭?Windows 涓嬫樉绀虹骇 HDR 杈撳嚭搴旇蛋 `DXGI swapchain + HDR metadata` 妗ユ帴锛岃€屼笉鏄户缁妸 tone-map 褰撴垚瀹屾暣 HDR 鏂规銆?- Release 楠岃瘉閫氳繃锛歚--opengl-diagnostics=PASS`銆乣MVP_OPENGL_NATIVE_INTEROP=disable --opengl-diagnostics=PASS`銆丱penGL `performance-log-check=PASS`銆乣subtitle-sync-check=PASS`銆乣delay-adjust-check=PASS`銆?
+### 2026-03-24 鏇存柊锛歄penGL M1 鎴愮啛鍖栨敹鏁?- `OpenGLVideoRenderer` 宸蹭粠浠呰兘鎾斁鐨?`M0` 杩囨浮鍚庣锛屾帹杩涘埌甯﹀瓧骞曘€佸惎鍔ㄦ湡 quirk 鍐崇瓥鍜屽熀纭€ HDR/鑹插僵澶勭悊鐨?`M1` 绾у埆锛涘綋鍓嶄粛淇濇寔 `opt-in`锛屼笉鏇夸唬榛樿 `D3D11` 鍚庣銆?- `ASS/SSA` 鐜伴樁娈甸噰鐢?`DirectWrite + D2D offscreen -> OpenGL texture` 璺緞锛屾敮鎸佸 `SubtitleItem` 鎺掑簭銆乮tem/run 鍒嗘鏍峰紡銆佸畾浣嶅榻愩€佹弿杈广€侀槾褰便€佽儗鏅涓庡～鍏咃紱浠嶆湭杈惧埌 `libass/mpv` 鐨勫畬鏁撮珮绾х壒鏁堣鐩栥€?- OpenGL 鍚姩鏈熸柊澧?`MVP_OPENGL_NATIVE_INTEROP=auto|disable|force`锛屽苟瀵?`Microsoft / GDI Generic` 杞欢 GL 鐜鐩存帴绂佺敤 native interop锛涘悓鏃惰緭鍑?`[diag:opengl-native]` 閫傞厤鍣ㄣ€侀┍鍔ㄣ€乨ecoder profile 涓庢渶缁堣鍒欐棩蹇椼€?- GLSL/HLSL 鑹插僵閾捐矾琛ラ綈 `BT.601 / BT.709 / BT.2020` 鐭╅樀閫夋嫨銆乣PQ / HLG` 妫€娴嬨€佸熀纭€ SDR tone-map 鍜?`BT.2020 -> BT.709` gamut mapping锛屽苟杈撳嚭 `[diag:opengl-color]`銆?- Release 楠岃瘉閫氳繃锛歚OpenGL performance-log-check=PASS`銆乣subtitle-sync-check=PASS`銆乣delay-adjust-check=PASS`銆?
+### 2026-03-24 鏇存柊锛歄penGL M0 娓叉煋閾捐矾钀藉湴
+- `OpenGLVideoRenderer` 宸蹭粠 stub 鍙樹负鍙敤鍚庣锛屾敮鎸?`YUV420P / NV12` 鐩存帴甯с€丟LSL 120 鑹插僵杞崲涓庡熀纭€閿洏鎺у埗銆?- 褰撳墠绛栫暐淇濇寔淇濆畧锛氶粯璁ゅ悗绔粛涓?`D3D11` / `SoftwareSDL` 鍥為€€锛宍OpenGL` 闇€閫氳繃 `MVP_RENDERER_BACKEND=opengl` 鏄惧紡鍚敤銆?- 鏈湴 `Release` 楠岃瘉锛歚--performance-log-check .\juren-30s.mp4 2000` 杈撳嚭 `renderer_backend=OpenGL`銆乣result=PASS`銆?- 褰撳墠 `OpenGL` 璺緞瀹氫綅涓?M0锛屼笉绛夊悓浜庢垚鐔熸挱鏀惧櫒 GPU 鍚庣锛涘瓧骞?OSD 鍙犲姞銆佸師鐢熺‖浠惰〃闈簰鎿嶄綔銆佽繘闃惰壊褰╃鐞嗕粛鏈ˉ榻愩€?
 
 
-
-鏈枃妗ｈ褰曢」鐩殑鐗堟湰鍙樻洿鍘嗗彶鍜屽綋鍓嶇姸鎬併€?
-
-
-## 褰撳墠鐗堟湰淇℃伅
+閺堫剚鏋冨锝堫唶瑜版洟銆嶉惄顔炬畱閻楀牊婀伴崣妯绘纯閸樺棗褰堕崪灞界秼閸撳秶濮搁幀浣碘偓?
 
 
-
-### 绗笁鏂瑰簱鐗堟湰
-
+## 瑜版挸澧犻悧鍫熸拱娣団剝浼?
 
 
-| 缁勪欢 | 鐗堟湰 | 璇存槑 |
+### 缁楊兛绗侀弬鐟扮氨閻楀牊婀?
+
+
+| 缂佸嫪娆?| 閻楀牊婀?| 鐠囧瓨妲?|
 
 |------|------|------|
 
-| FFmpeg | 8.0.1 | 澶氬獟浣撳鐞嗘鏋?|
+| FFmpeg | 8.0.1 | 婢舵艾鐛熸担鎾愁槱閻炲棙顢嬮弸?|
 
-| SDL2 | 2.30.11 | 澶氬獟浣撳簱锛堟樉绀哄拰闊抽锛?|
+| SDL2 | 2.30.11 | 婢舵艾鐛熸担鎾崇氨閿涘牊妯夌粈鍝勬嫲闂婃娊顣堕敍?|
 
-| Quill | 6.0.0 | 寮傛 Console + Rotating 鏃ュ織 |
+| Quill | 6.0.0 | 瀵倹顒?Console + Rotating 閺冦儱绻?|
 
-| CMake | 3.15+ | 鏋勫缓绯荤粺 |
+| CMake | 3.15+ | 閺嬪嫬缂撶化鑽ょ埠 |
 
-| C++ 鏍囧噯 | C++17 | 缂栬瘧鏍囧噯 |
-
-
-
-**娉ㄦ剰**: Quill 鐢?`external/quill` 鎻愪緵锛屾垨閫氳繃璁剧疆 `QUILL_ROOT` 鎸囧悜绯荤粺瀹夎鐨?v6.0.0+ 鐗堟湰銆?
-
-
-### 椤圭洰鐗堟湰
+| C++ 閺嶅洤鍣?| C++17 | 缂傛牞鐦ч弽鍥у櫙 |
 
 
 
-- **椤圭洰鐗堟湰**: 1.0.0
+**濞夈劍鍓?*: Quill 閻?`external/quill` 閹绘劒绶甸敍灞惧灗闁俺绻冪拋鍓х枂 `QUILL_ROOT` 閹稿洤鎮滅化鑽ょ埠鐎瑰顥婇惃?v6.0.0+ 閻楀牊婀伴妴?
 
-- **褰撳墠鍙戝竷鍊欓€?*: 1.0.0-rc1
 
-- **鍙戝竷鐘舵€?*: 鍙彂甯?RC锛屼笉寤鸿鐩存帴 GA
-
-- **鏋勫缓绫诲瀷**: Release / Debug
-
-- **鏀寔骞冲彴**: Windows, Linux, macOS
-
-- **绋嬪簭鏄剧ず鐗堟湰**: 1.0.0-rc1锛坄--version`锛?
-- **Windows 鏂囦欢鐗堟湰**: 1.0.0.0
-
-- **鍙戝竷鍖呮枃浠跺悕**: modern-video-player-1.0.0-rc1-windows-x64.zip
+### 妞ゅ湱娲伴悧鍫熸拱
 
 
 
-### 2026-03-23 鏇存柊锛歊C 鐗堟湰鍏冩暟鎹€丷elease 椤垫鏂囦笌鍖呯増鏈爣璇嗚ˉ榻?
-- 宸叉柊澧炲彲鐩存帴璐村埌 GitHub Release 椤电殑姝ｆ枃鏂囦欢锛歚docs/reports/V1_0_0_RC1_RELEASE_NOTES.md`銆?
-- `CMake` 鐜板凡寮曞叆缁熶竴鐗堟湰婧愶細鍩虹鐗堟湰 `1.0.0`锛岄鍙戝竷鍚庣紑 `rc1`锛岀粺涓€鐢熸垚绋嬪簭鍐呴儴鐗堟湰涓层€乄indows 璧勬簮鐗堟湰浠ュ強鎵撳寘鏂囦欢鍚嶃€?
-- `main` 鏂板 `--version`锛涘綋鍓嶅疄娴嬭緭鍑轰负锛歚Modern Video Player 1.0.0-rc1`銆?
-- Windows `VERSIONINFO` 宸茶ˉ榻愶紱褰撳墠瀹炴祴缁撴灉涓猴細
-  - `FileVersion=1.0.0.0`
+- **妞ゅ湱娲伴悧鍫熸拱**: 1.0.0
+
+- **瑜版挸澧犻崣鎴濈閸婃瑩鈧?*: 1.0.0-rc1
+
+- **閸欐垵绔烽悩鑸碘偓?*: 閸欘垰褰傜敮?RC閿涘奔绗夊楦款唴閻╁瓨甯?GA
+
+- **閺嬪嫬缂撶猾璇茬€?*: Release / Debug
+
+- **閺€顖涘瘮楠炲啿褰?*: Windows, Linux, macOS
+
+- **缁嬪绨弰鍓с仛閻楀牊婀?*: 1.0.0-rc1閿涘潉--version`閿?
+- **Windows 閺傚洣娆㈤悧鍫熸拱**: 1.0.0.0
+
+- **閸欐垵绔烽崠鍛瀮娴犺泛鎮?*: modern-video-player-1.0.0-rc1-windows-x64.zip
+
+
+
+### 2026-03-23 閺囧瓨鏌婇敍姝奀 閻楀牊婀伴崗鍐╂殶閹诡喓鈧阜elease 妞ゅ灚顒滈弬鍥︾瑢閸栧懐澧楅張顒佺垼鐠囧棜藟姒?
+- 瀹稿弶鏌婃晶鐐插讲閻╁瓨甯寸拹鏉戝煂 GitHub Release 妞ょ數娈戝锝嗘瀮閺傚洣娆㈤敍姝歞ocs/reports/V1_0_0_RC1_RELEASE_NOTES.md`閵?
+- `CMake` 閻滄澘鍑″鏇炲弳缂佺喍绔撮悧鍫熸拱濠ф劧绱伴崺铏诡攨閻楀牊婀?`1.0.0`閿涘矂顣╅崣鎴濈閸氬海绱?`rc1`閿涘瞼绮烘稉鈧悽鐔稿灇缁嬪绨崘鍛村劥閻楀牊婀版稉灞傗偓涔刬ndows 鐠у嫭绨悧鍫熸拱娴犮儱寮烽幍鎾冲瘶閺傚洣娆㈤崥宥冣偓?
+- `main` 閺傛澘顤?`--version`閿涙稑缍嬮崜宥呯杽濞村绶崙杞拌礋閿涙瓪Modern Video Player 1.0.0-rc1`閵?
+- Windows `VERSIONINFO` 瀹歌尪藟姒绘劧绱辫ぐ鎾冲鐎圭偞绁寸紒鎾寸亯娑撶尨绱?  - `FileVersion=1.0.0.0`
   - `ProductVersion=1.0.0-rc1`
   - `ProductName=Modern Video Player`
 
-- 鏂板 `CPack ZIP` 鎵撳寘瑙勫垯锛涘綋鍓嶅疄娴嬩骇鐗╀负锛歚build/modern-video-player-1.0.0-rc1-windows-x64.zip`銆?
-- 褰撳墠鍙戝竷鍖呭凡纭鍖呭惈 `modern-video-player.exe`銆佷緷璧?DLL銆乣plugins/sample_logger_plugin.dll` 涓?`RELEASE_NOTES.md`锛屼笖鏈墦鍏ユ湰鍦?`config/player_settings.ini`銆?
-- `HTTP` 涓嬭浇閾捐矾鐨?`user_agent` 鐜板凡缁熶竴鏇存柊涓?`modern-video-player/1.0.0-rc1`锛屼究浜庡悗缁?RC 闃舵鏃ュ織褰掓。涓庣嚎涓婃帓闅溿€?
-### 2026-03-23 鏇存柊锛?.0.0-rc1 鍙戝竷鍑嗗瀹屾垚
-
-- 褰撳墠缁撹宸叉敹鍙ｄ负锛歚鍙墦 v1.0.0-rc1 鏍囩`锛屼絾涓嶅缓璁洿鎺ュ彂甯冩寮忕増 `1.0.0`銆?
-- 鏈疆鍩轰簬 `Release` 鏋勫缓閲嶆柊鎵ц骞堕€氳繃锛?  - `tools/run_all_checks.ps1`
+- 閺傛澘顤?`CPack ZIP` 閹垫挸瀵樼憴鍕灟閿涙稑缍嬮崜宥呯杽濞村楠囬悧鈺€璐熼敍姝歜uild/modern-video-player-1.0.0-rc1-windows-x64.zip`閵?
+- 瑜版挸澧犻崣鎴濈閸栧懎鍑＄涵顔款吇閸栧懎鎯?`modern-video-player.exe`閵嗕椒绶风挧?DLL閵嗕梗plugins/sample_logger_plugin.dll` 娑?`RELEASE_NOTES.md`閿涘奔绗栭張顏呭ⅵ閸忋儲婀伴崷?`config/player_settings.ini`閵?
+- `HTTP` 娑撳娴囬柧鎹愮熅閻?`user_agent` 閻滄澘鍑＄紒鐔剁閺囧瓨鏌婃稉?`modern-video-player/1.0.0-rc1`閿涘奔绌舵禍搴℃倵缂?RC 闂冭埖顔岄弮銉ョ箶瑜版帗銆傛稉搴ｅ殠娑撳﹥甯撻梾婧库偓?
+### 2026-03-23 閺囧瓨鏌婇敍?.0.0-rc1 閸欐垵绔烽崙鍡楊槵鐎瑰本鍨?
+- 瑜版挸澧犵紒鎾诡啈瀹稿弶鏁归崣锝勮礋閿涙瓪閸欘垱澧?v1.0.0-rc1 閺嶅洨顒穈閿涘奔绲炬稉宥呯紦鐠侇喚娲块幒銉ュ絺鐢啯顒滃蹇曞 `1.0.0`閵?
+- 閺堫剝鐤嗛崺杞扮艾 `Release` 閺嬪嫬缂撻柌宥嗘煀閹笛嗩攽楠炲爼鈧俺绻冮敍?  - `tools/run_all_checks.ps1`
   - `--d3d11-diagnostics`
   - `--performance-log-check .\juren-30s.mp4 2000`
   - `--long-playback-check .\juren-30s.mp4 10000`
   - `--serial-failsession-regression-check .\juren-30s.mp4`
 
-- 鏈€鏂版牸寮忓洖褰掓姤鍛?`docs/reports/FORMAT_REGRESSION_20260323_224615.md` 姹囨€荤粨鏋滀负锛歚17 PASS / 0 PARTIAL / 0 FAIL / 0 SKIP`銆?
-- 宸叉柊澧?RC 姹囨€绘枃妗ｏ細`docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`锛岀粺涓€鏀跺彛鍙戝竷娓呭崟銆佸凡鐭ラ棶棰樸€佸彂甯冭鏄庡拰浠婂ぉ鐨勯獙璇佽瘉鎹€?
-- 褰撳墠 RC 浠嶄繚鐣欎袱绫绘槑纭闄╋細
-  - `闂 79` 瀵瑰簲鐨?software video decode 杩愯鎬佽矾寰勪粛鏈畬鍏ㄦ敹鍙?  - D3D11 driver / adapter quirk blacklist 瑙勫垯浠嶉渶缁х画鎵╁厖
-### 2026-03-23 鏇存柊锛欴3D11 decoder profile 鎺㈡祴銆乹uirk blacklist 涓庣嫭绔?diagnostics CLI
+- 閺堚偓閺傜増鐗稿蹇撴礀瑜版帗濮ら崨?`docs/reports/FORMAT_REGRESSION_20260323_224615.md` 濮瑰洦鈧崵绮ㄩ弸婊€璐熼敍姝?7 PASS / 0 PARTIAL / 0 FAIL / 0 SKIP`閵?
+- 瀹稿弶鏌婃晶?RC 濮瑰洦鈧粯鏋冨锝忕窗`docs/reports/V1_0_0_RC1_RELEASE_READINESS.md`閿涘瞼绮烘稉鈧弨璺哄經閸欐垵绔峰〒鍛礋閵嗕礁鍑￠惌銉╂６妫版ǜ鈧礁褰傜敮鍐嚛閺勫骸鎷版禒濠傘亯閻ㄥ嫰鐛欑拠浣界槈閹诡喓鈧?
+- 瑜版挸澧?RC 娴犲秳绻氶悾娆庤⒈缁粯妲戠涵顕€顥撻梽鈺嬬窗
+  - `闂傤噣顣?79` 鐎电懓绨查惃?software video decode 鏉╂劘顢戦幀浣界熅瀵板嫪绮涢張顏勭暚閸忋劍鏁归崣?  - D3D11 driver / adapter quirk blacklist 鐟欏嫬鍨禒宥夋付缂佈呯敾閹碘晛鍘?### 2026-03-23 閺囧瓨鏌婇敍娆?D11 decoder profile 閹恒垺绁撮妴涔箄irk blacklist 娑撳海瀚粩?diagnostics CLI
 
-- `D3D11VideoRenderer` 鐜板凡杈撳嚭缁撴瀯鍖?`D3D11DiagnosticsSnapshot`锛岀粺涓€鍖呭惈 adapter/driver銆乫eature level銆乣NV12/P010/P016` 鏍煎紡鏀寔銆乨ecoder profiles 涓?native direct 鍚姩鏈熺瓥鐣ャ€?
-- 鏂板 decoder profile 鎺㈡祴锛屽綋鍓嶆満鍣ㄦ渶鏂板疄娴嬬粨鏋滀负锛?  - `H.264`锛氭敮鎸?  - `HEVC`锛氭敮鎸?`Main / Main10`
-  - `VP9`锛氭敮鎸?`Profile0`锛屼笉鏀寔 `Profile2 10bit`
-  - `AV1`锛氬綋鍓嶉€傞厤鍣ㄦ湭鏆撮湶鏀寔 profile
+- `D3D11VideoRenderer` 閻滄澘鍑℃潏鎾冲毉缂佹挻鐎崠?`D3D11DiagnosticsSnapshot`閿涘瞼绮烘稉鈧崠鍛儓 adapter/driver閵嗕公eature level閵嗕梗NV12/P010/P016` 閺嶇厧绱￠弨顖涘瘮閵嗕龚ecoder profiles 娑?native direct 閸氼垰濮╅張鐔虹摜閻ｃ儯鈧?
+- 閺傛澘顤?decoder profile 閹恒垺绁撮敍灞界秼閸撳秵婧€閸ｃ劍娓堕弬鏉跨杽濞村绮ㄩ弸婊€璐熼敍?  - `H.264`閿涙碍鏁幐?  - `HEVC`閿涙碍鏁幐?`Main / Main10`
+  - `VP9`閿涙碍鏁幐?`Profile0`閿涘奔绗夐弨顖涘瘮 `Profile2 10bit`
+  - `AV1`閿涙艾缍嬮崜宥夆偓鍌炲帳閸ｃ劍婀弳鎾苟閺€顖涘瘮 profile
 
-- 鏂板 startup-time quirk / blacklist 鍐崇瓥锛涜嫢鍛戒腑 software adapter銆佺己灏戝叧閿?D3D11 video 鎺ュ彛銆乣NV12` 涓嶆弧瓒崇洿閲囨牱瑕佹眰鎴栧懡涓鍒欒〃锛屽垯浼氬湪鎾斁鍓嶇洿鎺ュ叧闂?native direct銆?
-- 棣栫増 blacklist 宸叉樉寮忚鐩?`Microsoft Basic Render Driver`锛涘綋鍓嶆満鍣ㄨ瘖鏂粨鏋滀负 `native_direct.allowed=true`銆乣disable_rule=none`銆?
-- `main` 鏂板 `--d3d11-diagnostics`锛屽彲涓€娆℃€ц緭鍑烘満鍣ㄥ彲璇?`key=value` 缁撴灉锛岀敤浜庤嚜鍔ㄥ寲銆佺幇鍦烘帓闅滃拰鍚庣画椹卞姩鍏煎鎬у綊妗ｃ€?### 2026-03-23 鏇存柊锛欴3D11 鍚姩鏈熻兘鍔涙帰娴嬩笌 adapter/driver 璇婃柇鏃ュ織
+- 閺傛澘顤?startup-time quirk / blacklist 閸愬磭鐡ラ敍娑滃閸涙垝鑵?software adapter閵嗕胶宸辩亸鎴濆彠闁?D3D11 video 閹恒儱褰涢妴涔V12` 娑撳秵寮х搾宕囨纯闁插洦鐗辩憰浣圭湴閹存牕鎳℃稉顓☆潐閸掓瑨銆冮敍灞藉灟娴兼艾婀幘顓熸杹閸撳秶娲块幒銉ュ彠闂?native direct閵?
+- 妫ｆ牜澧?blacklist 瀹稿弶妯夊蹇氼洬閻?`Microsoft Basic Render Driver`閿涙稑缍嬮崜宥嗘簚閸ｃ劏鐦栭弬顓犵波閺嬫粈璐?`native_direct.allowed=true`閵嗕梗disable_rule=none`閵?
+- `main` 閺傛澘顤?`--d3d11-diagnostics`閿涘苯褰叉稉鈧▎鈩冣偓褑绶崙鐑樻簚閸ｃ劌褰茬拠?`key=value` 缂佹挻鐏夐敍宀€鏁ゆ禍搴ゅ殰閸斻劌瀵查妴浣哄箛閸︾儤甯撻梾婊冩嫲閸氬海鐢绘す鍗炲З閸忕厧顔愰幀褍缍婂锝冣偓?### 2026-03-23 閺囧瓨鏌婇敍娆?D11 閸氼垰濮╅張鐔诲厴閸旀稒甯板ù瀣╃瑢 adapter/driver 鐠囧﹥鏌囬弮銉ョ箶
 
-- `D3D11VideoRenderer` 鍒濆鍖栭樁娈垫柊澧?`[diag:d3d11-init]` 鏃ュ織锛岀洿鎺ヨ緭鍑?adapter銆乨river version銆乫eature level銆佸叧閿?D3D11/DXGI 鎺ュ彛鍙敤鎬с€佹牸寮忔敮鎸佷綅涓?swap chain 鍙傛暟銆?
-- 褰撳墠鏈哄櫒鏈€鏂板疄娴嬪凡鑳藉湪鍚姩鏃剁洿鎺ョ湅鍒帮細`adapter="NVIDIA GeForce GTX 1080"`銆乣driver_version=32.0.15.6094`銆乣feature_level=11_1`銆乣device3=true`銆乣video_device=true`銆乣NV12/P010` 鏀寔鎯呭喌锛屼互鍙?`P016{check_failed_hr=-2147467259}` 杩欑被鏍煎紡鑳藉姏宸紓銆?
-- 杩欒疆涓嶆敼鍙樼幇鏈夋挱鏀捐矾寰勶紝鍙ˉ鎴愮啛鎾斁鍣ㄩ渶瑕佺殑鍚姩鏈熻瘖鏂笂涓嬫枃锛涢棶棰?90/91 鐨?native direct 涓?fallback 閾捐矾淇濇寔涓嶅彉銆?### 2026-03-23 鏇存柊锛欴3D11VA 鑷畾涔?hw_frames_ctx 鎺ュ叆鍙噰鏍疯В鐮佽〃闈?
-- `PlayerCore` 涓嶅啀鍙妸 `D3D11VA` 璁惧鎸傜粰 decoder锛岃€屾槸鍦?`get_format()` 闃舵鏄惧紡鍒涘缓 `hw_frames_ctx`锛屽苟涓?`AVD3D11VAFramesContext::BindFlags` 杩藉姞 `D3D11_BIND_SHADER_RESOURCE`銆?
-- 褰撳墠鏈哄櫒澶嶆祴缁撴灉琛ㄦ槑锛岃繖涓€姝ュ凡缁忚 D3D11 鍘熺敓鐩撮噰鏍风湡姝ｆ仮澶嶏細`Configured D3D11VA frames context for direct shader sampling: bind_flags=520`锛屽悓鏃?`video_native_output_frames=62`銆乣video_copy_back_frames=0`銆?
-- 闂 90 鐨勮繍琛屾椂 fallback 浠嶇劧淇濈暀锛屼綔涓哄叾浠栭┍鍔?璁惧缁勫悎涓?native direct 澶辫触鏃剁殑鏈€鍚庡厹搴曘€?### 2026-03-23 鏇存柊锛欴3D11 鍘熺敓鐩撮噰鏍疯繍琛屾椂澶辫触鏀逛负鑷姩鍥為€€ copy-back
+- `D3D11VideoRenderer` 閸掓繂顫愰崠鏍▉濞堝灚鏌婃晶?`[diag:d3d11-init]` 閺冦儱绻旈敍宀€娲块幒銉ㄧ翻閸?adapter閵嗕龚river version閵嗕公eature level閵嗕礁鍙ч柨?D3D11/DXGI 閹恒儱褰涢崣顖滄暏閹佲偓浣圭壐瀵繑鏁幐浣风秴娑?swap chain 閸欏倹鏆熼妴?
+- 瑜版挸澧犻張鍝勬珤閺堚偓閺傛澘鐤勫ù瀣嚒閼宠棄婀崥顖氬З閺冨墎娲块幒銉ф箙閸掑府绱癭adapter="NVIDIA GeForce GTX 1080"`閵嗕梗driver_version=32.0.15.6094`閵嗕梗feature_level=11_1`閵嗕梗device3=true`閵嗕梗video_device=true`閵嗕梗NV12/P010` 閺€顖涘瘮閹懎鍠岄敍灞间簰閸?`P016{check_failed_hr=-2147467259}` 鏉╂瑧琚弽鐓庣础閼宠棄濮忓顔肩磽閵?
+- 鏉╂瑨鐤嗘稉宥嗘暭閸欐骞囬張澶嬫尡閺€鎹愮熅瀵板嫸绱濋崣顏囁夐幋鎰暃閹绢厽鏂侀崳銊╂付鐟曚胶娈戦崥顖氬З閺堢喕鐦栭弬顓濈瑐娑撳鏋冮敍娑㈡６妫?90/91 閻?native direct 娑?fallback 闁炬崘鐭炬穱婵囧瘮娑撳秴褰夐妴?### 2026-03-23 閺囧瓨鏌婇敍娆?D11VA 閼奉亜鐣炬稊?hw_frames_ctx 閹恒儱鍙嗛崣顖炲櫚閺嶇柉袙閻浇銆冮棃?
+- `PlayerCore` 娑撳秴鍟€閸欘亝濡?`D3D11VA` 鐠佹儳顦幐鍌滅舶 decoder閿涘矁鈧本妲搁崷?`get_format()` 闂冭埖顔岄弰鎯х础閸掓稑缂?`hw_frames_ctx`閿涘苯鑻熸稉?`AVD3D11VAFramesContext::BindFlags` 鏉╄棄濮?`D3D11_BIND_SHADER_RESOURCE`閵?
+- 瑜版挸澧犻張鍝勬珤婢跺秵绁寸紒鎾寸亯鐞涖劍妲戦敍宀冪箹娑撯偓濮濄儱鍑＄紒蹇氼唨 D3D11 閸樼喓鏁撻惄鎾櫚閺嶉婀″锝嗕划婢跺稄绱癭Configured D3D11VA frames context for direct shader sampling: bind_flags=520`閿涘苯鎮撻弮?`video_native_output_frames=62`閵嗕梗video_copy_back_frames=0`閵?
+- 闂傤噣顣?90 閻ㄥ嫯绻嶇悰灞炬 fallback 娴犲秶鍔ф穱婵堟殌閿涘奔缍旀稉鍝勫従娴犳牠鈹嶉崝?鐠佹儳顦紒鍕値娑?native direct 婢惰精瑙﹂弮鍓佹畱閺堚偓閸氬骸鍘规惔鏇樷偓?### 2026-03-23 閺囧瓨鏌婇敍娆?D11 閸樼喓鏁撻惄鎾櫚閺嶇柉绻嶇悰灞炬婢惰精瑙﹂弨閫涜礋閼奉亜濮╅崶鐐衡偓鈧?copy-back
 
-- `D3D11VideoRenderer` 鏂板杩愯鏃?native direct 鐔旀柇锛氬鏋?`CreateShaderResourceView1` 鏃犳硶涓?D3D11VA 瑙ｇ爜琛ㄩ潰鍒涘缓 Y/UV plane SRV锛屾垨瑙ｇ爜琛ㄩ潰鏍煎紡涓嶆敮鎸佺洿鎺ラ噰鏍凤紝鍒欏叧闂湰娆′細璇濈殑 native direct rendering銆?
-- native direct 琚叧闂悗锛宍PlayerCore` 浼氱户缁妸鍚庣画纭В甯ц蛋 copy-back 鍒拌蒋浠跺抚锛屽啀澶嶇敤鐜版湁杞欢绾圭悊涓婁紶閾捐矾鏄剧ず锛岄伩鍏嶇户缁嚭鐜扳€滈煶棰戞甯搞€佽棰戦粦灞忊€濄€?
-- `Release / Debug` 瀵?`juren-30s.mp4` 鐨?`--performance-log-check 2000` 宸插娴嬮€氳繃锛涗袱鑰呴兘瀹為檯鍛戒腑 `fallback=copyback-to-software` 鍛婅锛屽苟淇濇寔 `render_frames > 0`銆?### 2026-03-20 鏇存柊锛歅layerCore 鍓╀綑椋庨櫓鏀舵暃锛圫cheduler 缁堢増绛栫暐銆丗ailSession 瀹炲寲銆乻erial/generation 瑙傛祴寮哄寲锛?
-- `SchedulerControlSnapshot` 鏂板缁撴瀯鍖栫瓥鐣ュ瓧娈碉細`clock_policy`銆乣audio_master_policy`銆乣audio_buffered_seconds`锛屽苟灏?`ended_policy` 鎵╁睍鍒?`HoldLastFrameNoClockSync`銆?
-- `Scheduler` render wait 鏀逛负娑堣垂绛栫暐鍑芥暟锛坄isAudioMasterActive` / `isVideoMasterActive` / `shouldApplyClockSync`锛夛紝鍚屾椂 `Scheduler::stop()` 鏂板 self-join 淇濇姢銆?
-- `FailSession` 宸蹭粠棰勭暀鍏ュ彛鎺ㄨ繘鍒板叧閿け璐ョ偣瀹炵敤璺緞锛沗handleRuntimeFailure()` 鍚屾琛ュ叆 stop/session failure 璁℃暟銆?
-- diagnostics 鏂板 stale serial 涓㈠純璁℃暟锛屾槑纭?`queue generation` 鍙礋璐ｅ鍣ㄨ竟鐣屼腑鏂紝鑰屾棫鏃堕棿绾跨‖澶辨晥浠嶇敱 item-level serial 涓诲垽瀹氥€?### 2026-03-20 鏇存柊锛歅layerCore 鍓綔鐢ㄩ泦涓寲涓?runtime failure/recovery policy 鏀跺彛
+- `D3D11VideoRenderer` 閺傛澘顤冩潻鎰攽閺?native direct 閻旀梹鏌囬敍姘洤閺?`CreateShaderResourceView1` 閺冪姵纭舵稉?D3D11VA 鐟欙絿鐖滅悰銊╂桨閸掓稑缂?Y/UV plane SRV閿涘本鍨ㄧ憴锝囩垳鐞涖劑娼伴弽鐓庣础娑撳秵鏁幐浣烘纯閹恒儵鍣伴弽鍑ょ礉閸掓瑥鍙ч梻顓熸拱濞嗏€茬窗鐠囨繄娈?native direct rendering閵?
+- native direct 鐞氼偄鍙ч梻顓炴倵閿涘畭PlayerCore` 娴兼氨鎴风紒顓熷Ω閸氬海鐢荤涵顒冃掔敮褑铔?copy-back 閸掓媽钂嬫禒璺烘姎閿涘苯鍟€婢跺秶鏁ら悳鐗堟箒鏉烆垯娆㈢痪鍦倞娑撳﹣绱堕柧鎹愮熅閺勫墽銇氶敍宀勪缉閸忓秶鎴风紒顓炲毉閻滄壋鈧粓鐓舵０鎴烆劀鐢悶鈧浇顫嬫０鎴︾拨鐏炲繆鈧縿鈧?
+- `Release / Debug` 鐎?`juren-30s.mp4` 閻?`--performance-log-check 2000` 瀹告彃顦插ù瀣偓姘崇箖閿涙稐琚遍懓鍛村厴鐎圭偤妾崨鎴掕厬 `fallback=copyback-to-software` 閸涘﹨顒熼敍灞借嫙娣囨繃瀵?`render_frames > 0`閵?### 2026-03-20 閺囧瓨鏌婇敍姝卨ayerCore 閸撯晙缍戞搴ㄦ珦閺€鑸垫殐閿涘湯cheduler 缂佸牏澧楃粵鏍殣閵嗕笚ailSession 鐎圭偛瀵查妴涔籩rial/generation 鐟欏倹绁村鍝勫閿?
+- `SchedulerControlSnapshot` 閺傛澘顤冪紒鎾寸€崠鏍摜閻ｃ儱鐡у▓纰夌窗`clock_policy`閵嗕梗audio_master_policy`閵嗕梗audio_buffered_seconds`閿涘苯鑻熺亸?`ended_policy` 閹碘晛鐫嶉崚?`HoldLastFrameNoClockSync`閵?
+- `Scheduler` render wait 閺€閫涜礋濞戝牐鍨傜粵鏍殣閸戣姤鏆熼敍鍧刬sAudioMasterActive` / `isVideoMasterActive` / `shouldApplyClockSync`閿涘绱濋崥灞炬 `Scheduler::stop()` 閺傛澘顤?self-join 娣囨繃濮㈤妴?
+- `FailSession` 瀹歌弓绮犳０鍕殌閸忋儱褰涢幒銊ㄧ箻閸掓澘鍙ч柨顔笺亼鐠愩儳鍋ｇ€圭偟鏁ょ捄顖氱窞閿涙矖handleRuntimeFailure()` 閸氬本顒炵悰銉ュ弳 stop/session failure 鐠佲剝鏆熼妴?
+- diagnostics 閺傛澘顤?stale serial 娑撱垹绱旂拋鈩冩殶閿涘本妲戠涵?`queue generation` 閸欘亣绀嬬拹锝咁啇閸ｃ劏绔熼悾灞艰厬閺傤叏绱濋懓灞炬＋閺冨爼妫跨痪璺ㄢ€栨径杈ㄦ櫏娴犲秶鏁?item-level serial 娑撹鍨界€规哎鈧?### 2026-03-20 閺囧瓨鏌婇敍姝卨ayerCore 閸擃垯缍旈悽銊╂肠娑擃厼瀵叉稉?runtime failure/recovery policy 閺€璺哄經
 
-- `SchedulerControlSnapshot` 宸茶ˉ鍏?`clock_source`銆乣audio_output_initialized`銆乣audio_master_sync_active` 涓?`ended_policy`锛宻cheduler 涓嶅啀鍙潬鏈€灏忔€佸拰闆舵暎鎺ㄦ柇娑堣垂涓氬姟璇箟銆?
-- `PlayerCore` 宸叉妸 start/resume/pause/stop request/stop completion/seek/session release 鍓綔鐢ㄧ粺涓€鎶藉埌 `apply*SideEffects()`锛宍play / pause / stop / seek / close / requestDeferredStop / serviceDeferredStop` 鍏ュ彛涓嶅啀鐩存帴鍫嗙嚎绋嬪拰璁惧鍔ㄤ綔銆?
-- `deferred stop` 宸插苟鍥炵粺涓€ stopping 璺緞锛況untime fatal 鐜伴€氳繃 `FailureRecoveryPolicy + handleRuntimeFailure()` 鏀跺彛鍒扮粺涓€鎭㈠鍏ュ彛锛屽悗缁彲浠ョ户缁墿瑕嗙洊鑼冨洿鑰屼笉鍐嶅鍒舵仮澶嶉€昏緫銆?
-- 鏈疆涓嶆敼澶栭儴 `PlaybackState`銆乁I銆乧opy-back 鎴?SoftwareSDL锛屽彧缁х画鏀剁揣鍐呮牳鐘舵€佹満涓?worker/device 鍔ㄤ綔鐨勮竟鐣屻€?
+- `SchedulerControlSnapshot` 瀹歌尪藟閸?`clock_source`閵嗕梗audio_output_initialized`閵嗕梗audio_master_sync_active` 娑?`ended_policy`閿涘cheduler 娑撳秴鍟€閸欘亪娼張鈧亸蹇斺偓浣告嫲闂嗚埖鏆庨幒銊︽焽濞戝牐鍨傛稉姘鐠囶厺绠熼妴?
+- `PlayerCore` 瀹稿弶濡?start/resume/pause/stop request/stop completion/seek/session release 閸擃垯缍旈悽銊х埠娑撯偓閹惰棄鍩?`apply*SideEffects()`閿涘畭play / pause / stop / seek / close / requestDeferredStop / serviceDeferredStop` 閸忋儱褰涙稉宥呭晙閻╁瓨甯撮崼鍡欏殠缁嬪鎷扮拋鎯ь槵閸斻劋缍旈妴?
+- `deferred stop` 瀹告彃鑻熼崶鐐电埠娑撯偓 stopping 鐠侯垰绶為敍娉乽ntime fatal 閻滀即鈧俺绻?`FailureRecoveryPolicy + handleRuntimeFailure()` 閺€璺哄經閸掓壆绮烘稉鈧幁銏狀槻閸忋儱褰涢敍灞芥倵缂侇厼褰叉禒銉ф埛缂侇厽澧跨憰鍡欐磰閼煎啫娲块懓灞肩瑝閸愬秴顦查崚鑸典划婢跺秹鈧槒绶妴?
+- 閺堫剝鐤嗘稉宥嗘暭婢舵牠鍎?`PlaybackState`閵嗕箒I閵嗕恭opy-back 閹?SoftwareSDL閿涘苯褰х紒褏鐢婚弨鍓佹彛閸愬懏鐗抽悩鑸碘偓浣规簚娑?worker/device 閸斻劋缍旈惃鍕珶閻ｅ被鈧?
 
-### 2026-03-20 鏇存柊锛歅layerCore seek/flush timeline serial 鍖栫浜岄樁娈?
+### 2026-03-20 閺囧瓨鏌婇敍姝卨ayerCore seek/flush timeline serial 閸栨牜顑囨禍宀勬▉濞?
 
 
-- `PlayerCore` 宸插紩鍏?`timeline_serial / pending_seek_serial`锛宻eek 涓嶅啀鍙潬 flush 鍜屽竷灏斾綅鍒囨崲鏃堕棿绾裤€?
-- demux packet銆乨ecoded `VideoFrame / AudioFrame`銆乺ender 鍜?audio consumer 閾捐矾閮藉凡鎺ヤ笂 serial 纭け鏁堝垽瀹氥€?
-- `flush` 缁х画淇濈暀锛屼絾璇箟宸蹭粠鈥滃敮涓€澶辨晥鏈哄埗鈥濋檷绾т负鈥滆緟鍔╂竻鎵€濓紱鐪熸鐨勬棫鏃堕棿绾胯竟鐣岀敱 serial 鎻愪緵銆?
-- diagnostics 涓庝笓椤规鏌ュ懡浠ゅ凡鏂板 `timeline_serial / pending_seek_serial` 杈撳嚭锛屼究浜庡悗缁户缁仛 EOF/Ended 鍜?Scheduler 濂戠害鍗囩骇銆?
-
+- `PlayerCore` 瀹告彃绱╅崗?`timeline_serial / pending_seek_serial`閿涘eek 娑撳秴鍟€閸欘亪娼?flush 閸滃苯绔风亸鏂剧秴閸掑洦宕查弮鍫曟？缁捐￥鈧?
+- demux packet閵嗕龚ecoded `VideoFrame / AudioFrame`閵嗕购ender 閸?audio consumer 闁炬崘鐭鹃柈钘夊嚒閹恒儰绗?serial 绾剙銇戦弫鍫濆灲鐎规哎鈧?
+- `flush` 缂佈呯敾娣囨繄鏆€閿涘奔绲剧拠顓濈疅瀹歌弓绮犻垾婊冩暜娑撯偓婢惰鲸鏅ラ張鍝勫煑閳ユ繈妾风痪褌璐熼垾婊嗙窡閸斺晜绔婚幍顐熲偓婵撶幢閻喐顒滈惃鍕＋閺冨爼妫跨痪鑳珶閻ｅ瞼鏁?serial 閹绘劒绶甸妴?
+- diagnostics 娑撳簼绗撴い瑙勵梾閺屻儱鎳℃禒銈呭嚒閺傛澘顤?`timeline_serial / pending_seek_serial` 鏉堟挸鍤敍灞肩┒娴滃骸鎮楃紒顓犳埛缂侇厼浠?EOF/Ended 閸?Scheduler 婵傛垹瀹抽崡鍥╅獓閵?
 
 
 
-### 2026-03-19 鏇存柊锛氳ˉ榻?records / analysis 鏂囨。涓€鑷存€?
+
+### 2026-03-19 閺囧瓨鏌婇敍姘乘夋?records / analysis 閺傚洦銆傛稉鈧懛瀛樷偓?
 
 
-- `CHANGELOG` 鐨勯棶棰樻€昏〃宸茶ˉ涓?`闂 78` 绱㈠紩锛岄伩鍏嶄粖澶╄繖缁?software decode 璇婃柇璁板綍鍦ㄦ€昏〃閲屽嚭鐜?`77 -> 79` 璺冲彿銆?
-- 宸插洖濉?`闂 69` 瀵瑰簲鐨?analysis 鏂囨。锛歚docs/analysis/PLAYERCORE_DAY6_DEFERRED_STOP_AND_RUNTIME_DEBT_FIX.md`銆?
-- 鏈疆涓嶆秹鍙婁唬鐮侀€昏緫鍙樻洿锛屽彧鏀跺彛浠婂ぉ鎻愪氦鍚庣殑鏂囨。绱㈠紩鍜屽垎鏋愭矇娣€涓€鑷存€с€?
+- `CHANGELOG` 閻ㄥ嫰妫舵０妯烩偓鏄忋€冨鑼端夋稉?`闂傤噣顣?78` 缁便垹绱╅敍宀勪缉閸忓秳绮栨径鈺勭箹缂?software decode 鐠囧﹥鏌囩拋鏉跨秿閸︺劍鈧槒銆冮柌灞藉毉閻?`77 -> 79` 鐠哄啿褰块妴?
+- 瀹告彃娲栨繅?`闂傤噣顣?69` 鐎电懓绨查惃?analysis 閺傚洦銆傞敍姝歞ocs/analysis/PLAYERCORE_DAY6_DEFERRED_STOP_AND_RUNTIME_DEBT_FIX.md`閵?
+- 閺堫剝鐤嗘稉宥嗙Ч閸欏﹣鍞惍渚€鈧槒绶崣妯绘纯閿涘苯褰ч弨璺哄經娴犲﹤銇夐幓鎰唉閸氬海娈戦弬鍥ㄣ€傜槐銏犵穿閸滃苯鍨庨弸鎰焽濞ｂ偓娑撯偓閼峰瓨鈧佲偓?
 
 
-### 2026-03-19 鏇存柊锛歅layerCore 杩愯鎬?software send probe 瀵圭収宸叉妸 software decode blocker 鏀舵暃鍒?runtime context 宸紓
+### 2026-03-19 閺囧瓨鏌婇敍姝卨ayerCore 鏉╂劘顢戦幀?software send probe 鐎靛湱鍙庡鍙夊Ω software decode blocker 閺€鑸垫殐閸?runtime context 瀹割喖绱?
+- `--software-video-send-probe` 閻滄澘鍑＄悰銉╃秷 `pre_send_receive_ret`閵嗕梗packet queue round-trip` 娑?`read-ahead` 鐎靛湱鍙庨敍娌梛uren-30s.mp4` 閺堚偓閺傛澘鐤勫ù瀣╄礋 `packet_queue_push_ok=true / packet_queue_pop_ok=true / read_ahead_packets=512 / send_ret=0 / receive_got_frame=true / result=PASS`閵?
+- `--software-video-decode-check` 閺傛澘顤?`audio_probe_mode`閿涘苯鑻熼弨顖涘瘮 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 閻?video-only 鐎靛湱鍙庨敍娑欐付閺傛澘鐤勫ù瀣▔缁€鍝勫祮娴?`clock_source=Video`閿涘奔绮涢悞鑸垫Ц `video_packet_dequeue_count=1 / video_send_packet_ok=0 / decode_video_ok=0 / render_frames=0 / result=FAIL`閵?
+- `PlayerCore::decodeVideoFrame()` 閺傛澘顤冩禒鍛箚婢у啫褰夐柌蹇撶磻閸氼垳娈?`MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 鐠囧﹥鏌囩捄顖氱窞閿涙稑婀?`video-only` 娑撳鐤勫ù瀣╃矝閸戣櫣骞?`Offthread software video send_packet probe timed out after 500ms`閵?
+- 缂佹捁顔戦弴瀛樻煀閿涙艾缍嬮崜?blocker 瀹稿弶甯撻梽?FFmpeg software decoder 閺堫兛缍嬮妴涔eceive->send` 妞ゅ搫绨妴涔竌cket queue 娴溿倖甯撮妴涔╡mux read-ahead閵嗕線鐓舵０鎴︽懠娴犮儱寮疯ぐ鎾冲 decode 缁捐法鈻奸張顒冮煩閿涙稑鎮楃紒顓炵安閻╁瓨甯寸€佃鐦?`PlayerCore::initDecoders()` 娴溠冨毉閻?software codec ctx 娑撳海瀚粩?probe 閻ㄥ嫬鐡у▓闈涙▕瀵倶鈧?
+### 2026-03-19 閺囧瓨鏌婇敍姘嚒鐞?software decode 閺堚偓鐏?send/dequeue 鐠佲剝鏆熼敍瀹恖ocker 閺€鑸垫殐閸掓壋鈧粓顩绘稉?packet send 閺堫亜鐣幋鎰箲閸ョ偐鈧?
 
-- `--software-video-send-probe` 鐜板凡琛ラ綈 `pre_send_receive_ret`銆乣packet queue round-trip` 涓?`read-ahead` 瀵圭収锛沗juren-30s.mp4` 鏈€鏂板疄娴嬩负 `packet_queue_push_ok=true / packet_queue_pop_ok=true / read_ahead_packets=512 / send_ret=0 / receive_got_frame=true / result=PASS`銆?
-- `--software-video-decode-check` 鏂板 `audio_probe_mode`锛屽苟鏀寔 `MVP_SOFTWARE_DECODE_CHECK_DISABLE_AUDIO=1` 鐨?video-only 瀵圭収锛涙渶鏂板疄娴嬫樉绀哄嵆浣?`clock_source=Video`锛屼粛鐒舵槸 `video_packet_dequeue_count=1 / video_send_packet_ok=0 / decode_video_ok=0 / render_frames=0 / result=FAIL`銆?
-- `PlayerCore::decodeVideoFrame()` 鏂板浠呯幆澧冨彉閲忓紑鍚殑 `MVP_SOFTWARE_VIDEO_SEND_OFFTHREAD` 璇婃柇璺緞锛涘湪 `video-only` 涓嬪疄娴嬩粛鍑虹幇 `Offthread software video send_packet probe timed out after 500ms`銆?
-- 缁撹鏇存柊锛氬綋鍓?blocker 宸叉帓闄?FFmpeg software decoder 鏈綋銆乣receive->send` 椤哄簭銆乸acket queue 浜ゆ帴銆乨emux read-ahead銆侀煶棰戦摼浠ュ強褰撳墠 decode 绾跨▼鏈韩锛涘悗缁簲鐩存帴瀵规瘮 `PlayerCore::initDecoders()` 浜у嚭鐨?software codec ctx 涓庣嫭绔?probe 鐨勫瓧娈靛樊寮傘€?
-### 2026-03-19 鏇存柊锛氬凡琛?software decode 鏈€灏?send/dequeue 璁℃暟锛宐locker 鏀舵暃鍒扳€滈涓?packet send 鏈畬鎴愯繑鍥炩€?
 
-
-- `PlayerCore` 鏂板涓夐」鏈€灏忚瘖鏂細
-
+- `PlayerCore` 閺傛澘顤冩稉澶愩€嶉張鈧亸蹇氱槚閺傤叏绱?
   - `video_packet_dequeue_count`
 
   - `video_send_packet_ok`
 
   - `video_send_packet_last_ret`
 
-- 瀹冧滑宸茬粡鎺ュ叆 `DiagnosticsSnapshot`銆佷綆棰戦摼璺棩蹇椼€乣--performance-log-check` 涓?`--software-video-decode-check`銆?
-- 姝ｅ父涓婚摼瀵圭収鏍锋湰 `juren-30s.mp4` 鐨勬渶鏂扮粨鏋滀负锛?
+- 鐎瑰啩婊戝鑼病閹恒儱鍙?`DiagnosticsSnapshot`閵嗕椒缍嗘０鎴︽懠鐠侯垱妫╄箛妞尖偓涔?-performance-log-check` 娑?`--software-video-decode-check`閵?
+- 濮濓絽鐖舵稉濠氭懠鐎靛湱鍙庨弽閿嬫拱 `juren-30s.mp4` 閻ㄥ嫭娓堕弬鎵波閺嬫粈璐熼敍?
   - `video_packet_dequeue_count=57`
 
   - `video_send_packet_ok=57`
@@ -175,39 +332,38 @@
 
   - `result=PASS`
 
-- software decode 鏍锋湰鐨勬渶鏂颁綆棰戣瘖鏂负锛?
+- software decode 閺嶉攱婀伴惃鍕付閺傞缍嗘０鎴ｇ槚閺傤厺璐熼敍?
   - `v_pkt_deq=1`
 
   - `v_send_ok=0`
 
   - `v_send_ret=-2147483648`
 
-- 缁撹鏇存柊锛歴oftware decode 绾跨▼宸茬粡鍙栧埌棣栦釜瑙嗛鍖咃紝浣嗛涓?`avcodec_send_packet()` 鍒拌瘖鏂偣浠嶆湭褰㈡垚鎴愬姛杩斿洖锛涘綋鍓?blocker 宸茶繘涓€姝ユ敹鏁涘埌 decoder 棣栧寘閫佸叆闃舵銆?
+- 缂佹捁顔戦弴瀛樻煀閿涙oftware decode 缁捐法鈻煎鑼病閸欐牕鍩屾＃鏍﹂嚋鐟欏棝顣堕崠鍜冪礉娴ｅ棝顩绘稉?`avcodec_send_packet()` 閸掓媽鐦栭弬顓犲仯娴犲秵婀ぐ銏″灇閹存劕濮涙潻鏂挎礀閿涙稑缍嬮崜?blocker 瀹歌尪绻樻稉鈧銉︽暪閺佹稑鍩?decoder 妫ｆ牕瀵橀柅浣稿弳闂冭埖顔岄妴?
 
 
 
 
-### 2026-03-19 鏇存柊锛歴oftware decode 淇濆畧绾跨▼閰嶇疆澶嶈窇鍚庝粛鍗″湪棣栦釜瑙嗛鍖咃紝`SdlVideoRenderer` 娉ㄩ噴涔辩爜宸叉竻鐞?
+### 2026-03-19 閺囧瓨鏌婇敍姝磑ftware decode 娣囨繂鐣х痪璺ㄢ柤闁板秶鐤嗘径宥堢獓閸氬簼绮涢崡鈥虫躬妫ｆ牔閲滅憴鍡涱暥閸栧拑绱漙SdlVideoRenderer` 濞夈劑鍣存稊杈╃垳瀹稿弶绔婚悶?
 
 
-- `Video decoder threading` 鐜板凡纭 software path 杩愯鍦?`thread_count=1 / thread_type=none`锛岃鏄庤繖杞鏍哥‘瀹炲懡涓簡鈥滀繚瀹堢嚎绋嬮厤缃€濈洰鏍囩姸鎬併€?
-- 閲嶆柊鎵ц `--software-video-decode-check` 鍚庯紝缁撴灉浠嶇劧鏄細`renderer_backend=SoftwareSDL`銆乣decoder_backend=Software`銆乣decode_video_ok=0`銆乣scheduler_video_decoded_frames=0`銆乣render_frames=0`銆乣video_frame_queue_peak_size=0`銆乣result=FAIL`銆?
-- 缁撳悎鎺у埗鍙拌瘖鏂棩蹇楅噷 `demux(v=163) / pkt_q(v=162)` 涓庝粎鍑虹幇 `Video decode first send_packet start` 鐨勭幇璞★紝鍙互鎺ㄦ柇 software decode 绾跨▼褰撳墠鏇村儚鏄湪棣栦釜瑙嗛鍖呮彁浜ら樁娈靛悗鍋滀綇锛岃€屼笉鏄崱鍦?copy-back / swscale / display copy銆?
-- `src/render/sdl_video_renderer.cpp` 宸茶ˉ淇?9 澶勫嚱鏁板ご娉ㄩ噴涔辩爜锛涙湰杞啀娆℃壂鎻?`src/`銆乣include/` 鐨?`///` 涓?`//` 娉ㄩ噴琛岋紝鏈啀鍙戠幇鏂扮殑鍙枒涔辩爜鍛戒腑銆?
-
-
-
-
-### 2026-03-19 鏇存柊锛氭柊澧?`--software-video-decode-check`锛屾妸 software video decode blocker 鍗曠嫭閽夋
+- `Video decoder threading` 閻滄澘鍑＄涵顔款吇 software path 鏉╂劘顢戦崷?`thread_count=1 / thread_type=none`閿涘矁顕╅弰搴ょ箹鏉烆喖顦查弽鍝モ€樼€圭偛鎳℃稉顓濈啊閳ユ粈绻氱€瑰牏鍤庣粙瀣帳缂冾喒鈧繄娲伴弽鍥╁Ц閹降鈧?
+- 闁插秵鏌婇幍褑顢?`--software-video-decode-check` 閸氬函绱濈紒鎾寸亯娴犲秶鍔ч弰顖ょ窗`renderer_backend=SoftwareSDL`閵嗕梗decoder_backend=Software`閵嗕梗decode_video_ok=0`閵嗕梗scheduler_video_decoded_frames=0`閵嗕梗render_frames=0`閵嗕梗video_frame_queue_peak_size=0`閵嗕梗result=FAIL`閵?
+- 缂佹挸鎮庨幒褍鍩楅崣鎷岀槚閺傤厽妫╄箛妤呭櫡 `demux(v=163) / pkt_q(v=162)` 娑撳簼绮庨崙铏瑰箛 `Video decode first send_packet start` 閻ㄥ嫮骞囩挒鈽呯礉閸欘垯浜掗幒銊︽焽 software decode 缁捐法鈻艰ぐ鎾冲閺囨潙鍎氶弰顖氭躬妫ｆ牔閲滅憴鍡涱暥閸栧懏褰佹禍銈夋▉濞堥潧鎮楅崑婊€缍囬敍宀冣偓灞肩瑝閺勵垰宕遍崷?copy-back / swscale / display copy閵?
+- `src/render/sdl_video_renderer.cpp` 瀹歌尪藟娣?9 婢跺嫬鍤遍弫鏉裤仈濞夈劑鍣存稊杈╃垳閿涙稒婀版潪顔煎晙濞嗏剝澹傞幓?`src/`閵嗕梗include/` 閻?`///` 娑?`//` 濞夈劑鍣寸悰宀嬬礉閺堫亜鍟€閸欐垹骞囬弬鎵畱閸欘垳鏋掓稊杈╃垳閸涙垝鑵戦妴?
 
 
 
-- 鏂板 `--software-video-decode-check <media_file> [sample_ms]`锛屼笓闂ㄥ洖绛斺€渟oftware video decode 鏄惁鐪熺殑浜у抚鈥濓紝涓嶅啀缁х画澶嶇敤鍙兘璇佹槑鈥滀細璇濆凡鍚姩鈥濈殑 `session-check`銆?
-- 鍛戒护鍐呴儴寮哄埗 `MVP_RENDERER_BACKEND=software`銆乣SDL_AUDIODRIVER=dummy` 鍜?`preferHardwareDecode=false`锛屼繚璇侀獙璇侀摼璺ǔ瀹氬懡涓?`SoftwareSDL + Software decode`銆?
-- 鍛戒护閫氳繃鏉′欢琚敹绱т负鈥滅湡瀹炰骇甯р€濊€屼笉鏄€滃彧鎵撳紑鎴愬姛鈥濓細蹇呴』鍚屾椂婊¤冻 `decode_video_ok > 0`銆乣scheduler_video_decoded_frames > 0`銆乣render_frames > 0`銆乣video_frame_queue_peak_size > 0`锛屽苟纭 `video_copy_back_frames == 0`銆?
-- 鍛戒护鏈韩鏀规垚 probe 寮忕‖閫€鍑猴紝閬垮厤琚綋鍓?soft decode blocker 涓嬬殑 `stop/close` 鎸傛銆?
-- 鏈満鏈€鏂伴獙璇佺粨鏋滐細
 
+### 2026-03-19 閺囧瓨鏌婇敍姘煀婢?`--software-video-decode-check`閿涘本濡?software video decode blocker 閸楁洜瀚柦澶嬵劥
+
+
+
+- 閺傛澘顤?`--software-video-decode-check <media_file> [sample_ms]`閿涘奔绗撻梻銊ユ礀缁涙柡鈧笩oftware video decode 閺勵垰鎯侀惇鐔烘畱娴溠冩姎閳ユ繐绱濇稉宥呭晙缂佈呯敾婢跺秶鏁ら崣顏囧厴鐠囦焦妲戦垾婊€绱扮拠婵嗗嚒閸氼垰濮╅垾婵堟畱 `session-check`閵?
+- 閸涙垝鎶ら崘鍛村劥瀵搫鍩?`MVP_RENDERER_BACKEND=software`閵嗕梗SDL_AUDIODRIVER=dummy` 閸?`preferHardwareDecode=false`閿涘奔绻氱拠渚€鐛欑拠渚€鎽肩捄顖溓旂€规艾鎳℃稉?`SoftwareSDL + Software decode`閵?
+- 閸涙垝鎶ら柅姘崇箖閺夆€叉鐞氼偅鏁圭槐褌璐熼垾婊呮埂鐎圭偘楠囩敮褉鈧繆鈧奔绗夐弰顖椻偓婊冨涧閹垫挸绱戦幋鎰閳ユ繐绱拌箛鍛淬€忛崥灞炬濠娐ゅ喕 `decode_video_ok > 0`閵嗕梗scheduler_video_decoded_frames > 0`閵嗕梗render_frames > 0`閵嗕梗video_frame_queue_peak_size > 0`閿涘苯鑻熺涵顔款吇 `video_copy_back_frames == 0`閵?
+- 閸涙垝鎶ら張顒冮煩閺€瑙勫灇 probe 瀵繒鈥栭柅鈧崙鐚寸礉闁灝鍘ょ悮顐㈢秼閸?soft decode blocker 娑撳娈?`stop/close` 閹稿倹顒撮妴?
+- 閺堫剚婧€閺堚偓閺備即鐛欑拠浣虹波閺嬫粣绱?
   - `open_ok=true / entered_playback_loop=true / renderer_backend=SoftwareSDL / decoder_backend=Software`
 
   - `demux_video_packets=163 / demux_queue_drop_packets=0`
@@ -216,231 +372,226 @@
 
   - `video_copy_back_frames=0 / video_swscale_frames=0 / result=FAIL`
 
-- 缁撹鏇存柊锛歜locker 宸蹭粠鈥渇allback 鏄惁杩樺湪 copy-back鈥濊繘涓€姝ユ敹鏁涗负鈥滃綋鍓嶅伐绋嬬殑杞欢瑙嗛瑙ｇ爜鎺ュ叆閾炬牴鏈病鏈夊舰鎴愯棰戝抚浜у嚭鈥濓紱鍦ㄥ畠淇ソ涔嬪墠锛屼笉搴旈噸鏂伴粯璁ゅ惎鐢?`software-first`銆?
+- 缂佹捁顔戦弴瀛樻煀閿涙瓬locker 瀹歌弓绮犻垾娓嘺llback 閺勵垰鎯佹潻妯烘躬 copy-back閳ユ繆绻樻稉鈧銉︽暪閺佹稐璐熼垾婊冪秼閸撳秴浼愮粙瀣畱鏉烆垯娆㈢憴鍡涱暥鐟欙絿鐖滈幒銉ュ弳闁剧偓鐗撮張顒佺梾閺堝鑸伴幋鎰潒妫版垵鎶氭禍褍鍤垾婵撶幢閸︺劌鐣犳穱顔笺偨娑斿澧犻敍灞肩瑝鎼存棃鍣搁弬浼寸帛鐠併倕鎯庨悽?`software-first`閵?
 
 
 
 
-### 2026-03-19 鏇存柊锛氭挙鍥?`SoftwareSDL` automatic software-first锛屼繚鐣?copy-back fallback 骞惰ˉ杞В闃诲璇婃柇
+### 2026-03-19 閺囧瓨鏌婇敍姘寵閸?`SoftwareSDL` automatic software-first閿涘奔绻氶悾?copy-back fallback 楠炴儼藟鏉烆垵袙闂冭顢ｇ拠濠冩焽
 
 
 
-- 鏈疆楠岃瘉纭锛氳櫧鐒垛€渟ystem-memory renderer 浼樺厛閬垮厤 copy-back鈥濊繖涓柟鍚戜笌鎴愮啛鎾斁鍣ㄦ€濊矾涓€鑷达紝浣嗗綋鍓嶅伐绋嬬殑 FFmpeg 杞欢瑙嗛瑙ｇ爜鎺ュ叆浠嶄笉绋冲畾锛屼笉鑳界洿鎺ユ妸 `SoftwareSDL` 榛樿鍒囧埌 `software-first`銆?
-- 宸叉挙鍥炶嚜鍔?renderer-aware `software-first` decoder 閲嶆柊鎺掑簭锛屾仮澶?`D3D11VA -> Software` 榛樿椤哄簭锛岄伩鍏嶆妸 fallback 涓绘祦绋嬪甫杩?0 甯ц緭鍑哄洖褰掋€?
-- 宸茶ˉ鍏呰蒋浠惰棰戣В鐮佷綆棰戣瘖鏂細棣栦釜 `send_packet` 鎺㈤拡銆丗Fmpeg 閿欒鐮佸瓧绗︿覆銆乻tall 涓婁笅鏂囨棩蹇楋紝鍚庣画鍙户缁崟鐙畾浣嶈蒋浠惰棰戣В鐮?blocker銆?
-- 褰撳墠閲嶆柊楠岃瘉缁撴灉锛?
-  - 榛樿 `D3D11 + D3D11VA` 涓婚摼浠嶄繚鎸?`video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+- 閺堫剝鐤嗘宀冪槈绾喛顓婚敍姘虫閻掑灈鈧笩ystem-memory renderer 娴兼ê鍘涢柆鍨帳 copy-back閳ユ繆绻栨稉顏呮煙閸氭垳绗岄幋鎰暃閹绢厽鏂侀崳銊︹偓婵婄熅娑撯偓閼疯揪绱濇担鍡楃秼閸撳秴浼愮粙瀣畱 FFmpeg 鏉烆垯娆㈢憴鍡涱暥鐟欙絿鐖滈幒銉ュ弳娴犲秳绗夌粙鍐茬暰閿涘奔绗夐懗鐣屾纯閹恒儲濡?`SoftwareSDL` 姒涙顓婚崚鍥у煂 `software-first`閵?
+- 瀹稿弶鎸欓崶鐐跺殰閸?renderer-aware `software-first` decoder 闁插秵鏌婇幒鎺戠碍閿涘本浠径?`D3D11VA -> Software` 姒涙顓绘い鍝勭碍閿涘矂浼╅崗宥嗗Ω fallback 娑撶粯绁︾粙瀣敨鏉?0 鐢嗙翻閸戝搫娲栬ぐ鎺嬧偓?
+- 瀹歌尪藟閸忓懓钂嬫禒鎯邦潒妫版垼袙閻椒缍嗘０鎴ｇ槚閺傤叏绱版＃鏍﹂嚋 `send_packet` 閹恒垽鎷￠妴涓桭mpeg 闁挎瑨顕ら惍浣哥摟缁楋缚瑕嗛妴涔籺all 娑撳﹣绗呴弬鍥ㄦ）韫囨绱濋崥搴ｇ敾閸欘垳鎴风紒顓炲礋閻欘剙鐣炬担宥堣拫娴犳儼顫嬫０鎴Ｐ掗惍?blocker閵?
+- 瑜版挸澧犻柌宥嗘煀妤犲矁鐦夌紒鎾寸亯閿?
+  - 姒涙顓?`D3D11 + D3D11VA` 娑撳鎽兼禒宥勭箽閹?`video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
 
-  - `SoftwareSDL` fallback 宸叉仮澶嶄负 `D3D11VA copy-back` 璺緞锛屽綋鍓嶆牱鏈疄娴?`video_copy_back_ratio_percent=33.5958 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+  - `SoftwareSDL` fallback 瀹稿弶浠径宥勮礋 `D3D11VA copy-back` 鐠侯垰绶為敍灞界秼閸撳秵鐗遍張顒€鐤勫ù?`video_copy_back_ratio_percent=33.5958 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
 
-  - 寮哄埗 `D3D11 + Software decode` 鏃朵粛鍙鐜拌蒋浠惰棰戣В鐮侀摼闃诲锛屽洜姝?`software-first` 鏆備笉閫傚悎閲嶆柊榛樿鍚敤
-
-
+  - 瀵搫鍩?`D3D11 + Software decode` 閺冩湹绮涢崣顖氼槻閻滄媽钂嬫禒鎯邦潒妫版垼袙閻線鎽奸梼璇差敚閿涘苯娲滃?`software-first` 閺嗗倷绗夐柅鍌氭値闁插秵鏌婃妯款吇閸氼垳鏁?
 
 
 
-### 2026-03-19 鏇存柊锛欰udio-master lateness 鏀剁揣涓?SoftwareSDL 鍑忔嫹璐濇湁闄愰噸鏋?
+
+### 2026-03-19 閺囧瓨鏌婇敍娆皍dio-master lateness 閺€鍓佹彛娑?SoftwareSDL 閸戝繑瀚圭拹婵囨箒闂勬劙鍣搁弸?
 
 
-- `IVideoRenderer` 鐜板凡鏀寔 `supportsDirectFrameFormat()`锛沗SdlVideoRenderer` 浼氱洿鎺ュ０鏄庢敮鎸?`YUV420P / NV12`銆?
-- `PlayerCore::prepareVideoOutputFrame()` 鍦ㄦ棤瑙嗛婊ら暅鏃跺厑璁?copy-back 鍚庣殑杞欢甯х洿鎺ヤ氦缁?`SoftwareSDL`锛屼笉鍐嶅己鍒?`swscale -> YUV420P`銆?
-- `Display` 鐜板凡鏀寔 `SDL_PIXELFORMAT_NV12 + SDL_UpdateNVTexture()`锛屽苟浼樺厛鎸佹湁 `AVFrame` 寮曠敤锛涙 stride 鐨?`YUV420P/NV12` 璺緞鍙伩鍏嶆樉绀哄眰娣辨嫹璐濄€?
-- `Scheduler::pumpRenderOnce()` 鐨?`Audio` master 閫昏緫宸叉敼鎴愬垎娈电瓑寰呫€佸姩鎬?late-drop 闃堝€煎拰鏈€灏?sleep 閲忓瓙锛岄伩鍏嶁€滃彧鐫′竴娆″氨鎻愬墠 render鈥濅互鍙婁吉蹇欑瓑銆?
-- 鏈満楠岃瘉缁撴灉锛?
-  - 榛樿 `D3D11 + D3D11VA` 涓婚摼浠嶄负 `video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
+- `IVideoRenderer` 閻滄澘鍑￠弨顖涘瘮 `supportsDirectFrameFormat()`閿涙矖SdlVideoRenderer` 娴兼氨娲块幒銉ワ紣閺勫孩鏁幐?`YUV420P / NV12`閵?
+- `PlayerCore::prepareVideoOutputFrame()` 閸︺劍妫ょ憴鍡涱暥濠娿倝鏆呴弮璺哄帒鐠?copy-back 閸氬海娈戞潪顖欐鐢呮纯閹恒儰姘︾紒?`SoftwareSDL`閿涘奔绗夐崘宥呭繁閸?`swscale -> YUV420P`閵?
+- `Display` 閻滄澘鍑￠弨顖涘瘮 `SDL_PIXELFORMAT_NV12 + SDL_UpdateNVTexture()`閿涘苯鑻熸导妯哄帥閹镐焦婀?`AVFrame` 瀵洜鏁ら敍娑欘劀 stride 閻?`YUV420P/NV12` 鐠侯垰绶為崣顖炰缉閸忓秵妯夌粈鍝勭湴濞ｈ鲸瀚圭拹婵勨偓?
+- `Scheduler::pumpRenderOnce()` 閻?`Audio` master 闁槒绶鍙夋暭閹存劕鍨庡▓鐢电搼瀵板懌鈧礁濮╅幀?late-drop 闂冨牆鈧厧鎷伴張鈧亸?sleep 闁插繐鐡欓敍宀勪缉閸忓秮鈧粌褰ч惈鈥茬濞嗏€虫皑閹绘劕澧?render閳ユ繀浜掗崣濠佸悏韫囨瑧鐡戦妴?
+- 閺堫剚婧€妤犲矁鐦夌紒鎾寸亯閿?
+  - 姒涙顓?`D3D11 + D3D11VA` 娑撳鎽兼禒宥勮礋 `video_copy_back_ratio_percent=0 / video_swscale_ratio_percent=0 / display_copy_ratio_percent=0`
 
-  - 寮哄埗 `SoftwareSDL` 鍚庯紝`video_swscale_ratio_percent=0`銆乣display_copy_ratio_percent=0`锛岀儹鐐瑰凡鏀舵暃鍒?`video_copy_back_ratio_percent=46.4067`
+  - 瀵搫鍩?`SoftwareSDL` 閸氬函绱漙video_swscale_ratio_percent=0`閵嗕梗display_copy_ratio_percent=0`閿涘瞼鍎归悙鐟板嚒閺€鑸垫殐閸?`video_copy_back_ratio_percent=46.4067`
 
-  - `SDL_AUDIODRIVER=dummy` 涓?`Audio` master 璺緞宸茶窇閫氾紝`scheduler_wait_events=274`锛屼笉鍐嶅嚭鐜板紓甯搁珮棰戝繖绛?
-
-
-### 2026-03-19 鏇存柊锛歋oftwareSDL 鎷疯礉閾捐矾閲忓寲銆丼cheduler 閲嶅惎棰勭畻涓?renderer override
+  - `SDL_AUDIODRIVER=dummy` 娑?`Audio` master 鐠侯垰绶炲鑼剁獓闁熬绱漙scheduler_wait_events=274`閿涘奔绗夐崘宥呭毉閻滄澘绱撶敮鎼佺彯妫版垵绻栫粵?
 
 
-
-- `Display::copyFrameData()` 鐜板凡鍏峰 `frames / bytes / time_us_total / time_us_max` 缁熻锛屽苟閫氳繃 `RendererDiagnostics + DiagnosticsSnapshot + --performance-log-check` 杈撳嚭杞欢鏄剧ず閾剧殑鐪熷疄鎴愭湰銆?
-- `Scheduler` worker 閲嶅惎绛栫暐宸蹭粠鍥哄畾娆℃暟鏀规垚鈥?0s 绐楀彛鍐呮渶澶?4 娆?+ 100ms 鍐峰嵈鈥濓紝骞舵柊澧?`scheduler_*_restart_limit_hits` 璇婃柇銆?
-- `RendererFactory` 鏂板 `MVP_RENDERER_BACKEND` override锛屽苟鍦?Windows 涓嬫敮鎸?`MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`锛宍--renderer-fallback-check` 褰撳墠宸叉仮澶嶉€氳繃銆?
-- 鏈満 4K60 寮哄埗 `SoftwareSDL` 閲囨牱鏄剧ず锛歚video_copy_back_ratio_percent=30.1018`銆乣video_swscale_ratio_percent=18.6623`銆乣display_copy_ratio_percent=21.8407`锛涜鏄庤蒋浠跺洖閫€閾惧凡缁忔槸 copy-back銆乻wscale銆乨isplay memcpy 鐨勫彔鍔犵儹鐐广€?
-- 榛樿 `D3D11 + D3D11VA` 涓婚摼閲嶆柊楠岃瘉鍚庝粛淇濇寔 `video_copy_back_ratio_percent=0`銆乣video_swscale_ratio_percent=0`銆乣display_copy_ratio_percent=0`锛寊ero-copy 缁撹涓嶅彉銆?
-
-
-### 2026-03-19 鏇存柊锛氶珮鐮佺巼/4K 闃熷垪瀹归噺銆佽嚜閫傚簲鑺傛祦涓?copy-back 璇婃柇澧炲己
+### 2026-03-19 閺囧瓨鏌婇敍姝媜ftwareSDL 閹风柉绀夐柧鎹愮熅闁插繐瀵查妴涓糲heduler 闁插秴鎯庢０鍕暬娑?renderer override
 
 
 
-- `FrameQueue` 宸叉柊澧?`peak_size / push_timeout_count` 缁熻锛宍DiagnosticsSnapshot` 涓?`--performance-log-check` 浼氬悓姝ヨ緭鍑?frame queue 鐨?`capacity / peak / timeout`銆?
-- `PlayerCore::open()` 鐜板湪鎸夊獟浣撳睘鎬ч厤缃棰?闊抽 frame queue 瀹归噺锛屽苟鍦?`D3D11VA` 鎵撳紑鍓嶈缃?`extra_hw_frames`锛岄伩鍏?4K native path 鎵撶垎 FFmpeg 鐨勭‖浠跺抚姹犮€?
-- `Scheduler` 宸叉妸 video/audio 鑳屽帇鏀逛负杩熸粸闃堝€硷紝骞舵柊澧?`video/audio_backpressure_wait_ms` 缁熻锛沗pumpRenderOnce()` 鍚屾椂淇浜?`Video` master 鐨?wall-clock pacing 鍜?late-frame catch-up銆?
-- 鏈€鏂?4K 鎬ц兘閲囨牱鏄剧ず锛歚renderer_backend=D3D11`銆乣decoder_backend=D3D11VA`銆乣video_native_output_frames=101`銆乣video_copy_back_frames=0`銆乣video_swscale_frames=0`锛岃鏄庡綋鍓嶄富閾句粛浠?native zero-copy 涓轰富锛屼笉鏄?copy-back 鐑偣銆?
-- 宸查噸鏂伴獙璇侊細`MSBuild`銆乣--performance-log-check`銆乣--high-bitrate-check`銆乣--4k-playback-check`銆乣--long-playback-check` 褰撳墠鍧囬€氳繃銆?
+- `Display::copyFrameData()` 閻滄澘鍑￠崗宄邦槵 `frames / bytes / time_us_total / time_us_max` 缂佺喕顓搁敍灞借嫙闁俺绻?`RendererDiagnostics + DiagnosticsSnapshot + --performance-log-check` 鏉堟挸鍤潪顖欐閺勫墽銇氶柧鍓ф畱閻喎鐤勯幋鎰拱閵?
+- `Scheduler` worker 闁插秴鎯庣粵鏍殣瀹歌弓绮犻崶鍝勭暰濞嗏剝鏆熼弨瑙勫灇閳?0s 缁愭褰涢崘鍛付婢?4 濞?+ 100ms 閸愬嘲宓堥垾婵撶礉楠炶埖鏌婃晶?`scheduler_*_restart_limit_hits` 鐠囧﹥鏌囬妴?
+- `RendererFactory` 閺傛澘顤?`MVP_RENDERER_BACKEND` override閿涘苯鑻熼崷?Windows 娑撳鏁幐?`MVP_D3D11_DRIVER_HINT=software -> SoftwareSDL`閿涘畭--renderer-fallback-check` 瑜版挸澧犲鍙変划婢跺秹鈧俺绻冮妴?
+- 閺堫剚婧€ 4K60 瀵搫鍩?`SoftwareSDL` 闁插洦鐗遍弰鍓с仛閿涙瓪video_copy_back_ratio_percent=30.1018`閵嗕梗video_swscale_ratio_percent=18.6623`閵嗕梗display_copy_ratio_percent=21.8407`閿涙稖顕╅弰搴よ拫娴犺泛娲栭柅鈧柧鎯у嚒缂佸繑妲?copy-back閵嗕够wscale閵嗕龚isplay memcpy 閻ㄥ嫬褰旈崝鐘靛劰閻愬箍鈧?
+- 姒涙顓?`D3D11 + D3D11VA` 娑撳鎽奸柌宥嗘煀妤犲矁鐦夐崥搴濈矝娣囨繃瀵?`video_copy_back_ratio_percent=0`閵嗕梗video_swscale_ratio_percent=0`閵嗕梗display_copy_ratio_percent=0`閿涘瘖ero-copy 缂佹捁顔戞稉宥呭綁閵?
 
 
-### 2026-03-19 鏇存柊锛?K backend session 瀛愯繘绋嬮€€鍑鸿矾寰勪慨澶?
+### 2026-03-19 閺囧瓨鏌婇敍姘剁彯閻胶宸?4K 闂冪喎鍨€瑰綊鍣洪妴浣藉殰闁倸绨查懞鍌涚ウ娑?copy-back 鐠囧﹥鏌囨晶鐐插繁
 
 
-- `--windows-backend-session-check` 宸蹭粠鈥滃鐢ㄥ父瑙勬挱鏀惧櫒閫€鍑烘敹灏锯€濇敼涓衡€滀竴娆℃€?probe 瀛愯繘绋嬧€濊矾寰勶細鎵撳嵃缁撴瀯鍖栫粨鏋滃悗鏄惧紡 flush锛屽苟鍦?Windows 涓嬬洿鎺?`TerminateProcess(GetCurrentProcess(), code)` 閫€鍑恒€?
-- 杩欐淇閽堝鐨勬槸鍥炲綊 harness锛屼笉鏄富鎾斁閾捐繍琛屾椂閫昏緫锛涚洰鏍囨槸娑堥櫎 `hard` 妯″紡鎵撳嵃 PASS 鍚庤秴鏃躲€乣soft` 妯″紡鎵撳嵃 PASS 鍚庡紓甯搁€€鍑虹殑娈嬬暀澶辫触銆?
-- 宸查噸鏂伴獙璇侊細`hard/soft --windows-backend-session-check` 閫€鍑虹爜鍧囦负 `0`锛宍--windows-backend-check` 涓?`--4k-playback-check` 褰撳墠鍧囧凡鎭㈠閫氳繃銆?
+
+- `FrameQueue` 瀹稿弶鏌婃晶?`peak_size / push_timeout_count` 缂佺喕顓搁敍瀹岲iagnosticsSnapshot` 娑?`--performance-log-check` 娴兼艾鎮撳銉ㄧ翻閸?frame queue 閻?`capacity / peak / timeout`閵?
+- `PlayerCore::open()` 閻滄澘婀幐澶婄崯娴ｆ挸鐫橀幀褔鍘ょ純顔款潒妫?闂婃娊顣?frame queue 鐎瑰綊鍣洪敍灞借嫙閸?`D3D11VA` 閹垫挸绱戦崜宥堫啎缂?`extra_hw_frames`閿涘矂浼╅崗?4K native path 閹垫挾鍨?FFmpeg 閻ㄥ嫮鈥栨禒璺烘姎濮圭姰鈧?
+- `Scheduler` 瀹稿弶濡?video/audio 閼冲苯甯囬弨閫涜礋鏉╃喐绮搁梼鍫濃偓纭风礉楠炶埖鏌婃晶?`video/audio_backpressure_wait_ms` 缂佺喕顓搁敍娌梡umpRenderOnce()` 閸氬本妞傛穱顔筋劀娴?`Video` master 閻?wall-clock pacing 閸?late-frame catch-up閵?
+- 閺堚偓閺?4K 閹嗗厴闁插洦鐗遍弰鍓с仛閿涙瓪renderer_backend=D3D11`閵嗕梗decoder_backend=D3D11VA`閵嗕梗video_native_output_frames=101`閵嗕梗video_copy_back_frames=0`閵嗕梗video_swscale_frames=0`閿涘矁顕╅弰搴＄秼閸撳秳瀵岄柧鍙ョ矝娴?native zero-copy 娑撹桨瀵岄敍灞肩瑝閺?copy-back 閻戭厾鍋ｉ妴?
+- 瀹告煡鍣搁弬浼寸崣鐠囦緤绱癭MSBuild`閵嗕梗--performance-log-check`閵嗕梗--high-bitrate-check`閵嗕梗--4k-playback-check`閵嗕梗--long-playback-check` 瑜版挸澧犻崸鍥偓姘崇箖閵?
 
 
-### 2026-03-19 鏇存柊锛氶煶棰戣澶囧け璐ユ椂鐨勮棰?only闄嶇骇涓庡洖褰掗棬绂佺籂鍋?
+### 2026-03-19 閺囧瓨鏌婇敍?K backend session 鐎涙劘绻樼粙瀣偓鈧崙楦跨熅瀵板嫪鎱ㄦ径?
 
 
-- `PlayerCore::open()` 鐜板湪鎶婇煶棰戣澶囧け璐ュ垎鎴愪袱绫伙細瑙嗛鏂囦欢浼氶檷绾т负 `video-only` 缁х画鎾斁锛岄煶棰?only 鏂囦欢浠嶇劧鐩存帴澶辫触锛岄伩鍏嶁€滄墦寮€鎴愬姛浣嗘病鏈変换浣曞彲鎾斁杈撳嚭鈥濈殑浼垚鍔熴€?
-- 鏃犻煶棰戣緭鍑轰絾鏈夎棰戞祦鏃讹紝涓绘椂閽熶粠 `System` 鏀逛负 `Video`锛岃浣嶇疆鎺ㄨ繘璺熼殢瀹為檯娓叉煋 PTS锛岃€屼笉鏄郴缁熸椂閽熶及绠椼€?
-- `DiagnosticsSnapshot` 鏂板 `audio_output_initialized / video_only_fallback / clock_source`锛宍--performance-log-check`銆乣--1080p60-check`銆乣--4k-playback-check`銆乣--high-bitrate-check`銆乣--long-playback-check` 浼氬悓姝ヨ緭鍑鸿繖浜涚姸鎬併€?
-- `1080p60/high-bitrate/long-playback` 涓変釜鍥炲綊闂ㄧ鐜板凡鏀逛负鍙湅 `demux_queue_drop_packets`锛屼笉鍐嶆妸闊抽绂佺敤鍦烘櫙涓嬬殑 `demux_ignored_packets` 璇垽鎴愰珮鐮佺巼鍥炲帇澶辫触銆?
-- 宸查噸鏂版墽琛岋細
+- `--windows-backend-session-check` 瀹歌弓绮犻垾婊冾槻閻劌鐖剁憴鍕尡閺€鎯ф珤闁偓閸戠儤鏁圭亸閿偓婵囨暭娑撹　鈧粈绔村▎鈩冣偓?probe 鐎涙劘绻樼粙瀣р偓婵婄熅瀵板嫸绱伴幍鎾冲祪缂佹挻鐎崠鏍波閺嬫粌鎮楅弰鎯х础 flush閿涘苯鑻熼崷?Windows 娑撳娲块幒?`TerminateProcess(GetCurrentProcess(), code)` 闁偓閸戞亽鈧?
+- 鏉╂瑦顐兼穱顔碱槻闁藉牆顕惃鍕Ц閸ョ偛缍?harness閿涘奔绗夐弰顖欏瘜閹绢厽鏂侀柧鎹愮箥鐞涘本妞傞柅鏄忕帆閿涙稓娲伴弽鍥ㄦЦ濞戝牓娅?`hard` 濡€崇础閹垫挸宓?PASS 閸氬氦绉撮弮韬测偓涔oft` 濡€崇础閹垫挸宓?PASS 閸氬骸绱撶敮鎼佲偓鈧崙铏规畱濞堝鏆€婢惰精瑙﹂妴?
+- 瀹告煡鍣搁弬浼寸崣鐠囦緤绱癭hard/soft --windows-backend-session-check` 闁偓閸戣櫣鐖滈崸鍥﹁礋 `0`閿涘畭--windows-backend-check` 娑?`--4k-playback-check` 瑜版挸澧犻崸鍥у嚒閹垹顦查柅姘崇箖閵?
 
+
+### 2026-03-19 閺囧瓨鏌婇敍姘剁叾妫版垼顔曟径鍥с亼鐠愩儲妞傞惃鍕潒妫?only闂勫秶楠囨稉搴℃礀瑜版帡妫粋浣虹眰閸?
+
+
+- `PlayerCore::open()` 閻滄澘婀幎濠囩叾妫版垼顔曟径鍥с亼鐠愩儱鍨庨幋鎰⒈缁紮绱扮憴鍡涱暥閺傚洣娆㈡导姘舵缁狙傝礋 `video-only` 缂佈呯敾閹绢厽鏂侀敍宀勭叾妫?only 閺傚洣娆㈡禒宥囧姧閻╁瓨甯存径杈Е閿涘矂浼╅崗宥佲偓婊勫ⅵ瀵偓閹存劕濮涙担鍡樼梾閺堝鎹㈡担鏇炲讲閹绢厽鏂佹潏鎾冲毉閳ユ繄娈戞导顏呭灇閸旂喆鈧?
+- 閺冪娀鐓舵０鎴ｇ翻閸戣桨绲鹃張澶庮潒妫版垶绁﹂弮璁圭礉娑撶粯妞傞柦鐔剁矤 `System` 閺€閫涜礋 `Video`閿涘矁顔€娴ｅ秶鐤嗛幒銊ㄧ箻鐠虹喖娈㈢€圭偤妾〒鍙夌厠 PTS閿涘矁鈧奔绗夐弰顖滈兇缂佺喐妞傞柦鐔跺強缁犳ぜ鈧?
+- `DiagnosticsSnapshot` 閺傛澘顤?`audio_output_initialized / video_only_fallback / clock_source`閿涘畭--performance-log-check`閵嗕梗--1080p60-check`閵嗕梗--4k-playback-check`閵嗕梗--high-bitrate-check`閵嗕梗--long-playback-check` 娴兼艾鎮撳銉ㄧ翻閸戦缚绻栨禍娑氬Ц閹降鈧?
+- `1080p60/high-bitrate/long-playback` 娑撳閲滈崶鐐茬秺闂傘劎顩﹂悳鏉垮嚒閺€閫涜礋閸欘亞婀?`demux_queue_drop_packets`閿涘奔绗夐崘宥嗗Ω闂婃娊顣剁粋浣烘暏閸︾儤娅欐稉瀣畱 `demux_ignored_packets` 鐠囶垰鍨介幋鎰扮彯閻胶宸奸崶鐐插竾婢惰精瑙﹂妴?
+- 瀹告煡鍣搁弬鐗堝⒔鐞涘矉绱?
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`
 
-  浠ュ強 `--1080p60-check`銆乣--high-bitrate-check`銆乣--long-playback-check`銆乣--performance-log-check`锛屽綋鍓嶅潎閫氳繃锛沗--4k-playback-check` 浠嶅彧鍓?`fallback_ok` 瀛愯繘绋嬭矾寰勫緟缁х画鎺掓煡銆?
+  娴犮儱寮?`--1080p60-check`閵嗕梗--high-bitrate-check`閵嗕梗--long-playback-check`閵嗕梗--performance-log-check`閿涘苯缍嬮崜宥呮綆闁俺绻冮敍娌?-4k-playback-check` 娴犲秴褰ч崜?`fallback_ok` 鐎涙劘绻樼粙瀣熅瀵板嫬绶熺紒褏鐢婚幒鎺撶叀閵?
 
 
 
 
-### 2026-03-19 鏇存柊锛氭挱鏀鹃摼璇婃柇鍒嗗眰涓?decoder drain / scheduler 瀹归敊琛ュ己
+### 2026-03-19 閺囧瓨鏌婇敍姘尡閺€楣冩懠鐠囧﹥鏌囬崚鍡楃湴娑?decoder drain / scheduler 鐎瑰綊鏁婄悰銉ュ繁
 
 
 
-- `decodeVideoFrame()` / `decodeAudioFrame()` 宸叉敼涓烘寔缁?`receive -> send -> receive` 鐘舵€佹満锛屽苟鍦?packet queue EOF 鍚庡 codec 鍙戦€?`nullptr` drain锛岄伩鍏嶆妸鈥滄殏鏃舵棤杈撳嚭鈥濆拰鈥滅湡姝ｅけ璐モ€濇贩鍦ㄤ竴璧枫€?
-- `DiagnosticsSnapshot` 鐜板凡鍖哄垎 `demux_ignored_packets / demux_queue_drop_packets`锛屽苟鏂板 decoder `send_packet(EAGAIN)`銆乨rain 娆℃暟銆乣native/copy-back/swscale/filter-blocked` 瑙嗛璺緞璁℃暟銆?
-- `Scheduler` 宸叉柊澧?video/audio 鑳屽帇浜嬩欢涓?video/audio/render restart 缁熻锛宺ender thread 涔熺撼鍏ュ彈淇濇姢 worker锛沗--performance-log-check` 浼氬悓姝ヨ緭鍑鸿繖浜涙柊鎸囨爣銆?
+- `decodeVideoFrame()` / `decodeAudioFrame()` 瀹稿弶鏁兼稉鐑樺瘮缂?`receive -> send -> receive` 閻樿埖鈧焦婧€閿涘苯鑻熼崷?packet queue EOF 閸氬骸顕?codec 閸欐垿鈧?`nullptr` drain閿涘矂浼╅崗宥嗗Ω閳ユ粍娈忛弮鑸垫￥鏉堟挸鍤垾婵嗘嫲閳ユ粎婀″锝呫亼鐠愩儮鈧繃璐╅崷銊ょ鐠ф灚鈧?
+- `DiagnosticsSnapshot` 閻滄澘鍑￠崠鍝勫瀻 `demux_ignored_packets / demux_queue_drop_packets`閿涘苯鑻熼弬鏉款杻 decoder `send_packet(EAGAIN)`閵嗕龚rain 濞嗏剝鏆熼妴涔ative/copy-back/swscale/filter-blocked` 鐟欏棝顣剁捄顖氱窞鐠佲剝鏆熼妴?
+- `Scheduler` 瀹稿弶鏌婃晶?video/audio 閼冲苯甯囨禍瀣╂娑?video/audio/render restart 缂佺喕顓搁敍瀹篹nder thread 娑旂喓鎾奸崗銉ュ綀娣囨繃濮?worker閿涙矖--performance-log-check` 娴兼艾鎮撳銉ㄧ翻閸戦缚绻栨禍娑欐煀閹稿洦鐖ｉ妴?
 
 
 
 
-### 2026-03-19 鏇存柊锛歅layerCore 鍋滄挱鏀跺彛涓庤繍琛屾椂璁捐鍊轰慨澶?
+### 2026-03-19 閺囧瓨鏌婇敍姝卨ayerCore 閸嬫粍鎸遍弨璺哄經娑撳氦绻嶇悰灞炬鐠佹崘顓搁崐杞版叏婢?
 
 
-- `PlayerCore` 宸茶ˉ涓?deferred stop / worker reap 璺緞锛孍OF 鑷姩鍋滄挱銆丯ext/Previous銆丵uit 绛夎矾寰勪笉鍐嶅彧鏀圭姸鎬佽€岄仐鐣?demux/audio/scheduler 鑴忕嚎绋嬨€?
-- `PacketQueue` 宸蹭粠鍘熷 `AVPacket*` 鍒囧埌 RAII `unique_ptr` 鎵€鏈夋潈妯″瀷锛宻eek / stop / close 杩囩▼涓殑鍓╀綑鍘嬬缉鍖呬細闅忛槦鍒楁竻鐞嗚嚜鍔ㄩ噴鏀俱€?
-- `Scheduler` 宸叉敮鎸佸紓姝ュ仠鏈哄苟鍦ㄩ噸鍚墠鍥炴敹宸查€€鍑?worker锛沗Clock` 宸蹭慨澶?system-clock 鐨?pause/speed 鏃堕棿鍩哄噯杩炵画鎬э紱`Demuxer::open()` 涔熷凡鍘绘帀閿佸唴閲嶅叆 `close()` 鐨勬閿侀闄┿€?
-- 宸查噸鏂版墽琛屾暣宸ョ▼楠岃瘉鍛戒护
-
-  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
-
-  褰撳墠缁撴灉涓?0 涓鍛?/ 0 涓敊璇€?
-
-
-### 2026-03-18 鏇存柊锛歁SVC warning debt 鍒嗗眰娓呯悊
-
-
-
-- Windows MSVC 鐩爣宸插惎鐢?`/utf-8 /external:anglebrackets /external:W0`锛屾湰鍦?UTF-8 婧愭枃浠朵笉鍐嶈Е鍙?`C4819`锛岀涓夋柟 angle-bracket 澶存枃浠?warning 涔熻闅旂鍒板閮ㄥ眰銆?
-- 鏈湴 `logger.cpp` 鐨?`getenv`銆佸瓧骞曡В鏋愬櫒鐨?`sscanf`銆乣main.cpp` 鐨勬湭浣跨敤鍙傛暟锛屼互鍙?`player_core.cpp` 鐨勬潯浠惰祴鍊?warning 鍧囧凡娓呯悊銆?
-- 宸查噸鏂版墽琛屾暣宸ョ▼楠岃瘉鍛戒护
+- `PlayerCore` 瀹歌尪藟娑?deferred stop / worker reap 鐠侯垰绶為敍瀛峅F 閼奉亜濮╅崑婊勬尡閵嗕腐ext/Previous閵嗕傅uit 缁涘鐭惧鍕瑝閸愬秴褰ч弨鍦Ц閹浇鈧矂浠愰悾?demux/audio/scheduler 閼村繒鍤庣粙瀣ㄢ偓?
+- `PacketQueue` 瀹歌弓绮犻崢鐔奉潗 `AVPacket*` 閸掑洤鍩?RAII `unique_ptr` 閹碘偓閺堝娼堝Ο鈥崇€烽敍瀹籩ek / stop / close 鏉╁洨鈻兼稉顓犳畱閸撯晙缍戦崢瀣級閸栧懍绱伴梾蹇涙Е閸掓绔婚悶鍡氬殰閸斻劑鍣撮弨淇扁偓?
+- `Scheduler` 瀹稿弶鏁幐浣哥磽濮濄儱浠犻張鍝勮嫙閸︺劑鍣搁崥顖氬閸ョ偞鏁瑰鏌モ偓鈧崙?worker閿涙矖Clock` 瀹歌弓鎱ㄦ径?system-clock 閻?pause/speed 閺冨爼妫块崺鍝勫櫙鏉╃偟鐢婚幀褝绱盽Demuxer::open()` 娑旂喎鍑￠崢缁樺竴闁夸礁鍞撮柌宥呭弳 `close()` 閻ㄥ嫭顒撮柨渚€顥撻梽鈹库偓?
+- 瀹告煡鍣搁弬鐗堝⒔鐞涘本鏆ｅ銉р柤妤犲矁鐦夐崨鎴掓姢
 
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
 
-  褰撳墠缁撴灉涓?`0 涓鍛?/ 0 涓敊璇痐銆?
-- 杩欒疆鍙樻洿涓嶆墿灞曟挱鏀惧櫒鍔熻兘闈紝鐩爣浠呬负鎭㈠ Windows CI 鐨勪綆鍣０鏋勫缓鍩虹嚎銆?
+  瑜版挸澧犵紒鎾寸亯娑?0 娑擃亣顒熼崨?/ 0 娑擃亪鏁婄拠顖樷偓?
 
 
-### 2026-03-18 鏇存柊锛欰SS 鏍囩瑙ｆ瀽涓?UTF-16 鑼冨洿淇
+### 2026-03-18 閺囧瓨鏌婇敍姝丼VC warning debt 閸掑棗鐪板〒鍛倞
 
 
 
-- `ASS/SSA` override 瑙ｆ瀽宸蹭慨澶?`\fnArial`銆乣\rDefault` 绛夌揣鍑戝啓娉曠殑鏍囩璇嗗埆閿欒锛屽父瑙佸瓧浣撳垏鎹㈠拰鏍峰紡閲嶇疆鐜板湪浼氭寜棰勬湡杩涘叆鍘熺敓 D3D11 瀛楀箷閾俱€?
-- `SubtitleTextRun.start/length` 涓?`D3D11VideoRenderer` 鐨?DirectWrite `DWRITE_TEXT_RANGE` 宸茬粺涓€涓?UTF-16 code unit 璇箟锛宔moji銆佹墿灞曞瓧绗﹀拰鍏朵粬闈?BMP 鏂囨湰鐨勬牱寮忚寖鍥翠笉鍐嶉敊浣嶃€?
-- 宸查噸鏂版墽琛屾暣宸ョ▼楠岃瘉鍛戒护
+- Windows MSVC 閻╊喗鐖ｅ鎻掓儙閻?`/utf-8 /external:anglebrackets /external:W0`閿涘本婀伴崷?UTF-8 濠ф劖鏋冩禒鏈电瑝閸愬秷袝閸?`C4819`閿涘瞼顑囨稉澶嬫煙 angle-bracket 婢跺瓨鏋冩禒?warning 娑旂喕顫﹂梾鏃傤瀲閸掓澘顦婚柈銊ョ湴閵?
+- 閺堫剙婀?`logger.cpp` 閻?`getenv`閵嗕礁鐡ч獮鏇⌒掗弸鎰珤閻?`sscanf`閵嗕梗main.cpp` 閻ㄥ嫭婀担璺ㄦ暏閸欏倹鏆熼敍灞间簰閸?`player_core.cpp` 閻ㄥ嫭娼禒鎯扮ゴ閸?warning 閸у洤鍑″〒鍛倞閵?
+- 瀹告煡鍣搁弬鐗堝⒔鐞涘本鏆ｅ銉р柤妤犲矁鐦夐崨鎴掓姢
 
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
 
-  褰撳墠缁撴灉涓?`167 涓鍛?/ 0 涓敊璇痐锛泈arning 涓昏鏉ヨ嚜绗笁鏂瑰ご鏂囦欢锛團Fmpeg / Quill锛夈€侀」鐩唴澶氬婧愮爜鐨?C4819 缂栫爜鍛婅锛屼互鍙婂皯閲忔棦鏈夌殑 C4996 / C4100 鎻愮ず銆?
-- 鏈疆鍓╀綑琛ヤ竵涓嶅啀鎵╁睍鍔熻兘闈紝鍙敹鏁涘師鐢?D3D11 瀛楀箷閾剧殑璇箟姝ｇ‘鎬т笌浜や粯璁板綍銆?
-### 2026-03-18 鏇存柊锛欴3D11 鍘熺敓娓叉煋閾句笌 ASS/SSA 瀛楀箷閾炬敹鍙?
+  瑜版挸澧犵紒鎾寸亯娑?`0 娑擃亣顒熼崨?/ 0 娑擃亪鏁婄拠鐥愰妴?
+- 鏉╂瑨鐤嗛崣妯绘纯娑撳秵澧跨仦鏇熸尡閺€鎯ф珤閸旂喕鍏橀棃顫礉閻╊喗鐖ｆ禒鍛礋閹垹顦?Windows CI 閻ㄥ嫪缍嗛崳顏勶紣閺嬪嫬缂撻崺铏瑰殠閵?
 
 
-- Windows 榛樿 `D3D11` renderer 鐜板湪鍏峰鐙珛鐨?`window + device + swap chain + native video + native subtitle overlay` 涓婚摼銆?
-- 鍦ㄦ湭鍚敤瑙嗛婊ら暅涓旀牸寮忓彈鏀寔鏃讹紝`PlayerCore` 浼氫繚鐣?`AV_PIX_FMT_D3D11` 鍘熺敓纭欢甯х洿閫氬埌 renderer锛屽苟鍚屾椂鍚戞覆鏌撳櫒鎺ㄩ€佸鏉″綋鍓嶆縺娲诲瓧骞曞璞°€?
-- 澶栨寕瀛楀箷閾惧凡浠庘€滀粎 SRT / 绾枃鏈€濇帹杩涘埌鈥?ass/.ssa/.srt + 缁撴瀯鍖栧瓧骞曞璞?+ 鍘熺敓 D3D11 鏍峰紡缁樺埗鈥濓紱`main.cpp` 鑷姩鎺㈡祴椤哄簭涓?`.ass -> .ssa -> .srt`銆?
-- `D3D11VideoRenderer` 鐜板湪鍦ㄥ悓涓€鍧?swap chain backbuffer 涓婂畬鎴?ASS/SSA 甯哥敤鏍峰紡瀛楀箷缁樺埗锛岃鐩栧～鍏呫€佹弿杈广€侀槾褰便€佽儗鏅銆佸榻愩€佸畾浣嶅拰 run 绾у瓧浣撴牱寮忥紱闈?D3D11 娓叉煋鍣ㄩ粯璁ら€€鍖栦负绾枃鏈樉绀恒€?
-- 宸叉竻鐞嗗叏灞€鏋勫缓闃诲鏂囦欢涓殑缂栫爜璇闂锛屽畬鏁磋В鍐虫柟妗堥獙璇佸懡浠?
+### 2026-03-18 閺囧瓨鏌婇敍娆癝S 閺嶅洨顒风憴锝嗙€芥稉?UTF-16 閼煎啫娲挎穱顔筋劀
+
+
+
+- `ASS/SSA` override 鐟欙絾鐎藉韫叏婢?`\fnArial`閵嗕梗\rDefault` 缁涘鎻ｉ崙鎴濆晸濞夋洜娈戦弽鍥╊劮鐠囧棗鍩嗛柨娆掝嚖閿涘苯鐖剁憴浣哥摟娴ｆ挸鍨忛幑銏犳嫲閺嶅嘲绱￠柌宥囩枂閻滄澘婀导姘瘻妫板嫭婀℃潻娑樺弳閸樼喓鏁?D3D11 鐎涙绠烽柧淇扁偓?
+- `SubtitleTextRun.start/length` 娑?`D3D11VideoRenderer` 閻?DirectWrite `DWRITE_TEXT_RANGE` 瀹歌尙绮烘稉鈧稉?UTF-16 code unit 鐠囶厺绠熼敍瀹攎oji閵嗕焦澧跨仦鏇炵摟缁楋箑鎷伴崗鏈电铂闂?BMP 閺傚洦婀伴惃鍕壉瀵繗瀵栭崶缈犵瑝閸愬秹鏁婃担宥冣偓?
+- 瀹告煡鍣搁弬鐗堝⒔鐞涘本鏆ｅ銉р柤妤犲矁鐦夐崨鎴掓姢
+
+  `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.vcxproj /t:Rebuild /p:Configuration=Debug /p:Platform=x64 /m`
+
+  瑜版挸澧犵紒鎾寸亯娑?`167 娑擃亣顒熼崨?/ 0 娑擃亪鏁婄拠鐥愰敍娉坅rning 娑撴槒顩﹂弶銉ㄥ殰缁楊兛绗侀弬鐟般仈閺傚洣娆㈤敍鍦楩mpeg / Quill閿涘鈧線銆嶉惄顔煎敶婢舵艾顦╁┃鎰垳閻?C4819 缂傛牜鐖滈崨濠咁劅閿涘奔浜掗崣濠傜毌闁插繑妫﹂張澶屾畱 C4996 / C4100 閹绘劗銇氶妴?
+- 閺堫剝鐤嗛崜鈺€缍戠悰銉ょ娑撳秴鍟€閹碘晛鐫嶉崝鐔诲厴闂堫澁绱濋崣顏呮暪閺佹稑甯悽?D3D11 鐎涙绠烽柧鍓ф畱鐠囶厺绠熷锝団€橀幀褌绗屾禍銈勭帛鐠佹澘缍嶉妴?
+### 2026-03-18 閺囧瓨鏌婇敍娆?D11 閸樼喓鏁撳〒鍙夌厠闁惧彞绗?ASS/SSA 鐎涙绠烽柧鐐暪閸?
+
+
+- Windows 姒涙顓?`D3D11` renderer 閻滄澘婀崗宄邦槵閻欘剛鐝涢惃?`window + device + swap chain + native video + native subtitle overlay` 娑撳鎽奸妴?
+- 閸︺劍婀崥顖滄暏鐟欏棝顣跺銈夋殔娑撴梹鐗稿蹇撳綀閺€顖涘瘮閺冭绱漙PlayerCore` 娴兼矮绻氶悾?`AV_PIX_FMT_D3D11` 閸樼喓鏁撶涵顑挎鐢呮纯闁艾鍩?renderer閿涘苯鑻熼崥灞炬閸氭垶瑕嗛弻鎾虫珤閹恒劑鈧礁顦块弶鈥崇秼閸撳秵绺哄ú璇茬摟楠炴洖顕挒掳鈧?
+- 婢舵牗瀵曠€涙绠烽柧鎯у嚒娴犲簶鈧粈绮?SRT / 缁绢垱鏋冮張顑解偓婵囧腹鏉╂稑鍩岄垾?ass/.ssa/.srt + 缂佹挻鐎崠鏍х摟楠炴洖顕挒?+ 閸樼喓鏁?D3D11 閺嶅嘲绱＄紒妯哄煑閳ユ繐绱盽main.cpp` 閼奉亜濮╅幒銏＄ゴ妞ゅ搫绨稉?`.ass -> .ssa -> .srt`閵?
+- `D3D11VideoRenderer` 閻滄澘婀崷銊ユ倱娑撯偓閸?swap chain backbuffer 娑撳﹤鐣幋?ASS/SSA 鐢摜鏁ら弽宄扮础鐎涙绠风紒妯哄煑閿涘矁顩惄鏍э綖閸忓懌鈧焦寮挎潏骞库偓渚€妲捐ぐ渚库偓浣藉剹閺咁垱顢嬮妴浣割嚠姒绘劑鈧礁鐣炬担宥呮嫲 run 缁狙冪摟娴ｆ挻鐗卞蹇ョ幢闂?D3D11 濞撳弶鐓嬮崳銊╃帛鐠併倝鈧偓閸栨牔璐熺痪顖涙瀮閺堫剚妯夌粈鎭掆偓?
+- 瀹稿弶绔婚悶鍡楀弿鐏炩偓閺嬪嫬缂撻梼璇差敚閺傚洣娆㈡稉顓犳畱缂傛牜鐖滅拠顖濐嚢闂傤噣顣介敍灞界暚閺佺袙閸愯櫕鏌熷鍫ョ崣鐠囦礁鎳℃禒?
   `& "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" build\modern-video-player.sln /t:modern-video-player /p:Configuration=Debug /p:Platform=x64 /m`
 
-  褰撳墠缁撴灉涓?`0 涓鍛?/ 0 涓敊璇痐銆?
-- 褰撳墠闄愬埗浠嶇劧瀛樺湪锛氳繖涓嶆槸瀹屾暣鐨?libass 绛変环瀹炵幇锛屽皻鏈ˉ鍏呯湡瀹?`.ass` 鏍锋湰鐨勮繍琛屾椂瑙嗚楠屾敹锛涜瑙?`docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md` 涓?`docs/records/CHANGELOG.md` 鐨勯棶棰?66銆?
+  瑜版挸澧犵紒鎾寸亯娑?`0 娑擃亣顒熼崨?/ 0 娑擃亪鏁婄拠鐥愰妴?
+- 瑜版挸澧犻梽鎰煑娴犲秶鍔х€涙ê婀敍姘崇箹娑撳秵妲哥€瑰本鏆ｉ惃?libass 缁涘鐜€圭偟骞囬敍灞界毣閺堫亣藟閸忓懐婀＄€?`.ass` 閺嶉攱婀伴惃鍕箥鐞涘本妞傜憴鍡氼潕妤犲本鏁归敍娑滎嚊鐟?`docs/design/D3D11_NATIVE_RENDER_CHAIN_2026-03-18.md` 娑?`docs/records/CHANGELOG.md` 閻ㄥ嫰妫舵０?66閵?
 ---
 
-## 闃舵涓€锛氬熀纭€鎾斁鍣紙鍘嗗彶璧风偣锛?
+## 闂冭埖顔屾稉鈧敍姘唨绾偓閹绢厽鏂侀崳顭掔礄閸樺棗褰剁挧椋庡仯閿?
 
 
-### 寮€濮嬫棩鏈?
+### 瀵偓婵妫╅張?
 2026-02-17
 
 
 
-### 闃舵鐩爣
+### 闂冭埖顔岄惄顔界垼
 
-瀹炵幇鍩虹鐨勮棰戞挱鏀惧姛鑳斤紝鍖呮嫭锛?
-- 瑙嗛瑙ｇ爜鍜屾樉绀?
-- 闊抽瑙ｇ爜鍜屾挱鏀?
-- 鍩烘湰鎾斁鎺у埗
-
-
-
-### 瀹屾垚鐘舵€?
-- [x] 椤圭洰缁撴瀯鎼缓
-
-- [x] FFmpeg 8.0.1 闆嗘垚
-
-- [x] SDL2 2.30.11 闆嗘垚
-
-- [x] 鏃ュ織绯荤粺锛圦uill 鍙岄€氶亾 + Fallback锛?
-- [x] 瑙嗛瑙ｇ爜妯″潡
-
-- [x] 闊抽瑙ｇ爜妯″潡
-
-- [x] 瑙嗛鏄剧ず妯″潡
-
-- [x] 闊抽鎾斁妯″潡
-
-- [x] 涓绘挱鏀惧櫒閫昏緫
-
-- [x] 鐗堟湰鍏煎鎬т慨澶?
-- [x] 瑙嗛娴佺储寮曚笉鍖归厤闂淇
+鐎圭偟骞囬崺铏诡攨閻ㄥ嫯顫嬫０鎴炴尡閺€鎯у閼虫枻绱濋崠鍛閿?
+- 鐟欏棝顣剁憴锝囩垳閸滃本妯夌粈?
+- 闂婃娊顣剁憴锝囩垳閸滃本鎸遍弨?
+- 閸╃儤婀伴幘顓熸杹閹貉冨煑
 
 
 
-**璇存槑**:
+### 鐎瑰本鍨氶悩鑸碘偓?
+- [x] 妞ゅ湱娲扮紒鎾寸€幖顓炵紦
 
-- 鏈妭璁板綍鐨勬槸 2026-02-17 ~ 2026-02-25 鐨勬棭鏈熷疄鐜板熀绾裤€?
-- 褰撴椂浣跨敤鐨勬槸鏃х増 decoder / playLoop 鏋舵瀯锛涚浉鍏虫枃浠跺凡鍦?2026-03-06 鏋舵瀯鏀舵暃鍚庣Щ闄ゆ垨骞跺叆 `PlayerCore + Scheduler + core/*` 涓婚摼銆?
-- 涓洪伩鍏嶈瀵硷紝涓嬭堪鍘嗗彶璇存槑淇濈暀鈥滆兘鍔涗笌闂鈥濇湰韬紝涓嶅啀鎶婂凡鍒犻櫎鏂囦欢褰撲綔褰撳墠浠撳簱缁撴瀯璇存槑銆?
+- [x] FFmpeg 8.0.1 闂嗗棙鍨?
+- [x] SDL2 2.30.11 闂嗗棙鍨?
+- [x] 閺冦儱绻旂化鑽ょ埠閿涘湨uill 閸欏矂鈧岸浜?+ Fallback閿?
+- [x] 鐟欏棝顣剁憴锝囩垳濡€虫健
 
+- [x] 闂婃娊顣剁憴锝囩垳濡€虫健
 
-### 鐗堟湰鍏煎鎬т慨鏀?
+- [x] 鐟欏棝顣堕弰鍓с仛濡€虫健
 
+- [x] 闂婃娊顣堕幘顓熸杹濡€虫健
 
-#### FFmpeg 8.0.1 鍏煎鎬?
-- 淇 `codec_ctx_->avctx->priv_data` 鍦?FFmpeg 8.0 涓笉鍙敤鐨勯棶棰?
-- 璇ヤ慨澶嶅彂鐢熷湪鏃х増鐙珛瑙嗛/闊抽瑙ｇ爜鍣ㄥ疄鐜颁腑锛?
-  - 鍦ㄨВ鐮佸櫒瀵硅薄鍐呮樉寮忎繚瀛?`format context`锛?
-  - 涓嶅啀渚濊禆浠?`codec context` 鍙嶅悜璇诲彇鍐呴儴瀛楁銆?
-- 鐩稿叧瀹炵幇鍚庢潵宸插苟鍏ョ幇琛岃В灏佽/瑙ｇ爜涓婚摼锛屾棫鏂囦欢鍚嶅凡涓嶅啀淇濈暀銆?
-#### 鏃ュ織绯荤粺鏇存柊锛堜紒涓氱骇 Quill 绠￠亾锛?
-- 閲嶆柊鍚敤 Quill锛屾瀯寤?ConsoleSink + RotatingFileSink 寮傛鏃ュ織閫氶亾锛屽苟淇濇寔 stdout/stderr 澶囨彺銆?
-- `config/logging.conf` 涓?`MVP_LOG_*` 鐜鍙橀噺鏀寔杩愯鏃惰皟鏁?`log_dir`銆佽疆杞ぇ灏?鏁伴噺鍙婃棩蹇楃瓑绾с€?
-- 鍒濆鍖栧け璐ユ垨鐩綍涓嶅彲鍐欐椂鑷姩鍛婅骞堕檷绾э紱瀹忔帴鍙ｄ笌 `DEBUG_MODE` 琛屼负淇濇寔鍏煎銆?
-- 淇敼鏂囦欢锛歚include/logger.h`銆乣src/logger.cpp`銆乣config/logging.conf`銆乣docs/design/LOGGING.md`銆乣docs/records/CHANGELOG.md`銆乣docs/records/VERSION.md`
-
-- 缂栬瘧杈撳嚭绀轰緥锛歚Quill: enabled`锛岃繍琛屾湡鏃ュ織鍐欏叆 `logs/modern-video-player.log`
+- [x] 娑撶粯鎸遍弨鎯ф珤闁槒绶?
+- [x] 閻楀牊婀伴崗鐓庮啇閹傛叏婢?
+- [x] 鐟欏棝顣跺ù浣哄偍瀵洑绗夐崠褰掑帳闂傤噣顣芥穱顔碱槻
 
 
 
-#### 澶氱嚎绋嬫挱鏀炬灦鏋勯噸鏋?(2026-02-25)
+**鐠囧瓨妲?*:
 
-- 瀹炵幇鐙珛瑙嗛瑙ｇ爜绾跨▼锛圴ideoDecodeThread锛?
-- 瀹炵幇鐙珛闊抽瑙ｇ爜绾跨▼锛圓udioDecodeThread锛?
-- 瀹炵幇绾跨▼瀹夊叏甯ч槦鍒楋紙FrameQueue锛夛紝鏀寔鏉′欢鍙橀噺绛夊緟
+- 閺堫剝濡拋鏉跨秿閻ㄥ嫭妲?2026-02-17 ~ 2026-02-25 閻ㄥ嫭妫張鐔风杽閻滄澘鐔€缁捐￥鈧?
+- 瑜版挻妞傛担璺ㄦ暏閻ㄥ嫭妲搁弮褏澧?decoder / playLoop 閺嬭埖鐎敍娑氭祲閸忚櫕鏋冩禒璺哄嚒閸?2026-03-06 閺嬭埖鐎弨鑸垫殐閸氬海些闂勩倖鍨ㄩ獮璺哄弳 `PlayerCore + Scheduler + core/*` 娑撳鎽奸妴?
+- 娑撴椽浼╅崗宥堫嚖鐎电》绱濇稉瀣牚閸樺棗褰剁拠瀛樻娣囨繄鏆€閳ユ粏鍏橀崝娑楃瑢闂傤噣顣介垾婵囨拱闊偓绱濇稉宥呭晙閹跺﹤鍑￠崚鐘绘珟閺傚洣娆㈣ぐ鎾茬稊瑜版挸澧犳禒鎾崇氨缂佹挻鐎拠瀛樻閵?
 
-- 瀹炵幇闊宠棰戝悓姝ョ鐞嗗櫒锛圫yncManager锛夛紝鏀寔 AudioMaster/VideoMaster/Free 涓夌妯″紡
 
-- 閲嶆瀯 VideoPlayer锛屼粠鍗曠嚎绋?playLoop 鏀逛负澶氱嚎绋?renderLoop
+### 閻楀牊婀伴崗鐓庮啇閹傛叏閺€?
 
-- 杩欎簺鑳藉姏鍚庢潵娌夋穩涓哄綋鍓嶄粨搴撲腑鐨?`core` 妯″潡锛?
+
+#### FFmpeg 8.0.1 閸忕厧顔愰幀?
+- 娣囶喖顦?`codec_ctx_->avctx->priv_data` 閸?FFmpeg 8.0 娑擃厺绗夐崣顖滄暏閻ㄥ嫰妫舵０?
+- 鐠囥儰鎱ㄦ径宥呭絺閻㈢喎婀弮褏澧楅悪顒傜彌鐟欏棝顣?闂婃娊顣剁憴锝囩垳閸ｃ劌鐤勯悳棰佽厬閿?
+  - 閸︺劏袙閻礁娅掔€电钖勯崘鍛▔瀵繋绻氱€?`format context`閿?
+  - 娑撳秴鍟€娓氭繆绂嗘禒?`codec context` 閸欏秴鎮滅拠璇插絿閸愬懘鍎寸€涙顔岄妴?
+- 閻╃鍙х€圭偟骞囬崥搴㈡降瀹告彃鑻熼崗銉у箛鐞涘矁袙鐏忎浇顥?鐟欙絿鐖滄稉濠氭懠閿涘本妫弬鍥︽閸氬秴鍑℃稉宥呭晙娣囨繄鏆€閵?
+#### 閺冦儱绻旂化鑽ょ埠閺囧瓨鏌婇敍鍫滅磼娑撴氨楠?Quill 缁狅繝浜鹃敍?
+- 闁插秵鏌婇崥顖滄暏 Quill閿涘本鐎?ConsoleSink + RotatingFileSink 瀵倹顒為弮銉ョ箶闁岸浜鹃敍灞借嫙娣囨繃瀵?stdout/stderr 婢跺洦褰洪妴?
+- `config/logging.conf` 娑?`MVP_LOG_*` 閻滎垰顣ㄩ崣姗€鍣洪弨顖涘瘮鏉╂劘顢戦弮鎯扮殶閺?`log_dir`閵嗕浇鐤嗘潪顒€銇囩亸?閺佷即鍣洪崣濠冩）韫囨鐡戠痪褋鈧?
+- 閸掓繂顫愰崠鏍с亼鐠愩儲鍨ㄩ惄顔肩秿娑撳秴褰查崘娆愭閼奉亜濮╅崨濠咁劅楠炲爼妾风痪褝绱辩€瑰繑甯撮崣锝勭瑢 `DEBUG_MODE` 鐞涘奔璐熸穱婵囧瘮閸忕厧顔愰妴?
+- 娣囶喗鏁奸弬鍥︽閿涙瓪include/logger.h`閵嗕梗src/logger.cpp`閵嗕梗config/logging.conf`閵嗕梗docs/design/LOGGING.md`閵嗕梗docs/records/CHANGELOG.md`閵嗕梗docs/records/VERSION.md`
+
+- 缂傛牞鐦ф潏鎾冲毉缁€杞扮伐閿涙瓪Quill: enabled`閿涘矁绻嶇悰灞炬埂閺冦儱绻旈崘娆忓弳 `logs/modern-video-player.log`
+
+
+
+#### 婢舵氨鍤庣粙瀣尡閺€鐐仸閺嬪嫰鍣搁弸?(2026-02-25)
+
+- 鐎圭偟骞囬悪顒傜彌鐟欏棝顣剁憴锝囩垳缁捐法鈻奸敍鍦磇deoDecodeThread閿?
+- 鐎圭偟骞囬悪顒傜彌闂婃娊顣剁憴锝囩垳缁捐法鈻奸敍鍦搖dioDecodeThread閿?
+- 鐎圭偟骞囩痪璺ㄢ柤鐎瑰鍙忕敮褔妲﹂崚妤嬬礄FrameQueue閿涘绱濋弨顖涘瘮閺夆€叉閸欐﹢鍣虹粵澶婄窡
+
+- 鐎圭偟骞囬棅瀹狀潒妫版垵鎮撳銉ь吀閻炲棗娅掗敍鍦珁ncManager閿涘绱濋弨顖涘瘮 AudioMaster/VideoMaster/Free 娑撳顫掑Ο鈥崇础
+
+- 闁插秵鐎?VideoPlayer閿涘奔绮犻崡鏇犲殠缁?playLoop 閺€閫涜礋婢舵氨鍤庣粙?renderLoop
+
+- 鏉╂瑤绨洪懗钘夊閸氬孩娼靛▽澶嬬┅娑撳搫缍嬮崜宥勭波鎼存挷鑵戦惃?`core` 濡€虫健閿?
   - `include/core/frame_queue.h`
 
   - `include/core/decoder_thread.h`
@@ -451,86 +602,76 @@
 
   - `include/core/player_core.h`
 
-- 鏃х増绾跨▼/鍚屾鏂囦欢鍚嶄粎浠ｈ〃鏃╂湡瀹炵幇闃舵锛岀幇宸蹭笉鍐嶄綔涓哄綋鍓嶆枃浠剁粨鏋勫瓨鍦ㄣ€?
-#### 闊抽鎾斁鏋舵瀯淇 (2026-02-25)
+- 閺冄呭缁捐法鈻?閸氬本顒為弬鍥︽閸氬秳绮庢禒锝堛€冮弮鈺傛埂鐎圭偟骞囬梼鑸殿唽閿涘瞼骞囧韫瑝閸愬秳缍旀稉鍝勭秼閸撳秵鏋冩禒鍓佺波閺嬪嫬鐡ㄩ崷銊ｂ偓?
+#### 闂婃娊顣堕幘顓熸杹閺嬭埖鐎穱顔碱槻 (2026-02-25)
 
-- 淇闊抽鎾斁鏂柇缁画鐨勯棶棰?
-- AudioDecodeThread 瑙ｇ爜鍚庣洿鎺ヨ皟鐢?AudioPlayer::play() 灏嗘暟鎹斁鍏?SDL 闃熷垪
+- 娣囶喖顦查棅鎶筋暥閹绢厽鏂侀弬顓熸焽缂侇厾鐢婚惃鍕６妫?
+- AudioDecodeThread 鐟欙絿鐖滈崥搴ｆ纯閹恒儴鐨熼悽?AudioPlayer::play() 鐏忓棙鏆熼幑顔芥杹閸?SDL 闂冪喎鍨?
+- 绾喕绻?SDL 闂婃娊顣堕崶鐐剁殶閼宠姤瀵旂紒顓″箯閸欐牗鏆熼幑?
+- 閻╃鍙ч柅鏄忕帆閸氬孩娼靛鎻掕嫙閸忋儱缍嬮崜宥夌叾妫版垶绉风拹鍦殠缁嬪鈧梗AudioPlayer` 娑?`PlayerCore` 娑撳鎽奸敍灞肩瑝閸愬秴顕惔鏃傚缁斿妫弬鍥︽閸氬秲鈧?
+#### Frame 缁夎濮╃拠顓濈疅娣囶喖顦?(2026-02-25)
 
-- 纭繚 SDL 闊抽鍥炶皟鑳芥寔缁幏鍙栨暟鎹?
-- 鐩稿叧閫昏緫鍚庢潵宸插苟鍏ュ綋鍓嶉煶棰戞秷璐圭嚎绋嬨€乣AudioPlayer` 涓?`PlayerCore` 涓婚摼锛屼笉鍐嶅搴旂嫭绔嬫棫鏂囦欢鍚嶃€?
-#### Frame 绉诲姩璇箟淇 (2026-02-25)
-
-- 淇 VideoFrame 鍜?AudioFrame 绫荤己灏戠Щ鍔ㄨ涔夊鑷寸殑宕╂簝闂
-
-- 涓?VideoFrame 娣诲姞绉诲姩鏋勯€犲嚱鏁板拰绉诲姩璧嬪€艰繍绠楃
-
-- 涓?AudioFrame 娣诲姞绉诲姩鏋勯€犲嚱鏁板拰绉诲姩璧嬪€艰繍绠楃
-
-- 鏄惧紡鍒犻櫎鎷疯礉鏋勯€犲嚱鏁板拰鎷疯礉璧嬪€艰繍绠楃锛岄槻姝㈡祬鎷疯礉
-
-- 褰撳墠绛変环鑳藉姏浣嶄簬锛?
+- 娣囶喖顦?VideoFrame 閸?AudioFrame 缁崵宸辩亸鎴犘╅崝銊嚔娑斿顕遍懛瀵告畱瀹曗晜绨濋梻顕€顣?
+- 娑?VideoFrame 濞ｈ濮炵粔璇插З閺嬪嫰鈧姴鍤遍弫鏉挎嫲缁夎濮╃挧瀣偓鑹扮箥缁犳顑?
+- 娑?AudioFrame 濞ｈ濮炵粔璇插З閺嬪嫰鈧姴鍤遍弫鏉挎嫲缁夎濮╃挧瀣偓鑹扮箥缁犳顑?
+- 閺勬儳绱￠崚鐘绘珟閹风柉绀夐弸鍕偓鐘插毐閺佹澘鎷伴幏鐤鐠у鈧壈绻嶇粻妤冾儊閿涘矂妲诲銏＄ガ閹风柉绀?
+- 瑜版挸澧犵粵澶夌幆閼宠棄濮忔担宥勭艾閿?
   - `include/core/frame.h`
 
   - `src/core/frame.cpp`
 
-#### 澶氳В鐮佸櫒瀹炰緥绔炰簤璇诲彇淇 (2026-02-25)
+#### 婢舵俺袙閻礁娅掔€圭偘绶ョ粩鐐扮挨鐠囪褰囨穱顔碱槻 (2026-02-25)
 
-- 淇鎾斁鏃跺涓В鐮佸櫒绔炰簤璇诲彇鍚屼竴 AVFormatContext 瀵艰嚧鐨勮В鐮侀敊璇?
-- 鍦ㄦ棭鏈熷疄鐜颁腑閫氳繃閲嶇疆鏃х増瑙ｇ爜鍣ㄧ姸鎬侀伩鍏嶇珵浜夛紱鍚庣画宸叉敼涓虹粺涓€ `Demuxer + PlayerCore + Scheduler` 涓婚摼
-
-- 淇敼鏂囦欢锛?
+- 娣囶喖顦查幘顓熸杹閺冭泛顦挎稉顏囆掗惍浣告珤缁旂偘绨ょ拠璇插絿閸氬奔绔?AVFormatContext 鐎佃壈鍤ч惃鍕掗惍渚€鏁婄拠?
+- 閸︺劍妫張鐔风杽閻滈鑵戦柅姘崇箖闁插秶鐤嗛弮褏澧楃憴锝囩垳閸ｃ劎濮搁幀渚€浼╅崗宥囩彽娴滃绱遍崥搴ｇ敾瀹稿弶鏁兼稉铏圭埠娑撯偓 `Demuxer + PlayerCore + Scheduler` 娑撳鎽?
+- 娣囶喗鏁奸弬鍥︽閿?
   - `src/video_player.cpp`
 
-### 宸茬煡闂
-
-- 闊宠棰戝悓姝ヤ娇鐢ㄧ畝鍗曠殑鏃堕棿璁＄畻锛岄珮閫熸垨浣庨€熸挱鏀炬椂鍙兘鏈夊悓姝ラ棶棰?
-- 浠呮敮鎸?YUV420P 鏍煎紡鐨勮棰?
-- seek 鍔熻兘闇€瑕佽繘涓€姝ュ畬鍠?
-
-
-### 闂淇璁板綍
+### 瀹歌尙鐓￠梻顕€顣?
+- 闂婂疇顫嬫０鎴濇倱濮濄儰濞囬悽銊х暆閸楁洜娈戦弮鍫曟？鐠侊紕鐣婚敍宀勭彯闁喐鍨ㄦ担搴ㄢ偓鐔告尡閺€鐐閸欘垵鍏橀張澶婃倱濮濄儵妫舵０?
+- 娴犲懏鏁幐?YUV420P 閺嶇厧绱￠惃鍕潒妫?
+- seek 閸旂喕鍏橀棁鈧憰浣界箻娑撯偓濮濄儱鐣崰?
 
 
+### 闂傤噣顣芥穱顔碱槻鐠佹澘缍?
 
-#### 瑙嗛娴佺储寮曚笉鍖归厤闂 (2026-02-24)
+
+#### 鐟欏棝顣跺ù浣哄偍瀵洑绗夐崠褰掑帳闂傤噣顣?(2026-02-24)
 
 
 
-**闂鎻忚堪**:
+**闂傤噣顣介幓蹇氬牚**:
 
-- 鎾斁 mp4 鏂囦欢鏃讹紝瑙嗛鏃犳硶姝ｅ父鏄剧ず
+- 閹绢厽鏂?mp4 閺傚洣娆㈤弮璁圭礉鐟欏棝顣堕弮鐘崇《濮濓絽鐖堕弰鍓с仛
 
-- 鏃ュ織鏄剧ず `stream_index=0, expected=1` 鍙嶅鍑虹幇
+- 閺冦儱绻旈弰鍓с仛 `stream_index=0, expected=1` 閸欏秴顦查崙铏瑰箛
 
-- 绋嬪簭寰幆 48 娆℃墠鑳借鍒版纭殑瑙嗛甯?
-
-
-**闂鍘熷洜**:
-
-- MP4 鏂囦欢鐨勬祦椤哄簭鏄煶棰戞祦(绱㈠紩0)鍦ㄨ棰戞祦(绱㈠紩1)涔嬪墠
-
-- `av_read_frame()` 杩斿洖鐨勫寘鍙兘鏄换鎰忔祦鐨勶紙閫氬父鏄涓€涓祦 - 闊抽娴侊級
-
-- 鍘熶唬鐮侀亣鍒颁笉鍖归厤鐨勬祦鏃剁洿鎺ヨ繑鍥?false锛屽鑷磋棰戝抚鏃犳硶瑙ｇ爜
+- 缁嬪绨顏嗗箚 48 濞嗏剝澧犻懗鍊燁嚢閸掔増顒滅涵顔炬畱鐟欏棝顣剁敮?
 
 
+**闂傤噣顣介崢鐔锋礈**:
 
-**瑙ｅ喅鏂规**:
+- MP4 閺傚洣娆㈤惃鍕ウ妞ゅ搫绨弰顖炵叾妫版垶绁?缁便垹绱?)閸︺劏顫嬫０鎴炵ウ(缁便垹绱?)娑斿澧?
+- `av_read_frame()` 鏉╂柨娲栭惃鍕瘶閸欘垵鍏橀弰顖欐崲閹板繑绁﹂惃鍕剁礄闁艾鐖堕弰顖滎儑娑撯偓娑擃亝绁?- 闂婃娊顣跺ù渚婄礆
 
-- 淇敼鏃х増瑙嗛瑙ｇ爜寰幆鐨勮鍖呴€昏緫
-
-- 灏嗛亣鍒颁笉鍖归厤娴佹椂杩斿洖 false锛屾敼涓?continue 璺宠繃璇ュ寘
-
-- 寰幆璇诲彇鐩村埌鎵惧埌姝ｇ‘娴佺储寮曠殑鍖?
+- 閸樼喍鍞惍渚€浜ｉ崚棰佺瑝閸栧綊鍘ら惃鍕ウ閺冨墎娲块幒銉ㄧ箲閸?false閿涘苯顕遍懛纾嬵潒妫版垵鎶氶弮鐘崇《鐟欙絿鐖?
 
 
-**淇敼鏂囦欢**:
+**鐟欙絽鍠呴弬瑙勵攳**:
 
-- 鏃х増瑙嗛瑙ｇ爜鍣ㄥ疄鐜帮紙璇ユ枃浠跺悗缁凡鍦ㄦ灦鏋勬敹鏁涗腑绉婚櫎锛?
+- 娣囶喗鏁奸弮褏澧楃憴鍡涱暥鐟欙絿鐖滃顏嗗箚閻ㄥ嫯顕伴崠鍛粹偓鏄忕帆
+
+- 鐏忓棝浜ｉ崚棰佺瑝閸栧綊鍘ゅù浣规鏉╂柨娲?false閿涘本鏁兼稉?continue 鐠哄疇绻冪拠銉ュ瘶
+
+- 瀵邦亞骞嗙拠璇插絿閻╂潙鍩岄幍鎯у煂濮濓絿鈥樺ù浣哄偍瀵洜娈戦崠?
 
 
-**鏃ュ織绀轰緥**:
+**娣囶喗鏁奸弬鍥︽**:
+
+- 閺冄呭鐟欏棝顣剁憴锝囩垳閸ｃ劌鐤勯悳甯礄鐠囥儲鏋冩禒璺烘倵缂侇厼鍑￠崷銊︾仸閺嬪嫭鏁归弫娑楄厬缁夊娅庨敍?
+
+
+**閺冦儱绻旂粈杞扮伐**:
 
 ```
 
@@ -538,7 +679,7 @@
 
 [DEBUG] [VIDEO] decodeFrame: packet stream mismatch, skipping
 
-... (閲嶅 48 娆?
+... (闁插秴顦?48 濞?
 
 [DEBUG] [VIDEO] decodeFrame: read packet, stream_index=1, expected=1
 
@@ -548,61 +689,59 @@
 
 
 
-#### 闊抽娴佺储寮曚笉鍖归厤闂 (2026-02-24)
+#### 闂婃娊顣跺ù浣哄偍瀵洑绗夐崠褰掑帳闂傤噣顣?(2026-02-24)
 
 
 
-**闂鎻忚堪**:
+**闂傤噣顣介幓蹇氬牚**:
 
-- 涓庤棰戞祦绱㈠紩鐩稿悓鐨勯棶棰橈紝闊抽鏃犳硶姝ｅ父瑙ｇ爜
-
-
-
-**闂鍘熷洜**:
-
-- 鍚屾牱鐨勯棶棰橈細闊抽鍖呭彲鑳戒笉鏄涓€涓璇诲彇鐨勬祦
+- 娑撳氦顫嬫０鎴炵ウ缁便垹绱╅惄绋挎倱閻ㄥ嫰妫舵０姗堢礉闂婃娊顣堕弮鐘崇《濮濓絽鐖剁憴锝囩垳
 
 
 
-**瑙ｅ喅鏂规**:
+**闂傤噣顣介崢鐔锋礈**:
 
-- 淇敼鏃х増闊抽瑙ｇ爜寰幆鐨勮鍖呴€昏緫
-
-- 搴旂敤涓庤棰戣В鐮佸櫒鐩稿悓鐨勪慨澶?
-
-
-**淇敼鏂囦欢**:
-
-- 鏃х増闊抽瑙ｇ爜鍣ㄥ疄鐜帮紙璇ユ枃浠跺悗缁凡鍦ㄦ灦鏋勬敹鏁涗腑绉婚櫎锛?
-
-
-#### YUV 鏁版嵁娓叉煋閿欒 (2026-02-24)
+- 閸氬本鐗遍惃鍕６妫版﹫绱伴棅鎶筋暥閸栧懎褰查懗鎴掔瑝閺勵垳顑囨稉鈧稉顏囶潶鐠囪褰囬惃鍕ウ
 
 
 
-**闂鎻忚堪**:
+**鐟欙絽鍠呴弬瑙勵攳**:
 
-- 瑙ｇ爜鎴愬姛鍚庣▼搴忕珛鍗抽€€鍑猴紝娌℃湁鐢婚潰鏄剧ず
+- 娣囶喗鏁奸弮褏澧楅棅鎶筋暥鐟欙絿鐖滃顏嗗箚閻ㄥ嫯顕伴崠鍛粹偓鏄忕帆
 
-
-
-**闂鍘熷洜**:
-
-- `renderFrame` 鍑芥暟浣跨敤閿欒鐨?YUV 鏁版嵁
-
-- 鍘熸潵浼犻€掔殑鏄?`frame->data[0]`锛堝彧鏄?Y 骞抽潰鎸囬拡锛?
-- 鐒跺悗閿欒鍦板亣璁?Y/U/V 鏄繛缁瓨鍌ㄧ殑
+- 鎼存梻鏁ゆ稉搴ゎ潒妫版垼袙閻礁娅掗惄绋挎倱閻ㄥ嫪鎱ㄦ径?
 
 
+**娣囶喗鏁奸弬鍥︽**:
 
-**瑙ｅ喅鏂规**:
-
-1. 浼犻€掓暣涓?AVFrame 鎸囬拡鑰屼笉鏄?`data[0]`
-
-2. 姝ｇ‘浣跨敤 Y/U/V 骞抽潰鐨勬暟鎹拰琛屽ぇ灏?
+- 閺冄呭闂婃娊顣剁憴锝囩垳閸ｃ劌鐤勯悳甯礄鐠囥儲鏋冩禒璺烘倵缂侇厼鍑￠崷銊︾仸閺嬪嫭鏁归弫娑楄厬缁夊娅庨敍?
 
 
-**淇敼鏂囦欢**:
+#### YUV 閺佺増宓佸〒鍙夌厠闁挎瑨顕?(2026-02-24)
+
+
+
+**闂傤噣顣介幓蹇氬牚**:
+
+- 鐟欙絿鐖滈幋鎰閸氬海鈻兼惔蹇曠彌閸楁娊鈧偓閸戠尨绱濆▽鈩冩箒閻㈠娼伴弰鍓с仛
+
+
+
+**闂傤噣顣介崢鐔锋礈**:
+
+- `renderFrame` 閸戣姤鏆熸担璺ㄦ暏闁挎瑨顕ら惃?YUV 閺佺増宓?
+- 閸樼喐娼垫导鐘烩偓鎺旀畱閺?`frame->data[0]`閿涘牆褰ч弰?Y 楠炴娊娼伴幐鍥嫛閿?
+- 閻掕泛鎮楅柨娆掝嚖閸︽澘浜ｇ拋?Y/U/V 閺勵垵绻涚紒顓炵摠閸屻劎娈?
+
+
+**鐟欙絽鍠呴弬瑙勵攳**:
+
+1. 娴肩娀鈧帗鏆ｆ稉?AVFrame 閹稿洭鎷￠懓灞肩瑝閺?`data[0]`
+
+2. 濮濓絿鈥樻担璺ㄦ暏 Y/U/V 楠炴娊娼伴惃鍕殶閹诡喖鎷扮悰灞姐亣鐏?
+
+
+**娣囶喗鏁奸弬鍥︽**:
 
 - `src/display.cpp`
 
@@ -610,7 +749,7 @@
 
 
 
-**浠ｇ爜鍙樻洿**:
+**娴狅絿鐖滈崣妯绘纯**:
 
 ```cpp
 
@@ -640,40 +779,37 @@ SDL_UpdateYUVTexture(
 
 
 
-### 闃舵鍚庣画鐩爣锛堝巻鍙茶褰曪級
+### 闂冭埖顔岄崥搴ｇ敾閻╊喗鐖ｉ敍鍫濆坊閸欒尪顔囪ぐ鏇礆
 
-- 鍚庣画鐩爣宸插湪 2026-03-06 涔嬪悗鐨勭珷鑺備腑閫愭钀藉湴锛屽寘鎷細
+- 閸氬海鐢婚惄顔界垼瀹告彃婀?2026-03-06 娑斿鎮楅惃鍕彿閼哄倷鑵戦柅鎰劄閽€钘夋勾閿涘苯瀵橀幏顒婄窗
 
-  - 缁熶竴 `PlayerCore + Scheduler + Filters` 鏋舵瀯锛?
-  - 澶栨寕瀛楀箷銆佹挱鏀惧垪琛ㄣ€佽缃笌蹇嵎閿帴鍏ワ紱
-
-  - D3D11VA / D3D11 鏈€灏忓彲鐢ㄩ摼璺紱
-
-  - 绔犺妭瀵艰埅銆丄-B Repeat銆佹埅鍥俱€?
+  - 缂佺喍绔?`PlayerCore + Scheduler + Filters` 閺嬭埖鐎敍?
+  - 婢舵牗瀵曠€涙绠烽妴浣规尡閺€鎯у灙鐞涖劊鈧浇顔曠純顔荤瑢韫囶偅宓庨柨顔藉复閸忋儻绱?
+  - D3D11VA / D3D11 閺堚偓鐏忓繐褰查悽銊╂懠鐠侯垽绱?
+  - 缁旂姾濡€佃壈鍩呴妴涓?B Repeat閵嗕焦鍩呴崶淇扁偓?
 
 
 ---
 
 
 
-## 鐗堟湰鍘嗗彶
+## 閻楀牊婀伴崢鍡楀蕉
 
 
 
-### v1.0.0 (绗竴闃舵)
+### v1.0.0 (缁楊兛绔撮梼鑸殿唽)
 
-- 鍒濆鐗堟湰
+- 閸掓繂顫愰悧鍫熸拱
 
-- 鍩轰簬 FFmpeg + SDL2 + Quill 鏋勫缓
-
-- 鏀寔鍩烘湰鐨勮棰戞挱鏀惧姛鑳?
+- 閸╄桨绨?FFmpeg + SDL2 + Quill 閺嬪嫬缂?
+- 閺€顖涘瘮閸╃儤婀伴惃鍕潒妫版垶鎸遍弨鎯у閼?
 
 
 ---
 
 
 
-## 渚濊禆搴撳畨瑁呰鏄?
+## 娓氭繆绂嗘惔鎾崇暔鐟佸懓顕╅弰?
 
 
 ### Windows
@@ -684,16 +820,16 @@ SDL_UpdateYUVTexture(
 
 ```powershell
 
-# 浣跨敤 vcpkg
+# 娴ｈ法鏁?vcpkg
 
 vcpkg install ffmpeg:x64-windows
 
 
 
-# 鎴栨墜鍔ㄤ笅杞?
-# 璁块棶 https://www.gyan.dev/ffmpeg/builds/
+# 閹存牗澧滈崝銊ょ瑓鏉?
+# 鐠佸潡妫?https://www.gyan.dev/ffmpeg/builds/
 
-# 涓嬭浇 ffmpeg-8.0.1-full_build.7z
+# 娑撳娴?ffmpeg-8.0.1-full_build.7z
 
 ```
 
@@ -703,22 +839,22 @@ vcpkg install ffmpeg:x64-windows
 
 ```powershell
 
-# 浣跨敤 vcpkg
+# 娴ｈ法鏁?vcpkg
 
 vcpkg install sdl2:x64-windows
 
 
 
-# 鎴栨墜鍔ㄤ笅杞?
-# 璁块棶 https://github.com/libsdl-org/SDL/releases
+# 閹存牗澧滈崝銊ょ瑓鏉?
+# 鐠佸潡妫?https://github.com/libsdl-org/SDL/releases
 
-# 涓嬭浇 SDL2-devel-2.30.11-VC.zip
+# 娑撳娴?SDL2-devel-2.30.11-VC.zip
 
 ```
 
 
 
-**娉ㄦ剰**: 鑻ユ湭鍗曠嫭瀹夎 Quill锛屽彲灏嗘簮鐮佽В鍘嬪埌 `external/quill`锛涗篃鍙互閫氳繃鍖呯鐞嗗櫒瀹夎鍚庤缃?`QUILL_ROOT`銆?
+**濞夈劍鍓?*: 閼汇儲婀崡鏇犲鐎瑰顥?Quill閿涘苯褰茬亸鍡樼爱閻浇袙閸樺鍩?`external/quill`閿涙稐绡冮崣顖欎簰闁俺绻冮崠鍛吀閻炲棗娅掔€瑰顥婇崥搴ゎ啎缂?`QUILL_ROOT`閵?
 
 
 ### Linux
@@ -727,7 +863,7 @@ vcpkg install sdl2:x64-windows
 
 ```bash
 
-# 缂栬瘧 FFmpeg 8.0.1
+# 缂傛牞鐦?FFmpeg 8.0.1
 
 ./configure --prefix=/usr/local
 
@@ -737,8 +873,7 @@ sudo make install
 
 
 
-# SDL2 閫氬父閫氳繃鍖呯鐞嗗櫒瀹夎
-
+# SDL2 闁艾鐖堕柅姘崇箖閸栧懐顓搁悶鍡楁珤鐎瑰顥?
 sudo apt install libsdl2-dev
 
 ```
@@ -751,7 +886,7 @@ sudo apt install libsdl2-dev
 
 ```bash
 
-# 浣跨敤 Homebrew
+# 娴ｈ法鏁?Homebrew
 
 brew install ffmpeg
 
@@ -761,14 +896,14 @@ brew install sdl2
 
 
 
-**娉ㄦ剰**: Quill 涓?header-only 搴擄紝鍙€氳繃 `brew` 瀹夎鎴栫洿鎺ヤ笅杞芥簮鐮佸悗閰嶇疆 `QUILL_ROOT`銆?
+**濞夈劍鍓?*: Quill 娑?header-only 鎼存搫绱濋崣顖炩偓姘崇箖 `brew` 鐎瑰顥婇幋鏍纯閹恒儰绗呮潪鑺ョ爱閻礁鎮楅柊宥囩枂 `QUILL_ROOT`閵?
 
 
 ---
 
 
 
-## 缂栬瘧鍛戒护
+## 缂傛牞鐦ч崨鎴掓姢
 
 
 
@@ -808,37 +943,36 @@ make -j$(nproc)
 
 
 
-## 鏂囨。鏇存柊鏃ュ織
+## 閺傚洦銆傞弴瀛樻煀閺冦儱绻?
 
 
-
-| 鏃ユ湡 | 鏇存柊鍐呭 |
+| 閺冦儲婀?| 閺囧瓨鏌婇崘鍛啇 |
 
 |------|----------|
 
-| 2026-02-17 | 鍒涘缓鐗堟湰璁板綍鏂囨。锛岃褰曠涓€闃舵瀹屾垚鎯呭喌 |
+| 2026-02-17 | 閸掓稑缂撻悧鍫熸拱鐠佹澘缍嶉弬鍥ㄣ€傞敍宀冾唶瑜版洜顑囨稉鈧梼鑸殿唽鐎瑰本鍨氶幆鍛枌 |
 
-| 2026-02-24 | 鏇存柊鏃ュ織绯荤粺涓轰紒涓氱骇 Quill 绠￠亾锛岃褰曡棰戞祦绱㈠紩闂淇 |
+| 2026-02-24 | 閺囧瓨鏌婇弮銉ョ箶缁崵绮烘稉杞扮磼娑撴氨楠?Quill 缁狅繝浜鹃敍宀冾唶瑜版洝顫嬫０鎴炵ウ缁便垹绱╅梻顕€顣芥穱顔碱槻 |
 
-| 2026-02-24 | 璁板綍闊抽娴佺储寮曢棶棰樺拰 YUV 娓叉煋闂淇 |
+| 2026-02-24 | 鐠佹澘缍嶉棅鎶筋暥濞翠胶鍌ㄥ鏇㈡６妫版ê鎷?YUV 濞撳弶鐓嬮梻顕€顣芥穱顔碱槻 |
 
-| 2026-02-24 | 鍒涘缓 CHANGELOG.md 闂淇璁板綍鏂囨。 |
+| 2026-02-24 | 閸掓稑缂?CHANGELOG.md 闂傤噣顣芥穱顔碱槻鐠佹澘缍嶉弬鍥ㄣ€?|
 
-| 2026-02-25 | 璁板綍澶氱嚎绋嬫挱鏀炬灦鏋勯噸鏋勫拰闊抽鎾斁鏋舵瀯淇 |
+| 2026-02-25 | 鐠佹澘缍嶆径姘卞殠缁嬪鎸遍弨鐐仸閺嬪嫰鍣搁弸鍕嫲闂婃娊顣堕幘顓熸杹閺嬭埖鐎穱顔碱槻 |
 
-| 2026-02-25 | 璁板綍 Frame 绉诲姩璇箟淇 |
+| 2026-02-25 | 鐠佹澘缍?Frame 缁夎濮╃拠顓濈疅娣囶喖顦?|
 
-| 2026-02-25 | 璁板綍澶氳В鐮佸櫒瀹炰緥绔炰簤璇诲彇淇 |
+| 2026-02-25 | 鐠佹澘缍嶆径姘承掗惍浣告珤鐎圭偘绶ョ粩鐐扮挨鐠囪褰囨穱顔碱槻 |
 
-| 2026-03-06 | 淇灏忓睆绐楀彛杩囧ぇ涓庣獥鍙ｇ缉鏀句簨浠跺吋瀹归棶棰?|
+| 2026-03-06 | 娣囶喖顦茬亸蹇撶潌缁愭褰涙潻鍥с亣娑撳海鐛ラ崣锝囩級閺€鍙ョ皑娴犺泛鍚嬬€瑰綊妫舵０?|
 
-| 2026-03-07 | 鎺ュ叆 GitHub Actions 鑷姩鏍煎紡鍥炲綊涓?CI 鍏煎鏀归€?|
+| 2026-03-07 | 閹恒儱鍙?GitHub Actions 閼奉亜濮╅弽鐓庣础閸ョ偛缍婃稉?CI 閸忕厧顔愰弨褰掆偓?|
 
-| 2026-03-07 | 鎺ュ叆鎾斁鍒楄〃涓婚摼璺€佽缃寔涔呭寲涓庡揩鎹烽敭棣栫増 |
+| 2026-03-07 | 閹恒儱鍙嗛幘顓熸杹閸掓銆冩稉濠氭懠鐠侯垬鈧浇顔曠純顔藉瘮娑斿懎瀵叉稉搴℃彥閹圭兘鏁＃鏍 |
 
-| 2026-03-08 | 娓呯悊鍘嗗彶绔犺妭涓殑鏃ц矾寰勬弿杩帮紝閬垮厤灏嗗凡绉婚櫎鏂囦欢璇啓涓哄綋鍓嶄粨搴撶粨鏋?|
+| 2026-03-08 | 濞撳懐鎮婇崢鍡楀蕉缁旂姾濡稉顓犳畱閺冄嗙熅瀵板嫭寮挎潻甯礉闁灝鍘ょ亸鍡楀嚒缁夊娅庨弬鍥︽鐠囶垰鍟撴稉鍝勭秼閸撳秳绮ㄦ惔鎾剁波閺?|
 
-| 2026-03-18 | 鍚屾 D3D11 鍘熺敓娓叉煋閾炬渶缁堢姸鎬侊紝璁板綍 ASS/SSA 鍘熺敓瀛楀箷閾炬敹鍙ｄ笌鍏ㄥ眬鏋勫缓闃诲娓呯悊 |
+| 2026-03-18 | 閸氬本顒?D3D11 閸樼喓鏁撳〒鍙夌厠闁剧偓娓剁紒鍫㈠Ц閹緤绱濈拋鏉跨秿 ASS/SSA 閸樼喓鏁撶€涙绠烽柧鐐暪閸欙絼绗岄崗銊ョ湰閺嬪嫬缂撻梼璇差敚濞撳懐鎮?|
 
 
 
@@ -846,57 +980,51 @@ make -j$(nproc)
 
 
 
-## 2026-03-06 鏇存柊
+## 2026-03-06 閺囧瓨鏌?
 
 
-
-### Core API / Scheduler / Filter 閲嶆瀯
-
-- 鏂板 `core` 瀛愭ā鍧楋細`PlayerCore`銆乣Scheduler`銆乣FrameQueue`銆乣Clock`銆乣Command`銆乣Frame`銆?
-- 鏂板 `filters` 瀛愭ā鍧楋細Filter 鎺ュ彛銆乣FilterRegistry`銆乣FilterPipeline`銆佸唴缃寒搴?瀵规瘮搴?楗卞拰搴︽护闀溿€?
-- 鍒濇湡寮曞叆 `VideoPlayer -> PlayerCore` 閫傞厤灞傦紝闅忓悗鍦ㄥ悓鏃ュ畬鎴愭灦鏋勬敹鏁涘苟绉婚櫎鏃ц矾寰勫垎鍙夈€?
+### Core API / Scheduler / Filter 闁插秵鐎?
+- 閺傛澘顤?`core` 鐎涙劖膩閸ф绱癭PlayerCore`閵嗕梗Scheduler`閵嗕梗FrameQueue`閵嗕梗Clock`閵嗕梗Command`閵嗕梗Frame`閵?
+- 閺傛澘顤?`filters` 鐎涙劖膩閸ф绱癋ilter 閹恒儱褰涢妴涔ilterRegistry`閵嗕梗FilterPipeline`閵嗕礁鍞寸純顔诲瘨鎼?鐎佃鐦惔?妤楀崬鎷版惔锔芥姢闂€婧库偓?
+- 閸掓繃婀″鏇炲弳 `VideoPlayer -> PlayerCore` 闁倿鍘ょ仦鍌︾礉闂呭繐鎮楅崷銊ユ倱閺冦儱鐣幋鎰仸閺嬪嫭鏁归弫娑樿嫙缁夊娅庨弮褑鐭惧鍕瀻閸欏鈧?
 
 
-### 娴嬭瘯涓庢瀯寤?
-- 褰撴椂鏇惧紩鍏ヤ复鏃舵牳蹇冩祴璇曟枃浠讹紱杩欎簺娴嬭瘯鏂囦欢宸插湪 2026-03-07 娓呯悊銆?
-- `CMakeLists.txt` 鍦ㄨ闃舵寮€濮嬬撼鍏?`src/core/*` 涓?`src/filters/*` 涓荤紪璇戦」銆?
-
-
----
-
-
-
-## 2026-03-06 鏋舵瀯鏀舵暃鏇存柊
-
-
-
-### 缁熶竴鏍稿績鏋舵瀯
-
-- 鍘婚櫎鏃ф挱鏀鹃摼璺紝瀹炵幇缁熶竴涓?`VideoPlayer + PlayerCore + Scheduler + Filters`銆?
-- 鍒犻櫎鏃?decoder/thread/sync/packet/legacy clock 鐩稿叧鏂囦欢銆?
-- `CMakeLists.txt` 浠呬繚鐣欐柊鏋舵瀯缂栬瘧椤广€?
-
-
-### 鏂囨。
-
-- 鏂板 `docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md`锛屽寘鍚噸鏋勭洰鏍囥€佸垹闄ゆā鍧椼€佷繚鐣欐枃浠舵竻鍗曘€?
+### 濞村鐦稉搴㈢€?
+- 瑜版挻妞傞弴鎯х穿閸忋儰澶嶉弮鑸电壋韫囧啯绁寸拠鏇熸瀮娴犺绱辨潻娆庣昂濞村鐦弬鍥︽瀹告彃婀?2026-03-07 濞撳懐鎮婇妴?
+- `CMakeLists.txt` 閸︺劏顕氶梼鑸殿唽瀵偓婵鎾奸崗?`src/core/*` 娑?`src/filters/*` 娑撹崵绱拠鎴︺€嶉妴?
 
 
 ---
 
 
 
-## 2026-03-06 绐楀彛浣撻獙淇
+## 2026-03-06 閺嬭埖鐎弨鑸垫殐閺囧瓨鏌?
+
+
+### 缂佺喍绔撮弽绋跨妇閺嬭埖鐎?
+- 閸樺娅庨弮褎鎸遍弨楣冩懠鐠侯垽绱濈€圭偟骞囩紒鐔剁娑?`VideoPlayer + PlayerCore + Scheduler + Filters`閵?
+- 閸掔娀娅庨弮?decoder/thread/sync/packet/legacy clock 閻╃鍙ч弬鍥︽閵?
+- `CMakeLists.txt` 娴犲懍绻氶悾娆愭煀閺嬭埖鐎紓鏍槯妞ゅ箍鈧?
+
+
+### 閺傚洦銆?
+- 閺傛澘顤?`docs/design/ARCHITECTURE_REFACTOR_2026-03-06.md`閿涘苯瀵橀崥顐﹀櫢閺嬪嫮娲伴弽鍥モ偓浣稿灩闂勩倖膩閸фぜ鈧椒绻氶悾娆愭瀮娴犺埖绔婚崡鏇樷偓?
+
+
+---
 
 
 
-### 灏忓睆鑷€傚簲涓庣缉鏀剧ǔ瀹氭€?
-- `Display::init()` 鍚姩鏃舵寜灞忓箷鍙敤鍖哄煙鑷€傚簲鍒濆绐楀彛灏哄锛堥檺鍒跺埌 90%锛屼繚鎸佽棰戞瘮渚嬶級銆?
-- 澧炲姞 `SDL_WINDOWEVENT_SIZE_CHANGED` 澶勭悊锛屽吋瀹逛笉鍚屽钩鍙?椹卞姩涓嬬殑绐楀彛灏哄鍙樺寲浜嬩欢銆?
-- 娓叉煋闃舵鎸夋簮瑙嗛姣斾緥璁＄畻鐩爣鍖哄煙锛岄伩鍏嶇獥鍙ｆ嫋鎷藉悗鐢婚潰鎷変几銆?
+## 2026-03-06 缁愭褰涙担鎾荤崣娣囶喖顦?
 
 
-### 淇敼鏂囦欢
+### 鐏忓繐鐫嗛懛顏堚偓鍌氱安娑撳海缂夐弨鍓旂€规碍鈧?
+- `Display::init()` 閸氼垰濮╅弮鑸靛瘻鐏炲繐绠烽崣顖滄暏閸栧搫鐓欓懛顏堚偓鍌氱安閸掓繂顫愮粣妤€褰涚亸鍝勵嚟閿涘牓妾洪崚璺哄煂 90%閿涘奔绻氶幐浣筋潒妫版垶鐦笟瀣剁礆閵?
+- 婢х偛濮?`SDL_WINDOWEVENT_SIZE_CHANGED` 婢跺嫮鎮婇敍灞藉悑鐎归€涚瑝閸氬苯閽╅崣?妞瑰崬濮╂稉瀣畱缁愭褰涚亸鍝勵嚟閸欐ê瀵叉禍瀣╂閵?
+- 濞撳弶鐓嬮梼鑸殿唽閹稿绨憴鍡涱暥濮ｆ柧绶ョ拋锛勭暬閻╊喗鐖ｉ崠鍝勭厵閿涘矂浼╅崗宥囩崶閸欙絾瀚嬮幏钘夋倵閻㈠娼伴幏澶夊嚑閵?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - `src/display.cpp`
 
@@ -908,20 +1036,18 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊
+## 2026-03-07 閺囧瓨鏌?
 
 
-
-### 鎾斁绋冲畾鎬т笌鍩虹浜や簰澧炲己
-
-- 淇绐楀彛鏈€澶у寲/缂╂斁鏃惰棰戠敾闈㈠彲鑳藉崱浣忕殑闂锛堥煶棰戜笉涓柇锛夈€?
-- 鏄剧ず灞傛柊澧炲熀纭€鎺у埗鏉★紙杩涘害鏉°€侀煶閲忔潯锛夈€?
-- 鏀寔榧犳爣鎷栧姩杩涘害鏉¤繘琛?seek銆?
-- 鏀寔榧犳爣鎷栧姩闊抽噺鏉¤繘琛屽疄鏃堕煶閲忚皟鑺傘€?
-- 琛ュ厖闊抽噺蹇嵎閿細`+/-` 涓?`鈫?鈫揱銆?
+### 閹绢厽鏂佺粙鍐茬暰閹傜瑢閸╄櫣顢呮禍銈勭鞍婢х偛宸?
+- 娣囶喖顦茬粣妤€褰涢張鈧径褍瀵?缂傗晜鏂侀弮鎯邦潒妫版垹鏁鹃棃銏犲讲閼宠棄宕辨担蹇曟畱闂傤噣顣介敍鍫ョ叾妫版垳绗夋稉顓熸焽閿涘鈧?
+- 閺勫墽銇氱仦鍌涙煀婢х偛鐔€绾偓閹貉冨煑閺夆槄绱欐潻娑樺閺壜扳偓渚€鐓堕柌蹇旀蒋閿涘鈧?
+- 閺€顖涘瘮姒х姵鐖ｉ幏鏍уЗ鏉╂稑瀹抽弶陇绻樼悰?seek閵?
+- 閺€顖涘瘮姒х姵鐖ｉ幏鏍уЗ闂婃娊鍣洪弶陇绻樼悰灞界杽閺冨爼鐓堕柌蹇氱殶閼哄倶鈧?
+- 鐞涖儱鍘栭棅鎶藉櫤韫囶偅宓庨柨顕嗙窗`+/-` 娑?`閳?閳彵閵?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/display.h
 
@@ -939,22 +1065,21 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堜紒涓氱骇妯″潡鎺ㄨ繘锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍫滅磼娑撴氨楠囧Ο鈥虫健閹恒劏绻橀敍?
 
 
-### MPC-HC 鏋舵瀯妯″潡鎵╁睍
+### MPC-HC 閺嬭埖鐎Ο鈥虫健閹碘晛鐫?
+- 閺傛澘顤冩导浣风瑹缁狙冪唨绾偓鐠佺偓鏌﹀Ο鈥虫健閿涙瓪TaskQueue`閵嗕梗FramePool`閵嗕梗DecoderThread`閵?
+- 閺傛澘顤冨〒鍙夌厠閹跺€熻杽鐏炲偊绱癭IVideoRenderer`閵嗕梗SdlVideoRenderer`閵嗕梗D3D11/OpenGL` 閸楃姳缍呯€圭偟骞囬妴涔endererFactory`閵?
+- `PlayerCore` 娴犲海娲块幒銉ょ贩鐠?`Display` 鐠嬪啯鏆ｆ稉杞扮贩鐠ф牗瑕嗛弻鎾村▕鐠炩剝甯撮崣锝冣偓?
+- 閺傛澘顤冮棅鎶筋暥婢х偛宸卞Ο鈥虫健閿?0 濞堥潧娼庣悰鈥虫珤閵嗕焦璐╅棅鍐叉珤閿涙矖AudioPlayer` 婢х偛濮炵紓鎾冲暱鐟欏倹绁撮幒銉ュ經閵?
+- 閺傛澘顤冪憴锝囩垳閸ｃ劎顓搁悶鍡樐侀崸妤嬬窗閼宠棄濮忛幒銏＄ゴ娑撳骸鎮楃粩顖濆殰閸斻劑鈧瀚ㄩ妴?
+- 閺傛澘顤冪€涙绠烽敍鍦玆T閿涘鈧焦鎸遍弨鎯у灙鐞涱煉绱橫3U8閿涘鈧浇顔曠純顔衡偓浣告彥閹圭兘鏁妴浣烘瘖閼层們鈧焦褰冩禒韬测偓浣圭壐瀵繑鏁幐浣碘偓浣圭ウ婵帊缍嬬憴锝嗙€界粵澶嬆侀崸妤咁€囬弸韬测偓?
+- 閺傛澘顤冨銈夋殔閸╄櫣琚稉搴ㄧ叾鐟欏棝顣跺銈夋殔闁炬拝绱濈悰銉ュ帠闂婃娊鍣?楠炲疇銆€闂婃娊顣跺銈夋殔閵?
+- 閸氬本顒為弴瀛樻煀 `.monkeycode/specs/enterprise-quill-logging/tasklist.md` 瀹告彃鐤勯悳浼淬€嶉妴?
 
-- 鏂板浼佷笟绾у熀纭€璁炬柦妯″潡锛歚TaskQueue`銆乣FramePool`銆乣DecoderThread`銆?
-- 鏂板娓叉煋鎶借薄灞傦細`IVideoRenderer`銆乣SdlVideoRenderer`銆乣D3D11/OpenGL` 鍗犱綅瀹炵幇銆乣RendererFactory`銆?
-- `PlayerCore` 浠庣洿鎺ヤ緷璧?`Display` 璋冩暣涓轰緷璧栨覆鏌撴娊璞℃帴鍙ｃ€?
-- 鏂板闊抽澧炲己妯″潡锛?0 娈靛潎琛″櫒銆佹贩闊冲櫒锛沗AudioPlayer` 澧炲姞缂撳啿瑙傛祴鎺ュ彛銆?
-- 鏂板瑙ｇ爜鍣ㄧ鐞嗘ā鍧楋細鑳藉姏鎺㈡祴涓庡悗绔嚜鍔ㄩ€夋嫨銆?
-- 鏂板瀛楀箷锛圫RT锛夈€佹挱鏀惧垪琛紙M3U8锛夈€佽缃€佸揩鎹烽敭銆佺毊鑲ゃ€佹彃浠躲€佹牸寮忔敮鎸併€佹祦濯掍綋瑙ｆ瀽绛夋ā鍧楅鏋躲€?
-- 鏂板婊ら暅鍩虹被涓庨煶瑙嗛婊ら暅閾撅紝琛ュ厖闊抽噺/骞宠　闊抽婊ら暅銆?
-- 鍚屾鏇存柊 `.monkeycode/specs/enterprise-quill-logging/tasklist.md` 宸插疄鐜伴」銆?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - CMakeLists.txt
 
@@ -1020,21 +1145,21 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堟牸寮忚兘鍔涚煩闃典笌楂樺垎楂樺抚璇勪及锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍫熺壐瀵繗鍏橀崝娑氱叐闂冨吀绗屾妯哄瀻妤傛ê鎶氱拠鍕強閿?
 
 
-### 鑳藉姏妫€鏌ュ叆鍙?
-- 鏂板 `--capabilities` 鍛戒护锛氳緭鍑鸿繍琛屾椂瀹瑰櫒/瑙嗛瑙ｇ爜鍣?闊抽瑙ｇ爜鍣ㄨ兘鍔涳紝骞剁粰鍑轰富鍔涙牸寮忚鐩栫煩闃碉紙PASS/PARTIAL/FAIL锛夈€?
-- 鏂板 `--evaluate-target` 鍛戒护锛氭寜 `瀹?楂?FPS/澹伴亾/鐮佺巼` 璇勪及瀹炴椂鎾斁鍙鎬т笌纭В/D3D11寤鸿銆?
+### 閼宠棄濮忓Λ鈧弻銉ュ弳閸?
+- 閺傛澘顤?`--capabilities` 閸涙垝鎶ら敍姘崇翻閸戦缚绻嶇悰灞炬鐎圭懓娅?鐟欏棝顣剁憴锝囩垳閸?闂婃娊顣剁憴锝囩垳閸ｃ劏鍏橀崝娑崇礉楠炲墎绮伴崙杞板瘜閸旀稒鐗稿蹇氼洬閻╂牜鐓╅梼纰夌礄PASS/PARTIAL/FAIL閿涘鈧?
+- 閺傛澘顤?`--evaluate-target` 閸涙垝鎶ら敍姘瘻 `鐎?妤?FPS/婢逛即浜?閻胶宸糮 鐠囧嫪鍙婄€圭偞妞傞幘顓熸杹閸欘垵顢戦幀褌绗岀涵顒冃?D3D11瀵ら缚顔呴妴?
 
 
-### 绋冲仴鎬у寮?
-- 淇 `src/streaming/dash_manifest_parser.cpp` 鍦?MSVC 涓嬬殑 raw-string 姝ｅ垯缂栬瘧闂锛屾仮澶嶆瀯寤哄熀绾裤€?
-- `Demuxer` 浣跨敤 `av_find_best_stream`锛屽苟寮曞叆 `probesize`/`analyzeduration`/`+genpts` 閫夐」澧炲己澶嶆潅濯掍綋鎺㈡祴銆?
-- `AudioPlayer` 鏆撮湶瀹為檯杈撳嚭鍙傛暟锛沗PlayerCore` 澶嶇敤閲嶉噰鏍峰櫒骞舵寜璁惧杈撳嚭鍙傛暟鍋氬闊抽亾閲嶉噰鏍枫€?
+### 缁嬪啿浠撮幀褍顤冨?
+- 娣囶喖顦?`src/streaming/dash_manifest_parser.cpp` 閸?MSVC 娑撳娈?raw-string 濮濓絽鍨紓鏍槯闂傤噣顣介敍灞句划婢跺秵鐎鍝勭唨缁捐￥鈧?
+- `Demuxer` 娴ｈ法鏁?`av_find_best_stream`閿涘苯鑻熷鏇炲弳 `probesize`/`analyzeduration`/`+genpts` 闁銆嶆晶鐐插繁婢跺秵娼呮刊鎺嶇秼閹恒垺绁撮妴?
+- `AudioPlayer` 閺嗘挳婀剁€圭偤妾潏鎾冲毉閸欏倹鏆熼敍娌桺layerCore` 婢跺秶鏁ら柌宥夊櫚閺嶅嘲娅掗獮鑸靛瘻鐠佹儳顦潏鎾冲毉閸欏倹鏆熼崑姘樋闂婃娊浜鹃柌宥夊櫚閺嶆灚鈧?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/streaming/dash_manifest_parser.cpp
 
@@ -1062,22 +1187,21 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛圖3D11VA 纭В鍥為€€閾捐矾锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍦?D11VA 绾剝袙閸ョ偤鈧偓闁炬崘鐭鹃敍?
 
 
-### 瑙ｇ爜鍚庣
+### 鐟欙絿鐖滈崥搴ｎ伂
 
-- `PlayerCore` 澧炲姞 D3D11VA 纭В灏濊瘯閫昏緫锛圵indows锛夈€?
-- 纭В鍒濆鍖栧け璐ユ椂鑷姩鍥為€€杞В锛屼繚璇佸彲鎾斁鎬т紭鍏堛€?
-
-
-### 瑙嗛杈撳嚭瑙勬暣
-
-- 瀵圭‖浠跺抚澧炲姞 `av_hwframe_transfer_data`锛?
-- 瀵归潪 `YUV420P` 甯у鍔?`sws_scale` 杞崲锛岀粺涓€涓?`YUV420P` 缁?SDL 娓叉煋銆?
+- `PlayerCore` 婢х偛濮?D3D11VA 绾剝袙鐏忔繆鐦柅鏄忕帆閿涘湹indows閿涘鈧?
+- 绾剝袙閸掓繂顫愰崠鏍с亼鐠愩儲妞傞懛顏勫З閸ョ偤鈧偓鏉烆垵袙閿涘奔绻氱拠浣稿讲閹绢厽鏂侀幀褌绱崗鍫涒偓?
 
 
-### 淇敼鏂囦欢
+### 鐟欏棝顣舵潏鎾冲毉鐟欏嫭鏆?
+- 鐎靛湱鈥栨禒璺烘姎婢х偛濮?`av_hwframe_transfer_data`閿?
+- 鐎靛綊娼?`YUV420P` 鐢冾杻閸?`sws_scale` 鏉烆剚宕查敍宀€绮烘稉鈧稉?`YUV420P` 缂?SDL 濞撳弶鐓嬮妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/core/player_core.h
 
@@ -1085,22 +1209,22 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堝崟鏂囦欢鎺㈡祴涓庢牸寮忓洖褰掕嚜鍔ㄥ寲锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍫濆礋閺傚洣娆㈤幒銏＄ゴ娑撳孩鐗稿蹇撴礀瑜版帟鍤滈崝銊ュ閿?
 
 
-### 鏂板鍙墽琛屽叆鍙?
-- 鏂板 `--probe-file <media_file>` 鍛戒护锛氳緭鍑?`probe.*` 鏈哄櫒鍙瀛楁锛屽寘鍚鍣?瑙嗛/闊抽鐘舵€併€佸垎杈ㄧ巼銆佸抚鐜囥€佸０閬撲笌寤鸿淇℃伅銆?
+### 閺傛澘顤冮崣顖涘⒔鐞涘苯鍙嗛崣?
+- 閺傛澘顤?`--probe-file <media_file>` 閸涙垝鎶ら敍姘崇翻閸?`probe.*` 閺堝搫娅掗崣顖濐嚢鐎涙顔岄敍灞藉瘶閸氼偄顔愰崳?鐟欏棝顣?闂婃娊顣堕悩鑸碘偓浣碘偓浣稿瀻鏉堛劎宸奸妴浣告姎閻滃洢鈧礁锛愰柆鎾茬瑢瀵ら缚顔呮穱鈩冧紖閵?
 
 
-### 鍥炲綊宸ュ叿閾?
-- 鏂板 `tools/format_regression/run_format_regression.ps1`锛氭寜鏍锋湰娓呭崟鑷姩鎵归噺鎵ц鎺㈡祴銆?
-- 鏂板 `tools/format_regression/format_samples.csv`锛氱淮鎶ゆ牸寮忔牱鏈笌棰勬湡缂栫爜淇℃伅銆?
-- 鏂板 `docs/workflows/FORMAT_REGRESSION.md`锛氳褰曡剼鏈弬鏁般€佽緭鍑鸿矾寰勫拰浣跨敤鏂瑰紡銆?
-- 鎶ュ憡杈撳嚭锛歚docs/reports/FORMAT_REGRESSION_*.md`銆?
-- 杩斿洖鐮佽涔夛細`0=鍏ㄩ儴PASS`锛宍1=瀛樺湪PARTIAL`锛宍2=瀛樺湪FAIL`銆?
+### 閸ョ偛缍婂銉ュ徔闁?
+- 閺傛澘顤?`tools/format_regression/run_format_regression.ps1`閿涙碍瀵滈弽閿嬫拱濞撳懎宕熼懛顏勫З閹靛綊鍣洪幍褑顢戦幒銏＄ゴ閵?
+- 閺傛澘顤?`tools/format_regression/format_samples.csv`閿涙氨娣幎銈嗙壐瀵繑鐗遍張顑跨瑢妫板嫭婀＄紓鏍垳娣団剝浼呴妴?
+- 閺傛澘顤?`docs/workflows/FORMAT_REGRESSION.md`閿涙俺顔囪ぐ鏇″壖閺堫剙寮弫鑸偓浣界翻閸戦缚鐭惧鍕嫲娴ｈ法鏁ら弬鐟扮础閵?
+- 閹躲儱鎲℃潏鎾冲毉閿涙瓪docs/reports/FORMAT_REGRESSION_*.md`閵?
+- 鏉╂柨娲栭惍浣筋嚔娑斿绱癭0=閸忋劑鍎碢ASS`閿涘畭1=鐎涙ê婀狿ARTIAL`閿涘畭2=鐎涙ê婀狥AIL`閵?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -1114,33 +1238,31 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛圙itHub Actions 鑷姩鍥炲綊锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍦檌tHub Actions 閼奉亜濮╅崶鐐茬秺閿?
 
 
-### CI 宸ヤ綔娴?
-- 鏂板 `.github/workflows/format-regression.yml`锛?
-  - PR / `main` / `master` 鑷姩瑙﹀彂锛?
-  - 鑷姩涓嬭浇 `SDL2/FFmpeg` 棰勭紪璇戜緷璧栧悗鎵ц Windows 鏋勫缓锛?
-  - 鏍锋湰鐢熸垚 + `run_all_checks.ps1` 鑷姩鍥炲綊锛?
-  - 涓婁紶 `docs/reports/FORMAT_REGRESSION_CI.md` 浜х墿銆?
+### CI 瀹搞儰缍斿ù?
+- 閺傛澘顤?`.github/workflows/format-regression.yml`閿?
+  - PR / `main` / `master` 閼奉亜濮╃憴锕€褰傞敍?
+  - 閼奉亜濮╂稉瀣祰 `SDL2/FFmpeg` 妫板嫮绱拠鎴滅贩鐠ф牕鎮楅幍褑顢?Windows 閺嬪嫬缂撻敍?
+  - 閺嶉攱婀伴悽鐔稿灇 + `run_all_checks.ps1` 閼奉亜濮╅崶鐐茬秺閿?
+  - 娑撳﹣绱?`docs/reports/FORMAT_REGRESSION_CI.md` 娴溠呭⒖閵?
 
 
-### 鏋勫缓涓庤剼鏈吋瀹规€?
-- `CMakeLists.txt`锛圵indows锛変紭鍏堟敮鎸?`SDL2::`銆乣FFMPEG::`銆乣unofficial::ffmpeg::` 瀵煎叆鐩爣锛屼繚鐣?`external/` 鍥為€€璺緞銆?
-- `tools/download_test_samples.ps1` 鏀寔閫氳繃 PATH 瑙ｆ瀽 `ffmpeg` 鍛戒护鍚嶏紝渚夸簬 CI 鐩存帴璋冪敤銆?
+### 閺嬪嫬缂撴稉搴ゅ壖閺堫剙鍚嬬€硅鈧?
+- `CMakeLists.txt`閿涘湹indows閿涘绱崗鍫熸暜閹?`SDL2::`閵嗕梗FFMPEG::`閵嗕梗unofficial::ffmpeg::` 鐎电厧鍙嗛惄顔界垼閿涘奔绻氶悾?`external/` 閸ョ偤鈧偓鐠侯垰绶為妴?
+- `tools/download_test_samples.ps1` 閺€顖涘瘮闁俺绻?PATH 鐟欙絾鐎?`ffmpeg` 閸涙垝鎶ら崥宥忕礉娓氬じ绨?CI 閻╁瓨甯寸拫鍐暏閵?
 
 
-### 浠诲姟娓呭崟鍚屾
-
-- 鏇存柊 `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `0.3`锛圥0/P1/P2 鑼冨洿鍐荤粨锛夋爣璁板畬鎴愶紱
-
-  - `2.1.1`锛堟牸寮忕煩闃靛畾涔夊喕缁擄級鏍囪瀹屾垚锛?
-  - `2.1.5`锛圥ASS/PARTIAL/FAIL 缁撴灉琛級鏍囪瀹屾垚锛?
-  - `2.3.1`锛堟牸寮忕煩闃电粨鏋滃彲杩芥函锛夋爣璁板畬鎴愩€?
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- 閺囧瓨鏌?`.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `0.3`閿涘湧0/P1/P2 閼煎啫娲块崘鑽ょ波閿涘鐖ｇ拋鏉跨暚閹存劧绱?
+  - `2.1.1`閿涘牊鐗稿蹇曠叐闂冮潧鐣炬稊澶婂枙缂佹搫绱氶弽鍥唶鐎瑰本鍨氶敍?
+  - `2.1.5`閿涘湧ASS/PARTIAL/FAIL 缂佹挻鐏夌悰顭掔礆閺嶅洩顔囩€瑰本鍨氶敍?
+  - `2.3.1`閿涘牊鐗稿蹇曠叐闂冪數绮ㄩ弸婊冨讲鏉╄姤鍑介敍澶嬬垼鐠佹澘鐣幋鎰┾偓?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - .github/workflows/format-regression.yml
 
@@ -1164,41 +1286,37 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堟挱鏀惧垪琛?+ 璁剧疆 + 蹇嵎閿鐗堬級
+## 2026-03-07 閺囧瓨鏌婇敍鍫熸尡閺€鎯у灙鐞?+ 鐠佸墽鐤?+ 韫囶偅宓庨柨顕€顩婚悧鍫礆
 
 
 
-### 涓绘祦绋嬭兘鍔?
-- `main` 鎺ュ叆 `PlaylistManager`锛?
-  - 鏀寔澶氭枃浠跺弬鏁版挱鏀惧垪琛紱
+### 娑撶粯绁︾粙瀣厴閸?
+- `main` 閹恒儱鍙?`PlaylistManager`閿?
+  - 閺€顖涘瘮婢舵碍鏋冩禒璺哄棘閺佺増鎸遍弨鎯у灙鐞涱煉绱?
+  - 閺€顖涘瘮 `.m3u8` 鐎电厧鍙嗛敍?
+  - 閺€顖涘瘮 `PageUp/PageDown` 娑撳﹣绔存＃?娑撳绔存＃鏍电幢
 
-  - 鏀寔 `.m3u8` 瀵煎叆锛?
-  - 鏀寔 `PageUp/PageDown` 涓婁竴棣?涓嬩竴棣栵紱
-
-  - EOF 鑷姩鍒囨崲涓嬩竴椤广€?
-- `main` 鎺ュ叆 `SettingsManager`锛?
-  - 鍚姩鍔犺浇 `config/player_settings.ini`锛?
-  - 澶辫触鍥為€€榛樿鍊硷紱
-
-  - 閫€鍑轰繚瀛橀煶閲忋€侀€熷害涓庡垪琛ㄧ储寮曘€?
+  - EOF 閼奉亜濮╅崚鍥ㄥ床娑撳绔存い骞库偓?
+- `main` 閹恒儱鍙?`SettingsManager`閿?
+  - 閸氼垰濮╅崝鐘烘祰 `config/player_settings.ini`閿?
+  - 婢惰精瑙﹂崶鐐衡偓鈧妯款吇閸婄》绱?
+  - 闁偓閸戣桨绻氱€涙﹢鐓堕柌蹇嬧偓渚€鈧喎瀹虫稉搴″灙鐞涖劎鍌ㄥ鏇樷偓?
 
 
-### 浜や簰澧炲己
+### 娴溿倓绨版晶鐐插繁
 
-- 蹇嵎閿鐗堥粯璁ら敭浣嶅叏閮ㄦ帴鍏ワ細
+- 韫囶偅宓庨柨顕€顩婚悧鍫ョ帛鐠併倝鏁担宥呭弿闁劍甯撮崗銉窗
 
-  - `Space` 鎾斁/鏆傚仠锛?
-  - `Enter/Alt+Enter/F` 鍏ㄥ睆锛?
-  - `Esc/Q` 閫€鍑洪€昏緫锛堝叏灞忎紭鍏堥€€鍏ㄥ睆锛夛紱
-
-  - `Left/Right` 涓?`Ctrl+Left/Ctrl+Right` 鐩稿 seek锛?
-  - `Up/Down/+/-/M` 闊抽噺涓庨潤闊筹紱
-
-  - `[`/`]` 鍙橀€熶笌 `R` 鎭㈠ 1.0x銆?
-- 娓叉煋浜嬩欢璇锋眰閾捐矾鎵╁睍鍒?`PlayerCore` 涓?`VideoPlayer`锛屾敮鎸佷富娴佺▼娑堣垂鈥滀笂涓€棣?涓嬩竴棣?閫€鍑衡€濇帶鍒惰姹傘€?
+  - `Space` 閹绢厽鏂?閺嗗倸浠犻敍?
+  - `Enter/Alt+Enter/F` 閸忋劌鐫嗛敍?
+  - `Esc/Q` 闁偓閸戞椽鈧槒绶敍鍫濆弿鐏炲繋绱崗鍫モ偓鈧崗銊ョ潌閿涘绱?
+  - `Left/Right` 娑?`Ctrl+Left/Ctrl+Right` 閻╃顕?seek閿?
+  - `Up/Down/+/-/M` 闂婃娊鍣烘稉搴ㄦ饯闂婄绱?
+  - `[`/`]` 閸欐﹢鈧喍绗?`R` 閹垹顦?1.0x閵?
+- 濞撳弶鐓嬫禍瀣╂鐠囬攱鐪伴柧鎹愮熅閹碘晛鐫嶉崚?`PlayerCore` 娑?`VideoPlayer`閿涘本鏁幐浣峰瘜濞翠胶鈻煎☉鍫ｅ瀭閳ユ粈绗傛稉鈧＃?娑撳绔存＃?闁偓閸戣　鈧繃甯堕崚鎯邦嚞濮瑰倶鈧?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -1238,28 +1356,27 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堢Щ闄?Core 鍗曞厓娴嬭瘯鐩爣锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍫⑿╅梽?Core 閸楁洖鍘撳ù瀣槸閻╊喗鐖ｉ敍?
 
 
-### 鏋勫缓閰嶇疆璋冩暣
-
-- 绉婚櫎 `BUILD_CORE_TESTS` 閫夐」锛岄伩鍏嶄繚鐣欐棤鏁堟祴璇曞紑鍏炽€?
-- 绉婚櫎 `core_frame_queue_tests`銆乣core_clock_tests` 鍜?`core_tests` 鑱氬悎鐩爣銆?
-
-
-### 鏂囦欢娓呯悊
-
-- 鍒犻櫎 `tests/core_frame_queue_tests.cpp`銆?
-- 鍒犻櫎 `tests/core_clock_tests.cpp`銆?
+### 閺嬪嫬缂撻柊宥囩枂鐠嬪啯鏆?
+- 缁夊娅?`BUILD_CORE_TESTS` 闁銆嶉敍宀勪缉閸忓秳绻氶悾娆愭￥閺佸牊绁寸拠鏇炵磻閸忕偨鈧?
+- 缁夊娅?`core_frame_queue_tests`閵嗕梗core_clock_tests` 閸?`core_tests` 閼辨艾鎮庨惄顔界垼閵?
 
 
-### 淇敼鏂囦欢
+### 閺傚洣娆㈠〒鍛倞
+
+- 閸掔娀娅?`tests/core_frame_queue_tests.cpp`閵?
+- 閸掔娀娅?`tests/core_clock_tests.cpp`閵?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - CMakeLists.txt
 
-- tests/core_frame_queue_tests.cpp锛堝垹闄わ級
+- tests/core_frame_queue_tests.cpp閿涘牆鍨归梽銈忕礆
 
-- tests/core_clock_tests.cpp锛堝垹闄わ級
+- tests/core_clock_tests.cpp閿涘牆鍨归梽銈忕礆
 
 - docs/records/CHANGELOG.md
 
@@ -1269,18 +1386,17 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堝鎸傚瓧骞曞姞杞藉叆鍙ｏ級
+## 2026-03-07 閺囧瓨鏌婇敍鍫濐樆閹稿倸鐡ч獮鏇炲鏉炶棄鍙嗛崣锝忕礆
 
 
 
-### 瀛楀箷鍏ュ彛鑳藉姏
+### 鐎涙绠烽崗銉ュ經閼宠棄濮?
+- 娑撶粯绁︾粙瀣煀婢х偛顦婚幐鍌氱摟楠炴洖寮弫甯窗`--subtitle <file.srt>`閵?
+- 閺堫亙绱?`--subtitle` 閺冭绱濋懛顏勫З鐏忔繆鐦崝鐘烘祰娑撳骸缍嬮崜宥呯崯娴ｆ挸鎮撻崥?`.srt` 閺傚洣娆㈤妴?
+- `VideoPlayer` 閺傛澘顤冩径鏍ㄥ瘯鐎涙绠烽崝鐘烘祰娑撳孩绔婚悶鍡樺复閸欙綇绱濋弨顖涘瘮 SRT 鐟欙絾鐎介獮鎯邦唶瑜版洘娼惄顔芥殶閵?
 
-- 涓绘祦绋嬫柊澧炲鎸傚瓧骞曞弬鏁帮細`--subtitle <file.srt>`銆?
-- 鏈紶 `--subtitle` 鏃讹紝鑷姩灏濊瘯鍔犺浇涓庡綋鍓嶅獟浣撳悓鍚?`.srt` 鏂囦欢銆?
-- `VideoPlayer` 鏂板澶栨寕瀛楀箷鍔犺浇涓庢竻鐞嗘帴鍙ｏ紝鏀寔 SRT 瑙ｆ瀽骞惰褰曟潯鐩暟銆?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/video_player.h
 
@@ -1298,31 +1414,29 @@ make -j$(nproc)
 
 
 
-## 2026-03-07 鏇存柊锛堝瓧骞曟覆鏌撳彔鍔犱笌鏃跺簭鍚屾锛?
+## 2026-03-07 閺囧瓨鏌婇敍鍫濈摟楠炴洘瑕嗛弻鎾冲綌閸旂姳绗岄弮璺虹碍閸氬本顒為敍?
 
 
-### 瀛楀箷娓叉煋鑳藉姏
-
-- 娓叉煋鎺ュ彛鏂板瀛楀箷鏂囨湰閫氶亾锛歚IVideoRenderer::setSubtitleText()`銆?
-- SDL 娓叉煋閾捐矾鏂板瀛楀箷鍙犲姞灞傦紝鏀寔澶氳鏄剧ず銆佽秴闀挎埅鏂€佸簳鏉夸笌闃村奖銆?
-- D3D11/OpenGL 娓叉煋鍣ㄨˉ榻愬瓧骞曟帴鍙ｆ々瀹炵幇锛屼繚璇佸鍚庣缂栬瘧涓€鑷存€с€?
-- 褰撳墠瀛楀箷瀛楁ā涓鸿交閲忓疄鐜帮紝闈?ASCII 瀛楃浼氶檷绾ф樉绀恒€?
-
-
-### 瀛楀箷鏃堕棿杞村悓姝?
-- `PlayerCore` 鏂板澶栨寕瀛楀箷杞ㄩ亾绠＄悊涓庢椿璺冪储寮曠紦瀛樸€?
-- 娓叉煋甯ц矾寰勪笌绌洪棽璺緞鍧囨寜褰撳墠鎾斁鏃堕棿鏇存柊瀛楀箷锛岃鐩栨挱鏀?鏆傚仠/seek銆?
-- 淇瀛楀箷鏇存柊涓殑閿佺矑搴﹂棶棰橈紝閬垮厤閿佸唴璋冪敤娓叉煋鎺ュ彛銆?
+### 鐎涙绠峰〒鍙夌厠閼宠棄濮?
+- 濞撳弶鐓嬮幒銉ュ經閺傛澘顤冪€涙绠烽弬鍥ㄦ拱闁岸浜鹃敍姝欼VideoRenderer::setSubtitleText()`閵?
+- SDL 濞撳弶鐓嬮柧鎹愮熅閺傛澘顤冪€涙绠烽崣鐘插鐏炲偊绱濋弨顖涘瘮婢舵俺顢戦弰鍓с仛閵嗕浇绉撮梹鎸庡焻閺傤厹鈧礁绨抽弶澶哥瑢闂冩潙濂栭妴?
+- D3D11/OpenGL 濞撳弶鐓嬮崳銊ㄋ夋鎰摟楠炴洘甯撮崣锝嗐€呯€圭偟骞囬敍灞肩箽鐠囦礁顦块崥搴ｎ伂缂傛牞鐦ф稉鈧懛瀛樷偓褋鈧?
+- 瑜版挸澧犵€涙绠风€涙膩娑撻缚浜ら柌蹇撶杽閻滃府绱濋棃?ASCII 鐎涙顑佹导姘舵缁狙勬▔缁€鎭掆偓?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 鐎涙绠烽弮鍫曟？鏉炴潙鎮撳?
+- `PlayerCore` 閺傛澘顤冩径鏍ㄥ瘯鐎涙绠锋潪銊╀壕缁狅紕鎮婃稉搴㈡た鐠哄啰鍌ㄥ鏇犵处鐎涙ǜ鈧?
+- 濞撳弶鐓嬬敮褑鐭惧鍕瑢缁屾椽妫界捄顖氱窞閸у洦瀵滆ぐ鎾冲閹绢厽鏂侀弮鍫曟？閺囧瓨鏌婄€涙绠烽敍宀冾洬閻╂牗鎸遍弨?閺嗗倸浠?seek閵?
+- 娣囶喖顦茬€涙绠烽弴瀛樻煀娑擃厾娈戦柨浣虹煈鎼达箓妫舵０姗堢礉闁灝鍘ら柨浣稿敶鐠嬪啰鏁ゅ〒鍙夌厠閹恒儱褰涢妴?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `1.1.2 瀛楀箷娓叉煋鍙犲姞` 鏍囪瀹屾垚锛?
-  - `1.1.3 鎾斁/鏆傚仠/seek 鍚屾` 鏍囪瀹屾垚銆?
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `1.1.2 鐎涙绠峰〒鍙夌厠閸欑姴濮瀈 閺嶅洩顔囩€瑰本鍨氶敍?
+  - `1.1.3 閹绢厽鏂?閺嗗倸浠?seek 閸氬本顒瀈 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/render/video_renderer.h
 
@@ -1360,29 +1474,27 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝瓧骞曞紑鍏充笌寮傚父澶勭悊锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫濈摟楠炴洖绱戦崗鍏呯瑢瀵倸鐖舵径鍕倞閿?
 
 
-### 瀛楀箷寮€鍏宠兘鍔?
-- 鏂板杩愯鏃跺瓧骞曞紑鍏抽摼璺紝鏀寔鍦ㄦ挱鏀句腑鎸?`V` 鍒囨崲瀛楀箷鏄剧ず寮€/鍏炽€?
-- 瀛楀箷鍏抽棴鏃剁珛鍗虫竻绌哄彔鍔犲眰锛涢噸鏂板紑鍚悗鎸夊綋鍓嶆挱鏀炬椂闂存仮澶嶅瓧骞曞悓姝ャ€?
-- 瀛楀箷寮€鍏崇姸鎬佸湪鎾斁浼氳瘽鍐呬繚鎸佷竴鑷达紝璺ㄥ獟浣撳垏鎹㈠彲缁ф壙褰撳墠鏄剧ず鍋忓ソ銆?
+### 鐎涙绠峰鈧崗瀹犲厴閸?
+- 閺傛澘顤冩潻鎰攽閺冭泛鐡ч獮鏇炵磻閸忔娊鎽肩捄顖ょ礉閺€顖涘瘮閸︺劍鎸遍弨鍙ヨ厬閹?`V` 閸掑洦宕茬€涙绠烽弰鍓с仛瀵偓/閸忕偨鈧?
+- 鐎涙绠烽崗鎶芥４閺冨墎鐝涢崡铏缁屽搫褰旈崝鐘茬湴閿涙盯鍣搁弬鏉跨磻閸氼垰鎮楅幐澶婄秼閸撳秵鎸遍弨鐐闂傚瓨浠径宥呯摟楠炴洖鎮撳銉ｂ偓?
+- 鐎涙绠峰鈧崗宕囧Ц閹礁婀幘顓熸杹娴兼俺鐦介崘鍛箽閹镐椒绔撮懛杈剧礉鐠恒劌鐛熸担鎾冲瀼閹广垹褰茬紒褎澹欒ぐ鎾冲閺勫墽銇氶崑蹇撱偨閵?
 
 
-### 寮傚父澶勭悊澧炲己
-
-- 澶栨寕瀛楀箷鍔犺浇璺緞妫€鏌ユ敼涓?`std::error_code`锛岄伩鍏嶆枃浠剁郴缁熷紓甯镐紶鎾€?
-- 澧炲姞瀛楀箷瑙ｆ瀽寮傚父鎹曡幏涓庢棩蹇楅檷绾у鐞嗭紝纭繚鎾斁涓婚摼涓嶄腑鏂€?
-- 鍔犺浇澶辫触鏃朵繚鎸佺姸鎬佷竴鑷达細娓呯┖鏃у瓧骞曞苟缁х画鎾斁濯掍綋銆?
-
-
-### 浠诲姟娓呭崟鍚屾
-
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `1.1.4 瀛楀箷寮€鍏充笌寮傚父澶勭悊` 鏍囪瀹屾垚銆?
+### 瀵倸鐖舵径鍕倞婢х偛宸?
+- 婢舵牗瀵曠€涙绠烽崝鐘烘祰鐠侯垰绶炲Λ鈧弻銉︽暭娑?`std::error_code`閿涘矂浼╅崗宥嗘瀮娴犲墎閮寸紒鐔风磽鐢晲绱堕幘顓溾偓?
+- 婢х偛濮炵€涙绠风憴锝嗙€藉鍌氱埗閹规洝骞忔稉搴㈡）韫囨妾风痪褍顦╅悶鍡礉绾喕绻氶幘顓熸杹娑撳鎽兼稉宥勮厬閺傤厹鈧?
+- 閸旂姾娴囨径杈Е閺冩湹绻氶幐浣哄Ц閹椒绔撮懛杈剧窗濞撳懐鈹栭弮褍鐡ч獮鏇炶嫙缂佈呯敾閹绢厽鏂佹刊鎺嶇秼閵?
 
 
-### 淇敼鏂囦欢
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `1.1.4 鐎涙绠峰鈧崗鍏呯瑢瀵倸鐖舵径鍕倞` 閺嶅洩顔囩€瑰本鍨氶妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/display.h
 
@@ -1422,35 +1534,33 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝揩鎹烽敭閰嶇疆鎸佷箙鍖栵級
+## 2026-03-08 閺囧瓨鏌婇敍鍫濇彥閹圭兘鏁柊宥囩枂閹镐椒绠欓崠鏍电礆
 
 
 
-### 鎸佷箙鍖栬兘鍔?
-- 鏂板 `hotkey.*` 閰嶇疆椤癸紝瑕嗙洊棣栫増蹇嵎閿姩浣溿€?
-- 鍚姩鏃惰鍙?`config/player_settings.ini` 骞跺簲鐢ㄩ敭浣嶆槧灏勩€?
-- 閫€鍑烘椂灏嗗綋鍓嶉敭浣嶅洖鍐欓厤缃枃浠讹紝淇濊瘉閲嶅惎鍚庝繚鎸佷竴鑷淬€?
+### 閹镐椒绠欓崠鏍厴閸?
+- 閺傛澘顤?`hotkey.*` 闁板秶鐤嗘い鐧哥礉鐟曞棛娲婃＃鏍韫囶偅宓庨柨顔煎З娴ｆ嚎鈧?
+- 閸氼垰濮╅弮鎯邦嚢閸?`config/player_settings.ini` 楠炶泛绨查悽銊╂暛娴ｅ秵妲х亸鍕┾偓?
+- 闁偓閸戠儤妞傜亸鍡楃秼閸撳秹鏁担宥呮礀閸愭瑩鍘ょ純顔芥瀮娴犺绱濇穱婵婄槈闁插秴鎯庨崥搴濈箽閹镐椒绔撮懛娣偓?
 
 
-### 浜や簰閾捐矾璋冩暣
-
-- `Display` 鏀逛负閫氳繃 `HotkeyManager` 澶勭悊閿綅鏄犲皠锛屼笉鍐嶅浐瀹氬啓姝讳富閿€笺€?
-- `Renderer` / `PlayerCore` / `VideoPlayer` 澧炲姞鐑敭绠＄悊閫忎紶鎺ュ彛銆?
-- 淇濈暀 `Esc` 涓?`Enter` 鐨勫吋瀹硅涓猴紝闄嶄綆榛樿浣跨敤涔犳儻鍥炲綊椋庨櫓銆?
-
-
-### 寮傚父涓庡吋瀹?
-- 瀵归潪娉?`hotkey.*` 閰嶇疆杩涜瀹归敊闄嶇骇锛堜繚鐣欓粯璁ゅ苟璁板綍鍛婅锛夈€?
-- 鏇存柊 `config/player_settings.ini` 榛樿鏍蜂緥锛岃ˉ榻愭墍鏈夊揩鎹烽敭椤广€?
+### 娴溿倓绨伴柧鎹愮熅鐠嬪啯鏆?
+- `Display` 閺€閫涜礋闁俺绻?`HotkeyManager` 婢跺嫮鎮婇柨顔荤秴閺勭姴鐨犻敍灞肩瑝閸愬秴娴愮€规艾鍟撳璁冲瘜闁款喖鈧鈧?
+- `Renderer` / `PlayerCore` / `VideoPlayer` 婢х偛濮為悜顓㈡暛缁狅紕鎮婇柅蹇庣炊閹恒儱褰涢妴?
+- 娣囨繄鏆€ `Esc` 娑?`Enter` 閻ㄥ嫬鍚嬬€圭顢戞稉鐚寸礉闂勫秳缍嗘妯款吇娴ｈ法鏁ゆ稊鐘冲劵閸ョ偛缍婃搴ㄦ珦閵?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 瀵倸鐖舵稉搴″悑鐎?
+- 鐎靛綊娼▔?`hotkey.*` 闁板秶鐤嗘潻娑滎攽鐎瑰綊鏁婇梽宥囬獓閿涘牅绻氶悾娆撶帛鐠併倕鑻熺拋鏉跨秿閸涘﹨顒熼敍澶堚偓?
+- 閺囧瓨鏌?`config/player_settings.ini` 姒涙顓婚弽铚傜伐閿涘矁藟姒绘劖澧嶉張澶婃彥閹圭兘鏁い骞库偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `1.3.2 鏀寔閿綅閰嶇疆鎸佷箙鍖朻 鏍囪瀹屾垚銆?
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `1.3.2 閺€顖涘瘮闁款喕缍呴柊宥囩枂閹镐椒绠欓崠鏈?閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/input/hotkey_manager.h
 
@@ -1496,34 +1606,30 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝揩鎹烽敭鍐茬獊妫€娴嬩笌鎭㈠榛樿锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫濇彥閹圭兘鏁崘鑼崐濡偓濞村绗岄幁銏狀槻姒涙顓婚敍?
 
 
-### 鍐茬獊妫€娴嬭兘鍔?
-- `HotkeyManager` 鏂板閿綅鍐茬獊妫€娴嬫帴鍙ｏ細
-
-  - `findConflicts()`锛氳繑鍥炲啿绐佸姩浣滃锛?
-  - `hasConflicts()`锛氬揩閫熷垽鏂槸鍚﹀瓨鍦ㄥ啿绐併€?
-- 鍚姩鍔犺浇鐑敭閰嶇疆鏃讹紝鑷姩妫€娴嬮噸澶嶉敭浣嶅苟杈撳嚭鍐茬獊鏃ュ織銆?
-
-
-### 鎭㈠榛樿鑳藉姏
-
-- `HotkeyManager` 鏂板 `resetToDefaults()`锛岀粺涓€鍥為€€榛樿閿綅銆?
-- 鏂板閰嶇疆寮€鍏?`hotkey.restore_defaults`锛?
-  - 璁剧疆涓?`true` 鍚庯紝涓嬩竴娆″惎鍔ㄨ嚜鍔ㄦ仮澶嶉粯璁ら敭浣嶏紱
-
-  - 鎭㈠瀹屾垚鍚庤嚜鍔ㄥ洖鍐欎负 `false`锛岄伩鍏嶉噸澶嶈Е鍙戙€?
-- 鍙戠幇鍐茬獊鏃惰嚜鍔ㄦ仮澶嶉粯璁ら敭浣嶏紝闃叉杩愯鏈熷姩浣滄涔夈€?
+### 閸愯尙鐛婂Λ鈧ù瀣厴閸?
+- `HotkeyManager` 閺傛澘顤冮柨顔荤秴閸愯尙鐛婂Λ鈧ù瀣复閸欙綇绱?
+  - `findConflicts()`閿涙俺绻戦崶鐐插暱缁愪礁濮╂担婊冾嚠閿?
+  - `hasConflicts()`閿涙艾鎻╅柅鐔峰灲閺傤厽妲搁崥锕€鐡ㄩ崷銊ュ暱缁愪降鈧?
+- 閸氼垰濮╅崝鐘烘祰閻戭參鏁柊宥囩枂閺冭绱濋懛顏勫З濡偓濞村鍣告径宥夋暛娴ｅ秴鑻熸潏鎾冲毉閸愯尙鐛婇弮銉ョ箶閵?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 閹垹顦叉妯款吇閼宠棄濮?
+- `HotkeyManager` 閺傛澘顤?`resetToDefaults()`閿涘瞼绮烘稉鈧崶鐐衡偓鈧妯款吇闁款喕缍呴妴?
+- 閺傛澘顤冮柊宥囩枂瀵偓閸?`hotkey.restore_defaults`閿?
+  - 鐠佸墽鐤嗘稉?`true` 閸氬函绱濇稉瀣╃濞嗏€虫儙閸斻劏鍤滈崝銊︿划婢跺秹绮拋銈夋暛娴ｅ稄绱?
+  - 閹垹顦茬€瑰本鍨氶崥搴ゅ殰閸斻劌娲栭崘娆庤礋 `false`閿涘矂浼╅崗宥夊櫢婢跺秷袝閸欐垯鈧?
+- 閸欐垹骞囬崘鑼崐閺冩儼鍤滈崝銊︿划婢跺秹绮拋銈夋暛娴ｅ稄绱濋梼鍙夘剾鏉╂劘顢戦張鐔峰З娴ｆ粍顒犳稊澶堚偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `1.3.3 鏀寔閿綅鍐茬獊妫€娴嬩笌鎭㈠榛樿` 鏍囪瀹屾垚銆?
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `1.3.3 閺€顖涘瘮闁款喕缍呴崘鑼崐濡偓濞村绗岄幁銏狀槻姒涙顓籤 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/input/hotkey_manager.h
 
@@ -1543,44 +1649,41 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝瓧骞?seek 鍚屾楠屾敹锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫濈摟楠?seek 閸氬本顒炴灞炬暪閿?
 
 
-### 楠屾敹涓庡彲鍥炲綊鑳藉姏
+### 妤犲本鏁规稉搴″讲閸ョ偛缍婇懗钘夊
 
-- 鏂板 `--subtitle-sync-check <subtitle.srt>` 鍛戒护锛岀敤浜庤嚜鍔ㄩ獙璇佸瓧骞曟椂闂磋酱鍖归厤銆?
-- 妫€鏌ヨ鐩栦袱绫诲満鏅細
-
-  - 椤哄簭鎾斁鏃堕棿杞达紙ordered锛夛紱
-
-  - 闈為『搴?seek 璺宠浆锛坰eek锛夈€?
-- 杈撳嚭 `mismatches` 涓?`PASS/FAIL`锛岀敤浜?M1 楠屾敹 `1.4.1`銆?
+- 閺傛澘顤?`--subtitle-sync-check <subtitle.srt>` 閸涙垝鎶ら敍宀€鏁ゆ禍搴ゅ殰閸斻劑鐛欑拠浣哥摟楠炴洘妞傞梻纾嬮叡閸栧綊鍘ら妴?
+- 濡偓閺屻儴顩惄鏍﹁⒈缁婧€閺咁垽绱?
+  - 妞ゅ搫绨幘顓熸杹閺冨爼妫挎潪杈剧礄ordered閿涘绱?
+  - 闂堢偤銆庢惔?seek 鐠哄疇娴嗛敍鍧癳ek閿涘鈧?
+- 鏉堟挸鍤?`mismatches` 娑?`PASS/FAIL`閿涘瞼鏁ゆ禍?M1 妤犲本鏁?`1.4.1`閵?
 
 
-### 浠ｇ爜缁撴瀯璋冩暣
+### 娴狅絿鐖滅紒鎾寸€拫鍐╂殻
 
-- 鎻愬彇瀛楀箷鏃堕棿杞村尮閰嶅叕鍏卞嚱鏁帮細
+- 閹绘劕褰囩€涙绠烽弮鍫曟？鏉炴潙灏柊宥呭彆閸忓崬鍤遍弫甯窗
 
   - `include/subtitle/subtitle_timeline.h`
 
   - `src/subtitle/subtitle_timeline.cpp`
 
-- `PlayerCore` 澶嶇敤缁熶竴鍖归厤鍑芥暟锛岄伩鍏嶈繍琛岃矾寰勪笌楠屾敹璺緞绠楁硶鍒嗗弶銆?
+- `PlayerCore` 婢跺秶鏁ょ紒鐔剁閸栧綊鍘ら崙鑺ユ殶閿涘矂浼╅崗宥堢箥鐞涘矁鐭惧鍕瑢妤犲本鏁圭捄顖氱窞缁犳纭堕崚鍡楀级閵?
 
 
-### 鏍蜂緥涓庢姤鍛?
-- 鏂板鏍蜂緥瀛楀箷锛歚samples/subtitle/subtitle_seek_sync_sample.srt`
+### 閺嶈渹绶ユ稉搴㈠Г閸?
+- 閺傛澘顤冮弽铚傜伐鐎涙绠烽敍姝歴amples/subtitle/subtitle_seek_sync_sample.srt`
 
-- 鏂板鏈湴楠岃瘉鎶ュ憡锛歚docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`
-
-
-
-### 浠诲姟娓呭崟鍚屾
-
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚1.4.1` 宸插畬鎴愩€?
+- 閺傛澘顤冮張顒€婀存宀冪槈閹躲儱鎲￠敍姝歞ocs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`
 
 
-### 淇敼鏂囦欢
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪1.4.1` 瀹告彃鐣幋鎰┾偓?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/subtitle/subtitle_timeline.h
 
@@ -1608,31 +1711,28 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟挱鏀惧垪琛?5 鏂囦欢楠屾敹锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫熸尡閺€鎯у灙鐞?5 閺傚洣娆㈡灞炬暪閿?
 
 
-### 楠屾敹鑳藉姏
+### 妤犲本鏁归懗钘夊
 
-- 鏂板 `--playlist-flow-check` 鍛戒护鐢ㄤ簬 `1.4.2` 鑷姩楠屾敹銆?
-- 楠屾敹鍖呭惈锛?
-  - 鑷冲皯 5 鏉℃挱鏀惧垪琛ㄨ緭鍏ユ牎楠岋紱
-
-  - 鍓?5 鏉″獟浣撳彲鎵撳紑妫€鏌ワ紱
-
-  - EOF 鑷姩鍒囨崲椤哄簭瑕嗙洊 `0 -> 1 -> 2 -> 3 -> 4`銆?
+- 閺傛澘顤?`--playlist-flow-check` 閸涙垝鎶ら悽銊ょ艾 `1.4.2` 閼奉亜濮╂灞炬暪閵?
+- 妤犲本鏁归崠鍛儓閿?
+  - 閼峰啿鐨?5 閺夆剝鎸遍弨鎯у灙鐞涖劏绶崗銉︾墡妤犲矉绱?
+  - 閸?5 閺夆€崇崯娴ｆ挸褰查幍鎾崇磻濡偓閺屻儻绱?
+  - EOF 閼奉亜濮╅崚鍥ㄥ床妞ゅ搫绨憰鍡欐磰 `0 -> 1 -> 2 -> 3 -> 4`閵?
 
 
-### 杈撳嚭涓庢姤鍛?
-- 鍛戒护杈撳嚭 `playlist-flow-check.*` 瀛楁锛屽寘鍚?`PASS/FAIL`銆?
-- 鏂板鏈湴鎶ュ憡锛歚docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`銆?
+### 鏉堟挸鍤稉搴㈠Г閸?
+- 閸涙垝鎶ゆ潏鎾冲毉 `playlist-flow-check.*` 鐎涙顔岄敍灞藉瘶閸?`PASS/FAIL`閵?
+- 閺傛澘顤冮張顒€婀撮幎銉ユ啞閿涙瓪docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`閵?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪1.4.2` 瀹告彃鐣幋鎰┾偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚1.4.2` 宸插畬鎴愩€?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -1650,18 +1750,17 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堣缃噸鍚仮澶嶉獙鏀讹級
+## 2026-03-08 閺囧瓨鏌婇敍鍫ｎ啎缂冾噣鍣搁崥顖涗划婢跺秹鐛欓弨璁圭礆
 
 
 
-### 楠屾敹鑳藉姏
+### 妤犲本鏁归懗钘夊
 
-- 鏂板 `--settings-persistence-check [settings_file]`锛岀敤浜?`1.4.3` 鑷姩楠屾敹銆?
-- 楠屾敹娴佺▼锛氬啓鍏ヨ缃?-> 閲嶈浇璁剧疆 -> 瀛楁涓€鑷存€ф瘮瀵广€?
+- 閺傛澘顤?`--settings-persistence-check [settings_file]`閿涘瞼鏁ゆ禍?`1.4.3` 閼奉亜濮╂灞炬暪閵?
+- 妤犲本鏁瑰ù浣衡柤閿涙艾鍟撻崗銉啎缂?-> 闁插秷娴囩拋鍓х枂 -> 鐎涙顔屾稉鈧懛瀛樷偓褎鐦€靛箍鈧?
 
 
-### 鏍￠獙瑕嗙洊瀛楁
-
+### 閺嶏繝鐛欑憰鍡欐磰鐎涙顔?
 - `player.volume_percent`
 
 - `player.playback_speed`
@@ -1674,17 +1773,16 @@ make -j$(nproc)
 
 
 
-### 杈撳嚭涓庢姤鍛?
-- 鍛戒护杈撳嚭 `settings-persistence-check.*` 瀛楁鍜?`PASS/FAIL`銆?
-- 鏂板鏈湴鎶ュ憡锛歚docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`銆?
+### 鏉堟挸鍤稉搴㈠Г閸?
+- 閸涙垝鎶ゆ潏鎾冲毉 `settings-persistence-check.*` 鐎涙顔岄崪?`PASS/FAIL`閵?
+- 閺傛澘顤冮張顒€婀撮幎銉ユ啞閿涙瓪docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`閵?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪1.4.3` 瀹告彃鐣幋鎰┾偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚1.4.3` 宸插畬鎴愩€?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -1700,18 +1798,17 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝鍣ㄧ煩闃佃ˉ榻愶級
+## 2026-03-08 閺囧瓨鏌婇敍鍫濐啇閸ｃ劎鐓╅梼浣兯夋鎰剁礆
 
 
 
-### 瑕嗙洊鑼冨洿
+### 鐟曞棛娲婇懠鍐ㄦ纯
 
-- 瀹屾垚 `2.1.2` 瀹瑰櫒楠屾敹瑕嗙洊锛歚mp4/mkv/mov/avi/webm/flv/ts/m2ts`銆?
+- 鐎瑰本鍨?`2.1.2` 鐎圭懓娅掓灞炬暪鐟曞棛娲婇敍姝歮p4/mkv/mov/avi/webm/flv/ts/m2ts`閵?
 
 
-### 鍥炲綊鏍锋湰鎵╁睍
-
-- `format_samples.csv` 鏂板涓夋潯鏍锋湰锛?
+### 閸ョ偛缍婇弽閿嬫拱閹碘晛鐫?
+- `format_samples.csv` 閺傛澘顤冩稉澶嬫蒋閺嶉攱婀伴敍?
   - `samples/mov/demo__h264_aac__1920x1080__30fps__2ch.mov`
 
   - `samples/avi/demo__h264_mp3__1280x720__30fps__2ch.avi`
@@ -1720,25 +1817,23 @@ make -j$(nproc)
 
 
 
-### 鑷姩鐢熸垚鑴氭湰鎵╁睍
+### 閼奉亜濮╅悽鐔稿灇閼存碍婀伴幍鈺佺潔
 
-- `download_test_samples.ps1` 鏂板 `mov/avi/m2ts` 鐩綍涓庣敓鎴愭祦绋嬨€?
+- `download_test_samples.ps1` 閺傛澘顤?`mov/avi/m2ts` 閻╊喖缍嶆稉搴ｆ晸閹存劖绁︾粙瀣ㄢ偓?
 
 
-### 鏈湴鍥炲綊缁撴灉
-
+### 閺堫剙婀撮崶鐐茬秺缂佹挻鐏?
 - `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
 
   - Total=12, PASS=12, PARTIAL=0, FAIL=0, SKIP=0
 
 
 
-### 浠诲姟娓呭崟鍚屾
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪2.1.2` 瀹告彃鐣幋鎰┾偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚2.1.2` 宸插畬鎴愩€?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - tools/format_regression/format_samples.csv
 
@@ -1770,41 +1865,37 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堣棰戠紪鐮佺煩闃佃ˉ榻愶級
+## 2026-03-08 閺囧瓨鏌婇敍鍫ｎ潒妫版垹绱惍浣虹叐闂冧絻藟姒绘劧绱?
 
 
+### 鐟曞棛娲婇懠鍐ㄦ纯
 
-### 瑕嗙洊鑼冨洿
-
-- 瀹屾垚 `2.1.3` 瑙嗛缂栫爜楠屾敹瑕嗙洊锛歚H.264/H.265/VP9/AV1/MPEG-2`銆?
+- 鐎瑰本鍨?`2.1.3` 鐟欏棝顣剁紓鏍垳妤犲本鏁圭憰鍡欐磰閿涙瓪H.264/H.265/VP9/AV1/MPEG-2`閵?
 
 
-### 鍥炲綊鏍锋湰鎵╁睍
-
-- `format_samples.csv` 鏂板锛?
+### 閸ョ偛缍婇弽閿嬫拱閹碘晛鐫?
+- `format_samples.csv` 閺傛澘顤冮敍?
   - `samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts`
 
 
 
-### 鑷姩鐢熸垚鑴氭湰鎵╁睍
+### 閼奉亜濮╅悽鐔稿灇閼存碍婀伴幍鈺佺潔
 
-- `download_test_samples.ps1` 鏂板 MPEG-2 瑙嗛鏍锋湰鐢熸垚娴佺▼锛坄mpeg2video + ac3 + ts`锛夈€?
+- `download_test_samples.ps1` 閺傛澘顤?MPEG-2 鐟欏棝顣堕弽閿嬫拱閻㈢喐鍨氬ù浣衡柤閿涘潉mpeg2video + ac3 + ts`閿涘鈧?
 
 
-### 鏈湴鍥炲綊缁撴灉
-
+### 閺堫剙婀撮崶鐐茬秺缂佹挻鐏?
 - `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
 
   - Total=13, PASS=13, PARTIAL=0, FAIL=0, SKIP=0
 
 
 
-### 浠诲姟娓呭崟鍚屾
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪2.1.3` 瀹告彃鐣幋鎰┾偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚2.1.3` 宸插畬鎴愩€?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - tools/format_regression/format_samples.csv
 
@@ -1822,18 +1913,16 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堥煶棰戠紪鐮佺煩闃佃ˉ榻愶級
+## 2026-03-08 閺囧瓨鏌婇敍鍫ョ叾妫版垹绱惍浣虹叐闂冧絻藟姒绘劧绱?
 
 
+### 鐟曞棛娲婇懠鍐ㄦ纯
 
-### 瑕嗙洊鑼冨洿
-
-- 瀹屾垚 `2.1.4` 闊抽缂栫爜楠屾敹瑕嗙洊锛歚AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`銆?
+- 鐎瑰本鍨?`2.1.4` 闂婃娊顣剁紓鏍垳妤犲本鏁圭憰鍡欐磰閿涙瓪AAC/MP3/AC3/E-AC3/DTS/FLAC/Opus/Vorbis/PCM`閵?
 
 
-### 鍥炲綊鏍锋湰鎵╁睍
-
-- 鏂板 4 鏉￠煶棰戠紪鐮佹牱鏈細
+### 閸ョ偛缍婇弽閿嬫拱閹碘晛鐫?
+- 閺傛澘顤?4 閺夛繝鐓舵０鎴犵椽閻焦鐗遍張顒婄窗
 
   - `samples/mkv/demo__h264_eac3__1920x1080__30fps__2ch.mkv`
 
@@ -1845,12 +1934,11 @@ make -j$(nproc)
 
 
 
-### 鑴氭湰澧炲己
+### 閼存碍婀版晶鐐插繁
 
-- `download_test_samples.ps1` 澧炲姞 E-AC3/DTS/Vorbis/PCM 鏍锋湰鐢熸垚銆?
-- DTS (`dca`) 缂栫爜娣诲姞 `-strict -2`銆?
-- `run_format_regression.ps1` 澧炲姞缂栫爜鍚嶇瓑浠峰尮閰嶏細
-
+- `download_test_samples.ps1` 婢х偛濮?E-AC3/DTS/Vorbis/PCM 閺嶉攱婀伴悽鐔稿灇閵?
+- DTS (`dca`) 缂傛牜鐖滃ǎ璇插 `-strict -2`閵?
+- `run_format_regression.ps1` 婢х偛濮炵紓鏍垳閸氬秶鐡戞禒宄板爱闁板稄绱?
   - `dts` <-> `dca`
 
   - `hevc` <-> `h265`
@@ -1859,20 +1947,18 @@ make -j$(nproc)
 
 
 
-### 鏈湴鍥炲綊缁撴灉
-
+### 閺堫剙婀撮崶鐐茬秺缂佹挻鐏?
 - `docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
 
   - Total=17, PASS=17, PARTIAL=0, FAIL=0, SKIP=0
 
 
 
-### 浠诲姟娓呭崟鍚屾
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿涙瓪2.1.4` 瀹告彃鐣幋鎰┾偓?
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛歚2.1.4` 宸插畬鎴愩€?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - tools/format_regression/format_samples.csv
 
@@ -1892,32 +1978,30 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圖ecoderFactory 鍒濆鍖栨祦绋嬫帴鍏ワ級
+## 2026-03-08 閺囧瓨鏌婇敍鍦杄coderFactory 閸掓繂顫愰崠鏍ㄧウ缁嬪甯撮崗銉礆
 
 
 
-### 瑙ｇ爜鍒濆鍖栭摼璺粺涓€
+### 鐟欙絿鐖滈崚婵嗩潗閸栨牠鎽肩捄顖滅埠娑撯偓
 
-- `DecoderFactory` 鏂板 `selectBackendOrder(codec_name, prefer_hardware)`锛岃緭鍑哄悗绔€欓€夊簭鍒楀苟淇濈暀杞欢瑙ｇ爜鍏滃簳銆?
-- `PlayerCore::initDecoders` 鎺ュ叆鍊欓€夊簭鍒楋紝鎸夐『搴忓皾璇曞悗绔垵濮嬪寲涓?`avcodec_open2`锛屽け璐ヨ嚜鍔ㄥ洖閫€涓嬩竴涓€欓€夈€?
-- `tryConfigureD3D11HardwareDecode` 璋冩暣涓虹函 D3D11 閰嶇疆鍑芥暟锛屽悗绔瓥鐣ョ粺涓€鐢?`DecoderFactory` 鍐冲畾銆?
-
-
-### 閰嶇疆鍏煎
-
-- 淇濇寔 `decoder.prefer_hardware_decode` 閰嶇疆椤圭敓鏁堬細
-
-  - `true`锛氫紭鍏堢‖瑙ｅ€欓€夛紝鍐嶅洖閫€杞В锛?
-  - `false`锛氱洿鎺ヨ蛋杞欢瑙ｇ爜鍊欓€夈€?
+- `DecoderFactory` 閺傛澘顤?`selectBackendOrder(codec_name, prefer_hardware)`閿涘矁绶崙鍝勬倵缁旑垰鈧瑩鈧绨崚妤€鑻熸穱婵堟殌鏉烆垯娆㈢憴锝囩垳閸忔粌绨抽妴?
+- `PlayerCore::initDecoders` 閹恒儱鍙嗛崐娆撯偓澶婄碍閸掓绱濋幐澶愩€庢惔蹇撶毦鐠囨洖鎮楃粩顖氬灥婵瀵叉稉?`avcodec_open2`閿涘苯銇戠拹銉ㄥ殰閸斻劌娲栭柅鈧稉瀣╃娑擃亜鈧瑩鈧鈧?
+- `tryConfigureD3D11HardwareDecode` 鐠嬪啯鏆ｆ稉铏瑰嚱 D3D11 闁板秶鐤嗛崙鑺ユ殶閿涘苯鎮楃粩顖滅摜閻ｃ儳绮烘稉鈧悽?`DecoderFactory` 閸愬啿鐣鹃妴?
 
 
-### 浠诲姟娓呭崟鍚屾
+### 闁板秶鐤嗛崗鐓庮啇
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `3.1.1 DecoderFactory 鎺ュ叆鐪熷疄鍒濆鍖栨祦绋媊 鏍囪瀹屾垚銆?
+- 娣囨繃瀵?`decoder.prefer_hardware_decode` 闁板秶鐤嗘い鍦晸閺佸牞绱?
+  - `true`閿涙矮绱崗鍫⑩€栫憴锝呪偓娆撯偓澶涚礉閸愬秴娲栭柅鈧潪顖澬掗敍?
+  - `false`閿涙氨娲块幒銉ㄨ泲鏉烆垯娆㈢憴锝囩垳閸婃瑩鈧鈧?
 
 
-### 淇敼鏂囦欢
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `3.1.1 DecoderFactory 閹恒儱鍙嗛惇鐔风杽閸掓繂顫愰崠鏍ㄧウ缁嬪獖 閺嶅洩顔囩€瑰本鍨氶妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/decoder/decoder_factory.h
 
@@ -1935,24 +2019,23 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圖3D11VA 鍗忓晢澶辫触杞В鍏滃簳锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍦?D11VA 閸楀繐鏅㈡径杈Е鏉烆垵袙閸忔粌绨抽敍?
 
 
-### 鍥為€€閾捐矾澧炲己
+### 閸ョ偤鈧偓闁炬崘鐭炬晶鐐插繁
 
-- 鍦?`PlayerCore::selectVideoPixelFormat` 涓紝褰?D3D11VA 鐩爣鍍忕礌鏍煎紡鏈瑙ｇ爜鍣ㄦ彁渚涙椂锛屾樉寮忛檷绾у埌杞欢鍚庣锛?
-  - `video_hw_pixel_fmt_` 閲嶇疆涓?`AV_PIX_FMT_NONE`锛?
-  - `video_decoder_backend_` 缃负 `Software`銆?
-- 鍦ㄨВ鐮佸垵濮嬪寲娴佺▼涓ˉ鍏呭崗鍟嗛檷绾ф棩蹇楋紝渚夸簬瀹氫綅鈥滅‖瑙ｅ垵濮嬪寲鎴愬姛浣嗗崗鍟嗛樁娈靛洖閫€鈥濈殑鍦烘櫙銆?
-
-
-### 浠诲姟娓呭崟鍚屾
-
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `3.1.2 D3D11VA 鍒濆鍖栦笌澶辫触鍥為€€杞В` 鏍囪瀹屾垚銆?
+- 閸?`PlayerCore::selectVideoPixelFormat` 娑擃叏绱濊ぐ?D3D11VA 閻╊喗鐖ｉ崓蹇曠閺嶇厧绱￠張顏囶潶鐟欙絿鐖滈崳銊﹀絹娓氭稒妞傞敍灞炬▔瀵繘妾风痪褍鍩屾潪顖欐閸氬海顏敍?
+  - `video_hw_pixel_fmt_` 闁插秶鐤嗘稉?`AV_PIX_FMT_NONE`閿?
+  - `video_decoder_backend_` 缂冾喕璐?`Software`閵?
+- 閸︺劏袙閻礁鍨垫慨瀣濞翠胶鈻兼稉顓∷夐崗鍛礂閸熷棝妾风痪褎妫╄箛妤嬬礉娓氬じ绨€规矮缍呴垾婊呪€栫憴锝呭灥婵瀵查幋鎰娴ｅ棗宕楅崯鍡涙▉濞堥潧娲栭柅鈧垾婵堟畱閸︾儤娅欓妴?
 
 
-### 淇敼鏂囦欢
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `3.1.2 D3D11VA 閸掓繂顫愰崠鏍︾瑢婢惰精瑙﹂崶鐐衡偓鈧潪顖澬抈 閺嶅洩顔囩€瑰本鍨氶妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - src/core/player_core.cpp
 
@@ -1966,40 +2049,38 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圖3D11 娓叉煋鏈€灏忓彲鐢ㄩ摼璺級
+## 2026-03-08 閺囧瓨鏌婇敍鍦?D11 濞撳弶鐓嬮張鈧亸蹇撳讲閻劑鎽肩捄顖ょ礆
 
 
 
-### 娓叉煋鍚庣鑳藉姏琛ラ綈
+### 濞撳弶鐓嬮崥搴ｎ伂閼宠棄濮忕悰銉╃秷
 
-- `D3D11VideoRenderer` 瀹屾垚鏈€灏忓彲鐢ㄥ疄鐜帮細
+- `D3D11VideoRenderer` 鐎瑰本鍨氶張鈧亸蹇撳讲閻劌鐤勯悳甯窗
 
-  - `init`锛氬垱寤烘覆鏌撻摼璺紱
+  - `init`閿涙艾鍨卞鐑樿閺屾捇鎽肩捄顖ょ幢
 
-  - `renderFrame`锛氭帴鍏ュ抚涓婁紶锛?
-  - `present`锛氭帴鍏ュ憟鐜帮紱
+  - `renderFrame`閿涙碍甯撮崗銉ユ姎娑撳﹣绱堕敍?
+  - `present`閿涙碍甯撮崗銉ユ啛閻滃府绱?
+  - 娴滃娆㈡稉搴濇唉娴滄帟顕Ч鍌炩偓蹇庣炊閵?
+- `Display` 閺傛澘顤冨〒鍙夌厠閸氬海顏崣顖濐潎濞村鍏橀崝娑崇窗
 
-  - 浜嬩欢涓庝氦浜掕姹傞€忎紶銆?
-- `Display` 鏂板娓叉煋鍚庣鍙娴嬭兘鍔涳細
-
-  - 鍙缃?renderer 椹卞姩鍋忓ソ锛?
-  - 鍙煡璇㈠綋鍓嶅疄闄?renderer 鍚庣鍚嶇О銆?
-
-
-### D3D11 鍚庣鏍￠獙涓庡洖閫€鍗忓悓
-
-- `D3D11VideoRenderer::init` 鍦ㄨ姹?`direct3d11` 鍚庯紝浼氭牎楠屽疄闄?SDL renderer 鍚庣锛?
-  - 鍛戒腑 `direct3d11/d3d11`锛氬垵濮嬪寲鎴愬姛锛?
-  - 鏈懡涓細鍒濆鍖栧け璐ュ苟鐢变笂灞傝Е鍙?`SoftwareSDL` 鍥為€€閾捐矾锛堜笌 `3.2.2` 鍗忓悓锛夈€?
+  - 閸欘垵顔曠純?renderer 妞瑰崬濮╅崑蹇撱偨閿?
+  - 閸欘垱鐓＄拠銏犵秼閸撳秴鐤勯梽?renderer 閸氬海顏崥宥囆為妴?
 
 
-### 浠诲姟娓呭崟鍚屾
+### D3D11 閸氬海顏弽锟犵崣娑撳骸娲栭柅鈧崡蹇撴倱
 
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `3.2.1 D3D11 娓叉煋鏈€灏忓彲鐢紙init/upload/present锛塦 鏍囪瀹屾垚銆?
+- `D3D11VideoRenderer::init` 閸︺劏顕Ч?`direct3d11` 閸氬函绱濇导姘墡妤犲苯鐤勯梽?SDL renderer 閸氬海顏敍?
+  - 閸涙垝鑵?`direct3d11/d3d11`閿涙艾鍨垫慨瀣閹存劕濮涢敍?
+  - 閺堫亜鎳℃稉顓ㄧ窗閸掓繂顫愰崠鏍с亼鐠愩儱鑻熼悽鍙樼瑐鐏炲倽袝閸?`SoftwareSDL` 閸ョ偤鈧偓闁炬崘鐭鹃敍鍫滅瑢 `3.2.2` 閸楀繐鎮撻敍澶堚偓?
 
 
-### 淇敼鏂囦欢
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `3.2.1 D3D11 濞撳弶鐓嬮張鈧亸蹇撳讲閻㈩煉绱檌nit/upload/present閿涘ˇ 閺嶅洩顔囩€瑰本鍨氶妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/display.h
 
@@ -2019,35 +2100,31 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟覆鏌撳け璐ヨ嚜鍔ㄩ檷绾у洖褰掑叆鍙ｏ級
+## 2026-03-08 閺囧瓨鏌婇敍鍫熻閺屾挸銇戠拹銉ㄥ殰閸斻劑妾风痪褍娲栬ぐ鎺戝弳閸欙綇绱?
 
 
-
-### 鏂板鍥炲綊鍛戒护
-
-- 鏂板 `--renderer-fallback-check <media_file>`锛?
-  - 寮哄埗鏋勯€?D3D11 娓叉煋鍒濆鍖栧け璐ュ満鏅紱
-
-  - 楠岃瘉鏄惁鑷姩鍥為€€ `SoftwareSDL`锛?
-  - 杈撳嚭 `renderer-fallback-check.*` 瀛楁鍜?`PASS/FAIL`銆?
+### 閺傛澘顤冮崶鐐茬秺閸涙垝鎶?
+- 閺傛澘顤?`--renderer-fallback-check <media_file>`閿?
+  - 瀵搫鍩楅弸鍕偓?D3D11 濞撳弶鐓嬮崚婵嗩潗閸栨牕銇戠拹銉ユ簚閺咁垽绱?
+  - 妤犲矁鐦夐弰顖氭儊閼奉亜濮╅崶鐐衡偓鈧?`SoftwareSDL`閿?
+  - 鏉堟挸鍤?`renderer-fallback-check.*` 鐎涙顔岄崪?`PASS/FAIL`閵?
 
 
-### 鍙娴嬭兘鍔涜ˉ榻?
-- 娓叉煋鎺ュ彛鏂板鍚庣鍚嶇О鏌ヨ锛屾挱鏀惧櫒瀵瑰鏂板褰撳墠娓叉煋鍚庣/瑙ｇ爜鍚庣鏌ヨ鎺ュ彛锛岀敤浜庡懡浠ゅ寲楠屾敹杈撳嚭銆?
+### 閸欘垵顫囧ù瀣厴閸旀稖藟姒?
+- 濞撳弶鐓嬮幒銉ュ經閺傛澘顤冮崥搴ｎ伂閸氬秶袨閺屻儴顕楅敍灞炬尡閺€鎯ф珤鐎电懓顦婚弬鏉款杻瑜版挸澧犲〒鍙夌厠閸氬海顏?鐟欙絿鐖滈崥搴ｎ伂閺屻儴顕楅幒銉ュ經閿涘瞼鏁ゆ禍搴℃嚒娴犮倕瀵叉灞炬暪鏉堟挸鍤妴?
 
 
-### 鏈湴鎶ュ憡
+### 閺堫剙婀撮幎銉ユ啞
 
-- 鏂板 `docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`锛岃褰曟湰鍦板洖褰掑懡浠や笌缁撴灉銆?
-
-
-### 浠诲姟娓呭崟鍚屾
-
-- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`锛?
-  - `3.3.2 娓叉煋澶辫触闄嶇骇涓嶄腑鏂挱鏀綻 鏍囪瀹屾垚銆?
+- 閺傛澘顤?`docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`閿涘矁顔囪ぐ鏇熸拱閸︽澘娲栬ぐ鎺戞嚒娴犮倓绗岀紒鎾寸亯閵?
 
 
-### 淇敼鏂囦欢
+### 娴犺濮熷〒鍛礋閸氬本顒?
+- `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`閿?
+  - `3.3.2 濞撳弶鐓嬫径杈Е闂勫秶楠囨稉宥勮厬閺傤厽鎸遍弨缍?閺嶅洩顔囩€瑰本鍨氶妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/render/video_renderer.h
 
@@ -2085,101 +2162,92 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圵indows 杞В/纭В涓诲姏鏍锋湰鍥炲綊锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍦礽ndows 鏉烆垵袙/绾剝袙娑撹濮忛弽閿嬫拱閸ョ偛缍婇敍?
 
 
-### 鍥炲綊鑳藉姏琛ラ綈
-
-- 鏂板 `--windows-backend-session-check <media_file> <hard|soft>`锛氬崟妯″紡浼氳瘽妫€鏌ヤ笌缁撴瀯鍖栬緭鍑恒€?
-- 鏂板骞剁ǔ瀹?`--windows-backend-check <media_file>`锛氳嚜鍔ㄨ仛鍚堢‖瑙?杞В缁撴灉骞惰緭鍑?`PASS/FAIL`銆?
-
-
-### 绋冲畾鎬т慨澶?
-- `--windows-backend-check` 浠庡悓杩涚▼鍙屼細璇濇敼涓虹埗杩涚▼鎷夎捣涓や釜瀛愯繘绋嬶紙hard/soft锛夊苟姹囨€伙紝瑙勯伩浼氳瘽鍥炴敹鍗℃銆?
-- Windows 瀛愯繘绋嬫墽琛屾敼涓?`CreateProcess`锛岄伩鍏?shell 閲嶅畾鍚戣娉曞樊寮傚鑷村け璐ャ€?
+### 閸ョ偛缍婇懗钘夊鐞涖儵缍?
+- 閺傛澘顤?`--windows-backend-session-check <media_file> <hard|soft>`閿涙艾宕熷Ο鈥崇础娴兼俺鐦藉Λ鈧弻銉ょ瑢缂佹挻鐎崠鏍翻閸戞亽鈧?
+- 閺傛澘顤冮獮鍓伹旂€?`--windows-backend-check <media_file>`閿涙俺鍤滈崝銊ㄤ粵閸氬牏鈥栫憴?鏉烆垵袙缂佹挻鐏夐獮鎯扮翻閸?`PASS/FAIL`閵?
 
 
-### 鏈湴楠岃瘉
-
-- `build/Debug/modern-video-player.exe --windows-backend-check juren-30s.mp4`锛歚PASS`
-
-- `build/Debug/modern-video-player.exe --renderer-fallback-check juren-30s.mp4`锛歚PASS`
-
-- `build/Debug/modern-video-player.exe --settings-persistence-check`锛歚PASS`
+### 缁嬪啿鐣鹃幀褌鎱ㄦ径?
+- `--windows-backend-check` 娴犲骸鎮撴潻娑氣柤閸欏奔绱扮拠婵囨暭娑撹櫣鍩楁潻娑氣柤閹峰鎹ｆ稉銈勯嚋鐎涙劘绻樼粙瀣剁礄hard/soft閿涘鑻熷Ч鍥ㄢ偓浼欑礉鐟欏嫰浼╂导姘崇樈閸ョ偞鏁归崡鈩冾劥閵?
+- Windows 鐎涙劘绻樼粙瀣⒔鐞涘本鏁兼稉?`CreateProcess`閿涘矂浼╅崗?shell 闁插秴鐣鹃崥鎴ｎ嚔濞夋洖妯婂鍌氼嚤閼锋潙銇戠拹銉ｂ偓?
 
 
+### 閺堫剙婀存宀冪槈
 
-### 浠诲姟娓呭崟鍚屾
+- `build/Debug/modern-video-player.exe --windows-backend-check juren-30s.mp4`閿涙瓪PASS`
 
+- `build/Debug/modern-video-player.exe --renderer-fallback-check juren-30s.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --settings-persistence-check`閿涙瓪PASS`
+
+
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `3.3.1 Windows 涓嬭蒋瑙?纭В涓诲姏鏍锋湰鍙挱` 鏍囪瀹屾垚銆?
-  - `3.3.3 鍥炲綊鎶ュ憡瀹屾暣` 鏍囪瀹屾垚銆?
+  - `3.3.1 Windows 娑撳钂嬬憴?绾剝袙娑撹濮忛弽閿嬫拱閸欘垱鎸盽 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `3.3.3 閸ョ偛缍婇幎銉ユ啞鐎瑰本鏆 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 鏂板鎶ュ憡
+### 閺傛澘顤冮幎銉ユ啞
 
 - `docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`
 
 
 
-## 2026-03-08 鏇存柊锛堢珷鑺傚鑸細涓婁竴绔?涓嬩竴绔狅級
+## 2026-03-08 閺囧瓨鏌婇敍鍫㈢彿閼哄倸顕遍懜顏庣窗娑撳﹣绔寸粩?娑撳绔寸粩鐙呯礆
 
 
 
-### 浜や簰鑳藉姏澧炲己
-
-- 鏂板绔犺妭瀵艰埅蹇嵎閿細
-
-  - `HOME`锛氳烦杞笂涓€绔狅紱
-
-  - `END`锛氳烦杞笅涓€绔犮€?
-- 绔犺妭璇锋眰閾捐矾宸叉墦閫氾細
-
-  - `Display -> Renderer -> PlayerCore -> VideoPlayer`銆?
+### 娴溿倓绨伴懗钘夊婢х偛宸?
+- 閺傛澘顤冪粩鐘哄Ν鐎佃壈鍩呰箛顐ｅ祹闁款噯绱?
+  - `HOME`閿涙俺鐑︽潪顑跨瑐娑撯偓缁旂媴绱?
+  - `END`閿涙俺鐑︽潪顑跨瑓娑撯偓缁旂姰鈧?
+- 缁旂姾濡拠閿嬬湴闁炬崘鐭惧鍙夊ⅵ闁熬绱?
+  - `Display -> Renderer -> PlayerCore -> VideoPlayer`閵?
 
 
-### 濯掍綋淇℃伅鑳藉姏澧炲己
+### 婵帊缍嬫穱鈩冧紖閼宠棄濮忔晶鐐插繁
 
-- `Demuxer` 鏂板绔犺妭鍏冩暟鎹В鏋愶細
+- `Demuxer` 閺傛澘顤冪粩鐘哄Ν閸忓啯鏆熼幑顔啃掗弸鎰剁窗
 
-  - `ChapterInfo`锛坰tart/end/title锛夛紱
-
-  - `MediaInfo::chapters`銆?
-- `PlayerCore` 鍦ㄦ墦寮€濯掍綋鍚庢瀯寤虹珷鑺傛椂闂寸偣锛屽苟鎻愪緵锛?
-  - `seekToNextChapter()`锛?
-  - `seekToPreviousChapter()`锛?
-  - `chapterCount()`銆?
-
-
-### 楠屾敹鑳藉姏琛ラ綈
-
-- 鏂板 `--chapter-nav-check <media_file>`锛?
-  - 鑷姩鎵ц鎾斁銆佷笅涓€绔犮€佷笂涓€绔犲苟鏍￠獙浣嶇疆鍙樺寲锛?
-  - 杈撳嚭 `chapter-nav-check.*` 涓?`PASS/FAIL`銆?
-- 鏂板鏈湴鎶ュ憡锛歚docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`銆?
+  - `ChapterInfo`閿涘澃tart/end/title閿涘绱?
+  - `MediaInfo::chapters`閵?
+- `PlayerCore` 閸︺劍澧﹀鈧刊鎺嶇秼閸氬孩鐎铏圭彿閼哄倹妞傞梻瀵稿仯閿涘苯鑻熼幓鎰返閿?
+  - `seekToNextChapter()`閿?
+  - `seekToPreviousChapter()`閿?
+  - `chapterCount()`閵?
 
 
-### 鏈湴楠岃瘉
+### 妤犲本鏁归懗钘夊鐞涖儵缍?
+- 閺傛澘顤?`--chapter-nav-check <media_file>`閿?
+  - 閼奉亜濮╅幍褑顢戦幘顓熸杹閵嗕椒绗呮稉鈧粩鐘偓浣风瑐娑撯偓缁旂姴鑻熼弽锟犵崣娴ｅ秶鐤嗛崣妯哄閿?
+  - 鏉堟挸鍤?`chapter-nav-check.*` 娑?`PASS/FAIL`閵?
+- 閺傛澘顤冮張顒€婀撮幎銉ユ啞閿涙瓪docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`閵?
 
-- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`锛歚PASS`
 
-- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`锛歚PASS`
+### 閺堫剙婀存宀冪槈
 
-- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`锛歚PASS`
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`閿涙瓪PASS`
 
-- `build/Debug/modern-video-player.exe --settings-persistence-check`锛歚PASS`
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --settings-persistence-check`閿涙瓪PASS`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `4.1 绔犺妭瀵艰埅锛堜笂涓€绔?涓嬩竴绔狅級` 鏍囪瀹屾垚銆?
+  - `4.1 缁旂姾濡€佃壈鍩呴敍鍫滅瑐娑撯偓缁?娑撳绔寸粩鐙呯礆` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/demuxer.h
 
@@ -2229,68 +2297,64 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圓-B Repeat锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍦?B Repeat閿?
 
 
-### 浜や簰鑳藉姏澧炲己
-
-- 鏂板 A-B Repeat 榛樿鐑敭锛?
-  - `A`锛氳缃?A 鐐癸紱
-
-  - `B`锛氳缃?B 鐐瑰苟鍚敤寰幆锛?
-  - `C`锛氭竻闄?A-B Repeat銆?
-- 甯姪淇℃伅琛ュ厖 `A/B/C` 閿綅璇存槑銆?
+### 娴溿倓绨伴懗钘夊婢х偛宸?
+- 閺傛澘顤?A-B Repeat 姒涙顓婚悜顓㈡暛閿?
+  - `A`閿涙俺顔曠純?A 閻愮櫢绱?
+  - `B`閿涙俺顔曠純?B 閻愮懓鑻熼崥顖滄暏瀵邦亞骞嗛敍?
+  - `C`閿涙碍绔婚梽?A-B Repeat閵?
+- 鐢喖濮穱鈩冧紖鐞涖儱鍘?`A/B/C` 闁款喕缍呯拠瀛樻閵?
 
 
-### 鎾斁鏍稿績鑳藉姏澧炲己
+### 閹绢厽鏂侀弽绋跨妇閼宠棄濮忔晶鐐插繁
 
-- `PlayerCore` 鏂板 A-B Repeat 鐘舵€佺鐞嗕笌鏌ヨ锛?
-  - `setABRepeatStart()`锛?
-  - `setABRepeatEnd()`锛?
-  - `clearABRepeat()`锛?
-  - `isABRepeatEnabled()`锛?
-  - `abRepeatStart()` / `abRepeatEnd()`銆?
-- 鏂板鎾斁寰幆妫€娴?`handleABRepeatLoop()`锛?
-  - 褰撴挱鏀句綅缃埌杈?B 鐐规椂鑷姩 seek 鍥?A 鐐广€?
-
-
-### 楠屾敹鑳藉姏琛ラ綈
-
-- 鏂板 `--ab-repeat-check <media_file>`锛?
-  - 鑷姩鎵ц鈥滆缃?A 鐐?-> 璁剧疆 B 鐐?-> 瑙傚療寰幆 -> 娓呴櫎鈥濓紱
-
-  - 杈撳嚭 `ab-repeat-check.*` 涓?`PASS/FAIL`銆?
-- 鏂板鏈湴鎶ュ憡锛歚docs/reports/AB_REPEAT_LOCAL_CHECK.md`銆?
+- `PlayerCore` 閺傛澘顤?A-B Repeat 閻樿埖鈧胶顓搁悶鍡曠瑢閺屻儴顕楅敍?
+  - `setABRepeatStart()`閿?
+  - `setABRepeatEnd()`閿?
+  - `clearABRepeat()`閿?
+  - `isABRepeatEnabled()`閿?
+  - `abRepeatStart()` / `abRepeatEnd()`閵?
+- 閺傛澘顤冮幘顓熸杹瀵邦亞骞嗗Λ鈧ù?`handleABRepeatLoop()`閿?
+  - 瑜版挻鎸遍弨鍙ョ秴缂冾喖鍩屾潏?B 閻愯妞傞懛顏勫З seek 閸?A 閻愬箍鈧?
 
 
-### 鍥炲綊淇
+### 妤犲本鏁归懗钘夊鐞涖儵缍?
+- 閺傛澘顤?`--ab-repeat-check <media_file>`閿?
+  - 閼奉亜濮╅幍褑顢戦垾婊嗩啎缂?A 閻?-> 鐠佸墽鐤?B 閻?-> 鐟欏倸鐧傚顏嗗箚 -> 濞撳懘娅庨垾婵撶幢
 
-- 淇 `--settings-persistence-check` 涓庢柊榛樿鐑敭鍐茬獊锛?
-  - 娴嬭瘯閿綅鐢?`b` 璋冩暣涓?`x`锛屾仮澶嶅洖褰掔ǔ瀹氭€с€?
+  - 鏉堟挸鍤?`ab-repeat-check.*` 娑?`PASS/FAIL`閵?
+- 閺傛澘顤冮張顒€婀撮幎銉ユ啞閿涙瓪docs/reports/AB_REPEAT_LOCAL_CHECK.md`閵?
 
 
-### 鏈湴楠岃瘉
+### 閸ョ偛缍婃穱顔碱槻
 
-- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`锛歚PASS`
+- 娣囶喖顦?`--settings-persistence-check` 娑撳孩鏌婃妯款吇閻戭參鏁崘鑼崐閿?
+  - 濞村鐦柨顔荤秴閻?`b` 鐠嬪啯鏆ｆ稉?`x`閿涘本浠径宥呮礀瑜版帞菙鐎规碍鈧佲偓?
 
-- `build/Debug/modern-video-player.exe --settings-persistence-check`锛歚PASS`
 
-- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`锛歚PASS`
+### 閺堫剙婀存宀冪槈
 
-- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`锛歚PASS`
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`閿涙瓪PASS`
 
-- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`锛歚PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --chapter-nav-check %TEMP%\\mvp_chapter_sample.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --renderer-fallback-check .\\juren-30s.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --windows-backend-check .\\juren-30s.mp4`閿涙瓪PASS`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `4.2 A-B Repeat` 鏍囪瀹屾垚銆?
+  - `4.2 A-B Repeat` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/input/hotkey_manager.h
 
@@ -2336,47 +2400,44 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟埅鍥撅級
+## 2026-03-08 閺囧瓨鏌婇敍鍫熷焻閸ユ拝绱?
+
+
+### 娴溿倓绨伴懗钘夊婢х偛宸?
+- 閺傛澘顤冪粙鍐茬暰閸欘垳鏁ら惃鍕焻閸ユ崘鍏橀崝娑崇窗
+
+  - `S` 鐟欙箑褰傞幋顏勬禈閿?
+  - 鏉堟挸鍤弬鍥︽閸愭瑥鍙?`screenshots/` 閻╊喖缍嶉敍?
+  - 閸涜棄鎮曢弽鐓庣础娑?`screenshot_YYYYMMDD_HHMMSS_mmm.ppm`閵?
+
+
+### 閹搭亜娴橀柧鎹愮熅閺€鑸垫殐
+
+- `PlayerCore` 閺傛澘顤冮張鈧潻鎴炶閺屾挸鎶氱紓鎾崇摠閿涘瞼鏁ゆ禍搴℃躬閺嗗倸浠犻幀浣烘纯閹恒儰绻氱€涙ê缍嬮崜宥囨暰闂堫潿鈧?
+- `requestScreenshot()` 閸栧搫鍨庢稉銈囶潚鐠侯垰绶為敍?
+  - 閹绢厽鏂佹稉顓ㄧ窗瀵倹顒炵粵澶婄窡瑜版挸澧?娑撳绔寸敮褑鎯ら惄姗堢幢
+
+  - 閺嗗倸浠犻幀渚婄窗閻╁瓨甯存禒搴ｇ处鐎涙ê鎶氶拃鐣屾磸閵?
+- `main` 娑擃厾娈?`--screenshot-check` 閺€閫涜礋鐟曞棛娲婇弳鍌氫粻閹焦鍩呴崶鎯ф簚閺咁垬鈧?
+
+
+### 閺堫剙婀存宀冪槈
+
+- `build/Debug/modern-video-player.exe --screenshot-check .\\juren-30s.mp4`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --settings-persistence-check`閿涙瓪PASS`
+
+- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`閿涙瓪PASS`
 
 
 
-### 浜や簰鑳藉姏澧炲己
-
-- 鏂板绋冲畾鍙敤鐨勬埅鍥捐兘鍔涳細
-
-  - `S` 瑙﹀彂鎴浘锛?
-  - 杈撳嚭鏂囦欢鍐欏叆 `screenshots/` 鐩綍锛?
-  - 鍛藉悕鏍煎紡涓?`screenshot_YYYYMMDD_HHMMSS_mmm.ppm`銆?
-
-
-### 鎴浘閾捐矾鏀舵暃
-
-- `PlayerCore` 鏂板鏈€杩戞覆鏌撳抚缂撳瓨锛岀敤浜庡湪鏆傚仠鎬佺洿鎺ヤ繚瀛樺綋鍓嶇敾闈€?
-- `requestScreenshot()` 鍖哄垎涓ょ璺緞锛?
-  - 鎾斁涓細寮傛绛夊緟褰撳墠/涓嬩竴甯ц惤鐩橈紱
-
-  - 鏆傚仠鎬侊細鐩存帴浠庣紦瀛樺抚钀界洏銆?
-- `main` 涓殑 `--screenshot-check` 鏀逛负瑕嗙洊鏆傚仠鎬佹埅鍥惧満鏅€?
-
-
-### 鏈湴楠岃瘉
-
-- `build/Debug/modern-video-player.exe --screenshot-check .\\juren-30s.mp4`锛歚PASS`
-
-- `build/Debug/modern-video-player.exe --settings-persistence-check`锛歚PASS`
-
-- `build/Debug/modern-video-player.exe --ab-repeat-check .\\juren-30s.mp4`锛歚PASS`
-
-
-
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `4.3 鎴浘` 鏍囪瀹屾垚銆?
+  - `4.3 閹搭亜娴榒 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/core/player_core.h
 
@@ -2400,43 +2461,39 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝抚姝ヨ繘锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫濇姎濮濄儴绻橀敍?
 
 
-### 浜や簰鑳藉姏澧炲己
+### 娴溿倓绨伴懗钘夊婢х偛宸?
+- 閺傛澘顤冮弳鍌氫粻閹礁鎶氬銉ㄧ箻閿?
+  - `,` 閸氬酣鈧偓娑撯偓鐢嶇幢
 
-- 鏂板鏆傚仠鎬佸抚姝ヨ繘锛?
-  - `,` 鍚庨€€涓€甯э紱
-
-  - `.` 鍓嶈繘涓€甯э紱
-
-  - 姝ヨ繘鍚庝粛淇濇寔鏆傚仠鐘舵€併€?
+  - `.` 閸撳秷绻樻稉鈧敮褝绱?
+  - 濮濄儴绻橀崥搴濈矝娣囨繃瀵旈弳鍌氫粻閻樿埖鈧降鈧?
 
 
-### 涓婚摼瀹炵幇
+### 娑撳鎽肩€圭偟骞?
+- `PlayerCore` 閺傛澘顤?`stepFrameBackward()` / `stepFrameForward()`閿涘矂鍣伴悽銊⑩偓婊勬畯閸嬫粍鈧?seek + 妫ｆ牕鎶氶崚閿嬫煀閳ユ繃鏁归弫娑樺礋鐢勵劄鏉╂稏鈧?
+- 濮濄儴绻橀弮璺侯槻閻劍娓舵潻鎴炶閺屾挸鎶氶弮鍫曟毐娑撳骸鐛熸担?FPS 娴兼壆鐣诲銉╂毐閿涘苯鑻熼崷?seek 閸氬簼瀵岄崝銊﹁閺屾挾娲伴弽鍥ㄦ闂傚鍋ｉ惃鍕浕娑擃亣顫嬫０鎴濇姎閵?
+- 闂婃娊顣跺☉鍫ｅ瀭缁捐法鈻奸崷銊︽畯閸嬫粍鈧椒绗夐崘宥囨暏閺?`playback_pts` 閸ョ偛鍟撹ぐ鎾冲娴ｅ秶鐤嗛敍宀勪缉閸忓秴鎶氬銉ㄧ箻閸氬簼缍呯純顔款潶闂婃娊顣堕弮鍫曟寭閸ョ偞濯洪妴?
+- `main` 閺傛澘顤?`--frame-step-check <media_file>` 閼奉亝顥呴崨鎴掓姢閵?
 
-- `PlayerCore` 鏂板 `stepFrameBackward()` / `stepFrameForward()`锛岄噰鐢ㄢ€滄殏鍋滄€?seek + 棣栧抚鍒锋柊鈥濇敹鏁涘崟甯ф杩涖€?
-- 姝ヨ繘鏃跺鐢ㄦ渶杩戞覆鏌撳抚鏃堕暱涓庡獟浣?FPS 浼扮畻姝ラ暱锛屽苟鍦?seek 鍚庝富鍔ㄦ覆鏌撶洰鏍囨椂闂寸偣鐨勯涓棰戝抚銆?
-- 闊抽娑堣垂绾跨▼鍦ㄦ殏鍋滄€佷笉鍐嶇敤鏃?`playback_pts` 鍥炲啓褰撳墠浣嶇疆锛岄伩鍏嶅抚姝ヨ繘鍚庝綅缃闊抽鏃堕挓鍥炴媺銆?
-- `main` 鏂板 `--frame-step-check <media_file>` 鑷鍛戒护銆?
 
+### 閺堫剙婀存宀冪槈
 
-### 鏈湴楠岃瘉
+- `build/Debug/modern-video-player.exe --frame-step-check .\\juren-30s.mp4`閿涙瓪PASS`
 
-- `build/Debug/modern-video-player.exe --frame-step-check .\\juren-30s.mp4`锛歚PASS`
-
-- `build/Debug/modern-video-player.exe --settings-persistence-check`锛歚PASS`
+- `build/Debug/modern-video-player.exe --settings-persistence-check`閿涙瓪PASS`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `4.4 甯ф杩涳紙鏆傚仠鎬侊級` 鏍囪瀹屾垚銆?
+  - `4.4 鐢勵劄鏉╂冻绱欓弳鍌氫粻閹緤绱歚 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/input/hotkey_manager.h
 
@@ -2488,49 +2545,44 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堝樊璺濊瘎浼版枃妗ｅ榻愶級
+## 2026-03-08 閺囧瓨鏌婇敍鍫濇▕鐠烘繆鐦庢导鐗堟瀮濡楋絽顕鎰剁礆
 
 
 
-### 鏂囨。鍩虹嚎鍒锋柊
+### 閺傚洦銆傞崺铏瑰殠閸掗攱鏌?
+- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 閺囧瓨鏌婃稉鐑樺焻閼?`2026-03-08` 閻ㄥ嫬鐤勯悳鎵Ц閹降鈧?
+- 鐠囧嫪鍙婃笟婵囧祦娴犲簶鈧粌褰ч惇瀣复閸?妤犮劍鐏﹂垾婵嗗磳缁狙傝礋閳ユ粈鍞惍浣稿弳閸?+ 閺堫剙婀存灞炬暪閹躲儱鎲￠垾婵婁粓閸氬牆鍨介弬顓溾偓?
 
-- `docs/analysis/MPC_HC_GAP_ANALYSIS.md` 鏇存柊涓烘埅鑷?`2026-03-08` 鐨勫疄鐜扮姸鎬併€?
-- 璇勪及渚濇嵁浠庘€滃彧鐪嬫帴鍙?楠ㄦ灦鈥濆崌绾т负鈥滀唬鐮佸叆鍙?+ 鏈湴楠屾敹鎶ュ憡鈥濊仈鍚堝垽鏂€?
 
+### 缂佹捁顔戞穱顔筋劀
 
-### 缁撹淇
+- 鐏忓棔浜掓稉瀣侀崸妞剧矤閺冄呭閻ㄥ嫧鈧粓顎囬弸?閺堫亝甯撮崗銉⑩偓婵堢眰濮濓絼璐熼垾婊堝劥閸掑棗鐤勯悳鎵斥偓婵撶窗
 
-- 灏嗕互涓嬫ā鍧椾粠鏃х増鐨勨€滈鏋?鏈帴鍏モ€濈籂姝ｄ负鈥滈儴鍒嗗疄鐜扳€濓細
+  - 鐎涙绠风化鑽ょ埠閿?
+  - 閹绢厽鏂侀崚妤勩€冮敍?
+  - 鐟欙絿鐖滈崳銊ь吀閻炲棴绱?
+  - 韫囶偅宓庨柨顔鹃兇缂佺噦绱?
+  - 鐠佸墽鐤嗙化鑽ょ埠閵?
+- 濡€虫健缂佺喕顓搁弴瀛樻煀娑撶尨绱?
+  - `鏉堟儳鍩?MPC-HC 缁涘楠? 0 / 14`
 
-  - 瀛楀箷绯荤粺锛?
-  - 鎾斁鍒楄〃锛?
-  - 瑙ｇ爜鍣ㄧ鐞嗭紱
+  - `闁劌鍨庣€圭偟骞? 11 / 14`
 
-  - 蹇嵎閿郴缁燂紱
-
-  - 璁剧疆绯荤粺銆?
-- 妯″潡缁熻鏇存柊涓猴細
-
-  - `杈惧埌 MPC-HC 绛夌骇: 0 / 14`
-
-  - `閮ㄥ垎瀹炵幇: 11 / 14`
-
-  - `楠ㄦ灦/鏈帴鍏? 3 / 14`
+  - `妤犮劍鐏?閺堫亝甯撮崗? 3 / 14`
 
 
 
-### 鍓╀綑閲嶇偣鏇存柊
+### 閸撯晙缍戦柌宥囧仯閺囧瓨鏌?
+- `P0` 閼辨氨鍔嶆潪顑胯礋閿?
+  - `1080p60 / 4K / 妤傛鐖滈悳鍢?缁嬪啿鐣鹃幀褌绗岄幀褑鍏橀弮銉ョ箶閿?
+  - 婢舵岸鐓舵潪?鐎涙绠锋潪?閺冭泛娆㈢拫鍐Ν閿?
+  - `OpenGL` 閸氬海顏粵鏍殣閺€鑸垫殐閿?
+  - 閸婂秹鈧喖鐓舵０鎴犵摜閻ｃ儳鎴风紒顓炵暚閸犲嫨鈧?
+- `P1` 閼辨氨鍔嶉敍姘弿闁插繐鎻╅幑鐑芥暛閵嗕胶鏁鹃獮?缂傗晜鏂?閺冨娴嗛妴浣规姢闂€婊呮暏閹村嘲鍙嗛崣锝冣偓?
+- `P2` 閼辨氨鍔嶉敍姘絻娴犺翰鈧焦绁︽刊鎺嶇秼閵嗕胶姣婇懖銈囬兇缂佺喍楠囬崫浣稿閵?
 
-- `P0` 鑱氱劍杞负锛?
-  - `1080p60 / 4K / 楂樼爜鐜嘸 绋冲畾鎬т笌鎬ц兘鏃ュ織锛?
-  - 澶氶煶杞?瀛楀箷杞?鏃跺欢璋冭妭锛?
-  - `OpenGL` 鍚庣绛栫暐鏀舵暃锛?
-  - 鍊嶉€熼煶棰戠瓥鐣ョ户缁畬鍠勩€?
-- `P1` 鑱氱劍锛氬叏閲忓揩鎹烽敭銆佺敾骞?缂╂斁/鏃嬭浆銆佹护闀滅敤鎴峰叆鍙ｃ€?
-- `P2` 鑱氱劍锛氭彃浠躲€佹祦濯掍綋銆佺毊鑲ょ郴缁熶骇鍝佸寲銆?
 
-
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/analysis/MPC_HC_GAP_ANALYSIS.md
 
@@ -2544,22 +2596,21 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堢増鏈枃妗ｅ巻鍙叉钀芥竻鐞嗭級
+## 2026-03-08 閺囧瓨鏌婇敍鍫㈠閺堫剚鏋冨锝呭坊閸欏弶顔岄拃鑺ョ閻炲棴绱?
 
 
-
-### 鍘嗗彶绔犺妭鍘绘涔?
-- 灏嗏€滈樁娈典竴锛氬熀纭€鎾斁鍣紙褰撳墠闃舵锛夆€濊皟鏁翠负鈥滈樁娈典竴锛氬熀纭€鎾斁鍣紙鍘嗗彶璧风偣锛夆€濓紝鏄庣‘璇ユ璁板綍鐨勬槸 `2026-02-17 ~ 2026-02-25` 鐨勬棭鏈熷疄鐜板熀绾裤€?
-- 涓洪樁娈典竴琛ュ厖璇存槑锛氭棫鐗?`decoder / playLoop` 璺緞宸插湪 `2026-03-06` 鏋舵瀯鏀舵暃鍚庡苟鍏?`PlayerCore + Scheduler + core/*` 涓婚摼銆?
-
-
-### 鏃ц矾寰勮〃杩版竻娲?
-- 灏嗘棭鏈?`video_decoder` / `audio_decoder` 浠ュ強 `VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 鐨勬枃浠剁骇琛ㄨ堪鏀瑰啓涓鸿兘鍔涚骇鍘嗗彶璁板綍銆?
-- 灏嗏€滀笅涓€姝ヨ鍒掆€濇敼鍐欎负鈥滈樁娈靛悗缁洰鏍囷紙鍘嗗彶璁板綍锛夆€濓紝閬垮厤涓庡綋鍓嶈凯浠ｈ繘搴︾珷鑺傛贩娣嗐€?
-- 灏?`USE_NEW_PLAYER_CORE` 鍜屼复鏃?`tests/core_*` 鐨勫巻鍙叉弿杩版敼鍐欎负鈥滄灦鏋勬敹鏁?/ 鍚庣画娓呯悊鈥濆彛寰勩€?
+### 閸樺棗褰剁粩鐘哄Ν閸樼粯顒犳稊?
+- 鐏忓棌鈧粓妯佸▓鍏哥閿涙艾鐔€绾偓閹绢厽鏂侀崳顭掔礄瑜版挸澧犻梼鑸殿唽閿涘鈧繆鐨熼弫缈犺礋閳ユ粓妯佸▓鍏哥閿涙艾鐔€绾偓閹绢厽鏂侀崳顭掔礄閸樺棗褰剁挧椋庡仯閿涘鈧繐绱濋弰搴ｂ€樼拠銉︻唽鐠佹澘缍嶉惃鍕Ц `2026-02-17 ~ 2026-02-25` 閻ㄥ嫭妫張鐔风杽閻滄澘鐔€缁捐￥鈧?
+- 娑撴椽妯佸▓鍏哥鐞涖儱鍘栫拠瀛樻閿涙碍妫悧?`decoder / playLoop` 鐠侯垰绶炲鎻掓躬 `2026-03-06` 閺嬭埖鐎弨鑸垫殐閸氬骸鑻熼崗?`PlayerCore + Scheduler + core/*` 娑撳鎽奸妴?
 
 
-### 淇敼鏂囦欢
+### 閺冄嗙熅瀵板嫯銆冩潻鐗堢濞?
+- 鐏忓棙妫張?`video_decoder` / `audio_decoder` 娴犮儱寮?`VideoDecodeThread` / `AudioDecodeThread` / `SyncManager` 閻ㄥ嫭鏋冩禒鍓侀獓鐞涖劏鍫弨鐟板晸娑撻缚鍏橀崝娑氶獓閸樺棗褰剁拋鏉跨秿閵?
+- 鐏忓棌鈧粈绗呮稉鈧銉吀閸掓巻鈧繃鏁奸崘娆庤礋閳ユ粓妯佸▓闈涙倵缂侇厾娲伴弽鍥风礄閸樺棗褰剁拋鏉跨秿閿涘鈧繐绱濋柆鍨帳娑撳骸缍嬮崜宥堝嚡娴狅綀绻樻惔锔剧彿閼哄倹璐╁ǎ鍡愨偓?
+- 鐏?`USE_NEW_PLAYER_CORE` 閸滃奔澶嶉弮?`tests/core_*` 閻ㄥ嫬宸婚崣鍙夊伎鏉╃増鏁奸崘娆庤礋閳ユ粍鐏﹂弸鍕暪閺?/ 閸氬海鐢诲〒鍛倞閳ユ繂褰涘鍕┾偓?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/records/VERSION.md
 
@@ -2733,38 +2784,36 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟挱鏀炬€ц兘鏃ュ織楠屾敹锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫熸尡閺€鐐偓褑鍏橀弮銉ョ箶妤犲本鏁归敍?
 
 
-### 鍙娴嬫€цˉ榻?
-- 鏂板 `core::DiagnosticsSnapshot`锛岀粺涓€瀵煎嚭瑙ｅ皝瑁呭寘璁℃暟銆侀噸璇?涓㈠寘銆佽В鐮佸抚鏁般€佹覆鏌撳抚鏁般€侀煶棰戞彁浜ゅ抚鏁般€佽皟搴﹀櫒鎺夊抚涓庨槦鍒楅暱搴︺€?
-- `VideoPlayer` 鏂板 `getInfo()` / `getDiagnosticsSnapshot()` 閫忎紶鎺ュ彛锛屼緵鍛戒护琛岄獙鏀跺拰鍚庣画璇婃柇澶嶇敤銆?
-- `main` 鏂板 `--performance-log-check <media_file> [sample_ms]`锛岃緭鍑猴細
+### 閸欘垵顫囧ù瀣偓褑藟姒?
+- 閺傛澘顤?`core::DiagnosticsSnapshot`閿涘瞼绮烘稉鈧€电厧鍤憴锝呯殱鐟佸懎瀵樼拋鈩冩殶閵嗕線鍣哥拠?娑撱垹瀵橀妴浣叫掗惍浣告姎閺佽埇鈧焦瑕嗛弻鎾虫姎閺佽埇鈧線鐓舵０鎴炲絹娴溿倕鎶氶弫鑸偓浣界殶鎼达箑娅掗幒澶婃姎娑撳酣妲﹂崚妤呮毐鎼达负鈧?
+- `VideoPlayer` 閺傛澘顤?`getInfo()` / `getDiagnosticsSnapshot()` 闁繋绱堕幒銉ュ經閿涘奔绶甸崨鎴掓姢鐞涘矂鐛欓弨璺烘嫲閸氬海鐢荤拠濠冩焽婢跺秶鏁ら妴?
+- `main` 閺傛澘顤?`--performance-log-check <media_file> [sample_ms]`閿涘矁绶崙鐚寸窗
 
-  - renderer / decoder backend锛堜綔涓哄綋鍓?GPU 璺緞鏍囪瘑锛夛紱
+  - renderer / decoder backend閿涘牅缍旀稉鍝勭秼閸?GPU 鐠侯垰绶為弽鍥槕閿涘绱?
+  - 鏉╂稓鈻奸獮鍐叉綆 CPU 閸楃姷鏁ゆ稉搴ㄢ偓鏄忕帆閺嶇绺鹃弫甯幢
 
-  - 杩涚▼骞冲潎 CPU 鍗犵敤涓庨€昏緫鏍稿績鏁帮紱
-
-  - demux / decode / render / scheduler / queue 鍏抽敭鎸囨爣銆?
-
-
-### 鏈湴楠岃瘉
-
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200`锛歚PASS`
-
-- 楠屾敹鎶ュ憡锛歚docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md`
+  - demux / decode / render / scheduler / queue 閸忔娊鏁幐鍥ㄧ垼閵?
 
 
+### 閺堫剙婀存宀冪槈
 
-### 浠诲姟娓呭崟鍚屾
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --performance-log-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 1200`閿涙瓪PASS`
 
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md`
+
+
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `2.2.4 杈撳嚭鎬ц兘鏃ュ織锛堟帀甯?闃熷垪/CPU/GPU锛塦 鏍囪瀹屾垚銆?
+  - `2.2.4 鏉堟挸鍤幀褑鍏橀弮銉ョ箶閿涘牊甯€鐢?闂冪喎鍨?CPU/GPU閿涘ˇ 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/core/player_core.h
 
@@ -2794,37 +2843,36 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛?080p60 绋冲畾鎾斁楠屾敹锛?
+## 2026-03-08 閺囧瓨鏌婇敍?080p60 缁嬪啿鐣鹃幘顓熸杹妤犲本鏁归敍?
 
 
-### 绋冲畾鎬ч棬绂佽ˉ榻?
-- `main` 鏂板 `--1080p60-check <media_file> [sample_ms]`锛屽鐢?`probe + diagnostics` 鍙ｅ緞楠岃瘉锛?
-  - `1920x1080 @ 60fps` 鏍锋湰鏄惁鍖归厤鐩爣锛?
-  - 杩炵画鎾斁绐楀彛鍐呮椂闂存槸鍚︽寔缁帹杩涳紱
+### 缁嬪啿鐣鹃幀褔妫粋浣剿夋?
+- `main` 閺傛澘顤?`--1080p60-check <media_file> [sample_ms]`閿涘苯顦查悽?`probe + diagnostics` 閸欙絽绶炴宀冪槈閿?
+  - `1920x1080 @ 60fps` 閺嶉攱婀伴弰顖氭儊閸栧綊鍘ら惄顔界垼閿?
+  - 鏉╃偟鐢婚幘顓熸杹缁愭褰涢崘鍛闂傚瓨妲搁崥锔藉瘮缂侇厽甯规潻娑崇幢
 
-  - 璋冨害鍣ㄦ槸鍚﹀嚭鐜?`late_drop`锛?
-  - 瑙ｅ皝瑁呮槸鍚﹀彂鐢熶涪鍖呫€?
-- 鏂板 `samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4` 鐨勬牱鏈敓鎴愯剼鏈叆鍙ｏ紝鐢ㄤ簬鏈湴绋冲畾鎬у洖褰掋€?
-
-
-### 鏈湴楠岃瘉
-
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --1080p60-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 5000`锛歚PASS`
-
-- 楠屾敹鎶ュ憡锛歚docs/reports/1080P60_STABILITY_LOCAL_CHECK.md`
+  - 鐠嬪啫瀹抽崳銊︽Ц閸氾箑鍤悳?`late_drop`閿?
+  - 鐟欙絽鐨濈憗鍛Ц閸氾箑褰傞悽鐔舵丢閸栧懌鈧?
+- 閺傛澘顤?`samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4` 閻ㄥ嫭鐗遍張顒傛晸閹存劘鍓奸張顒€鍙嗛崣锝忕礉閻劋绨張顒€婀寸粙鍐茬暰閹冩礀瑜版帇鈧?
 
 
+### 閺堫剙婀存宀冪槈
 
-### 浠诲姟娓呭崟鍚屾
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --1080p60-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 5000`閿涙瓪PASS`
 
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/1080P60_STABILITY_LOCAL_CHECK.md`
+
+
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `2.2.1 1080p60 闀挎椂绋冲畾` 鏍囪瀹屾垚銆?
-  - `2.3.2 1080p60 绋冲畾鎾斁杈炬爣` 鏍囪瀹屾垚銆?
+  - `2.2.1 1080p60 闂€鎸庢缁嬪啿鐣綻 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `2.3.2 1080p60 缁嬪啿鐣鹃幘顓熸杹鏉堢偓鐖 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -2850,38 +2898,36 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛?K 鎾斁涓庨檷绾ч獙鏀讹級
+## 2026-03-08 閺囧瓨鏌婇敍?K 閹绢厽鏂佹稉搴ㄦ缁狙囩崣閺€璁圭礆
 
 
 
-### 4K 闂ㄧ琛ラ綈
+### 4K 闂傘劎顩︾悰銉╃秷
 
-- `main` 鏂板 `--4k-playback-check <media_file> [sample_ms]`锛岃仈鍚堥獙璇侊細
-
-  - `4K` 鏍锋湰鍦ㄨ繛缁挱鏀剧獥鍙ｅ唴鏄惁鎸佺画鎺ㄨ繘锛?
-  - 褰撳墠鎾斁閾捐矾鏄惁鏃?`late_drop`锛?
-  - hard / soft 涓や釜瀛愯繘绋嬩細璇濇槸鍚﹀潎鍙繘鍏ユ挱鏀撅紝璇佹槑纭В澶辫触鏃跺彲闄嶇骇銆?
-- 楠屾敹閫昏緫澶嶇敤浜嗗凡鏈?`runBackendSessionSubprocess()`锛岄伩鍏嶉噸澶嶅疄鐜?Windows 鍚庣鍥為€€鏍￠獙銆?
-
-
-### 鏈湴楠岃瘉
-
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000`锛歚PASS`
-
-- 楠屾敹鎶ュ憡锛歚docs/reports/4K_PLAYBACK_LOCAL_CHECK.md`
+- `main` 閺傛澘顤?`--4k-playback-check <media_file> [sample_ms]`閿涘矁浠堥崥鍫ョ崣鐠囦緤绱?
+  - `4K` 閺嶉攱婀伴崷銊ㄧ箾缂侇厽鎸遍弨鍓х崶閸欙絽鍞撮弰顖氭儊閹镐胶鐢婚幒銊ㄧ箻閿?
+  - 瑜版挸澧犻幘顓熸杹闁炬崘鐭鹃弰顖氭儊閺?`late_drop`閿?
+  - hard / soft 娑撱倓閲滅€涙劘绻樼粙瀣╃窗鐠囨繃妲搁崥锕€娼庨崣顖濈箻閸忋儲鎸遍弨鎾呯礉鐠囦焦妲戠涵顒冃掓径杈Е閺冭泛褰查梽宥囬獓閵?
+- 妤犲本鏁归柅鏄忕帆婢跺秶鏁ゆ禍鍡楀嚒閺?`runBackendSessionSubprocess()`閿涘矂浼╅崗宥夊櫢婢跺秴鐤勯悳?Windows 閸氬海顏崶鐐衡偓鈧弽锟犵崣閵?
 
 
+### 閺堫剙婀存宀冪槈
 
-### 浠诲姟娓呭崟鍚屾
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --4k-playback-check .\samples\mkv\demo__hevc_ac3__3840x2160__60fps__6ch__ma2.mkv 2000`閿涙瓪PASS`
 
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/4K_PLAYBACK_LOCAL_CHECK.md`
+
+
+
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `2.2.2 4K 鍙挱鏀撅紙浼樺厛绋冲畾锛屽啀鎻愭€ц兘锛塦 鏍囪瀹屾垚銆?
-  - `2.3.3 4K 鎾斁鍙敤骞跺彲闄嶇骇` 鏍囪瀹屾垚銆?
+  - `2.2.2 4K 閸欘垱鎸遍弨鎾呯礄娴兼ê鍘涚粙鍐茬暰閿涘苯鍟€閹绘劖鈧嗗厴閿涘ˇ 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `2.3.3 4K 閹绢厽鏂侀崣顖滄暏楠炶泛褰查梽宥囬獓` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -2903,32 +2949,31 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堥珮鐮佺巼鏍锋湰楠屾敹锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫ョ彯閻胶宸奸弽閿嬫拱妤犲本鏁归敍?
 
 
-### 楂樼爜鐜囬棬绂佽ˉ榻?
-- `main` 鏂板 `--high-bitrate-check <media_file> [sample_ms]`锛屽墠缃鍙栨牸寮忕爜鐜囧苟瑕佹眰 `>= 80Mbps`銆?
-- 杩炵画鎾斁绐楀彛鍚屾椂妫€鏌ワ細鏃堕棿鎺ㄨ繘銆乣late_drop`銆乨emux 涓㈠寘涓庡疄闄?decoder / renderer backend銆?
-- `tools/download_test_samples.ps1` 鏂板 `stress100m__h264_aac__1920x1080__60fps__2ch.mp4` 鐢熸垚鍏ュ彛锛岀敤浜庨珮鐮佺巼鍥炲綊銆?
+### 妤傛鐖滈悳鍥，缁備浇藟姒?
+- `main` 閺傛澘顤?`--high-bitrate-check <media_file> [sample_ms]`閿涘苯澧犵純顔款嚢閸欐牗鐗稿蹇曠垳閻滃洤鑻熺憰浣圭湴 `>= 80Mbps`閵?
+- 鏉╃偟鐢婚幘顓熸杹缁愭褰涢崥灞炬濡偓閺屻儻绱伴弮鍫曟？閹恒劏绻橀妴涔ate_drop`閵嗕龚emux 娑撱垹瀵樻稉搴＄杽闂?decoder / renderer backend閵?
+- `tools/download_test_samples.ps1` 閺傛澘顤?`stress100m__h264_aac__1920x1080__60fps__2ch.mp4` 閻㈢喐鍨氶崗銉ュ經閿涘瞼鏁ゆ禍搴ㄧ彯閻胶宸奸崶鐐茬秺閵?
 
 
-### 鏈湴楠岃瘉
+### 閺堫剙婀存宀冪槈
 
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000`锛歚PASS`
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --high-bitrate-check .\samples\mp4\stress100m__h264_aac__1920x1080__60fps__2ch.mp4 3000`閿涙瓪PASS`
 
-- 楠屾敹鎶ュ憡锛歚docs/reports/HIGH_BITRATE_LOCAL_CHECK.md`
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/HIGH_BITRATE_LOCAL_CHECK.md`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `2.2.3 澶х爜鐜囨牱鏈紙>80Mbps锛夊彲鎾斁` 鏍囪瀹屾垚銆?
+  - `2.2.3 婢堆呯垳閻滃洦鐗遍張顒婄礄>80Mbps閿涘褰查幘顓熸杹` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -2954,37 +2999,36 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堥暱鏃舵挱鏀剧ǔ瀹氭€ч獙鏀讹級
+## 2026-03-08 閺囧瓨鏌婇敍鍫ユ毐閺冭埖鎸遍弨鍓旂€规碍鈧囩崣閺€璁圭礆
 
 
 
-- `main` 鏂板 `--long-playback-check <media_file> [sample_ms]`锛岃姹傞噰鏍风獥鍙ｈ嚦灏?`5000ms`锛屽苟杈撳嚭 `probe`銆乥ackend銆佹椂闂存帹杩涗笌鎺夊抚/涓㈠寘闂ㄧ瀛楁銆?
-- 杩炵画鎾斁绐楀彛鍚屾椂妫€鏌ワ細`open_ok`銆佽繘鍏ユ挱鏀惧惊鐜€佺獥鍙ｇ粨鏉熷悗浠嶅浜庢挱鏀炬€併€乣advance_ratio` 杈炬爣銆乣scheduler_late_drops=0` 涓?`demux_dropped_packets=0`銆?
-- 鏂板 `docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`锛屽苟鍚屾鍙戝竷闂ㄧ `6.1 ~ 6.6` 涓哄凡瀹屾垚銆?
+- `main` 閺傛澘顤?`--long-playback-check <media_file> [sample_ms]`閿涘矁顩﹀Ч鍌炲櫚閺嶉鐛ラ崣锝堝殾鐏?`5000ms`閿涘苯鑻熸潏鎾冲毉 `probe`閵嗕攻ackend閵嗕焦妞傞梻瀛樺腹鏉╂稐绗岄幒澶婃姎/娑撱垹瀵橀梻銊ь洣鐎涙顔岄妴?
+- 鏉╃偟鐢婚幘顓熸杹缁愭褰涢崥灞炬濡偓閺屻儻绱癭open_ok`閵嗕浇绻橀崗銉︽尡閺€鎯ф儕閻滎垬鈧胶鐛ラ崣锝囩波閺夌喎鎮楁禒宥咁槱娴滃孩鎸遍弨鐐偓浣碘偓涔dvance_ratio` 鏉堢偓鐖ｉ妴涔cheduler_late_drops=0` 娑?`demux_dropped_packets=0`閵?
+- 閺傛澘顤?`docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`閿涘苯鑻熼崥灞绢劄閸欐垵绔烽梻銊ь洣 `6.1 ~ 6.6` 娑撳搫鍑＄€瑰本鍨氶妴?
 
 
-### 鏈湴楠岃瘉
+### 閺堫剙婀存宀冪槈
 
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --long-playback-check .\juren-30s.mp4 10000`锛歚PASS`
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --long-playback-check .\juren-30s.mp4 10000`閿涙瓪PASS`
 
-- 楠屾敹鎶ュ憡锛歚docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `6.1 鍔熻兘锛歁1/M2 蹇呴』鍏ㄩ儴閫氳繃` 鏍囪瀹屾垚銆?
-  - `6.2 鏍煎紡锛氫富鍔涙牸寮忕煩闃垫湁缁撴灉涓斿彲瑙ｉ噴` 鏍囪瀹屾垚銆?
-  - `6.3 鍒嗚鲸鐜囷細1080p60 绋冲畾锛?K 鍙敤骞跺彲闄嶇骇` 鏍囪瀹屾垚銆?
-  - `6.4 浜や簰锛氶粯璁ゅ揩鎹烽敭瀹屾暣鍙敤` 鏍囪瀹屾垚銆?
-  - `6.5 绋冲畾鎬э細闀挎椂鎾斁鏃?crash` 鏍囪瀹屾垚銆?
-  - `6.6 鍙娴嬶細鍏抽敭鏃ュ織瀹屾暣` 鏍囪瀹屾垚銆?
+  - `6.1 閸旂喕鍏橀敍姝?/M2 韫囧懘銆忛崗銊╁劥闁俺绻僠 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `6.2 閺嶇厧绱￠敍姘瘜閸旀稒鐗稿蹇曠叐闂冨灚婀佺紒鎾寸亯娑撴柨褰茬憴锝夊櫞` 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `6.3 閸掑棜椴搁悳鍥风窗1080p60 缁嬪啿鐣鹃敍?K 閸欘垳鏁ら獮璺哄讲闂勫秶楠嘸 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `6.4 娴溿倓绨伴敍姘剁帛鐠併倕鎻╅幑鐑芥暛鐎瑰本鏆ｉ崣顖滄暏` 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `6.5 缁嬪啿鐣鹃幀褝绱伴梹鎸庢閹绢厽鏂侀弮?crash` 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `6.6 閸欘垵顫囧ù瀣剁窗閸忔娊鏁弮銉ョ箶鐎瑰本鏆 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - src/main.cpp
 
@@ -3004,32 +3048,31 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟彃浠剁郴缁燂級
+## 2026-03-08 閺囧瓨鏌婇敍鍫熷絻娴犲墎閮寸紒鐕傜礆
 
 
 
-- 鏂板 `include/plugin/plugin_api.h` 涓庨噸鍐?`PluginManager`锛岃ˉ榻?`DLL` 鍔ㄦ€佸姞杞姐€乣API` 鐗堟湰鏍￠獙銆乣load/unload` 鐢熷懡鍛ㄦ湡涓庡紓甯镐繚鎶ゃ€?
-- `PluginManager` 鐜板彲浣滀负鎻掍欢瀹夸富娉ㄥ唽澶栭儴瑙嗛/闊抽婊ら暅宸ュ巶锛沗FilterRegistry` 鍚屾琛ュ厖娉ㄩ攢鎺ュ彛锛屾敮鎸佸嵏杞芥椂娓呯悊鎵╁睍鐐广€?
-- 鏂板 `sample_logger_plugin` 绀轰緥 `DLL` 涓?`--plugin-check [plugin_dir_or_file]` 楠屾敹鍛戒护锛岄獙璇佹彃浠跺姞杞姐€佹护闀滄敞鍐屼笌鍗歌浇娓呯悊闂幆銆?
+- 閺傛澘顤?`include/plugin/plugin_api.h` 娑撳酣鍣搁崘?`PluginManager`閿涘矁藟姒?`DLL` 閸斻劍鈧礁濮炴潪濮愨偓涔PI` 閻楀牊婀伴弽锟犵崣閵嗕梗load/unload` 閻㈢喎鎳￠崨銊︽埂娑撳骸绱撶敮闀愮箽閹躲們鈧?
+- `PluginManager` 閻滄澘褰叉担婊€璐熼幓鎺嶆鐎瑰じ瀵屽▔銊ュ斀婢舵牠鍎寸憴鍡涱暥/闂婃娊顣跺銈夋殔瀹搞儱宸堕敍娌桭ilterRegistry` 閸氬本顒炵悰銉ュ帠濞夈劑鏀㈤幒銉ュ經閿涘本鏁幐浣稿祻鏉炶姤妞傚〒鍛倞閹碘晛鐫嶉悙骞库偓?
+- 閺傛澘顤?`sample_logger_plugin` 缁€杞扮伐 `DLL` 娑?`--plugin-check [plugin_dir_or_file]` 妤犲本鏁归崨鎴掓姢閿涘矂鐛欑拠浣瑰絻娴犺泛濮炴潪濮愨偓浣规姢闂€婊勬暈閸愬奔绗岄崡姝屾祰濞撳懐鎮婇梻顓犲箚閵?
 
 
-### 鏈湴楠岃瘉
+### 閺堫剙婀存宀冪槈
 
-- `cmake --build build --config Debug`锛氶€氳繃銆?
-- `build/Debug/modern-video-player.exe --plugin-check`锛歚PASS`
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
+- `build/Debug/modern-video-player.exe --plugin-check`閿涙瓪PASS`
 
-- 楠屾敹鎶ュ憡锛歚docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md`
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `7.1 鎻掍欢绯荤粺` 鏍囪瀹屾垚銆?
+  - `7.1 閹绘帊娆㈢化鑽ょ埠` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - CMakeLists.txt
 
@@ -3063,34 +3106,32 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛堟祦濯掍綋 HTTP 鍒嗙墖涓庣紦鍐诧級
+## 2026-03-08 閺囧瓨鏌婇敍鍫熺ウ婵帊缍?HTTP 閸掑棛澧栨稉搴ｇ处閸愯绱?
 
 
+- 闁插秴鍟?`HttpStreamDownloader`閿涙艾鐔€娴?FFmpeg `avio` 閺€顖涘瘮閻喎鐤?HTTP 閹垫挸绱戦妴浣稿瀻閸ф顕伴崣鏍モ偓浣稿敶闁劎绱﹂崘灞傗偓涓扥F 閻樿埖鈧椒绗岄柨娆掝嚖闁繋绱堕妴?
+- `main` 閺傛澘顤?`--streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]`閿涘苯褰叉稉瀣祰 HLS 婵帊缍嬪〒鍛礋閵嗕浇袙閺嬫劗娴夌€电懓鍨庨悧?URL閿涘苯鑻熸宀冪槈閸掑棛澧栫紓鎾冲暱闂傤厾骞嗛妴?
+- 閺傛澘顤冮張顒€婀存径鐟板徔 `samples/streaming/hls_local/*` 娑?`tools/start_streaming_fixture_server.ps1`閿涘瞼鏁ゆ禍搴℃躬閺堫剚婧€閸氼垰濮?HTTP 闂堟瑦鈧焦婀囬崝鈥宠嫙婢跺秶骞囩€圭偤鐛欓妴?
 
-- 閲嶅啓 `HttpStreamDownloader`锛氬熀浜?FFmpeg `avio` 鏀寔鐪熷疄 HTTP 鎵撳紑銆佸垎鍧楄鍙栥€佸唴閮ㄧ紦鍐层€丒OF 鐘舵€佷笌閿欒閫忎紶銆?
-- `main` 鏂板 `--streaming-buffer-check <playlist_url> [segment_limit] [target_buffer_bytes]`锛屽彲涓嬭浇 HLS 濯掍綋娓呭崟銆佽В鏋愮浉瀵瑰垎鐗?URL锛屽苟楠岃瘉鍒嗙墖缂撳啿闂幆銆?
-- 鏂板鏈湴澶瑰叿 `samples/streaming/hls_local/*` 涓?`tools/start_streaming_fixture_server.ps1`锛岀敤浜庡湪鏈満鍚姩 HTTP 闈欐€佹湇鍔″苟澶嶇幇瀹為獙銆?
 
+### 閺堫剙婀存宀冪槈
 
-### 鏈湴楠岃瘉
-
-- `cmake --build build --config Debug`锛氶€氳繃銆?
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
 - `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming/hls_local -Port 8765`
 
-- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`锛歚PASS`
+- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8765/sample.m3u8 3 128`閿涙瓪PASS`
 
-- 楠屾敹鎶ュ憡锛歚docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md`
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `7.2 娴佸獟浣擄紙鐪熷疄 HTTP 鍒嗙墖涓庣紦鍐诧級` 鏍囪瀹屾垚銆?
+  - `7.2 濞翠礁鐛熸担鎿勭礄閻喎鐤?HTTP 閸掑棛澧栨稉搴ｇ处閸愯绱歚 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/streaming/http_stream_downloader.h
 
@@ -3128,38 +3169,37 @@ make -j$(nproc)
 
 
 
-## 2026-03-08 鏇存柊锛圚LS/DASH 鑷€傚簲鐮佺巼锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍦歀S/DASH 閼奉亪鈧倸绨查惍浣哄芳閿?
 
 
-- 鎵╁睍 `HlsManifestParser`锛氳瘑鍒?`#EXT-X-STREAM-INF` master playlist銆佸鐮佺巼 variant 涓庡獟浣撴挱鏀惧垪琛ㄣ€?
-- 鎵╁睍 `DashManifestParser`锛氳В鏋?`Representation` 甯﹀銆乣BaseURL`銆乣Initialization` 涓?`SegmentURL` 鏄庣粏銆?
-- 鏂板 `AdaptiveBitrateSelector`锛屾寜浼扮畻甯﹀閫夋嫨鏈€鍚堥€傜爜鐜囷紝骞跺湪 `main` 涓彁渚?`--adaptive-bitrate-check <manifest_url> <bandwidth_samples_csv> [segment_limit] [target_buffer_bytes]` 鏈湴楠屾敹鍏ュ彛銆?
-- 鏂板 `samples/streaming/abr_local/{hls,dash}` 澶瑰叿锛屽苟鎵╁睍 `tools/start_streaming_fixture_server.ps1` 鏀寔 `mpd/m4s/mp4` 鍐呭绫诲瀷銆?
+- 閹碘晛鐫?`HlsManifestParser`閿涙俺鐦戦崚?`#EXT-X-STREAM-INF` master playlist閵嗕礁顦块惍浣哄芳 variant 娑撳骸鐛熸担鎾存尡閺€鎯у灙鐞涖劊鈧?
+- 閹碘晛鐫?`DashManifestParser`閿涙俺袙閺?`Representation` 鐢箑顔旈妴涔aseURL`閵嗕梗Initialization` 娑?`SegmentURL` 閺勫海绮忛妴?
+- 閺傛澘顤?`AdaptiveBitrateSelector`閿涘本瀵滄导鎵暬鐢箑顔旈柅澶嬪閺堚偓閸氬牓鈧倻鐖滈悳鍥风礉楠炶泛婀?`main` 娑擃厽褰佹笟?`--adaptive-bitrate-check <manifest_url> <bandwidth_samples_csv> [segment_limit] [target_buffer_bytes]` 閺堫剙婀存灞炬暪閸忋儱褰涢妴?
+- 閺傛澘顤?`samples/streaming/abr_local/{hls,dash}` 婢剁懓鍙块敍灞借嫙閹碘晛鐫?`tools/start_streaming_fixture_server.ps1` 閺€顖涘瘮 `mpd/m4s/mp4` 閸愬懎顔愮猾璇茬€烽妴?
 
 
-### 鏈湴楠岃瘉
+### 閺堫剙婀存宀冪槈
 
-- `cmake --build build --config Debug`锛氶€氳繃銆?
+- `cmake --build build --config Debug`閿涙岸鈧俺绻冮妴?
 - `.\tools\start_streaming_fixture_server.ps1 -RootPath samples/streaming -Port 8766`
 
-- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8766/hls_local/sample.m3u8 3 128`锛歚PASS`
+- `build/Debug/modern-video-player.exe --streaming-buffer-check http://127.0.0.1:8766/hls_local/sample.m3u8 3 128`閿涙瓪PASS`
 
-- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/hls/master.m3u8 900000,3500000,1500000 2 128`锛歚PASS`
+- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/hls/master.m3u8 900000,3500000,1500000 2 128`閿涙瓪PASS`
 
-- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/dash/sample.mpd 900000,3500000,1500000 2 128`锛歚PASS`
+- `build/Debug/modern-video-player.exe --adaptive-bitrate-check http://127.0.0.1:8766/abr_local/dash/sample.mpd 900000,3500000,1500000 2 128`閿涙瓪PASS`
 
-- 楠屾敹鎶ュ憡锛歚docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md`
+- 妤犲本鏁归幎銉ユ啞閿涙瓪docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `7.3 HLS/DASH 鑷€傚簲鐮佺巼` 鏍囪瀹屾垚銆?
+  - `7.3 HLS/DASH 閼奉亪鈧倸绨查惍浣哄芳` 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - include/streaming/hls_manifest_parser.h
 
@@ -3235,39 +3275,38 @@ make -j$(nproc)
 
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
-## 2026-03-08 鏇存柊锛堝缓绔嬮噷绋嬬鏍囩锛?
+## 2026-03-08 閺囧瓨鏌婇敍鍫濈紦缁斿鍣风粙瀣暥閺嶅洨顒烽敍?
 
 
-- 瀹屾垚浠诲姟娓呭崟 `0.4`锛屽缓绔嬮噷绋嬬鏍囩 `v0.2.0-rc1` 涓?`v0.2.0`銆?
-- `v0.2.0-rc1` 鐢ㄤ簬鍐荤粨鍙戝竷闂ㄧ宸叉敹鍙ｇ殑鍊欓€夊揩鐓э紱`v0.2.0` 鐢ㄤ簬鏍囪褰撳墠涓荤嚎閲岀▼纰戝畬鎴愮偣銆?
-- 鍚屾鍒锋柊宸窛璇勪及涓庝换鍔℃竻鍗曠姸鎬侊紝閬垮厤鏂囨。浠嶄繚鐣欌€滀粎宸爣绛炬搷浣溾€濈殑鏃у彛寰勩€?
-- 鐢变簬閲岀▼纰戝凡鍏峰鍙拷婧殑 `RC` 鏍囩锛屼换鍔℃竻鍗曚腑鐨?`5.3 姣忎釜閲岀▼纰戠粨鏉熷墠蹇呴』鍙墦 RC 鏍囩` 涔熷悓姝ユ弧瓒炽€?
+- 鐎瑰本鍨氭禒璇插濞撳懎宕?`0.4`閿涘苯缂撶粩瀣櫡缁嬪顣堕弽鍥╊劮 `v0.2.0-rc1` 娑?`v0.2.0`閵?
+- `v0.2.0-rc1` 閻劋绨崘鑽ょ波閸欐垵绔烽梻銊ь洣瀹稿弶鏁归崣锝囨畱閸婃瑩鈧鎻╅悡褝绱盽v0.2.0` 閻劋绨弽鍥唶瑜版挸澧犳稉鑽ゅ殠闁插瞼鈻肩喊鎴濈暚閹存劗鍋ｉ妴?
+- 閸氬本顒為崚閿嬫煀瀹割喛绐涚拠鍕強娑撳簼鎹㈤崝鈩冪閸楁洜濮搁幀渚婄礉闁灝鍘ら弬鍥ㄣ€傛禒宥勭箽閻ｆ瑢鈧粈绮庡顔界垼缁涚偓鎼锋担婧锯偓婵堟畱閺冄冨經瀵板嫨鈧?
+- 閻㈠彉绨柌宀€鈻肩喊鎴濆嚒閸忓嘲顦崣顖濇嫹濠ь垳娈?`RC` 閺嶅洨顒烽敍灞兼崲閸斺剝绔婚崡鏇氳厬閻?`5.3 濮ｅ繋閲滈柌宀€鈻肩喊鎴犵波閺夌喎澧犺箛鍛淬€忛崣顖涘ⅵ RC 閺嶅洨顒穈 娑旂喎鎮撳銉﹀姬鐡掔偨鈧?
 
 
-### 鏍囩璇存槑
+### 閺嶅洨顒风拠瀛樻
 
-- `v0.2.0-rc1`锛氬熀浜庡彂甯冮棬绂侀棴鐜悗鐨勭ǔ瀹氬揩鐓у缓绔嬨€?
-- `v0.2.0`锛氬熀浜庡綋鍓?`main` 鐨勯噷绋嬬鏀跺彛蹇収寤虹珛銆?
+- `v0.2.0-rc1`閿涙艾鐔€娴滃骸褰傜敮鍐，缁備線妫撮悳顖氭倵閻ㄥ嫮菙鐎规艾鎻╅悡褍缂撶粩瀣ㄢ偓?
+- `v0.2.0`閿涙艾鐔€娴滃骸缍嬮崜?`main` 閻ㄥ嫰鍣风粙瀣暥閺€璺哄經韫囶偆鍙庡铏圭彌閵?
 
 
-### 鏈湴楠岃瘉
+### 閺堫剙婀存宀冪槈
 
-- `git tag --list`锛氱‘璁ゆ爣绛惧凡瀛樺湪銆?
+- `git tag --list`閿涙氨鈥樼拋銈嗙垼缁涙儳鍑＄€涙ê婀妴?
 - `git show v0.2.0-rc1 --no-patch --stat`
 
 - `git show v0.2.0 --no-patch --stat`
 
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `0.4 寤虹珛閲岀▼纰戞爣绛撅紙v0.2.0-rc1 / v0.2.0锛塦 鏍囪瀹屾垚銆?
-  - `5.3 姣忎釜閲岀▼纰戠粨鏉熷墠蹇呴』鍙墦 RC 鏍囩` 鏍囪瀹屾垚銆?
+  - `0.4 瀵よ櫣鐝涢柌宀€鈻肩喊鎴炵垼缁涙拝绱檝0.2.0-rc1 / v0.2.0閿涘ˇ 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `5.3 濮ｅ繋閲滈柌宀€鈻肩喊鎴犵波閺夌喎澧犺箛鍛淬€忛崣顖涘ⅵ RC 閺嶅洨顒穈 閺嶅洩顔囩€瑰本鍨氶妴?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/records/VERSION.md
 
@@ -3279,29 +3318,28 @@ make -j$(nproc)
 
 - .monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md
 
-## 2026-03-08 鏇存柊锛堟墽琛屽畧鍒欏彛寰勫悓姝ワ級
+## 2026-03-08 閺囧瓨鏌婇敍鍫熷⒔鐞涘苯鐣ч崚娆忓經瀵板嫬鎮撳銉礆
 
 
 
-- 缁撳悎鏈疆鎻愪氦涓庝换鍔℃帹杩涢『搴忥紝`5.1 WIP 闄愬埗锛氬悓鏃惰繘琛屼换鍔′笉瓒呰繃 2 涓猔 鍙垽瀹氫负婊¤冻锛屽苟鍚屾鍕鹃€夈€?
-- `5.2 姣忓懆浜斿彧鍋氭敹鏁涳紙淇銆佸洖褰掋€佹枃妗ｏ級` 灞炰簬鎸夊懆鎵ц鑺傚绾︽潫锛屽綋鍓嶄粨搴撲腑灏氱己鎸佺画鎬х殑鍛ㄧ淮搴﹁瘉鎹紝鏆備繚鎸佹湭鍕鹃€夈€?
+- 缂佹挸鎮庨張顒冪枂閹绘劒姘︽稉搴濇崲閸斺剝甯规潻娑€庢惔蹇ョ礉`5.1 WIP 闂勬劕鍩楅敍姘倱閺冩儼绻樼悰灞兼崲閸斺€茬瑝鐡掑懓绻?2 娑撶寯 閸欘垰鍨界€规矮璐熷陇鍐婚敍灞借嫙閸氬本顒為崟楣冣偓澶堚偓?
+- `5.2 濮ｅ繐鎳嗘禍鏂垮涧閸嬫碍鏁归弫娑崇礄娣囶喖顦查妴浣告礀瑜版帇鈧焦鏋冨锝忕礆` 鐏炵偘绨幐澶婃噯閹笛嗩攽閼哄倸顨旂痪锔芥将閿涘苯缍嬮崜宥勭波鎼存挷鑵戠亸姘卞繁閹镐胶鐢婚幀褏娈戦崨銊ф樊鎼达箒鐦夐幑顕嗙礉閺嗗倷绻氶幐浣规弓閸曢箖鈧鈧?
 
 
-### 鍙ｅ緞璇存槑
+### 閸欙絽绶炵拠瀛樻
 
-- `5.1` 鐨勫垽鏂緷鎹槸鏈疆浠诲姟鎸夊崟涓荤嚎涓茶鎺ㄨ繘锛氬彂甯冮棬绂併€佹彃浠剁郴缁熴€佹祦濯掍綋缂撳啿銆丄BR銆侀噷绋嬬鏍囩涓庡畧鍒欏彛寰勪緷娆℃敹鍙ｃ€?
-- `5.2` 闇€瑕佽法鍛ㄣ€侀噸澶嶆墽琛岀殑杩囩▼璇佹嵁锛屼笉閫傚悎浠呭嚟褰撳墠涓€娆℃敹鍙ｇ粨鏋滅洿鎺ュ垽瀹氬畬鎴愩€?
+- `5.1` 閻ㄥ嫬鍨介弬顓濈贩閹诡喗妲搁張顒冪枂娴犺濮熼幐澶婂礋娑撹崵鍤庢稉鑼额攽閹恒劏绻橀敍姘絺鐢啴妫粋浣碘偓浣瑰絻娴犲墎閮寸紒鐔粹偓浣圭ウ婵帊缍嬬紓鎾冲暱閵嗕竸BR閵嗕線鍣风粙瀣暥閺嶅洨顒锋稉搴＄暓閸掓瑥褰涘鍕贩濞嗏剝鏁归崣锝冣偓?
+- `5.2` 闂団偓鐟曚浇娉曢崨銊ｂ偓渚€鍣告径宥嗗⒔鐞涘瞼娈戞潻鍥┾柤鐠囦焦宓侀敍灞肩瑝闁倸鎮庢禒鍛殶瑜版挸澧犳稉鈧▎鈩冩暪閸欙絿绮ㄩ弸婊呮纯閹恒儱鍨界€规艾鐣幋鎰┾偓?
 
 
-### 浠诲姟娓呭崟鍚屾
-
+### 娴犺濮熷〒鍛礋閸氬本顒?
 - `.monkeycode/specs/mpc-hc-alignment-iteration/tasklist.md`
 
-  - `5.1 WIP 闄愬埗锛氬悓鏃惰繘琛屼换鍔′笉瓒呰繃 2 涓猔 鏍囪瀹屾垚銆?
-  - `5.2 姣忓懆浜斿彧鍋氭敹鏁涳紙淇銆佸洖褰掋€佹枃妗ｏ級` 淇濇寔寰呭畬鎴愩€?
+  - `5.1 WIP 闂勬劕鍩楅敍姘倱閺冩儼绻樼悰灞兼崲閸斺€茬瑝鐡掑懓绻?2 娑撶寯 閺嶅洩顔囩€瑰本鍨氶妴?
+  - `5.2 濮ｅ繐鎳嗘禍鏂垮涧閸嬫碍鏁归弫娑崇礄娣囶喖顦查妴浣告礀瑜版帇鈧焦鏋冨锝忕礆` 娣囨繃瀵斿鍛暚閹存劑鈧?
 
 
-### 淇敼鏂囦欢
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/records/VERSION.md
 
@@ -3315,41 +3353,40 @@ make -j$(nproc)
 
 
 
-## 闂 63: 钀藉湴 5.2 鍛ㄤ簲鏀舵暃鏃ユ墽琛屾墜鍐?
+## 闂傤噣顣?63: 閽€钘夋勾 5.2 閸涖劋绨查弨鑸垫殐閺冦儲澧界悰灞惧閸?
 
 
-**鏃ユ湡**: 2026-03-08
+**閺冦儲婀?*: 2026-03-08
 
-**鐘舵€?*: 宸茶В鍐?
-
-
-### 闂鎻忚堪
-
-- 瀹堝垯椤?`5.2 姣忓懆浜斿彧鍋氭敹鏁涳紙淇銆佸洖褰掋€佹枃妗ｏ級` 鐩墠鍙湁鍘熷垯鎻忚堪锛岀己灏戝彲閲嶅鎵ц鐨勬祦绋嬨€佽竟鐣屽拰杈撳嚭鐗╁畾涔夈€?
+**閻樿埖鈧?*: 瀹歌尪袙閸?
 
 
-### 鍒嗘瀽璁板綍
+### 闂傤噣顣介幓蹇氬牚
 
-1. `docs/plans/MPC_HC_ITERATION_PLAN.md` 鍙粰鍑衡€滄瘡鍛ㄤ簲鍥哄畾鍋氭敹鏁涙棩鈥濈殑鑺傚寤鸿锛屼絾娌℃湁钀藉疄鎴愰€愭鎿嶄綔鎵嬪唽銆?
-2. `docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md` 宸茶鐩栤€滃浣曞仛鍥炲綊鈥濓紝浣嗚繕娌℃湁鍥炵瓟鈥滃懆浜斿綋澶╁厑璁稿仛浠€涔堛€佺姝㈠仛浠€涔堛€佷粈涔堟椂鍊欏彲浠ュ緱鍑?RC 缁撹鈥濄€?
-3. 鍥犳褰撳墠鏈€鍚堥€傜殑鍔ㄤ綔鏄厛鎶?`5.2` 钀芥垚娴佺▼鏂囨。锛屽啀绛夊緟鍚庣画璺ㄥ懆鎵ц璇佹嵁鍐冲畾鏄惁鍕鹃€夈€?
+- 鐎瑰牆鍨い?`5.2 濮ｅ繐鎳嗘禍鏂垮涧閸嬫碍鏁归弫娑崇礄娣囶喖顦查妴浣告礀瑜版帇鈧焦鏋冨锝忕礆` 閻╊喖澧犻崣顏呮箒閸樼喎鍨幓蹇氬牚閿涘瞼宸辩亸鎴濆讲闁插秴顦查幍褑顢戦惃鍕ウ缁嬪鈧浇绔熼悾灞芥嫲鏉堟挸鍤悧鈺佺暰娑斿鈧?
 
 
-### 瑙ｅ喅鏂规
+### 閸掑棙鐎界拋鏉跨秿
 
-- 鏂板 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`锛屾槑纭懆鑺傚銆佸懆浜斿厑璁?绂佹浜嬮」銆佹墽琛岄『搴忋€佹帹鑽愬懡浠ゃ€佽緭鍑虹墿涓庡嬀閫夊彛寰勩€?
-- 鏇存柊 `docs/README.md` 鍏ュ彛锛岀‘淇濊娴佺▼鏂囨。鍙洿鎺ユ绱€?
-- 鍚屾鐗堟湰/鍙樻洿/寮€鍙戣褰曪紝鏄庣‘ `5.2` 宸叉湁鎵ц鎵嬪唽锛屼絾浠诲姟娓呭崟浠嶄繚鎸佸緟瀹屾垚銆?
-
-
-### 鏈湴楠屾敹缁撴灉
-
-- 鏂版枃妗ｅ凡瑕嗙洊鈥滃懆涓€鑷冲懆鍥涘紑鍙戙€佸懆浜斿彧鍋氭敹鏁涒€濈殑鑺傚璇存槑銆?
-- 鏂版枃妗ｅ凡鏄庣‘鈥滃厑璁镐簨椤?/ 绂佹浜嬮」 / 杈撳嚭鐗?/ RC 鍑嗗缁撹鈥濈殑鎵ц杈圭晫銆?
-- 浠诲姟娓呭崟 `5.2` 鏈浠嶆湭鍕鹃€夛紝寰呭悗缁舰鎴愯法鍛ㄦ墽琛岃瘉鎹悗鍐嶅洖鍐欍€?
+1. `docs/plans/MPC_HC_ITERATION_PLAN.md` 閸欘亞绮伴崙琛♀偓婊勭槨閸涖劋绨查崶鍝勭暰閸嬫碍鏁归弫娑欐）閳ユ繄娈戦懞鍌氼殧瀵ら缚顔呴敍灞肩稻濞屸剝婀侀拃钘夌杽閹存劙鈧劖顒為幙宥勭稊閹靛鍞介妴?
+2. `docs/workflows/REGRESSION_OPERATION_PLAYBOOK.md` 瀹歌尪顩惄鏍も偓婊冾洤娴ｆ洖浠涢崶鐐茬秺閳ユ繐绱濇担鍡氱箷濞屸剝婀侀崶鐐电摕閳ユ粌鎳嗘禍鏂跨秼婢垛晛鍘戠拋绋夸粵娴犫偓娑斿牄鈧胶顩﹀銏犱粵娴犫偓娑斿牄鈧椒绮堟稊鍫熸閸婃瑥褰叉禒銉ョ繁閸?RC 缂佹捁顔戦垾婵勨偓?
+3. 閸ョ姵顒濊ぐ鎾冲閺堚偓閸氬牓鈧倻娈戦崝銊ょ稊閺勵垰鍘涢幎?`5.2` 閽€鑺ュ灇濞翠胶鈻奸弬鍥ㄣ€傞敍灞藉晙缁涘绶熼崥搴ｇ敾鐠恒劌鎳嗛幍褑顢戠拠浣瑰祦閸愬啿鐣鹃弰顖氭儊閸曢箖鈧鈧?
 
 
-### 淇敼鏂囦欢
+### 鐟欙絽鍠呴弬瑙勵攳
+
+- 閺傛澘顤?`docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`閿涘本妲戠涵顔兼噯閼哄倸顨旈妴浣告噯娴滄柨鍘戠拋?缁備焦顒涙禍瀣€嶉妴浣瑰⒔鐞涘矂銆庢惔蹇嬧偓浣瑰腹閼芥劕鎳℃禒銈冣偓浣界翻閸戣櫣澧挎稉搴″瑎闁褰涘鍕┾偓?
+- 閺囧瓨鏌?`docs/README.md` 閸忋儱褰涢敍宀€鈥樻穱婵婎嚉濞翠胶鈻奸弬鍥ㄣ€傞崣顖滄纯閹恒儲顥呯槐顫偓?
+- 閸氬本顒為悧鍫熸拱/閸欐ɑ娲?瀵偓閸欐垼顔囪ぐ鏇礉閺勫海鈥?`5.2` 瀹稿弶婀侀幍褑顢戦幍瀣斀閿涘奔绲炬禒璇插濞撳懎宕熸禒宥勭箽閹镐礁绶熺€瑰本鍨氶妴?
+
+
+### 閺堫剙婀存灞炬暪缂佹挻鐏?
+- 閺傜増鏋冨锝呭嚒鐟曞棛娲婇垾婊冩噯娑撯偓閼峰啿鎳嗛崶娑樼磻閸欐垯鈧礁鎳嗘禍鏂垮涧閸嬫碍鏁归弫娑掆偓婵堟畱閼哄倸顨旂拠瀛樻閵?
+- 閺傜増鏋冨锝呭嚒閺勫海鈥橀垾婊冨帒鐠侀晲绨ㄦい?/ 缁備焦顒涙禍瀣€?/ 鏉堟挸鍤悧?/ RC 閸戝棗顦紒鎾诡啈閳ユ繄娈戦幍褑顢戞潏鍦櫕閵?
+- 娴犺濮熷〒鍛礋 `5.2` 閺堫剚顐兼禒宥嗘弓閸曢箖鈧绱濆鍛倵缂侇厼鑸伴幋鎰硶閸涖劍澧界悰宀冪槈閹诡喖鎮楅崘宥呮礀閸愭瑣鈧?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md
 
@@ -3365,41 +3402,40 @@ make -j$(nproc)
 
 
 
-## 闂 64: 琛ラ綈 5.2 鐣欑棔妯℃澘锛坉aily_board / 鍛ㄦ姤锛?
+## 闂傤噣顣?64: 鐞涖儵缍?5.2 閻ｆ瑧妫斿Ο鈩冩緲閿涘潐aily_board / 閸涖劍濮ら敍?
 
 
-**鏃ユ湡**: 2026-03-08
+**閺冦儲婀?*: 2026-03-08
 
-**鐘舵€?*: 宸茶В鍐?
-
-
-### 闂鎻忚堪
-
-- `5.2` 宸叉湁娴佺▼鎵嬪唽锛屼絾杩樼己灏戝彲鐩存帴濉啓鐨勨€滄棩鐪嬫澘璁板綍鍗?+ 鍛ㄦ姤妯℃澘鈥濓紝涓嶅埄浜庡悗缁矇娣€璺ㄥ懆鎵ц璇佹嵁銆?
+**閻樿埖鈧?*: 瀹歌尪袙閸?
 
 
-### 鍒嗘瀽璁板綍
+### 闂傤噣顣介幓蹇氬牚
 
-1. 浠呮湁 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`锛岃繕涓嶈冻浠ユ敮鎾戞瘡鍛ㄥ疄闄呮墽琛屾椂鐨勪綆鎴愭湰鐣欑棔銆?
-2. `daily_board.md` 褰撳墠鍙湁浠诲姟瀹夋帓锛屾病鏈変负涓や釜鍛ㄤ簲棰勭暀鍥哄畾濉啓浣嶇疆銆?
-3. 鍥犳闇€瑕佸悓鏃惰ˉ榻愨€滃懆浜斿綋鏃ヨ褰曞崱鈥濆拰鈥滄瘡鍛ㄦ眹鎬绘ā鏉库€濅袱涓浇浣撱€?
+- `5.2` 瀹稿弶婀佸ù浣衡柤閹靛鍞介敍灞肩稻鏉╂宸辩亸鎴濆讲閻╁瓨甯存繅顐㈠晸閻ㄥ嫧鈧粍妫╅惇瀣緲鐠佹澘缍嶉崡?+ 閸涖劍濮ゅΟ鈩冩緲閳ユ繐绱濇稉宥呭焺娴滃骸鎮楃紒顓熺焽濞ｂ偓鐠恒劌鎳嗛幍褑顢戠拠浣瑰祦閵?
 
 
-### 瑙ｅ喅鏂规
+### 閸掑棙鐎界拋鏉跨秿
 
-- 鏇存柊 `.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`锛屼负 Day 5 / Day 10 澧炲姞鏀舵暃鏃ヨ褰曞崱銆?
-- 鏂板 `.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`锛屼綔涓?`5.2` 鐨勫懆鎶ョ暀鐥曟ā鏉裤€?
-- 鍚屾 `docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`銆乣docs/README.md` 涓庣浉鍏宠褰曟枃妗ｏ紝鏄庣‘杩欎袱涓ā鏉跨殑鍏ュ彛鍜岀敤閫斻€?
-
-
-### 鏈湴楠屾敹缁撴灉
-
-- `daily_board.md` 宸插彲鐩存帴濉啓鍛ㄤ簲鐨勮寖鍥村喕缁撱€佸洖褰掑懡浠ゃ€乥locker 缁撹銆佹枃妗ｅ悓姝ュ拰闃舵缁撹銆?
-- `weekly_report_template.md` 宸插彲鐢ㄤ簬澶嶅埗鐢熸垚姣忓懆鍛ㄦ姤瀹炰緥锛屽苟娌夋穩 `5.2` 鐨勮法鍛ㄨ瘉鎹€?
-- 浠诲姟娓呭崟 `5.2` 鏈浠嶆湭鍕鹃€夛紝浠呰ˉ榻愮暀鐥曟ā鏉裤€?
+1. 娴犲懏婀?`docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`閿涘矁绻曟稉宥堝喕娴犮儲鏁幘鎴炵槨閸涖劌鐤勯梽鍛⒔鐞涘本妞傞惃鍕秵閹存劖婀伴悾娆戞閵?
+2. `daily_board.md` 瑜版挸澧犻崣顏呮箒娴犺濮熺€瑰甯撻敍灞剧梾閺堝璐熸稉銈勯嚋閸涖劋绨叉０鍕殌閸ュ搫鐣炬繅顐㈠晸娴ｅ秶鐤嗛妴?
+3. 閸ョ姵顒濋棁鈧憰浣告倱閺冩儼藟姒绘劏鈧粌鎳嗘禍鏂跨秼閺冦儴顔囪ぐ鏇炲幢閳ユ繂鎷伴垾婊勭槨閸涖劍鐪归幀缁樐侀弶搴撯偓婵呰⒈娑擃亣娴囨担鎾扁偓?
 
 
-### 淇敼鏂囦欢
+### 鐟欙絽鍠呴弬瑙勵攳
+
+- 閺囧瓨鏌?`.monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md`閿涘奔璐?Day 5 / Day 10 婢х偛濮為弨鑸垫殐閺冦儴顔囪ぐ鏇炲幢閵?
+- 閺傛澘顤?`.monkeycode/specs/mpc-hc-alignment-iteration/weekly_report_template.md`閿涘奔缍旀稉?`5.2` 閻ㄥ嫬鎳嗛幎銉ф殌閻ユ洘膩閺夎￥鈧?
+- 閸氬本顒?`docs/workflows/WEEKLY_CONVERGENCE_PLAYBOOK.md`閵嗕梗docs/README.md` 娑撳海娴夐崗瀹狀唶瑜版洘鏋冨锝忕礉閺勫海鈥樻潻娆庤⒈娑擃亝膩閺夎法娈戦崗銉ュ經閸滃瞼鏁ら柅鏂烩偓?
+
+
+### 閺堫剙婀存灞炬暪缂佹挻鐏?
+- `daily_board.md` 瀹告彃褰查惄瀛樺复婵夘偄鍟撻崨銊ょ安閻ㄥ嫯瀵栭崶鏉戝枙缂佹挶鈧礁娲栬ぐ鎺戞嚒娴犮們鈧攻locker 缂佹捁顔戦妴浣规瀮濡楋絽鎮撳銉ユ嫲闂冭埖顔岀紒鎾诡啈閵?
+- `weekly_report_template.md` 瀹告彃褰查悽銊ょ艾婢跺秴鍩楅悽鐔稿灇濮ｅ繐鎳嗛崨銊﹀Г鐎圭偘绶ラ敍灞借嫙濞屽绌?`5.2` 閻ㄥ嫯娉曢崨銊ㄧ槈閹诡喓鈧?
+- 娴犺濮熷〒鍛礋 `5.2` 閺堫剚顐兼禒宥嗘弓閸曢箖鈧绱濇禒鍛八夋鎰殌閻ユ洘膩閺夎￥鈧?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - .monkeycode/specs/mpc-hc-alignment-iteration/daily_board.md
 
@@ -3421,42 +3457,40 @@ make -j$(nproc)
 
 
 
-## 闂 65: 姹囨€诲綋鍓嶅姛鑳姐€佷娇鐢ㄦ柟寮忎笌楠岃瘉鍏ュ彛
+## 闂傤噣顣?65: 濮瑰洦鈧缍嬮崜宥呭閼冲鈧椒濞囬悽銊︽煙瀵繋绗屾宀冪槈閸忋儱褰?
 
 
+**閺冦儲婀?*: 2026-03-08
 
-**鏃ユ湡**: 2026-03-08
-
-**鐘舵€?*: 宸茶В鍐?
-
-
-### 闂鎻忚堪
-
-- 褰撳墠浠撳簱宸茬粡鍏峰杈冨鎾斁鍣ㄨ兘鍔涗笌楠屾敹鍛戒护锛屼絾鍔熻兘娓呭崟銆佷娇鐢ㄦ柟寮忓拰楠岃瘉鍏ュ彛鍒嗘暎鍦?`README`銆乣reports`銆乣tasklist` 涓?`main.cpp` 甯姪杈撳嚭涓紝缂哄皯涓€浠界粺涓€鎬昏銆?
+**閻樿埖鈧?*: 瀹歌尪袙閸?
 
 
-### 鍒嗘瀽璁板綍
+### 闂傤噣顣介幓蹇氬牚
 
-1. 鐢ㄦ埛鍙洿鎺ヤ娇鐢ㄧ殑鍔熻兘锛屼笌寮€鍙?楠屾敹鍚戝懡浠ゆ贩鏉傚湪澶氫釜鏂囨。鍜屾簮鐮佸府鍔╄緭鍑轰腑锛屼笉鍒╀簬蹇€熺悊瑙ｂ€滅▼搴忕幇鍦ㄥ埌搴曡兘鍋氫粈涔堚€濄€?
-2. 鏍?`README.md` 鍙繚鐣欎簡杈冩棭鏈熺殑鍔熻兘涓庝娇鐢ㄧず渚嬶紝鏃犳硶瀹屾暣瑕嗙洊褰撳墠涓荤嚎鑳藉姏銆?
-3. 鍥犳闇€瑕佹柊澧炰竴浠芥€昏鏂囨。锛屾妸鈥滃姛鑳姐€佺敤娉曘€侀獙璇佲€濋泦涓暣鐞嗭紝骞跺悓姝ュ叆鍙ｇ储寮曘€?
+- 瑜版挸澧犳禒鎾崇氨瀹歌尙绮￠崗宄邦槵鏉堝啫顦块幘顓熸杹閸ｃ劏鍏橀崝娑楃瑢妤犲本鏁归崨鎴掓姢閿涘奔绲鹃崝鐔诲厴濞撳懎宕熼妴浣峰▏閻劍鏌熷蹇撴嫲妤犲矁鐦夐崗銉ュ經閸掑棙鏆庨崷?`README`閵嗕梗reports`閵嗕梗tasklist` 娑?`main.cpp` 鐢喖濮潏鎾冲毉娑擃叏绱濈紓鍝勭毌娑撯偓娴犵晫绮烘稉鈧幀鏄忣潔閵?
 
 
-### 瑙ｅ喅鏂规
+### 閸掑棙鐎界拋鏉跨秿
 
-- 鏂板 `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`锛岀郴缁熸暣鐞嗗綋鍓嶅姛鑳姐€佷娇鐢ㄦ柟寮忋€侀厤缃柟寮忋€侀獙璇佸懡浠や笌鎶ュ憡鏄犲皠銆?
-- 鏇存柊 `docs/README.md`锛屼负璇ユ€昏鏂囨。澧炲姞鍏ュ彛锛屽苟鍦ㄦ洿鏂板巻鍙蹭腑璁拌处銆?
-- 鏇存柊鏍?`README.md`锛岃ˉ鍏呭埌褰撳墠鎬昏鏂囨。鐨勫叆鍙ｏ紝閬垮厤浣跨敤璇存槑缁х画鍋滅暀鍦ㄦ棫鍙ｅ緞銆?
-
-
-### 鏈湴楠屾敹缁撴灉
-
-- 鏂版枃妗ｅ凡瑕嗙洊鈥滅敤鎴峰彲鐩存帴浣跨敤鍔熻兘 / 寮€鍙戦獙鏀惰兘鍔?/ 浣跨敤鏂瑰紡 / 楠岃瘉娴佺▼ / 褰撳墠杈圭晫鈥濄€?
-- 鏂囨。涓凡缁欏嚭 `--capabilities`銆乣--probe-file`銆乣--evaluate-target` 浠ュ強涓撻」楠屾敹鍛戒护鐨勭粺涓€鍏ュ彛銆?
-- 褰撳墠浠撳簱娌℃湁鏂板浠ｇ爜鏀瑰姩锛屾湰娆″彧琛ラ綈鍔熻兘涓庝娇鐢ㄨ鏄庢枃妗ｃ€?
+1. 閻劍鍩涢崣顖滄纯閹恒儰濞囬悽銊ф畱閸旂喕鍏橀敍灞肩瑢瀵偓閸?妤犲本鏁归崥鎴濇嚒娴犮倖璐╅弶鍌氭躬婢舵矮閲滈弬鍥ㄣ€傞崪灞剧爱閻礁搴滈崝鈺勭翻閸戣桨鑵戦敍灞肩瑝閸掆晙绨箛顐︹偓鐔烘倞鐟欙絺鈧粎鈻兼惔蹇曞箛閸︺劌鍩屾惔鏇″厴閸嬫矮绮堟稊鍫氣偓婵勨偓?
+2. 閺?`README.md` 閸欘亙绻氶悾娆庣啊鏉堝啯妫張鐔烘畱閸旂喕鍏樻稉搴濆▏閻劎銇氭笟瀣剁礉閺冪姵纭剁€瑰本鏆ｇ憰鍡欐磰瑜版挸澧犳稉鑽ゅ殠閼宠棄濮忛妴?
+3. 閸ョ姵顒濋棁鈧憰浣规煀婢х偘绔存禒鑺モ偓鏄忣潔閺傚洦銆傞敍灞惧Ω閳ユ粌濮涢懗濮愨偓浣烘暏濞夋洏鈧線鐛欑拠浣测偓婵嬫肠娑擃厽鏆ｉ悶鍡礉楠炶泛鎮撳銉ュ弳閸欙絿鍌ㄥ鏇樷偓?
 
 
-### 淇敼鏂囦欢
+### 鐟欙絽鍠呴弬瑙勵攳
+
+- 閺傛澘顤?`docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`閿涘瞼閮寸紒鐔告殻閻炲棗缍嬮崜宥呭閼冲鈧椒濞囬悽銊︽煙瀵繈鈧線鍘ょ純顔芥煙瀵繈鈧線鐛欑拠浣告嚒娴犮倓绗岄幎銉ユ啞閺勭姴鐨犻妴?
+- 閺囧瓨鏌?`docs/README.md`閿涘奔璐熺拠銉︹偓鏄忣潔閺傚洦銆傛晶鐐插閸忋儱褰涢敍灞借嫙閸︺劍娲块弬鏉垮坊閸欒弓鑵戠拋鎷屽閵?
+- 閺囧瓨鏌婇弽?`README.md`閿涘矁藟閸忓懎鍩岃ぐ鎾冲閹槒顫嶉弬鍥ㄣ€傞惃鍕弳閸欙綇绱濋柆鍨帳娴ｈ法鏁ょ拠瀛樻缂佈呯敾閸嬫粎鏆€閸︺劍妫崣锝呯窞閵?
+
+
+### 閺堫剙婀存灞炬暪缂佹挻鐏?
+- 閺傜増鏋冨锝呭嚒鐟曞棛娲婇垾婊呮暏閹村嘲褰查惄瀛樺复娴ｈ法鏁ら崝鐔诲厴 / 瀵偓閸欐垿鐛欓弨鎯板厴閸?/ 娴ｈ法鏁ら弬鐟扮础 / 妤犲矁鐦夊ù浣衡柤 / 瑜版挸澧犳潏鍦櫕閳ユ縿鈧?
+- 閺傚洦銆傛稉顓炲嚒缂佹瑥鍤?`--capabilities`閵嗕梗--probe-file`閵嗕梗--evaluate-target` 娴犮儱寮锋稉鎾汇€嶆灞炬暪閸涙垝鎶ら惃鍕埠娑撯偓閸忋儱褰涢妴?
+- 瑜版挸澧犳禒鎾崇氨濞屸剝婀侀弬鏉款杻娴狅絿鐖滈弨鐟板З閿涘本婀板▎鈥冲涧鐞涖儵缍堥崝鐔诲厴娑撳簼濞囬悽銊嚛閺勫孩鏋冨锝冣偓?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md
 
@@ -3476,43 +3510,41 @@ make -j$(nproc)
 
 
 
-## 闂 70: PlayerCore 鐘舵€佹満閲嶈璁＄涓€闃舵
+## 闂傤噣顣?70: PlayerCore 閻樿埖鈧焦婧€闁插秷顔曠拋锛勵儑娑撯偓闂冭埖顔?
 
 
+**閺冦儲婀?*: 2026-03-19
 
-**鏃ユ湡**: 2026-03-19
-
-**鐘舵€?*: 宸茶В鍐?
-
-
-### 闂鎻忚堪
-
-- 鐢ㄦ埛瑕佹眰鍏堝仛鎾斁鍣ㄥ唴鏍哥姸鎬佹満閲嶈璁＄涓€闃舵锛屼笉鍔?serial銆佷笉鍔?copy-back/SoftwareSDL锛屼笉鏀瑰閮?`PlaybackState` 鎺ュ彛銆?
-- 鐩爣鏄妸 UI 鎾斁鎬佸拰鍐呮牳浼氳瘽/娴佹按绾挎€佹媶寮€锛屽苟鎶婃暎钀藉湪 `PlayerCore` 鍚勫叆鍙ｉ噷鐨勭姸鎬佹敼鍐欐敹鍙ｅ埌缁熶竴 transition 鍏ュ彛銆?
+**閻樿埖鈧?*: 瀹歌尪袙閸?
 
 
-### 鍒嗘瀽璁板綍
+### 闂傤噣顣介幓蹇氬牚
 
-1. 褰撳墠 `PlayerCore` 鐨?`open / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 閮戒細鐩存帴鍐?`state_`锛岀姸鎬佸彉鍖栨病鏈夊崟涓€鍏ュ彛銆?
-2. `deferred stop` 涔嬪墠鏄嫭绔嬪竷灏旇涔夛紝瀵艰嚧杩愯鎬佸拰 deferred stop 鏃佽矾鎬佸垎瑁傘€?
-3. `Scheduler` 鐩墠鍙湁 `running_ / paused_`锛岀涓€闃舵涓嶅疁杩囨棭濉炲叆鏇村涓氬姟璇箟锛屽簲璇ュ厛鐢?`PlayerCore` 缁熶竴缁存姢浼氳瘽鎬併€佽繍琛屾€佸拰娴佹按绾挎€併€?
-
-
-### 瑙ｅ喅鏂规
-
-- 鍦?`PlayerCore` 鍐呴儴鏂板 `SessionState / RunState / PipelinePhase` 涓?`CoreStateSnapshot`銆?
-- 鏂板 `transitionSessionState / transitionRunState / transitionPipelinePhase / publishPlaybackStateFromInternalState`锛屽苟鍔犲叆闈炴硶杩佺Щ淇濇姢鍜岀姸鎬佽縼绉绘棩蹇椼€?
-- 灏?`eof_reached / pending_seek / deferred_stop_pending` 鏀跺洖鍒扮粺涓€蹇収绠＄悊銆?
-- 鎶?`open / close / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 鏀逛负鍙€氳繃 transition helper 鍙樻洿鐘舵€侊紱瀵瑰 `PlaybackState` 浠嶄繚鎸佸吋瀹广€?
-- 鏂板鍒嗘瀽鏂囨。 `docs/analysis/PLAYERCORE_DAY16_STATE_MACHINE_REDESIGN.md`锛岃褰曠涓€闃舵杈圭晫銆丼cheduler 澶勭悊缁撹鍜屼笅涓€闃舵 serial 鍖栧缓璁€?
+- 閻劍鍩涚憰浣圭湴閸忓牆浠涢幘顓熸杹閸ｃ劌鍞撮弽鍝ュЦ閹焦婧€闁插秷顔曠拋锛勵儑娑撯偓闂冭埖顔岄敍灞肩瑝閸?serial閵嗕椒绗夐崝?copy-back/SoftwareSDL閿涘奔绗夐弨鐟邦樆闁?`PlaybackState` 閹恒儱褰涢妴?
+- 閻╊喗鐖ｉ弰顖涘Ω UI 閹绢厽鏂侀幀浣告嫲閸愬懏鐗虫导姘崇樈/濞翠焦鎸夌痪鎸庘偓浣瑰瀵偓閿涘苯鑻熼幎濠冩殠閽€钘夋躬 `PlayerCore` 閸氬嫬鍙嗛崣锝夊櫡閻ㄥ嫮濮搁幀浣规暭閸愭瑦鏁归崣锝呭煂缂佺喍绔?transition 閸忋儱褰涢妴?
 
 
-### 鏈湴楠屾敹缁撴灉
+### 閸掑棙鐎界拋鏉跨秿
 
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃銆?
+1. 瑜版挸澧?`PlayerCore` 閻?`open / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 闁垝绱伴惄瀛樺复閸?`state_`閿涘瞼濮搁幀浣稿綁閸栨牗鐥呴張澶婂礋娑撯偓閸忋儱褰涢妴?
+2. `deferred stop` 娑斿澧犻弰顖滃缁斿绔风亸鏃囶嚔娑斿绱濈€佃壈鍤ф潻鎰攽閹礁鎷?deferred stop 閺冧浇鐭鹃幀浣稿瀻鐟佸倶鈧?
+3. `Scheduler` 閻╊喖澧犻崣顏呮箒 `running_ / paused_`閿涘瞼顑囨稉鈧梼鑸殿唽娑撳秴鐤佹潻鍥ㄦ－婵夌偛鍙嗛弴鏉戭樋娑撴艾濮熺拠顓濈疅閿涘苯绨茬拠銉ュ帥閻?`PlayerCore` 缂佺喍绔寸紒瀛樺Б娴兼俺鐦介幀浣碘偓浣界箥鐞涘本鈧礁鎷板ù浣规寜缁炬寧鈧降鈧?
 
 
-### 淇敼鏂囦欢
+### 鐟欙絽鍠呴弬瑙勵攳
+
+- 閸?`PlayerCore` 閸愬懘鍎撮弬鏉款杻 `SessionState / RunState / PipelinePhase` 娑?`CoreStateSnapshot`閵?
+- 閺傛澘顤?`transitionSessionState / transitionRunState / transitionPipelinePhase / publishPlaybackStateFromInternalState`閿涘苯鑻熼崝鐘插弳闂堢偞纭舵潻浣盒╂穱婵囧Б閸滃瞼濮搁幀浣界讣缁夌粯妫╄箛妞尖偓?
+- 鐏?`eof_reached / pending_seek / deferred_stop_pending` 閺€璺烘礀閸掓壆绮烘稉鈧箛顐ゅ弾缁狅紕鎮婇妴?
+- 閹?`open / close / play / pause / stop / seek / requestDeferredStop / serviceDeferredStop / onRenderIdle` 閺€閫涜礋閸欘亪鈧俺绻?transition helper 閸欐ɑ娲块悩鑸碘偓渚婄幢鐎电懓顦?`PlaybackState` 娴犲秳绻氶幐浣稿悑鐎瑰箍鈧?
+- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€?`docs/analysis/PLAYERCORE_DAY16_STATE_MACHINE_REDESIGN.md`閿涘矁顔囪ぐ鏇狀儑娑撯偓闂冭埖顔屾潏鍦櫕閵嗕讣cheduler 婢跺嫮鎮婄紒鎾诡啈閸滃奔绗呮稉鈧梼鑸殿唽 serial 閸栨牕缂撶拋顔衡偓?
+
+
+### 閺堫剙婀存灞炬暪缂佹挻鐏?
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`閿涙岸鈧俺绻冮妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/core/player_core.h
 
@@ -3528,41 +3560,40 @@ make -j$(nproc)
 
 
 
-## 闂 81: PlayerCore seek/flush timeline serial 鍖栫浜岄樁娈?
+## 闂傤噣顣?81: PlayerCore seek/flush timeline serial 閸栨牜顑囨禍宀勬▉濞?
 
 
-**鏃ユ湡**: 2026-03-20
+**閺冦儲婀?*: 2026-03-20
 
-**鐘舵€?*: 宸茶В鍐?
-
-
-### 闂鎻忚堪
-
-- 鐢ㄦ埛瑕佹眰缁х画鍋氭挱鏀惧櫒鍐呮牳鐘舵€佹満閲嶈璁＄浜岄樁娈碉紝浣嗘槑纭笉鍔?copy-back銆丼oftwareSDL銆乁I 灞傚拰澶栭儴 `PlaybackState`锛屽彧澶勭悊 seek/flush 鐨?timeline serial 鍖栥€?
-- 鐩爣鏄 seek/stop/deferred stop 涔嬪悗鐨勬棫 packet銆佹棫瑙嗛甯с€佹棫闊抽甯у嵆浣挎櫄鍒帮紝涔熷繀椤诲洜涓?serial 涓嶅尮閰嶈€岃纭涪寮冦€?
+**閻樿埖鈧?*: 瀹歌尪袙閸?
 
 
-### 鍒嗘瀽璁板綍
+### 闂傤噣顣介幓蹇氬牚
 
-1. `ThreadSafeQueue` 鍜?`FrameQueue` 褰撳墠閮藉彧鏈?stop/clear/flush 璇箟锛屾病鏈?generation/serial锛涙棫鏃堕棿绾挎暟鎹鍓嶅彧鑳介潬鈥滆鍙婃椂娓呯┖鈥濊€屼笉鏄€滆鏄庣‘鍒ゅ簾鈥濄€?
-2. seek 涔嬪墠涓昏渚濊禆 `scheduler pause + stopDemuxThread + flushPipelines + avcodec_flush_buffers() + audio_player_->stop()`锛宎udio consumer 绾跨▼鏈韩涓嶅甫鏃堕棿绾垮垽瀹氾紝render 璺緞涔熸病鏈?serial 闃茬嚎銆?
-3. 绗簩闃舵鏈€绋冲Ε鐨勮惤鐐癸紝鏄繚鎸?queue 瀹瑰櫒閫氱敤锛屾敼涓鸿姣忎釜 packet/frame 鑷甫 serial锛屽苟鐢?`PlayerCore` 闆嗕腑鍒嗛厤鍜屾縺娲?serial銆?
-
-
-### 瑙ｅ喅鏂规
-
-- 鏂板 `TimelineSerial` 涓?`DemuxPacket`锛屽苟涓?`VideoFrame / AudioFrame` 澧炲姞 `serial` 瀛楁銆?
-- 鍦?`PlayerCore` 鍐呴儴鏂板 `timeline_serial / pending_seek_serial` 鍙婄粺涓€ helper锛歚allocateNextTimelineSerial / activateTimelineSerial / setPendingSeekSerial / isAcceptedTimelineSerial`銆?
-- `open` 鎴愬姛鏃跺缓绔嬮涓?serial锛沗seek` 鍏堝垏鍒?pending serial锛屽啀鍦ㄦ垚鍔熷悗婵€娲伙紱`stop / requestDeferredStop` 浼氱珛鍗虫帹杩?serial锛岀‘淇濇棫 worker 鏅氬埌鏃跺彧鑳戒骇鍑哄簾鏁版嵁銆?
-- demux 绾跨▼鍚姩鏃舵崟鑾?serial锛宒ecode/render/audio consumer 鍏ㄩ摼璺仛 stale serial 涓㈠純锛沝iagnostics 鍜屼笓椤规鏌ュ懡浠ゅ鍑?serial 瑙傛祴瀛楁銆?
+- 閻劍鍩涚憰浣圭湴缂佈呯敾閸嬫碍鎸遍弨鎯ф珤閸愬懏鐗抽悩鑸碘偓浣规簚闁插秷顔曠拋锛勵儑娴滃矂妯佸▓纰夌礉娴ｅ棙妲戠涵顔荤瑝閸?copy-back閵嗕讣oftwareSDL閵嗕箒I 鐏炲倸鎷版径鏍劥 `PlaybackState`閿涘苯褰ф径鍕倞 seek/flush 閻?timeline serial 閸栨牓鈧?
+- 閻╊喗鐖ｉ弰顖濐唨 seek/stop/deferred stop 娑斿鎮楅惃鍕＋ packet閵嗕焦妫憴鍡涱暥鐢佲偓浣规＋闂婃娊顣剁敮褍宓嗘担鎸庢珓閸掑府绱濇稊鐔风箑妞よ娲滄稉?serial 娑撳秴灏柊宥堚偓宀冾潶绾兛娑鍐︹偓?
 
 
-### 鏈湴楠屾敹缁撴灉
+### 閸掑棙鐎界拋鏉跨秿
 
-- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`锛氶€氳繃銆?
+1. `ThreadSafeQueue` 閸?`FrameQueue` 瑜版挸澧犻柈钘夊涧閺?stop/clear/flush 鐠囶厺绠熼敍灞剧梾閺?generation/serial閿涙稒妫弮鍫曟？缁炬寧鏆熼幑顔筋劃閸撳秴褰ч懗浠嬫浆閳ユ粏顫﹂崣濠冩濞撳懐鈹栭垾婵娾偓灞肩瑝閺勵垪鈧粏顫﹂弰搴ｂ€橀崚銈呯熬閳ユ縿鈧?
+2. seek 娑斿澧犳稉鏄忣洣娓氭繆绂?`scheduler pause + stopDemuxThread + flushPipelines + avcodec_flush_buffers() + audio_player_->stop()`閿涘畮udio consumer 缁捐法鈻奸張顒冮煩娑撳秴鐢弮鍫曟？缁惧灝鍨界€规熬绱漴ender 鐠侯垰绶炴稊鐔哥梾閺?serial 闂冭尙鍤庨妴?
+3. 缁楊兛绨╅梼鑸殿唽閺堚偓缁嬪啿螘閻ㄥ嫯鎯ら悙鐧哥礉閺勵垯绻氶幐?queue 鐎圭懓娅掗柅姘辨暏閿涘本鏁兼稉楦款唨濮ｅ繋閲?packet/frame 閼奉亜鐢?serial閿涘苯鑻熼悽?`PlayerCore` 闂嗗棔鑵戦崚鍡涘帳閸滃本绺哄ú?serial閵?
 
 
-### 淇敼鏂囦欢
+### 鐟欙絽鍠呴弬瑙勵攳
+
+- 閺傛澘顤?`TimelineSerial` 娑?`DemuxPacket`閿涘苯鑻熸稉?`VideoFrame / AudioFrame` 婢х偛濮?`serial` 鐎涙顔岄妴?
+- 閸?`PlayerCore` 閸愬懘鍎撮弬鏉款杻 `timeline_serial / pending_seek_serial` 閸欏﹦绮烘稉鈧?helper閿涙瓪allocateNextTimelineSerial / activateTimelineSerial / setPendingSeekSerial / isAcceptedTimelineSerial`閵?
+- `open` 閹存劕濮涢弮璺虹紦缁斿顩绘稉?serial閿涙矖seek` 閸忓牆鍨忛崚?pending serial閿涘苯鍟€閸︺劍鍨氶崝鐔锋倵濠碘偓濞蹭紮绱盽stop / requestDeferredStop` 娴兼氨鐝涢崡铏腹鏉?serial閿涘瞼鈥樻穱婵囨＋ worker 閺呮艾鍩岄弮璺哄涧閼虫垝楠囬崙鍝勭熬閺佺増宓侀妴?
+- demux 缁捐法鈻奸崥顖氬З閺冭埖宕熼懢?serial閿涘畳ecode/render/audio consumer 閸忋劑鎽肩捄顖氫粵 stale serial 娑撱垹绱旈敍娌漣agnostics 閸滃奔绗撴い瑙勵梾閺屻儱鎳℃禒銈咁嚤閸?serial 鐟欏倹绁寸€涙顔岄妴?
+
+
+### 閺堫剙婀存灞炬暪缂佹挻鐏?
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe build\modern-video-player.vcxproj /t:Build /p:Configuration=Debug /p:Platform=x64 /m`閿涙岸鈧俺绻冮妴?
+
+
+### 娣囶喗鏁奸弬鍥︽
 
 - include/core/frame.h
 
@@ -3694,19 +3725,18 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
 
-## 闂 84: PlayerCore 鍓綔鐢ㄩ泦涓寲涓?runtime failure/recovery policy 鏀跺彛
+## 闂傤噣顣?84: PlayerCore 閸擃垯缍旈悽銊╂肠娑擃厼瀵叉稉?runtime failure/recovery policy 閺€璺哄經
 
-**鏃ユ湡**: 2026-03-20
-**鐘舵€?*: 宸茶В鍐?
-### 闂鎻忚堪
-- `PlayerCore` 鐨勫閮ㄥ叆鍙ｅ凡缁忓畬鎴愮姸鎬佽縼绉绘敹鍙ｏ紝浣嗙嚎绋嬨€佽澶囥€侀槦鍒楀拰鏃堕挓鍓綔鐢ㄤ粛鏁ｈ惤鍦ㄥ涓叆鍙ｅ嚱鏁伴噷銆?- `SchedulerControlSnapshot` 杩樼己 `clock_source`銆乤udio-master 绾︽潫鍜?ended policy锛宻cheduler 浠嶈鑷鎺ㄦ柇涓氬姟璇箟銆?- decode/resample/output 鐨?fatal 鐐圭己灏戠粺涓€ recovery policy锛屽鏄撻噸鏂伴暱鍑哄垎鏁ｇ殑閿欒澶勭悊銆?
-### 鍒嗘瀽璁板綍
-1. 鐘舵€佽縼绉婚泦涓箣鍚庯紝涓嬩竴灞傚繀椤荤户缁泦涓殑鏄?side effects锛涘惁鍒欏叆鍙ｅ嚱鏁颁粛鐒朵細鎴愪负鈥滅姸鎬佹満 + worker 绠＄悊鍣ㄢ€濈殑娣峰悎浣撱€?2. `deferred stop` 鐨勬湰璐ㄦ槸寮傛 stop completion锛岃€屼笉鏄柊鐨勪笟鍔＄姸鎬侊紱鍥犳 request/completion side effects 蹇呴』鍏辩敤涓€濂?helper銆?3. scheduler 宸茬粡鎷ユ湁 `run_state / pipeline_phase / accepted_timeline_serial`锛屾湰杞户缁妸 `clock_source`銆乤udio-master 鍜?ended policy 缁撴瀯鍖栵紝鑳介伩鍏嶅啀鍔犳柊鐨勯浂鏁ｅ竷灏斾綅銆?4. runtime failure 鍏堢粺涓€鎴?`FailureRecoveryPolicy` 鍚庯紝鍚庣画鎵╁ぇ fatal 鐐硅鐩栬寖鍥存椂涓嶉渶瑕侀噸鏂版媶鎭㈠璺緞銆?
-### 澶勭悊缁撴灉
-- 鏂板 `applyStartPlaybackSideEffects / applyResumePlaybackSideEffects / applyPausePlaybackSideEffects / applyStopRequestSideEffects / applyStopCompletionSideEffects / applySeekSideEffects / applySessionReleaseSideEffects`銆?- `requestDeferredStop()` 涓?`serviceDeferredStop()` 宸插鐢?stop request/completion side effects锛宒eferred stop 涓嶅啀缁存姢鐙珛鍋滄満閫昏緫銆?- `SchedulerControlSnapshot` 宸叉柊澧?`clock_source`銆乣audio_output_initialized`銆乣audio_master_sync_active`銆乣ended_policy`锛宻cheduler render wait 閫昏緫宸叉帴鍏ヨ繖浜涘瓧娈点€?- 鏂板 `FailureRecoveryPolicy` 涓?`handleRuntimeFailure()`锛屽苟鎶婅棰?闊抽 decode-resample 閾句笂鐨勫叧閿?fatal 鐐圭粺涓€鏀跺彛鍒拌鍏ュ彛銆?
-### 鏈湴楠屾敹缁撴灉
-- Debug 鏋勫缓閫氳繃锛宍0 warnings / 0 errors`銆?- 鏈敼 UI 灞傚拰澶栭儴 `PlaybackState`锛屾湰杞彧鏀跺彛鍐呮牳鍓綔鐢ㄥ拰 runtime recovery 绛栫暐銆?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY20_SIDE_EFFECTS_AND_RUNTIME_FAILURE_REDESIGN.md`銆?
-### 淇敼鏂囦欢
+**閺冦儲婀?*: 2026-03-20
+**閻樿埖鈧?*: 瀹歌尪袙閸?
+### 闂傤噣顣介幓蹇氬牚
+- `PlayerCore` 閻ㄥ嫬顦婚柈銊ュ弳閸欙絽鍑＄紒蹇撶暚閹存劗濮搁幀浣界讣缁夌粯鏁归崣锝忕礉娴ｅ棛鍤庣粙瀣ㄢ偓浣筋啎婢跺洢鈧線妲﹂崚妤€鎷伴弮鍫曟寭閸擃垯缍旈悽銊ょ矝閺侊綀鎯ら崷銊ヮ樋娑擃亜鍙嗛崣锝呭毐閺佷即鍣烽妴?- `SchedulerControlSnapshot` 鏉╂宸?`clock_source`閵嗕工udio-master 缁撅附娼崪?ended policy閿涘cheduler 娴犲秷顩﹂懛顏囶攽閹恒劍鏌囨稉姘鐠囶厺绠熼妴?- decode/resample/output 閻?fatal 閻愬湱宸辩亸鎴犵埠娑撯偓 recovery policy閿涘苯顔愰弰鎾诲櫢閺備即鏆遍崙鍝勫瀻閺侊絿娈戦柨娆掝嚖婢跺嫮鎮婇妴?
+### 閸掑棙鐎界拋鏉跨秿
+1. 閻樿埖鈧浇绺肩粔濠氭肠娑擃厺绠ｉ崥搴礉娑撳绔寸仦鍌氱箑妞よ崵鎴风紒顓㈡肠娑擃厾娈戦弰?side effects閿涙稑鎯侀崚娆忓弳閸欙絽鍤遍弫棰佺矝閻掓湹绱伴幋鎰礋閳ユ粎濮搁幀浣规簚 + worker 缁狅紕鎮婇崳銊⑩偓婵堟畱濞ｅ嘲鎮庢担鎾扁偓?2. `deferred stop` 閻ㄥ嫭婀扮拹銊︽Ц瀵倹顒?stop completion閿涘矁鈧奔绗夐弰顖涙煀閻ㄥ嫪绗熼崝锛勫Ц閹緤绱遍崶鐘愁劃 request/completion side effects 韫囧懘銆忛崗杈╂暏娑撯偓婵?helper閵?3. scheduler 瀹歌尙绮￠幏銉︽箒 `run_state / pipeline_phase / accepted_timeline_serial`閿涘本婀版潪顔炬埛缂侇厽濡?`clock_source`閵嗕工udio-master 閸?ended policy 缂佹挻鐎崠鏍电礉閼充粙浼╅崗宥呭晙閸旂姵鏌婇惃鍕祩閺侊絽绔风亸鏂剧秴閵?4. runtime failure 閸忓牏绮烘稉鈧幋?`FailureRecoveryPolicy` 閸氬函绱濋崥搴ｇ敾閹碘晛銇?fatal 閻愮顩惄鏍瘱閸ュ瓨妞傛稉宥夋付鐟曚線鍣搁弬鐗堝閹垹顦茬捄顖氱窞閵?
+### 婢跺嫮鎮婄紒鎾寸亯
+- 閺傛澘顤?`applyStartPlaybackSideEffects / applyResumePlaybackSideEffects / applyPausePlaybackSideEffects / applyStopRequestSideEffects / applyStopCompletionSideEffects / applySeekSideEffects / applySessionReleaseSideEffects`閵?- `requestDeferredStop()` 娑?`serviceDeferredStop()` 瀹告彃顦查悽?stop request/completion side effects閿涘畳eferred stop 娑撳秴鍟€缂佸瓨濮㈤悪顒傜彌閸嬫粍婧€闁槒绶妴?- `SchedulerControlSnapshot` 瀹稿弶鏌婃晶?`clock_source`閵嗕梗audio_output_initialized`閵嗕梗audio_master_sync_active`閵嗕梗ended_policy`閿涘cheduler render wait 闁槒绶鍙夊复閸忋儴绻栨禍娑樼摟濞堢偣鈧?- 閺傛澘顤?`FailureRecoveryPolicy` 娑?`handleRuntimeFailure()`閿涘苯鑻熼幎濠咁潒妫?闂婃娊顣?decode-resample 闁惧彞绗傞惃鍕彠闁?fatal 閻愬湱绮烘稉鈧弨璺哄經閸掓媽顕氶崗銉ュ經閵?
+### 閺堫剙婀存灞炬暪缂佹挻鐏?- Debug 閺嬪嫬缂撻柅姘崇箖閿涘畭0 warnings / 0 errors`閵?- 閺堫亝鏁?UI 鐏炲倸鎷版径鏍劥 `PlaybackState`閿涘本婀版潪顔煎涧閺€璺哄經閸愬懏鐗抽崜顖欑稊閻劌鎷?runtime recovery 缁涙牜鏆愰妴?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY20_SIDE_EFFECTS_AND_RUNTIME_FAILURE_REDESIGN.md`閵?
+### 娣囶喗鏁奸弬鍥︽
 - include/core/player_core.h
 - src/core/player_core.cpp
 - include/core/scheduler.h
@@ -3715,19 +3745,18 @@ make -j$(nproc)
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
-## 闂 85: PlayerCore 鍓╀綑椋庨櫓鏀舵暃锛歋cheduler 缁堢増绛栫暐銆丗ailSession 瀹炲寲涓?serial/generation 瑙傛祴寮哄寲
+## 闂傤噣顣?85: PlayerCore 閸撯晙缍戞搴ㄦ珦閺€鑸垫殐閿涙瓔cheduler 缂佸牏澧楃粵鏍殣閵嗕笚ailSession 鐎圭偛瀵叉稉?serial/generation 鐟欏倹绁村鍝勫
 
-**鏃ユ湡**: 2026-03-20
-**鐘舵€?*: 宸茶В鍐?
-### 闂鎻忚堪
-- `SchedulerControlSnapshot` 闇€瑕佺户缁粨鏋勫寲 ended policy / clock policy / audio-master 绾︽潫銆?- `FailSession` 闇€瑕佷粠缁熶竴鍏ュ彛鎺ㄨ繘鍒板叧閿繍琛屾椂閿欒鐨勫疄闄呰鐩栥€?- queue generation 涓?item-level serial 闇€瑕佹洿鐩磋鐨勫彲瑙傛祴杈圭晫銆?
-### 鍒嗘瀽璁板綍
-1. 鑻?scheduler 浠嶄緷璧栧竷灏旀嫾璇箟锛岀瓥鐣ユ剰鍥句細缁х画鍒嗘暎銆?2. 鑻?`FailSession` 鍙仠鐣欏湪鍏ュ彛灞傦紝閬囧埌涓嶅彲鎭㈠閿欒鏃舵仮澶嶈矾寰勪粛涓嶄竴鑷淬€?3. generation 瑙ｅ喅鐨勬槸瀹瑰櫒鍞ら啋鍜岃竟鐣屼腑鏂紝涓嶆浛浠?serial 鐨勬椂闂寸嚎鍒ゅ畾銆?
-### 澶勭悊缁撴灉
-- `SchedulerControlSnapshot` 宸叉柊澧?`clock_policy`銆乣audio_master_policy`銆乣audio_buffered_seconds`锛屽苟鎵╁睍 ended policy銆?- `Scheduler` 宸叉敼涓虹瓥鐣ラ┍鍔?render wait锛沗Scheduler::stop()` 澧炲姞 self-join 淇濇姢銆?- `FailSession` 宸茶鐩栧叧閿笉鍙仮澶嶉敊璇偣骞惰惤鍒扮湡瀹炶矾寰勩€?- `DiagnosticsSnapshot` 鏂板 stale serial drop 璁℃暟涓?runtime failure 璁℃暟锛屽苟鎺ュ叆妫€鏌ュ懡浠よ緭鍑恒€?
-### 鏈湴楠屾敹缁撴灉
-- Debug 鏋勫缓閫氳繃锛宍0 warnings / 0 errors`銆?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY21_REMAINING_RISKS_CONVERGENCE.md`銆?
-### 淇敼鏂囦欢
+**閺冦儲婀?*: 2026-03-20
+**閻樿埖鈧?*: 瀹歌尪袙閸?
+### 闂傤噣顣介幓蹇氬牚
+- `SchedulerControlSnapshot` 闂団偓鐟曚胶鎴风紒顓犵波閺嬪嫬瀵?ended policy / clock policy / audio-master 缁撅附娼妴?- `FailSession` 闂団偓鐟曚椒绮犵紒鐔剁閸忋儱褰涢幒銊ㄧ箻閸掓澘鍙ч柨顔跨箥鐞涘本妞傞柨娆掝嚖閻ㄥ嫬鐤勯梽鍛邦洬閻╂牓鈧?- queue generation 娑?item-level serial 闂団偓鐟曚焦娲块惄纾嬵潎閻ㄥ嫬褰茬憴鍌涚ゴ鏉堝湱鏅妴?
+### 閸掑棙鐎界拋鏉跨秿
+1. 閼?scheduler 娴犲秳绶风挧鏍х鐏忔梹瀚剧拠顓濈疅閿涘瞼鐡ラ悾銉﹀壈閸ュ彞绱扮紒褏鐢婚崚鍡樻殠閵?2. 閼?`FailSession` 閸欘亜浠犻悾娆忔躬閸忋儱褰涚仦鍌︾礉闁洤鍩屾稉宥呭讲閹垹顦查柨娆掝嚖閺冭埖浠径宥堢熅瀵板嫪绮涙稉宥勭閼锋番鈧?3. generation 鐟欙絽鍠呴惃鍕Ц鐎圭懓娅掗崬銈夊晪閸滃矁绔熼悾灞艰厬閺傤叏绱濇稉宥嗘禌娴?serial 閻ㄥ嫭妞傞梻瀵稿殠閸掋倕鐣鹃妴?
+### 婢跺嫮鎮婄紒鎾寸亯
+- `SchedulerControlSnapshot` 瀹稿弶鏌婃晶?`clock_policy`閵嗕梗audio_master_policy`閵嗕梗audio_buffered_seconds`閿涘苯鑻熼幍鈺佺潔 ended policy閵?- `Scheduler` 瀹稿弶鏁兼稉铏圭摜閻ｃ儵鈹嶉崝?render wait閿涙矖Scheduler::stop()` 婢х偛濮?self-join 娣囨繃濮㈤妴?- `FailSession` 瀹歌尪顩惄鏍у彠闁款喕绗夐崣顖涗划婢跺秹鏁婄拠顖滃仯楠炴儼鎯ら崚鎵埂鐎圭偠鐭惧鍕┾偓?- `DiagnosticsSnapshot` 閺傛澘顤?stale serial drop 鐠佲剝鏆熸稉?runtime failure 鐠佲剝鏆熼敍灞借嫙閹恒儱鍙嗗Λ鈧弻銉ユ嚒娴犮倛绶崙鎭掆偓?
+### 閺堫剙婀存灞炬暪缂佹挻鐏?- Debug 閺嬪嫬缂撻柅姘崇箖閿涘畭0 warnings / 0 errors`閵?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY21_REMAINING_RISKS_CONVERGENCE.md`閵?
+### 娣囶喗鏁奸弬鍥︽
 - include/core/scheduler.h
 - src/core/scheduler.cpp
 - include/core/player_core.h
@@ -3737,21 +3766,20 @@ make -j$(nproc)
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
-## 闂 86: serial/failsession 鍥炲綊妫€鏌ヨˉ榻愶紙杩炵画 seek銆佹殏鍋滄€?seek銆乧lose-reopen锛?
-**鏃ユ湡**: 2026-03-20
-**鐘舵€?*: 宸茶В鍐?
-### 闂鎻忚堪
-- 闇€瑕佽ˉ鍏呬笓鐢?CLI 鍥炲綊鎺㈤拡锛岄獙璇?serial 杈圭晫涓?FailSession 绾︽潫鍦ㄥ叧閿満鏅笅鏃犲洖褰掋€?
-### 鍒嗘瀽璁板綍
-1. 鐜版湁 performance/software 妫€鏌ュ亸閾捐矾鍋ュ悍锛屼笉鐩存帴瑕嗙洊涓夌被鐘舵€佽竟鐣屻€?2. 闈炴硶鐘舵€佽縼绉绘鍓嶅彧鍦ㄦ棩蹇楀彲瑙侊紝涓嶅埄浜庢満鍣?gate銆?3. 鍥炲綊鍛戒护闇€缁熶竴 `key=value` 涓?`result=PASS/FAIL`锛屼究浜庤嚜鍔ㄥ寲娑堣垂銆?
-### 澶勭悊缁撴灉
-- `DiagnosticsSnapshot` 鏂板 `illegal_session_transitions / illegal_run_transitions / illegal_pipeline_transitions`锛屽苟瀹屾垚璁℃暟涓庨噸缃帴鍏ャ€?- 鏂板 CLI 鍛戒护锛?  - `--seek-burst-serial-check`
+## 闂傤噣顣?86: serial/failsession 閸ョ偛缍婂Λ鈧弻銉ㄋ夋鎰剁礄鏉╃偟鐢?seek閵嗕焦娈忛崑婊勨偓?seek閵嗕恭lose-reopen閿?
+**閺冦儲婀?*: 2026-03-20
+**閻樿埖鈧?*: 瀹歌尪袙閸?
+### 闂傤噣顣介幓蹇氬牚
+- 闂団偓鐟曚浇藟閸忓懍绗撻悽?CLI 閸ョ偛缍婇幒銏ゆ嫛閿涘矂鐛欑拠?serial 鏉堝湱鏅稉?FailSession 缁撅附娼崷銊ュ彠闁款喖婧€閺咁垯绗呴弮鐘叉礀瑜版帇鈧?
+### 閸掑棙鐎界拋鏉跨秿
+1. 閻滅増婀?performance/software 濡偓閺屻儱浜搁柧鎹愮熅閸嬨儱鎮嶉敍灞肩瑝閻╁瓨甯寸憰鍡欐磰娑撳琚悩鑸碘偓浣界珶閻ｅ被鈧?2. 闂堢偞纭堕悩鑸碘偓浣界讣缁夌粯顒濋崜宥呭涧閸︺劍妫╄箛妤€褰茬憴渚婄礉娑撳秴鍩勬禍搴㈡簚閸?gate閵?3. 閸ョ偛缍婇崨鎴掓姢闂団偓缂佺喍绔?`key=value` 娑?`result=PASS/FAIL`閿涘奔绌舵禍搴ゅ殰閸斻劌瀵插☉鍫ｅ瀭閵?
+### 婢跺嫮鎮婄紒鎾寸亯
+- `DiagnosticsSnapshot` 閺傛澘顤?`illegal_session_transitions / illegal_run_transitions / illegal_pipeline_transitions`閿涘苯鑻熺€瑰本鍨氱拋鈩冩殶娑撳酣鍣哥純顔藉复閸忋儯鈧?- 閺傛澘顤?CLI 閸涙垝鎶ら敍?  - `--seek-burst-serial-check`
   - `--paused-seek-serial-check`
   - `--close-reopen-serial-check`
-- `--performance-log-check` 涓?`--software-video-decode-check` 澧炲姞闈炴硶杩佺Щ璁℃暟瀛楁杈撳嚭銆?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY22_SERIAL_FAILSESSION_REGRESSION_CHECKS.md`銆?
-### 鏈湴楠屾敹缁撴灉
-- Debug 鏋勫缓閫氳繃锛宍0 warnings / 0 errors`銆?- 鏂板 3 涓鏌ュ懡浠ゅ湪 `juren-30s.mp4` 涓婂潎杩斿洖 `PASS`銆?
-### 淇敼鏂囦欢
+- `--performance-log-check` 娑?`--software-video-decode-check` 婢х偛濮為棃鐐寸《鏉╀胶些鐠佲剝鏆熺€涙顔屾潏鎾冲毉閵?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY22_SERIAL_FAILSESSION_REGRESSION_CHECKS.md`閵?
+### 閺堫剙婀存灞炬暪缂佹挻鐏?- Debug 閺嬪嫬缂撻柅姘崇箖閿涘畭0 warnings / 0 errors`閵?- 閺傛澘顤?3 娑擃亝顥呴弻銉ユ嚒娴犮倕婀?`juren-30s.mp4` 娑撳﹤娼庢潻鏂挎礀 `PASS`閵?
+### 娣囶喗鏁奸弬鍥︽
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
@@ -3760,30 +3788,29 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
 
-## 闂 87: serial/failsession 鍥炲綊澧炲姞涓€閿仛鍚?gate锛堥檷浣庢紡璺戦闄╋級
+## 闂傤噣顣?87: serial/failsession 閸ョ偛缍婃晶鐐插娑撯偓闁款喛浠涢崥?gate閿涘牓妾锋担搴㈢础鐠烘垿顥撻梽鈺嬬礆
 
-- `main` 鏂板鑱氬悎鍛戒护锛?  - `--serial-failsession-regression-check <media_file> [seek_count] [paused_seek_count] [sample_ms]`
-- 鑱氬悎鍛戒护鍐呴儴椤哄簭鎵ц锛?  - `--seek-burst-serial-check`
+- `main` 閺傛澘顤冮懕姘値閸涙垝鎶ら敍?  - `--serial-failsession-regression-check <media_file> [seek_count] [paused_seek_count] [sample_ms]`
+- 閼辨艾鎮庨崨鎴掓姢閸愬懘鍎存い鍝勭碍閹笛嗩攽閿?  - `--seek-burst-serial-check`
   - `--paused-seek-serial-check`
   - `--close-reopen-serial-check`
-- 鏂板鏈哄櫒鍙鑱氬悎杈撳嚭锛?  - `serial-failsession-regression-check.seek_burst_ok`
+- 閺傛澘顤冮張鍝勬珤閸欘垵顕伴懕姘値鏉堟挸鍤敍?  - `serial-failsession-regression-check.seek_burst_ok`
   - `serial-failsession-regression-check.paused_seek_ok`
   - `serial-failsession-regression-check.close_reopen_ok`
   - `serial-failsession-regression-check.pass_count`
   - `serial-failsession-regression-check.total_count`
   - `serial-failsession-regression-check.result`
-- 鏈湴楠岃瘉锛?  - Debug 鏋勫缓閫氳繃锛宍0 warnings / 0 errors`銆?  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`锛歚PASS`锛坄pass_count=3/3`锛夈€?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY23_SERIAL_FAILSESSION_AGGREGATE_GATE.md`銆?
-### 淇敼鏂囦欢
+- 閺堫剙婀存宀冪槈閿?  - Debug 閺嬪嫬缂撻柅姘崇箖閿涘畭0 warnings / 0 errors`閵?  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`閿涙瓪PASS`閿涘潉pass_count=3/3`閿涘鈧?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY23_SERIAL_FAILSESSION_AGGREGATE_GATE.md`閵?
+### 娣囶喗鏁奸弬鍥︽
 - src/main.cpp
 - docs/analysis/PLAYERCORE_DAY23_SERIAL_FAILSESSION_AGGREGATE_GATE.md
 - docs/records/CHANGELOG.md
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
 
-## 闂 88: 寮哄埗 FailSession 鍥炲綊鎺㈤拡涓?codec 閿侀噸鍏ュ穿婧冧慨澶?
-- 鏂板 `--forced-failsession-check <media_file> [sample_ms]`锛岄€氳繃娴嬭瘯娉ㄥ叆绋冲畾瑕嗙洊 `FailSession` 璺緞锛屽苟杈撳嚭鏈哄櫒鍙 `key=value` + `result=PASS/FAIL`銆?- `PlayerCore::decodeVideoFrame` 澧炲姞 `MVP_FORCE_FAIL_SESSION_ON_VIDEO_DECODE` 娴嬭瘯娉ㄥ叆寮€鍏筹紝鐢ㄤ簬寮哄埗杩涘叆 `FailureRecoveryPolicy::FailSession`銆?- 淇 `FailSession` 浠庤В鐮佺嚎绋嬭繘鍏ユ椂鐨?codec 閿侀噸鍏ュ穿婧冿細
-  - `video_codec_mutex_`銆乣audio_codec_mutex_` 璋冩暣涓?`std::recursive_mutex`锛?  - `decodeVideoFrame/decodeAudioFrame` 鐨?`lock_guard` 绫诲瀷鍚屾璋冩暣銆?- 鏈湴楠岃瘉锛?  - Debug 鏋勫缓閫氳繃锛宍0 warnings / 0 errors`銆?  - `build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200`锛歚PASS`銆?  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`锛歚PASS`銆?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY24_FORCED_FAILSESSION_AND_CODEC_LOCK_REENTRANCY_FIX.md`銆?
-### 淇敼鏂囦欢
+## 闂傤噣顣?88: 瀵搫鍩?FailSession 閸ョ偛缍婇幒銏ゆ嫛娑?codec 闁夸線鍣搁崗銉ョ┛濠у啩鎱ㄦ径?
+- 閺傛澘顤?`--forced-failsession-check <media_file> [sample_ms]`閿涘矂鈧俺绻冨ù瀣槸濞夈劌鍙嗙粙鍐茬暰鐟曞棛娲?`FailSession` 鐠侯垰绶為敍灞借嫙鏉堟挸鍤張鍝勬珤閸欘垵顕?`key=value` + `result=PASS/FAIL`閵?- `PlayerCore::decodeVideoFrame` 婢х偛濮?`MVP_FORCE_FAIL_SESSION_ON_VIDEO_DECODE` 濞村鐦▔銊ュ弳瀵偓閸忕绱濋悽銊ょ艾瀵搫鍩楁潻娑樺弳 `FailureRecoveryPolicy::FailSession`閵?- 娣囶喖顦?`FailSession` 娴犲氦袙閻胶鍤庣粙瀣箻閸忋儲妞傞惃?codec 闁夸線鍣搁崗銉ョ┛濠у喛绱?  - `video_codec_mutex_`閵嗕梗audio_codec_mutex_` 鐠嬪啯鏆ｆ稉?`std::recursive_mutex`閿?  - `decodeVideoFrame/decodeAudioFrame` 閻?`lock_guard` 缁鐎烽崥灞绢劄鐠嬪啯鏆ｉ妴?- 閺堫剙婀存宀冪槈閿?  - Debug 閺嬪嫬缂撻柅姘崇箖閿涘畭0 warnings / 0 errors`閵?  - `build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200`閿涙瓪PASS`閵?  - `build\Debug\modern-video-player.exe --serial-failsession-regression-check .\juren-30s.mp4`閿涙瓪PASS`閵?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY24_FORCED_FAILSESSION_AND_CODEC_LOCK_REENTRANCY_FIX.md`閵?
+### 娣囶喗鏁奸弬鍥︽
 - include/core/player_core.h
 - src/core/player_core.cpp
 - src/main.cpp
@@ -3792,16 +3819,14 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
 
-## 闂 89: run_all_checks 鎺ュ叆 forced-failsession 涓€閿?gate
+## 闂傤噣顣?89: run_all_checks 閹恒儱鍙?forced-failsession 娑撯偓闁?gate
 
-- `tools/run_all_checks.ps1` 鏂板鍙傛暟锛?  - `ForcedFailSessionFile`锛堥粯璁ゅ鐢?`ProbeFile`锛?  - `ForcedFailSessionSampleMs`锛堥粯璁?`2200`锛?- 鍥炲綊娴佺▼浠?2 姝ユ墿涓?3 姝ワ細
-  1. `[1/3]` `--probe-file --json`
+- `tools/run_all_checks.ps1` 閺傛澘顤冮崣鍌涙殶閿?  - `ForcedFailSessionFile`閿涘牓绮拋銈咁槻閻?`ProbeFile`閿?  - `ForcedFailSessionSampleMs`閿涘牓绮拋?`2200`閿?- 閸ョ偛缍婂ù浣衡柤娴?2 濮濄儲澧挎稉?3 濮濄儻绱?  1. `[1/3]` `--probe-file --json`
   2. `[2/3]` `--forced-failsession-check`
   3. `[3/3]` `run_format_regression.ps1`
-- gate 瑙勫垯澧炲己锛?  - probe 澶辫触鐩存帴閫€鍑猴紱
-  - forced-failsession 澶辫触鐩存帴閫€鍑哄苟璺宠繃 format regression銆?- 鏈湴楠岃瘉锛?  - `powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath "build/Debug/modern-video-player.exe" -ProbeFile "juren-30s.mp4" -ForcedFailSessionSampleMs 2200`
-  - `probe/forced-failsession/regression` 閫€鍑虹爜鍧囦负 `0`锛岃剼鏈€婚€€鍑虹爜 `0`銆?- 鏂板鍒嗘瀽鏂囨。锛歚docs/analysis/PLAYERCORE_DAY25_RUN_ALL_CHECKS_FORCED_FAILSESSION_GATE.md`銆?
-### 淇敼鏂囦欢
+- gate 鐟欏嫬鍨晶鐐插繁閿?  - probe 婢惰精瑙﹂惄瀛樺复闁偓閸戠尨绱?  - forced-failsession 婢惰精瑙﹂惄瀛樺复闁偓閸戝搫鑻熺捄瀹犵箖 format regression閵?- 閺堫剙婀存宀冪槈閿?  - `powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath "build/Debug/modern-video-player.exe" -ProbeFile "juren-30s.mp4" -ForcedFailSessionSampleMs 2200`
+  - `probe/forced-failsession/regression` 闁偓閸戣櫣鐖滈崸鍥﹁礋 `0`閿涘矁鍓奸張顒佲偓濠氣偓鈧崙铏圭垳 `0`閵?- 閺傛澘顤冮崚鍡樼€介弬鍥ㄣ€傞敍姝歞ocs/analysis/PLAYERCORE_DAY25_RUN_ALL_CHECKS_FORCED_FAILSESSION_GATE.md`閵?
+### 娣囶喗鏁奸弬鍥︽
 - tools/run_all_checks.ps1
 - docs/analysis/PLAYERCORE_DAY25_RUN_ALL_CHECKS_FORCED_FAILSESSION_GATE.md
 - docs/records/CHANGELOG.md
@@ -3810,26 +3835,14 @@ make -j$(nproc)
 
 
 
-## 问题 90: OpenGL 原生 D3D11 互操作停止期异常退出与低吞吐修复
-**日期**: 2026-03-24
-**状态**: 已解决
-### 问题描述
-- `MVP_RENDERER_BACKEND=opengl` 下已进入 `D3D11VA -> OpenGL` 原生互操作路径，但 `--performance-log-check .\juren-30s.mp4 2000` 在 stop/close 阶段异常退出，未输出最终 `result`。
-- 同时出现原生路径吞吐异常偏低：`video_native_output_frames=62` 之前只能稳定渲染约 3 帧，表现为 stop 前卡顿和退出不稳定。
-### 分析记录
-1. OpenGL 原生路径使用 renderer-owned D3D11 device，FFmpeg 硬解线程与 OpenGL 渲染线程共享同一 D3D11 immediate context。
-2. 该设备创建时未开启 `ID3D11Multithread::SetMultithreadProtected(TRUE)`，导致并发访问不安全，出现 native 路径卡顿、stop 阶段异常退出。
-3. `PlayerCore::applySessionReleaseSideEffects()` 原先先释放 decoder/hw context，再关闭 renderer；这会让仍持有 `AV_PIX_FMT_D3D11` 帧引用的缓存帧/渲染线程处于危险释放顺序。
-### 处理结果
+## 闂 90: OpenGL 鍘熺敓 D3D11 浜掓搷浣滃仠姝㈡湡寮傚父閫€鍑轰笌浣庡悶鍚愪慨澶?**鏃ユ湡**: 2026-03-24
+**鐘舵€?*: 宸茶В鍐?### 闂鎻忚堪
+- `MVP_RENDERER_BACKEND=opengl` 涓嬪凡杩涘叆 `D3D11VA -> OpenGL` 鍘熺敓浜掓搷浣滆矾寰勶紝浣?`--performance-log-check .\juren-30s.mp4 2000` 鍦?stop/close 闃舵寮傚父閫€鍑猴紝鏈緭鍑烘渶缁?`result`銆?- 鍚屾椂鍑虹幇鍘熺敓璺緞鍚炲悙寮傚父鍋忎綆锛歚video_native_output_frames=62` 涔嬪墠鍙兘绋冲畾娓叉煋绾?3 甯э紝琛ㄧ幇涓?stop 鍓嶅崱椤垮拰閫€鍑轰笉绋冲畾銆?### 鍒嗘瀽璁板綍
+1. OpenGL 鍘熺敓璺緞浣跨敤 renderer-owned D3D11 device锛孎Fmpeg 纭В绾跨▼涓?OpenGL 娓叉煋绾跨▼鍏变韩鍚屼竴 D3D11 immediate context銆?2. 璇ヨ澶囧垱寤烘椂鏈紑鍚?`ID3D11Multithread::SetMultithreadProtected(TRUE)`锛屽鑷村苟鍙戣闂笉瀹夊叏锛屽嚭鐜?native 璺緞鍗￠】銆乻top 闃舵寮傚父閫€鍑恒€?3. `PlayerCore::applySessionReleaseSideEffects()` 鍘熷厛鍏堥噴鏀?decoder/hw context锛屽啀鍏抽棴 renderer锛涜繖浼氳浠嶆寔鏈?`AV_PIX_FMT_D3D11` 甯у紩鐢ㄧ殑缂撳瓨甯?娓叉煋绾跨▼澶勪簬鍗遍櫓閲婃斁椤哄簭銆?### 澶勭悊缁撴灉
 - `src/render/opengl_video_renderer.cpp`
-  - 为 OpenGL 原生互操作使用的 D3D11 设备补齐 `ID3D11Multithread` 多线程保护。
-  - 保持 `D3D11VA -> D3D11 shader color convert -> WGL_NV_DX_interop -> OpenGL draw` 原生路径继续工作。
-- `src/core/player_core.cpp`
-  - 调整 session release 顺序：先释放缓存 native frame 并关闭 renderer，再释放 decoder/hw context。
-- Release 本地验证：
-  - `$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000`
-  - 结果：`renderer_backend=OpenGL`、`decoder_backend=D3D11VA`、`video_native_output_frames=62`、`video_copy_back_frames=0`、`render_frames=47`、`result=PASS`、进程退出码 `0`。
-### 修改文件
+  - 涓?OpenGL 鍘熺敓浜掓搷浣滀娇鐢ㄧ殑 D3D11 璁惧琛ラ綈 `ID3D11Multithread` 澶氱嚎绋嬩繚鎶ゃ€?  - 淇濇寔 `D3D11VA -> D3D11 shader color convert -> WGL_NV_DX_interop -> OpenGL draw` 鍘熺敓璺緞缁х画宸ヤ綔銆?- `src/core/player_core.cpp`
+  - 璋冩暣 session release 椤哄簭锛氬厛閲婃斁缂撳瓨 native frame 骞跺叧闂?renderer锛屽啀閲婃斁 decoder/hw context銆?- Release 鏈湴楠岃瘉锛?  - `$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 2000`
+  - 缁撴灉锛歚renderer_backend=OpenGL`銆乣decoder_backend=D3D11VA`銆乣video_native_output_frames=62`銆乣video_copy_back_frames=0`銆乣render_frames=47`銆乣result=PASS`銆佽繘绋嬮€€鍑虹爜 `0`銆?### 淇敼鏂囦欢
 - src/render/opengl_video_renderer.cpp
 - src/core/player_core.cpp
 - docs/reports/OPENGL_RENDERER_LOCAL_CHECK.md
@@ -3838,14 +3851,8 @@ make -j$(nproc)
 - docs/records/VERSION.md
 - docs/records/DEVELOP_LOG.md
 
-## 2026-03-24 OpenGL ASS 样式链路增强
-- 字幕模型新增：`wrap_style`、`spacing`、`scale_x_percent`、`scale_y_percent`、`rotation_degrees`、`outline_x/y`、`shadow_x/y`。
-- `ASS parser` 新增 `WrapStyle`、style 字段与 `\q/\fsp/\fscx/\fscy/\fr/\frz/\xbord/\ybord/\xshad/\yshad` 支持。
-- OpenGL/D3D11 GPU 字幕渲染已消费上述字段：`DirectWrite character spacing + D2D transform + x/y outline/shadow`。
-- 新增 `--subtitle-style-check` 样式诊断 CLI。
-- 新增回归样本：`samples/subtitles/opengl_ass_style_validation.ass`。
-- 本地验证通过：`subtitle-style-check`、`subtitle-sync-check`、`opengl delay-adjust-check`、`opengl-diagnostics` 全部 `PASS`。
-
+## 2026-03-24 OpenGL ASS 鏍峰紡閾捐矾澧炲己
+- 瀛楀箷妯″瀷鏂板锛歚wrap_style`銆乣spacing`銆乣scale_x_percent`銆乣scale_y_percent`銆乣rotation_degrees`銆乣outline_x/y`銆乣shadow_x/y`銆?- `ASS parser` 鏂板 `WrapStyle`銆乻tyle 瀛楁涓?`\q/\fsp/\fscx/\fscy/\fr/\frz/\xbord/\ybord/\xshad/\yshad` 鏀寔銆?- OpenGL/D3D11 GPU 瀛楀箷娓叉煋宸叉秷璐逛笂杩板瓧娈碉細`DirectWrite character spacing + D2D transform + x/y outline/shadow`銆?- 鏂板 `--subtitle-style-check` 鏍峰紡璇婃柇 CLI銆?- 鏂板鍥炲綊鏍锋湰锛歚samples/subtitles/opengl_ass_style_validation.ass`銆?- 鏈湴楠岃瘉閫氳繃锛歚subtitle-style-check`銆乣subtitle-sync-check`銆乣opengl delay-adjust-check`銆乣opengl-diagnostics` 鍏ㄩ儴 `PASS`銆?
 ## 2026-03-24 Subtitle Capability Update
 - Added ASS run-level subtitle support for `secondary color`, rectangular `clip`, basic rectangular `iclip`, and karaoke timing (`k/kf/ko/K`) across both D3D11 and OpenGL subtitle paths.
 - Added renderer subtitle clock propagation so animated subtitle content can invalidate and redraw correctly while paused or during clock changes.
@@ -3938,19 +3945,18 @@ make -j$(nproc)
 - Added in-memory `AssParser::parseText(...)` / `SrtParser::parseText(...)`, plus `--embedded-subtitle-check <media_file>`.
 - Expanded `tools/run_opengl_checks.ps1` to validate generated embedded ASS and embedded `mov_text` samples through both CLI checks and OpenGL playback.
 - Validation: Release build PASS, embedded ASS check PASS, embedded text check PASS, OpenGL gate PASS.
-### 2026-03-25 更新：OpenGL 启动卡死收敛到 WASAPI 默认端点阻塞
-- Windows 音频输出新增默认 render endpoint preflight：默认/`wasapi` 输出且没有默认或 active render endpoint 时，不再进入阻塞的 `SDL_OpenAudioDevice(nullptr, ...)`，直接沿用现有 `video-only fallback`。
-- `DiagnosticsSnapshot` 和播放类检查命令新增：
+### 2026-03-25 鏇存柊锛歄penGL 鍚姩鍗℃鏀舵暃鍒?WASAPI 榛樿绔偣闃诲
+- Windows 闊抽杈撳嚭鏂板榛樿 render endpoint preflight锛氶粯璁?`wasapi` 杈撳嚭涓旀病鏈夐粯璁ゆ垨 active render endpoint 鏃讹紝涓嶅啀杩涘叆闃诲鐨?`SDL_OpenAudioDevice(nullptr, ...)`锛岀洿鎺ユ部鐢ㄧ幇鏈?`video-only fallback`銆?- `DiagnosticsSnapshot` 鍜屾挱鏀剧被妫€鏌ュ懡浠ゆ柊澧烇細
   - `audio_device_open_attempted`
   - `audio_init_latency_ms`
   - `audio_init_strategy`
   - `audio_init_detail`
-- OpenGL 修复后本机验证：
+- OpenGL 淇鍚庢湰鏈洪獙璇侊細
   - `$env:MVP_RENDERER_BACKEND='opengl'; .\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200`
   - `audio_device_open_attempted=false`
   - `audio_init_strategy=skip-no-default-render-endpoint`
   - `result=PASS`
-- `tools/run_opengl_checks.ps1`：`16/16 PASS`
+- `tools/run_opengl_checks.ps1`锛歚16/16 PASS`
 ### 2026-03-25 Update: Embedded subtitle multi-track selection UI + CLI
 - Added OpenGL subtitle-track controls in bottom bar (previous/next track + `current / total` state).
 - Added playback argument `--subtitle-track <stream_index>` to set preferred embedded subtitle stream before media open.
@@ -4001,3 +4007,9 @@ make -j$(nproc)
 - Added corresponding analysis document `docs/analysis/PLAYERCORE_DAY46_CROSS_PLATFORM_MASTER_TASKLIST_CONSOLIDATION.md`.
 - Rebuilt `docs/plans/README.md` to expose the new master tasklist as default plans entry.
 - Validation: doc reference check PASS, local `Release` build PASS.
+
+
+
+
+
+

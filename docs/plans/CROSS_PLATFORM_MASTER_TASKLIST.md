@@ -1,6 +1,6 @@
 # CROSS PLATFORM MASTER TASKLIST
 Date: 2026-03-25
-Scope: Windows + Linux first, macOS later
+Scope: Windows + Linux (current execution scope), macOS explicitly deferred
 Owner: modern-video-player
 
 ## 1. Goal
@@ -34,16 +34,16 @@ Owner: modern-video-player
 ## 5. Task Matrix
 
 ### Phase 0: Baseline and Boundary Freeze (`M1` prework)
-- [ ] `CP-001` (`NEXT`) Freeze platform matrix and MVP acceptance:
+- [x] `CP-001` (`DONE`) Freeze platform matrix and MVP acceptance:
   - Windows x64 (mainline), Linux x64 (first second-platform target)
   - Linux MVP: local file playback, audio/video/subtitle, seek/pause
-- [ ] `CP-002` (`NEXT`) Freeze sample matrix:
+- [x] `CP-002` (`DONE`) Freeze sample matrix:
   - H.264/H.265/10bit, ASS/SSA/SRT/WebVTT, PGS/DVD subtitle samples
-- [ ] `CP-003` (`NEXT`) Freeze current platform-coupling inventory:
+- [x] `CP-003` (`DONE`) Freeze current platform-coupling inventory:
   - D3D11/DXGI/D2D/DirectWrite/WASAPI/WGL-specific code locations
-- [ ] `CP-004` (`NEXT`) Freeze regression command matrix:
+- [x] `CP-004` (`DONE`) Freeze regression command matrix:
   - Windows gate and Linux gate command parity
-- [ ] `CP-005` (`NEXT`) Create risk map:
+- [x] `CP-005` (`DONE`) Create risk map:
   - OpenGL event freeze, subtitle/font ownership, fallback behavior
 
 Acceptance:
@@ -51,18 +51,18 @@ Acceptance:
 - One frozen media/regression sample list.
 
 ### Phase 1: Strategy and Capability Extraction (`M1`)
-- [ ] `CP-101` (`NEXT`) Add `platform_capabilities` abstraction.
-- [ ] `CP-102` (`NEXT`) Add `playback_strategy` abstraction with renderer/decoder candidate chains.
-- [ ] `CP-103` (`NEXT`) Refactor `RendererFactory`:
+- [x] `CP-101` (`DONE`) Add `platform_capabilities` abstraction.
+- [x] `CP-102` (`DONE`) Add `playback_strategy` abstraction with renderer/decoder candidate chains.
+- [x] `CP-103` (`DONE`) Refactor `RendererFactory`:
   - keep creation/support checks only
   - remove default platform policy ownership
-- [ ] `CP-104` (`NEXT`) Refactor `DecoderFactory`:
+- [x] `CP-104` (`DONE`) Refactor `DecoderFactory`:
   - context-based candidate ordering
   - keep software fallback mandatory
-- [ ] `CP-105` (`NEXT`) Refactor `PlayerCore::open()`:
+- [x] `CP-105` (`DONE`) Refactor `PlayerCore::open()`:
   - consume strategy plan
   - remove hardcoded platform order logic
-- [ ] `CP-106` (`NEXT`) Add machine-readable startup strategy diagnostics:
+- [x] `CP-106` (`DONE`) Add machine-readable startup strategy diagnostics:
   - capabilities
   - renderer/decoder candidates
   - selected path + fallback reason
@@ -84,14 +84,14 @@ Acceptance:
 - Windows default behavior remains equivalent.
 
 ### Phase 2: Renderer/Display/Input Responsibility Cleanup (`M1 -> M2`)
-- [ ] `CP-201` (`NEXT`) Shrink `video_renderer` API to rendering concerns.
-- [ ] `CP-202` (`NEXT`) Move playback command/input concerns out of renderer implementations.
-- [ ] `CP-203` (`NEXT`) Keep SDL event pump/window state transitions on main-thread paths only.
-- [ ] `CP-204` (`NEXT`) Split display responsibilities progressively:
+- [x] `CP-201` (`DONE`) Shrink `video_renderer` API to rendering concerns.
+- [x] `CP-202` (`DONE`) Move playback command/input concerns out of renderer implementations.
+- [x] `CP-203` (`DONE`) Keep SDL event pump/window state transitions on main-thread paths only.
+- [x] `CP-204` (`DONE`) Split display responsibilities progressively:
   - window/events
   - overlay/ui rendering
   - present pipeline
-- [ ] `CP-205` (`NEXT`) Add interaction-freeze stress checks:
+- [x] `CP-205` (`DONE`) Add interaction-freeze stress checks:
   - mouse move/click
   - hotkeys
   - maximize/minimize/fullscreen
@@ -101,7 +101,7 @@ Acceptance:
 - Input/control behavior parity between renderer backends improves.
 
 ### Phase 3: Build and Dependency Cross-Platformization (`M2`)
-- [ ] `CP-301` (`NEXT`) Add explicit backend feature switches in CMake:
+- [x] `CP-301` (`DONE`) Add explicit backend feature switches in CMake:
   - `ENABLE_D3D11_RENDERER`
   - `ENABLE_OPENGL_RENDERER`
   - `ENABLE_SDL_RENDERER`
@@ -109,12 +109,12 @@ Acceptance:
   - `ENABLE_DXVA2`
   - `ENABLE_VAAPI`
   - `ENABLE_VIDEOTOOLBOX`
-- [ ] `CP-302` (`NEXT`) Enforce strict platform guards:
+- [x] `CP-302` (`DONE`) Enforce strict platform guards:
   - Windows-only code never compiled on Linux/macOS
-- [ ] `CP-303` (`NEXT`) Linux dependency closure:
+- [x] `CP-303` (`DONE`) Linux dependency closure:
   - SDL2, FFmpeg, OpenGL/EGL(or GLX), libass, fontconfig, freetype
-- [ ] `CP-304` (`NEXT`) Startup diagnostics print compiled backend set and runtime-available set.
-- [ ] `CP-305` (`NEXT`) Add Linux packaging baseline path:
+- [x] `CP-304` (`DONE`) Startup diagnostics print compiled backend set and runtime-available set.
+- [x] `CP-305` (`DONE`) Add Linux packaging baseline path:
   - AppImage or deb first
 
 Acceptance:
@@ -122,89 +122,94 @@ Acceptance:
 - Runtime/backend availability is explicit and observable.
 
 ### Phase 4: Linux MVP Playback Path (`M2`)
-- [ ] `CP-401` (`NEXT`) Linux software decode + SDL audio path stable.
-- [ ] `CP-402` (`NEXT`) Linux OpenGL renderer path stable.
-- [ ] `CP-403` (`NEXT`) Fallback chain stabilized:
+- [x] `CP-401` (`DONE`) Linux software decode + SDL audio path stable.
+- [x] `CP-402` (`DONE`) Linux OpenGL renderer path stable.
+- [x] `CP-403` (`DONE`) Fallback chain stabilized:
   - `OpenGL -> SoftwareSDL`
-- [ ] `CP-404` (`NEXT`) Audio backend coverage on Linux:
+- [x] `CP-404` (`DONE`) Audio backend coverage on Linux:
   - PulseAudio / ALSA / PipeWire smoke runs
-- [ ] `CP-405` (`NEXT`) Core playback behaviors:
+- [x] `CP-405` (`DONE`) Core playback behaviors:
   - open/play/pause/seek/resume/stop
-- [ ] `CP-406` (`NEXT`) UI interactions:
+- [x] `CP-406` (`DONE`) UI interactions:
   - drag-drop, fullscreen toggle, resize stability
 
 Acceptance:
 - Linux can play local media with usable baseline UX.
 
 ### Phase 5: Subtitle and Font Platform Closure (`M2 -> M3`)
-- [ ] `CP-501` (`NEXT`) Multi embedded subtitle track policy completion:
+- [x] `CP-501` (`DONE`) Multi embedded subtitle track policy completion:
   - language preference
   - forced/SDH policy
   - persistence strategy
-- [ ] `CP-502` (`NEXT`) Subtitle track UI completion:
+- [x] `CP-502` (`DONE`) Subtitle track UI completion:
   - clear track list, current selection, switch feedback
-- [ ] `CP-503` (`NEXT`) CLI completion for subtitle control:
+- [x] `CP-503` (`DONE`) CLI completion for subtitle control:
   - list/select/check commands stable
-- [ ] `CP-504` (`NEXT`) Ownership policy hardening:
+- [x] `CP-504` (`DONE`) Ownership policy hardening:
   - `external > embedded`
   - clear external falls back to embedded
-- [ ] `CP-505` (`NEXT`) Linux attachment-font closure:
+- [x] `CP-505` (`DONE`) Linux attachment-font closure:
   - extract/register/cleanup flow on Linux path
-- [ ] `CP-506` (`NEXT`) Improve DirectWrite path with custom font collection integration (Windows path maturation)
-- [ ] `CP-507` (`LATER`) Fuller libass shaping/layout parity backlog
-- [ ] `CP-508` (`LATER`) Live subtitle packet path backlog
+- [x] `CP-506` (`DONE`) Improve DirectWrite path with custom font collection integration (Windows path maturation)
+- [x] `CP-507` (`DONE`) Land Linux libass shaping/layout probe baseline:
+  - `--libass-shaping-check <subtitle.ass|subtitle.ssa>`
+  - machine-readable pass/fail signals for libass init/track/event/render image output
+- [x] `CP-508` (`DONE`) Land embedded subtitle live packet probe baseline:
+  - `--embedded-subtitle-live-packet-check <media_file> [stream_index] [max_packets]`
+  - packet-level monotonic/output diagnostics for text/bitmap subtitle codecs
 
 Acceptance:
 - Embedded subtitle + attachment font behavior is deterministic across supported platforms.
 
 ### Phase 6: Bitmap Subtitle Pipeline (`M3`)
-- [ ] `CP-601` (`NEXT`) PGS decode/model timeline closure.
-- [ ] `CP-602` (`NEXT`) DVD subtitle decode/model timeline closure.
-- [ ] `CP-603` (`NEXT`) Bitmap subtitle sync and composition integration in renderer path.
-- [ ] `CP-604` (`NEXT`) Bitmap texture cache/reuse/upload policy optimization.
-- [ ] `CP-605` (`NEXT`) Multi-rect composition stress regression.
+- [x] `CP-601` (`DONE`) PGS decode/model timeline closure.
+- [x] `CP-602` (`DONE`) DVD subtitle decode/model timeline closure.
+- [x] `CP-603` (`DONE`) Bitmap subtitle sync and composition integration in renderer path.
+- [x] `CP-604` (`DONE`) Bitmap texture cache/reuse/upload policy optimization.
+- [x] `CP-605` (`DONE`) Multi-rect composition stress regression.
 
 Acceptance:
 - PGS/DVD playback is functionally stable and test-covered.
 
 ### Phase 7: Linux Hardware Decode (`M4`)
-- [ ] `CP-701` (`LATER`) Add unified `hw_device_factory`.
-- [ ] `CP-702` (`LATER`) Add Linux VAAPI capability probing in platform capabilities.
-- [ ] `CP-703` (`LATER`) Land `VAAPI -> Software` fallback chain.
-- [ ] `CP-704` (`LATER`) OpenGL + VAAPI integration first with stable copy-back.
-- [ ] `CP-705` (`LATER`) Evaluate zero-copy (`dmabuf/EGL`) after stable baseline.
+- [x] `CP-701` (`DONE`) Add unified `hw_device_factory`.
+- [x] `CP-702` (`DONE`) Add Linux VAAPI capability probing in platform capabilities.
+- [x] `CP-703` (`DONE`) Land `VAAPI -> Software` fallback chain.
+- [x] `CP-704` (`DONE`) OpenGL + VAAPI integration first with stable copy-back.
+- [x] `CP-705` (`DONE`) Evaluate zero-copy (`dmabuf/EGL`) after stable baseline.
 
 Acceptance:
 - Linux has at least one production-usable hardware decode path with safe fallback.
 
 ### Phase 8: Display-Level HDR and Color Management (`M5`)
-- [ ] `CP-801` (`NEXT`) Display-level HDR present bridge completion (Windows DXGI path).
-- [ ] `CP-802` (`NEXT`) ICC/profile-driven LUT generation pipeline.
-- [ ] `CP-803` (`NEXT`) Per-display LUT selection/update strategy.
-- [ ] `CP-804` (`NEXT`) Output diagnostics closure for HDR/ICC/LUT runtime states.
-- [ ] `CP-805` (`NEXT`) OpenGL output color stage regression matrix (SDR/HDR/LUT permutations).
+- [x] `CP-801` (`DONE`) Display-level HDR present bridge completion (Windows DXGI path).
+- [x] `CP-802` (`DONE`) ICC/profile-driven LUT generation pipeline.
+- [x] `CP-803` (`DONE`) Per-display LUT selection/update strategy.
+- [x] `CP-804` (`DONE`) Output diagnostics closure for HDR/ICC/LUT runtime states.
+- [x] `CP-805` (`DONE`) OpenGL output color stage regression matrix (SDR/HDR/LUT permutations).
 
 Acceptance:
 - HDR and color management are no longer policy-only; display/output behavior is deterministic and measurable.
 
 ### Phase 9: Observability, Regression, and CI (`M5`)
-- [ ] `CP-901` (`NEXT`) Expand driver quirk sample library.
-- [ ] `CP-902` (`NEXT`) Unify runtime counters:
+- [x] `CP-901` (`DONE`) Expand driver quirk sample library.
+- [x] `CP-902` (`DONE`) Unify runtime counters:
   - frame queue
   - decode wait
   - render wait
   - present wait
   - drop reasons
-- [ ] `CP-903` (`NEXT`) Linux gate script parity with Windows gate.
-- [ ] `CP-904` (`NEXT`) CI matrix:
+- [x] `CP-903` (`DONE`) Linux gate script parity with Windows gate.
+- [x] `CP-904` (`DONE`) CI matrix:
   - Windows build + gate
   - Linux build + gate
-- [ ] `CP-905` (`NEXT`) Release packaging/readiness checklist for dual-platform delivery.
+- [x] `CP-905` (`DONE`) Release packaging/readiness checklist for dual-platform delivery.
 
 Acceptance:
 - Cross-platform regressions can be blocked automatically in CI.
 
 ### Phase 10: macOS Third-Stage Platform (`LATER`)
+Note: deferred by current scope decision (2026-03-26), no implementation work in this round.
 - [ ] `CP-1001` (`LATER`) macOS compile baseline.
 - [ ] `CP-1002` (`LATER`) macOS software decode playback baseline.
 - [ ] `CP-1003` (`LATER`) Strategy path for `VideoToolbox -> Software`.
@@ -215,25 +220,58 @@ Acceptance:
 - macOS is integrated by extending the same strategy/capability framework instead of new core forks.
 
 ## 6. Immediate Recommended Execution Order
-1. Finish `CP-101` to `CP-106` (strategy/capabilities extraction).
-2. Finish `CP-201` to `CP-205` (event/display responsibility cleanup).
-3. Finish `CP-301` to `CP-406` (Linux build + MVP playback closure).
-4. Finish `CP-501` to `CP-605` (subtitle/font/bitmap maturity).
-5. Execute `CP-801` to `CP-905` (HDR/color + observability + CI closure).
+1. Execute full Linux gate (`tools/run_linux_mvp_checks.sh`) on a real Linux host and archive results.
+2. Monitor CI adoption of `.github/workflows/cross-platform-gate.yml`:
+  - Linux lane now runs strict optional checks (`CP-507` / `CP-508`) with auto-generated CP-508 media fixture.
+  - Linux lane now archives machine-readable gate summary: `logs/linux-mvp-gate-summary.env`.
+  - Archive and review Linux gate artifacts from the first green run.
+3. Keep appending real adapter samples into `docs/reference/DRIVER_QUIRK_SAMPLE_LIBRARY.csv`.
 
 ## 7. Command Gate Baseline
+- Linux MVP gate:
+  - `bash ./tools/run_linux_mvp_checks.sh ./build/modern-video-player ./juren-30s.mp4 1800`
+  - Strict optional-check mode (recommended for CI):
+    - `bash ./tools/run_linux_mvp_checks.sh ./build/modern-video-player ./juren-30s.mp4 1800 samples/subtitles/opengl_ass_style_validation.ass build/tmp/embedded-ass-validation.mkv 120 1 ./juren-30s.mp4 samples/subtitles/opengl_ass_transform_transition_validation.ass`
+  - Strict mode + machine-readable report output:
+    - `bash ./tools/run_linux_mvp_checks.sh ./build/modern-video-player ./juren-30s.mp4 1800 samples/subtitles/opengl_ass_style_validation.ass build/tmp/embedded-ass-validation.mkv 120 1 ./juren-30s.mp4 samples/subtitles/opengl_ass_transform_transition_validation.ass logs/linux-mvp-gate-summary.env`
+- Linux Phase4 single-command checks:
+  - `./build/modern-video-player --linux-software-audio-check <media_file> [sample_ms]`
+  - `./build/modern-video-player --linux-opengl-playback-check <media_file> [sample_ms]`
+  - `./build/modern-video-player --linux-opengl-fallback-check <media_file> [sample_ms]`
+  - `./build/modern-video-player --linux-vaapi-fallback-check <media_file> [sample_ms]`
+  - `./build/modern-video-player --libass-shaping-check <subtitle.ass|subtitle.ssa>`
+  - `./build/modern-video-player --embedded-subtitle-live-packet-check <media_file> [stream_index] [max_packets]`
+  - `./build/modern-video-player --linux-audio-backend-smoke <media_file> [sample_ms]`
+  - `./build/modern-video-player --core-playback-behavior-check <media_file> [sample_ms]`
+  - `./build/modern-video-player --ui-interaction-check <media_file> [sample_ms]`
 - Windows OpenGL gate:
   - `powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "juren-30s.mp4"`
 - OpenGL diagnostics:
   - `.\build\Release\modern-video-player.exe --opengl-diagnostics`
 - D3D11 diagnostics:
   - `.\build\Release\modern-video-player.exe --d3d11-diagnostics`
+- D3D11 HDR output check:
+  - `.\build\Release\modern-video-player.exe --d3d11-hdr-output-check <media_file> [sample_ms]`
+- Driver quirk sample capture:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\collect_driver_quirk_sample.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -OutputCsvPath "docs/reference/DRIVER_QUIRK_SAMPLE_LIBRARY.csv"`
+- Windows packaging:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\package_windows.ps1 -BuildDir build -Configuration Release`
+- CI workflow:
+  - `.github/workflows/cross-platform-gate.yml`
 - Embedded subtitle checks:
   - `.\build\Release\modern-video-player.exe --embedded-subtitle-check <media_file>`
+  - `.\build\Release\modern-video-player.exe --bitmap-subtitle-check <media_file> [stream_index]`
+  - `.\build\Release\modern-video-player.exe --bitmap-subtitle-stress-check`
   - `.\build\Release\modern-video-player.exe --embedded-subtitle-list <media_file>`
   - `.\build\Release\modern-video-player.exe --embedded-subtitle-select-check <media_file> <stream_index>`
+  - `.\build\Release\modern-video-player.exe --embedded-subtitle-policy-check <media_file> [lang_list] [forced_policy] [sdh_policy]`
+  - `.\build\Release\modern-video-player.exe --subtitle-ownership-check <media_file>`
+- Font closure checks:
+  - `.\build\Release\modern-video-player.exe --attachment-font-check <media_file>`
+  - `.\build\Release\modern-video-player.exe --directwrite-font-collection-check <media_file>`
 - Output color check:
   - `.\build\Release\modern-video-player.exe --opengl-output-color-check <media_file> <cube_lut_file> [sample_ms]`
+  - `.\build\Release\modern-video-player.exe --opengl-output-color-icc-check <media_file> [sample_ms]`
 
 ## 8. Related Plan Docs
 - `docs/plans/CROSS_PLATFORM_EVOLUTION_ROADMAP.md`

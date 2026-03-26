@@ -190,7 +190,7 @@ struct SubtitleItem {
     int drawing_scale{1};
     std::string drawing_commands;
     bool is_bitmap{false};
-    SubtitleBitmap bitmap;
+    std::vector<SubtitleBitmap> bitmap_rects;
     std::vector<SubtitleTextRun> runs;
 };
 

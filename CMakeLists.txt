@@ -1,6 +1,8 @@
 ﻿cmake_minimum_required(VERSION 3.15)
-set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 project(modern-video-player VERSION 1.0.0 LANGUAGES C CXX)
+if(WIN32)
+    set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
+endif()
 
 set(MVP_VERSION_PRERELEASE "rc1" CACHE STRING "Prerelease suffix without leading dash")
 set(MVP_VERSION_BUILD 0 CACHE STRING "Fourth component for Windows file version")
@@ -49,6 +51,99 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(DEBUG_MODE "Enable debug logging" ON)
+
+if(WIN32)
+    option(ENABLE_D3D11_RENDERER "Build D3D11 renderer backend" ON)
+    option(ENABLE_D3D11VA "Enable D3D11VA decode backend capability" ON)
+    option(ENABLE_DXVA2 "Enable DXVA2 decode backend capability (reserved switch)" OFF)
+else()
+    option(ENABLE_D3D11_RENDERER "Build D3D11 renderer backend" OFF)
+    option(ENABLE_D3D11VA "Enable D3D11VA decode backend capability" OFF)
+    option(ENABLE_DXVA2 "Enable DXVA2 decode backend capability (reserved switch)" OFF)
+endif()
+option(ENABLE_OPENGL_RENDERER "Build OpenGL renderer backend" ON)
+option(ENABLE_SDL_RENDERER "Build SDL software renderer backend" ON)
+if(APPLE)
+    option(ENABLE_VIDEOTOOLBOX "Enable VideoToolbox decode backend capability (reserved switch)" ON)
+else()
+    option(ENABLE_VIDEOTOOLBOX "Enable VideoToolbox decode backend capability (reserved switch)" OFF)
+endif()
+if(UNIX AND NOT APPLE)
+    option(ENABLE_VAAPI "Enable VAAPI decode backend capability (reserved switch)" ON)
+else()
+    option(ENABLE_VAAPI "Enable VAAPI decode backend capability (reserved switch)" OFF)
+endif()
+
+set(MVP_ENABLE_D3D11_RENDERER ${ENABLE_D3D11_RENDERER})
+if(MVP_ENABLE_D3D11_RENDERER AND NOT WIN32)
+    message(WARNING "ENABLE_D3D11_RENDERER requires WIN32; forcing OFF")
+    set(MVP_ENABLE_D3D11_RENDERER OFF)
+endif()
+
+set(MVP_ENABLE_D3D11VA ${ENABLE_D3D11VA})
+if(MVP_ENABLE_D3D11VA AND NOT WIN32)
+    message(WARNING "ENABLE_D3D11VA requires WIN32; forcing OFF")
+    set(MVP_ENABLE_D3D11VA OFF)
+endif()
+
+set(MVP_ENABLE_DXVA2 ${ENABLE_DXVA2})
+if(MVP_ENABLE_DXVA2 AND NOT WIN32)
+    message(WARNING "ENABLE_DXVA2 requires WIN32; forcing OFF")
+    set(MVP_ENABLE_DXVA2 OFF)
+endif()
+
+set(MVP_ENABLE_VAAPI ${ENABLE_VAAPI})
+if(MVP_ENABLE_VAAPI AND (WIN32 OR APPLE))
+    message(WARNING "ENABLE_VAAPI requires Linux/Unix non-Apple; forcing OFF")
+    set(MVP_ENABLE_VAAPI OFF)
+endif()
+
+set(MVP_ENABLE_VIDEOTOOLBOX ${ENABLE_VIDEOTOOLBOX})
+if(MVP_ENABLE_VIDEOTOOLBOX AND NOT APPLE)
+    message(WARNING "ENABLE_VIDEOTOOLBOX requires APPLE; forcing OFF")
+    set(MVP_ENABLE_VIDEOTOOLBOX OFF)
+endif()
+
+set(MVP_ENABLE_OPENGL_RENDERER ${ENABLE_OPENGL_RENDERER})
+set(MVP_ENABLE_SDL_RENDERER ${ENABLE_SDL_RENDERER})
+
+if(NOT MVP_ENABLE_D3D11_RENDERER AND NOT MVP_ENABLE_OPENGL_RENDERER AND NOT MVP_ENABLE_SDL_RENDERER)
+    message(FATAL_ERROR "At least one renderer must be enabled: ENABLE_D3D11_RENDERER / ENABLE_OPENGL_RENDERER / ENABLE_SDL_RENDERER")
+endif()
+
+set(MVP_HAVE_SOFTWARE_SDL_RENDERER 0)
+if(MVP_ENABLE_SDL_RENDERER)
+    set(MVP_HAVE_SOFTWARE_SDL_RENDERER 1)
+endif()
+set(MVP_HAVE_OPENGL_RENDERER 0)
+if(MVP_ENABLE_OPENGL_RENDERER)
+    set(MVP_HAVE_OPENGL_RENDERER 1)
+endif()
+set(MVP_HAVE_D3D11_RENDERER 0)
+if(MVP_ENABLE_D3D11_RENDERER)
+    set(MVP_HAVE_D3D11_RENDERER 1)
+endif()
+set(MVP_HAVE_D3D11VA_DECODER 0)
+if(MVP_ENABLE_D3D11VA)
+    set(MVP_HAVE_D3D11VA_DECODER 1)
+endif()
+set(MVP_HAVE_DXVA2_DECODER 0)
+if(MVP_ENABLE_DXVA2)
+    set(MVP_HAVE_DXVA2_DECODER 1)
+endif()
+set(MVP_HAVE_VAAPI_DECODER 0)
+if(MVP_ENABLE_VAAPI)
+    set(MVP_HAVE_VAAPI_DECODER 1)
+endif()
+set(MVP_HAVE_VIDEOTOOLBOX_DECODER 0)
+if(MVP_ENABLE_VIDEOTOOLBOX)
+    set(MVP_HAVE_VIDEOTOOLBOX_DECODER 1)
+endif()
+
+message(STATUS "Feature switches: D3D11_RENDERER=${MVP_ENABLE_D3D11_RENDERER} OPENGL_RENDERER=${MVP_ENABLE_OPENGL_RENDERER} SDL_RENDERER=${MVP_ENABLE_SDL_RENDERER} D3D11VA=${MVP_ENABLE_D3D11VA} DXVA2=${MVP_ENABLE_DXVA2} VAAPI=${MVP_ENABLE_VAAPI} VIDEOTOOLBOX=${MVP_ENABLE_VIDEOTOOLBOX}")
+
+set(PLATFORM_EXTRA_INCLUDE_DIRS "")
+set(PLATFORM_EXTRA_LIBRARIES "")
 
 if(WIN32)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
@@ -169,6 +264,21 @@ else()
         libswscale
         libswresample
     )
+    if(UNIX AND NOT APPLE)
+        pkg_check_modules(LIBASS REQUIRED libass)
+        pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
+        pkg_check_modules(FREETYPE2 REQUIRED freetype2)
+        list(APPEND PLATFORM_EXTRA_INCLUDE_DIRS
+            ${LIBASS_INCLUDE_DIRS}
+            ${FONTCONFIG_INCLUDE_DIRS}
+            ${FREETYPE2_INCLUDE_DIRS}
+        )
+        list(APPEND PLATFORM_EXTRA_LIBRARIES
+            ${LIBASS_LIBRARIES}
+            ${FONTCONFIG_LIBRARIES}
+            ${FREETYPE2_LIBRARIES}
+        )
+    endif()
 
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -pedantic")
     set(FFMPEG_LIBRARIES
@@ -185,9 +295,10 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/include
     ${SDL2_INCLUDE_DIRS}
     ${QUILL_INCLUDE_DIRS}
+    ${PLATFORM_EXTRA_INCLUDE_DIRS}
 )
 
-add_executable(${PROJECT_NAME}
+set(MVP_PLAYER_SOURCES
     src/main.cpp
     src/video_player.cpp
     src/demuxer.cpp
@@ -199,17 +310,19 @@ add_executable(${PROJECT_NAME}
     src/core/frame_pool.cpp
     src/core/decoder_thread.cpp
     src/core/scheduler.cpp
+    src/core/playback_strategy.cpp
     src/core/player_core.cpp
-    src/render/sdl_video_renderer.cpp
-    src/render/d3d11_video_renderer.cpp
-    src/render/opengl_video_renderer.cpp
+    src/platform/platform_capabilities.cpp
+    src/platform/hw_device_factory.cpp
     src/render/renderer_factory.cpp
+    src/render/output_color_profile.cpp
     src/audio/audio_equalizer.cpp
     src/audio/audio_mixer.cpp
     src/decoder/decoder_factory.cpp
     src/subtitle/subtitle_parser.cpp
     src/subtitle/srt_parser.cpp
     src/subtitle/ass_parser.cpp
+    src/subtitle/libass_probe.cpp
     src/subtitle/embedded_subtitle_loader.cpp
     src/subtitle/subtitle_font_registry.cpp
     src/subtitle/subtitle_timeline.cpp
@@ -232,12 +345,34 @@ add_executable(${PROJECT_NAME}
     src/filters/saturation_filter.cpp
     src/filters/volume_balance_filter.cpp
     src/filters/builtin_filters.cpp
-    ${MVP_WIN32_RESOURCE}
 )
+if(MVP_ENABLE_SDL_RENDERER)
+    list(APPEND MVP_PLAYER_SOURCES src/render/sdl_video_renderer.cpp)
+endif()
+if(MVP_ENABLE_D3D11_RENDERER)
+    list(APPEND MVP_PLAYER_SOURCES src/render/d3d11_video_renderer.cpp)
+endif()
+if(MVP_ENABLE_OPENGL_RENDERER)
+    list(APPEND MVP_PLAYER_SOURCES src/render/opengl_video_renderer.cpp)
+endif()
+if(WIN32 AND MVP_WIN32_RESOURCE)
+    list(APPEND MVP_PLAYER_SOURCES ${MVP_WIN32_RESOURCE})
+endif()
+
+add_executable(${PROJECT_NAME} ${MVP_PLAYER_SOURCES})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /utf-8 /external:anglebrackets /external:W0)
 endif()
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    MVP_HAVE_SOFTWARE_SDL_RENDERER=${MVP_HAVE_SOFTWARE_SDL_RENDERER}
+    MVP_HAVE_OPENGL_RENDERER=${MVP_HAVE_OPENGL_RENDERER}
+    MVP_HAVE_D3D11_RENDERER=${MVP_HAVE_D3D11_RENDERER}
+    MVP_HAVE_D3D11VA_DECODER=${MVP_HAVE_D3D11VA_DECODER}
+    MVP_HAVE_DXVA2_DECODER=${MVP_HAVE_DXVA2_DECODER}
+    MVP_HAVE_VAAPI_DECODER=${MVP_HAVE_VAAPI_DECODER}
+    MVP_HAVE_VIDEOTOOLBOX_DECODER=${MVP_HAVE_VIDEOTOOLBOX_DECODER}
+)
 
 add_library(sample_logger_plugin SHARED
     src/plugin/sample_logger_plugin.cpp
@@ -260,18 +395,31 @@ add_custom_command(TARGET sample_logger_plugin POST_BUILD
             $<TARGET_FILE_DIR:${PROJECT_NAME}>/plugins/
 )
 
+if(NOT WIN32 AND MVP_ENABLE_OPENGL_RENDERER)
+    find_package(OpenGL REQUIRED)
+endif()
+
 if(WIN32)
+    set(MVP_WIN32_EXTRA_LIBS
+        dwrite
+        ole32
+    )
+    if(MVP_ENABLE_D3D11_RENDERER OR MVP_ENABLE_OPENGL_RENDERER)
+        list(APPEND MVP_WIN32_EXTRA_LIBS
+            d3d11
+            d2d1
+            dxgi
+            d3dcompiler
+        )
+    endif()
+    if(MVP_ENABLE_OPENGL_RENDERER)
+        list(APPEND MVP_WIN32_EXTRA_LIBS opengl32)
+    endif()
     target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
         ${FFMPEG_LIBRARIES}
         ${QUILL_LIBRARIES}
-        d3d11
-        d2d1
-        dwrite
-        dxgi
-        d3dcompiler
-        ole32
-        opengl32
+        ${MVP_WIN32_EXTRA_LIBS}
     )
 
     if(SDL2_EXTERNAL_DIR)
@@ -293,10 +441,15 @@ if(WIN32)
         endforeach()
     endif()
 else()
+    set(MVP_UNIX_EXTRA_LIBS ${PLATFORM_EXTRA_LIBRARIES})
+    if(MVP_ENABLE_OPENGL_RENDERER)
+        list(APPEND MVP_UNIX_EXTRA_LIBS OpenGL::GL)
+    endif()
     target_link_libraries(${PROJECT_NAME}
         ${SDL2_LIBRARIES}
         ${FFMPEG_LIBRARIES}
         ${QUILL_LIBRARIES}
+        ${MVP_UNIX_EXTRA_LIBS}
         pthread
         m
     )
@@ -337,6 +490,15 @@ set(CPACK_PACKAGE_FILE_NAME
 )
 if(WIN32)
     set(CPACK_GENERATOR "ZIP")
+elseif(UNIX AND NOT APPLE)
+    set(CPACK_GENERATOR "DEB;TGZ")
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "${MVP_PACKAGE_VENDOR}")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "video")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS
+        "libsdl2-2.0-0, libavformat60, libavcodec60, libavutil58, libswscale7, libswresample4, libass9, libfontconfig1, libfreetype6"
+    )
 endif()
 set(CPACK_VERBATIM_VARIABLES YES)
 

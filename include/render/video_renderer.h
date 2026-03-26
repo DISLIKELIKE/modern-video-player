@@ -3,11 +3,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
-#include <vector>
 
 #include "core/frame.h"
-#include "input/hotkey_manager.h"
-#include "subtitle/subtitle_parser.h"
 
 namespace vp::render {
 
@@ -46,6 +43,37 @@ struct RendererDiagnostics {
     int opengl_output_lut_size{0};
     std::string opengl_output_lut_path;
     std::string opengl_output_lut_error;
+    std::string opengl_output_lut_source{"none"};
+    uint64_t opengl_output_lut_reload_count{0};
+    int opengl_output_display_index{-1};
+    std::string opengl_output_display_name{"unknown"};
+    std::string opengl_output_display_device_name{"unknown"};
+    bool opengl_output_icc_profile_available{false};
+    std::string opengl_output_icc_profile_source{"none"};
+    std::string opengl_output_icc_profile_path;
+    std::string opengl_output_icc_profile_description{"unknown"};
+    std::string opengl_output_binding_error;
+    bool d3d11_hdr_present_requested{false};
+    bool d3d11_hdr_present_active{false};
+    bool d3d11_hdr_content_detected{false};
+    std::string d3d11_hdr_present_mode{"auto"};
+    std::string d3d11_hdr_present_decision{"not-evaluated"};
+    std::string d3d11_hdr_swapchain_format{"unknown"};
+    std::string d3d11_hdr_output_color_space{"unknown"};
+    int d3d11_hdr_output_display_index{-1};
+    std::string d3d11_hdr_output_display_name{"unknown"};
+    std::string d3d11_hdr_output_device_name{"unknown"};
+    bool d3d11_hdr_output_advanced_color_active{false};
+    bool d3d11_hdr_output_hdr_active{false};
+    bool d3d11_hdr_metadata_available{false};
+    bool d3d11_hdr_metadata_applied{false};
+    std::string d3d11_hdr_metadata_source{"none"};
+    uint64_t d3d11_hdr_state_reload_count{0};
+    uint64_t d3d11_present_count{0};
+    uint64_t d3d11_present_failures{0};
+    uint64_t d3d11_present_time_us_total{0};
+    uint64_t d3d11_present_time_us_max{0};
+    std::string d3d11_hdr_error;
 };
 
 class IVideoRenderer {
@@ -58,46 +86,6 @@ public:
     virtual void renderFrame(const core::VideoFrame& frame) = 0;
     virtual void present() = 0;
     virtual void clear() = 0;
-
-    virtual void handleEvents() = 0;
-    virtual bool shouldQuit() const = 0;
-
-    virtual bool consumeTogglePauseRequest() = 0;
-    virtual bool consumeSeekRequest(double& normalized_position) = 0;
-    virtual bool consumeSeekDeltaRequest(double& delta_seconds) = 0;
-    virtual bool consumeVolumeChangeRequest(float& volume) = 0;
-    virtual bool consumeSpeedChangeRequest(double& speed_delta) = 0;
-    virtual bool consumeResetSpeedRequest() = 0;
-    virtual bool consumeToggleSubtitleRequest() = 0;
-    virtual bool consumeSetABRepeatStartRequest() = 0;
-    virtual bool consumeSetABRepeatEndRequest() = 0;
-    virtual bool consumeClearABRepeatRequest() = 0;
-    virtual bool consumeScreenshotRequest() = 0;
-    virtual bool consumeStepFrameBackwardRequest() = 0;
-    virtual bool consumeStepFrameForwardRequest() = 0;
-    virtual bool consumePreviousSubtitleTrackRequest() = 0;
-    virtual bool consumeNextSubtitleTrackRequest() = 0;
-    virtual bool consumeSubtitleDelayChangeRequest(double& delta_seconds) = 0;
-    virtual bool consumeAudioDelayChangeRequest(double& delta_seconds) = 0;
-    virtual bool consumeNextChapterRequest() = 0;
-    virtual bool consumePreviousChapterRequest() = 0;
-    virtual bool consumeNextItemRequest() = 0;
-    virtual bool consumePreviousItemRequest() = 0;
-    virtual bool consumeOpenFileRequest(std::string& path) = 0;
-
-    virtual void setOverlayState(double position, double duration, float volume, bool paused) = 0;
-    virtual void setSubtitleClock(double subtitle_time_seconds) {
-        (void)subtitle_time_seconds;
-    }
-    virtual void setSubtitleText(const std::string& text) = 0;
-    virtual void setSubtitleItems(const std::vector<subtitle::SubtitleItem>& items) {
-        setSubtitleText(subtitle::flattenSubtitleText(items));
-    }
-    virtual void setSubtitleTrackState(int current_ordinal, int track_count) {
-        (void)current_ordinal;
-        (void)track_count;
-    }
-    virtual void setHotkeyManager(const input::HotkeyManager& hotkey_manager) = 0;
 
     virtual bool supportsNativeFrameFormat(AVPixelFormat format) const {
         (void)format;

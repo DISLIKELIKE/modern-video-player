@@ -2,6 +2,17 @@
 
 更新日期：2026-03-09
 
+## 0. 执行状态（2026-03-25）
+
+- [x] `CP-101`：`platform_capabilities` 抽象与探测入口已落地
+- [x] `CP-102`：`playback_strategy` 抽象与 open plan 已落地
+- [x] `CP-103`：`RendererFactory` 已回收为“支持判断 + 创建”职责
+- [x] `CP-104`：`DecoderFactory` 已改为 context-driven 排序并保留 software mandatory fallback
+- [x] `CP-105`：`PlayerCore::open()` 已改为消费策略计划
+- [x] `CP-106`：启动策略机器可读诊断（capabilities/candidates/selected/fallback）已接入 `--performance-log-check`
+
+当前结论：Phase 1 核心抽离已完成，且 `CP-201` ~ `CP-205` 已完成职责收口与回归验证；下一步进入 `CP-301`（构建开关平台化）及后续 Linux MVP 交付链路。
+
 ## 1. 文档定位
 
 这份文档是对 `docs/plans/CROSS_PLATFORM_REFACTOR_TASKLIST.md` 里 **Phase 1：抽平台能力与播放策略层** 的单独展开。

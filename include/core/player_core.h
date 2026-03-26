@@ -37,6 +37,7 @@ extern "C" {
 
 
 #include "core/clock.h"
+#include "core/playback_strategy.h"
 
 #include "core/frame.h"
 
@@ -51,7 +52,9 @@ extern "C" {
 #include "filters/filter_pipeline.h"
 
 #include "input/hotkey_manager.h"
+#include "input/playback_input_source.h"
 
+#include "render/render_overlay_sink.h"
 #include "render/video_renderer.h"
 
 #include "subtitle/embedded_subtitle_loader.h"
@@ -156,6 +159,28 @@ struct DiagnosticsSnapshot {
 
     std::string audio_init_detail;
 
+    std::string startup_platform{"Unknown"};
+
+    std::string startup_renderer_capabilities{"none"};
+
+    std::string startup_decoder_capabilities{"none"};
+    std::string startup_renderer_compiled_set{"none"};
+    std::string startup_renderer_runtime_set{"none"};
+    std::string startup_decoder_compiled_set{"none"};
+    std::string startup_decoder_runtime_set{"none"};
+
+    std::string startup_renderer_candidates{"none"};
+
+    std::string startup_decoder_candidates{"none"};
+
+    std::string startup_selected_renderer{"None"};
+
+    std::string startup_selected_decoder{"Unknown"};
+
+    std::string startup_renderer_fallback_reason{"none"};
+
+    std::string startup_decoder_fallback_reason{"none"};
+
     SchedulerClockPolicy scheduler_clock_policy{SchedulerClockPolicy::UseClockSource};
 
     SchedulerAudioMasterPolicy scheduler_audio_master_policy{SchedulerAudioMasterPolicy::Disabled};
@@ -242,6 +267,8 @@ struct DiagnosticsSnapshot {
 
     uint64_t scheduler_wait_events{0};
 
+    uint64_t scheduler_render_wait_ms{0};
+
     uint64_t scheduler_video_backpressure_events{0};
 
     uint64_t scheduler_audio_backpressure_events{0};
@@ -271,6 +298,10 @@ struct DiagnosticsSnapshot {
     uint64_t illegal_run_transitions{0};
 
     uint64_t illegal_pipeline_transitions{0};
+
+    uint64_t runtime_drop_total{0};
+
+    std::string runtime_drop_summary{"none"};
 
     uint64_t video_copy_back_time_us_total{0};
 
@@ -321,6 +352,68 @@ struct DiagnosticsSnapshot {
     std::string renderer_opengl_output_lut_path;
 
     std::string renderer_opengl_output_lut_error;
+
+    std::string renderer_opengl_output_lut_source{"none"};
+
+    uint64_t renderer_opengl_output_lut_reload_count{0};
+
+    int renderer_opengl_output_display_index{-1};
+
+    std::string renderer_opengl_output_display_name{"unknown"};
+
+    std::string renderer_opengl_output_display_device_name{"unknown"};
+
+    bool renderer_opengl_output_icc_profile_available{false};
+
+    std::string renderer_opengl_output_icc_profile_source{"none"};
+
+    std::string renderer_opengl_output_icc_profile_path;
+
+    std::string renderer_opengl_output_icc_profile_description{"unknown"};
+
+    std::string renderer_opengl_output_binding_error;
+
+    bool renderer_d3d11_hdr_present_requested{false};
+
+    bool renderer_d3d11_hdr_present_active{false};
+
+    bool renderer_d3d11_hdr_content_detected{false};
+
+    std::string renderer_d3d11_hdr_present_mode{"auto"};
+
+    std::string renderer_d3d11_hdr_present_decision{"not-evaluated"};
+
+    std::string renderer_d3d11_hdr_swapchain_format{"unknown"};
+
+    std::string renderer_d3d11_hdr_output_color_space{"unknown"};
+
+    int renderer_d3d11_hdr_output_display_index{-1};
+
+    std::string renderer_d3d11_hdr_output_display_name{"unknown"};
+
+    std::string renderer_d3d11_hdr_output_device_name{"unknown"};
+
+    bool renderer_d3d11_hdr_output_advanced_color_active{false};
+
+    bool renderer_d3d11_hdr_output_hdr_active{false};
+
+    bool renderer_d3d11_hdr_metadata_available{false};
+
+    bool renderer_d3d11_hdr_metadata_applied{false};
+
+    std::string renderer_d3d11_hdr_metadata_source{"none"};
+
+    uint64_t renderer_d3d11_hdr_state_reload_count{0};
+
+    uint64_t renderer_d3d11_present_count{0};
+
+    uint64_t renderer_d3d11_present_failures{0};
+
+    uint64_t renderer_d3d11_present_time_us_total{0};
+
+    uint64_t renderer_d3d11_present_time_us_max{0};
+
+    std::string renderer_d3d11_hdr_error;
 
     size_t video_packet_queue_size{0};
 
@@ -459,6 +552,14 @@ public:
     void setPreferredEmbeddedSubtitleStreamIndex(int stream_index);
 
     int preferredEmbeddedSubtitleStreamIndex() const;
+
+    void setEmbeddedSubtitleSelectionPolicy(const subtitle::EmbeddedSubtitleSelectionPolicy& policy);
+
+    subtitle::EmbeddedSubtitleSelectionPolicy embeddedSubtitleSelectionPolicy() const;
+
+    std::string activeSubtitleSourcePath() const;
+
+    size_t activeSubtitleItemCount() const;
 
     void setSubtitleEnabled(bool enabled);
 
@@ -610,11 +711,15 @@ private:
 
 
 
-    bool initDecoders();
+    bool initDecoders(const PlaybackOpenPlan& plan);
 
     void releaseDecoders();
 
-    bool tryConfigureD3D11HardwareDecode(const AVCodec* codec, AVCodecContext* codec_ctx);
+    bool tryConfigureHardwareDecode(const AVCodec* codec,
+                                    AVCodecContext* codec_ctx,
+                                    decoder::DecoderBackend backend);
+
+    bool configureHardwareFramesContext(AVCodecContext* codec_ctx);
 
     bool configureD3D11HardwareFramesContext(AVCodecContext* codec_ctx);
 
@@ -768,6 +873,8 @@ private:
     std::unique_ptr<Demuxer> demuxer_;
 
     render::VideoRendererPtr video_renderer_;
+    input::IPlaybackInputSource* playback_input_source_{nullptr};
+    render::IRenderOverlaySink* render_overlay_sink_{nullptr};
 
     std::unique_ptr<AudioPlayer> audio_player_;
 
@@ -778,6 +885,28 @@ private:
     std::string audio_init_strategy_{"not-run"};
 
     std::string audio_init_detail_;
+
+    std::string startup_platform_{"Unknown"};
+
+    std::string startup_renderer_capabilities_{"none"};
+
+    std::string startup_decoder_capabilities_{"none"};
+    std::string startup_renderer_compiled_set_{"none"};
+    std::string startup_renderer_runtime_set_{"none"};
+    std::string startup_decoder_compiled_set_{"none"};
+    std::string startup_decoder_runtime_set_{"none"};
+
+    std::string startup_renderer_candidates_{"none"};
+
+    std::string startup_decoder_candidates_{"none"};
+
+    std::string startup_selected_renderer_{"None"};
+
+    std::string startup_selected_decoder_{"Unknown"};
+
+    std::string startup_renderer_fallback_reason_{"none"};
+
+    std::string startup_decoder_fallback_reason_{"none"};
 
 
 
@@ -872,6 +1001,8 @@ private:
     std::atomic<bool> next_item_requested_{false};
 
     std::atomic<bool> previous_item_requested_{false};
+    std::thread::id event_thread_id_{};
+    std::atomic<bool> event_thread_violation_logged_{false};
 
     std::mutex open_file_request_mutex_;
 
@@ -1019,6 +1150,7 @@ private:
     std::string embedded_subtitle_source_path_;
     int embedded_subtitle_selected_stream_index_{-1};
     int preferred_embedded_subtitle_stream_index_{-1};
+    subtitle::EmbeddedSubtitleSelectionPolicy embedded_subtitle_selection_policy_{};
 
     std::vector<int> subtitle_active_indices_;
 

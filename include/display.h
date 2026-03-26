@@ -144,6 +144,8 @@ private:
     std::atomic<bool> renderer_reset_requested_{false};
     std::atomic<bool> texture_reset_requested_{false};
     std::atomic<bool> fullscreen_toggle_requested_{false};
+    std::thread::id event_thread_id_{};
+    std::atomic<bool> event_thread_guard_reported_{false};
     bool initialized_{false};
     std::mutex sdl_mutex_;
     int texture_width_{0};

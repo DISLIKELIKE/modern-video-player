@@ -90,6 +90,21 @@ public:
     int preferredEmbeddedSubtitleStreamIndex() const {
         return core_player_ ? core_player_->preferredEmbeddedSubtitleStreamIndex() : -1;
     }
+    void setEmbeddedSubtitleSelectionPolicy(const subtitle::EmbeddedSubtitleSelectionPolicy& policy) {
+        if (core_player_) {
+            core_player_->setEmbeddedSubtitleSelectionPolicy(policy);
+        }
+    }
+    subtitle::EmbeddedSubtitleSelectionPolicy embeddedSubtitleSelectionPolicy() const {
+        return core_player_ ? core_player_->embeddedSubtitleSelectionPolicy()
+                            : subtitle::EmbeddedSubtitleSelectionPolicy{};
+    }
+    std::string activeSubtitleSourcePath() const {
+        return core_player_ ? core_player_->activeSubtitleSourcePath() : std::string{};
+    }
+    size_t activeSubtitleItemCount() const {
+        return core_player_ ? core_player_->activeSubtitleItemCount() : 0U;
+    }
     void setSubtitleEnabled(bool enabled);
     bool isSubtitleEnabled() const;
     bool toggleSubtitleEnabled();
