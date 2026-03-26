@@ -3,8 +3,41 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 126` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 127` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 127: Linux workflow Build Linux Release compile blocker closure
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Parsed failed Linux workflow runs and fixed current compile blockers in subtitle/OpenGL paths.
+- Kept Windows path behavior unchanged and added non-Windows helper visibility where class code depends on shared symbols.
+
+### Log
+```text
+Workflow failure inspection:
+gh run view 23601824744 --job 68733664519 --log
+gh run view 23601841417 --json status,conclusion,event,jobs
+Result: Linux Build Linux Release failure reproduced and root causes identified.
+
+Build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+Performance regression:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Result: PASS
+```
+
+### Notes
+1. Linux runner evidence still requires push + GitHub Actions rerun.
+2. Existing encoding warnings in unrelated files remain out of this patch scope.
 
 ## Issue 126: Workflow log FFmpeg duration compatibility closure
 

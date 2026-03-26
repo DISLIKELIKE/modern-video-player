@@ -3,8 +3,54 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 126` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 127` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 127: Linux workflow Build Linux Release compile blocker closure
+
+**Date**: 2026-03-26
+
+### Problem Description
+- GitHub Actions Linux lane failed in `Build Linux Release` while Windows lane passed.
+- Failing runs included:
+  - `23601824744` (`push`)
+  - `23601841417` (`workflow_dispatch`)
+
+### Root Cause Analysis
+- `src/subtitle/libass_probe.cpp` used `std::max(0, event.Start)` and `std::max(0, event.Duration)`, which caused template deduction conflict on Linux (`int` vs `long long`).
+- `src/render/opengl_video_renderer.cpp` had cross-platform class code referencing helper symbols that were only defined inside a Windows-only helper block.
+
+### Solution
+- `libass_probe`:
+  - Added clamp helper to safely convert libass event timestamps to `int`.
+- `opengl_video_renderer`:
+  - Added Linux-visible (`#if !defined(_WIN32)`) helper/type block outside Windows-only section, including:
+    - subtitle animated-run detection helpers
+    - OpenGL present/HDR enums and env parsers
+    - string trimming and swap-interval helpers
+    - output display binding state + Linux resolver
+
+### Validation
+- `gh run view 23601824744 --job 68733664519 --log` -> failure root errors confirmed.
+- `gh run view 23601841417 --json status,conclusion,event,jobs` -> Linux `Build Linux Release` failure confirmed.
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin` -> PASS
+- `.\build\Release\modern-video-player.exe --d3d11-diagnostics` -> PASS
+- `.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200` -> PASS
+
+### Modified Files
+- `src/subtitle/libass_probe.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `docs/analysis/PLAYERCORE_DAY61_LINUX_WORKFLOW_BUILD_ERROR_CLOSURE.md`
+- `docs/design/CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_DESIGN_2026-03-26.md`
+- `docs/plans/CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_PLAN_2026-03-26.md`
+- `docs/reports/CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 126: Workflow log remaining FFmpeg duration compatibility closure
 

@@ -71,8 +71,14 @@ void collectProbeTimestamps(const ASS_Track* track,
     const int event_count = std::min(track->n_events, kMaxEventsToSample);
     for (int i = 0; i < event_count; ++i) {
         const ASS_Event& event = track->events[i];
-        const int start_ms = std::max(0, event.Start);
-        const int duration_ms = std::max(0, event.Duration);
+        const auto clamp_event_time_ms = [](long long value) -> int {
+            return static_cast<int>(std::clamp(
+                value,
+                0ll,
+                static_cast<long long>(std::numeric_limits<int>::max())));
+        };
+        const int start_ms = clamp_event_time_ms(static_cast<long long>(event.Start));
+        const int duration_ms = clamp_event_time_ms(static_cast<long long>(event.Duration));
         const int end_ms = start_ms + duration_ms;
         const int mid_ms = start_ms + duration_ms / 2;
 

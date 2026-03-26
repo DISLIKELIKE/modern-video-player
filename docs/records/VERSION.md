@@ -6,6 +6,25 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-26 Update: Linux workflow Build Linux Release compile blocker closure
+- Closed Linux compile failures observed in workflow runs `23601824744` and `23601841417`:
+  - `libass_probe`: mixed `int`/`long long` in timestamp clamp path
+  - `opengl_video_renderer`: non-Windows helper/type visibility gap
+- Code updates:
+  - `src/subtitle/libass_probe.cpp`
+  - `src/render/opengl_video_renderer.cpp`
+- Synced docs/records for this round:
+  - analysis: `PLAYERCORE_DAY61_LINUX_WORKFLOW_BUILD_ERROR_CLOSURE.md`
+  - design: `CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_LINUX_WORKFLOW_BUILD_ERROR_FIX_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--performance-log-check` PASS
+- Remaining:
+  - Linux runner proof still requires push + rerun of `cross-platform-gate`.
+
 ### 2026-03-26 Update: Workflow-log FFmpeg duration compatibility closure
 - Closed remaining workflow-log Linux compile error:
   - old FFmpeg `AVFrame` lacks `duration` field (`pkt_duration` fallback required)

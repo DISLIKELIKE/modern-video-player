@@ -3025,6 +3025,254 @@ using PFNWGLDXLOCKOBJECTSNVPROC = BOOL(WINAPI*)(HANDLE h_device, GLint count, HA
 using PFNWGLDXUNLOCKOBJECTSNVPROC = BOOL(WINAPI*)(HANDLE h_device, GLint count, HANDLE* h_objects);
 #endif
 
+#if !defined(_WIN32)
+bool subtitleAnimationHasMotion(const subtitle::SubtitleStyleAnimation& animation) {
+    if (!animation.has_move) {
+        return false;
+    }
+    if (std::abs(animation.move_x2 - animation.move_x1) <= 0.001 &&
+        std::abs(animation.move_y2 - animation.move_y1) <= 0.001) {
+        return false;
+    }
+    return !animation.move_has_timing || animation.move_t2_seconds > animation.move_t1_seconds;
+}
+
+bool subtitleAnimationHasFade(const subtitle::SubtitleStyleAnimation& animation) {
+    switch (animation.fade_mode) {
+    case subtitle::SubtitleFadeMode::Simple:
+        return animation.fade_in_seconds > 0.0005 || animation.fade_out_seconds > 0.0005;
+    case subtitle::SubtitleFadeMode::Complex:
+        return animation.fade_alpha1 != animation.fade_alpha2 ||
+               animation.fade_alpha2 != animation.fade_alpha3 ||
+               animation.fade_t2_seconds > animation.fade_t1_seconds ||
+               animation.fade_t4_seconds > animation.fade_t3_seconds;
+    case subtitle::SubtitleFadeMode::None:
+    default:
+        return false;
+    }
+}
+
+bool subtitleAnimationHasStyleTransitions(const subtitle::SubtitleStyleAnimation& animation) {
+    return std::any_of(animation.style_transitions.begin(),
+                       animation.style_transitions.end(),
+                       [](const subtitle::SubtitleStyleTransition& transition) {
+                           return transition.property_mask != 0;
+                       });
+}
+
+bool subtitleItemHasAnimatedRuns(const subtitle::SubtitleItem& item) {
+    if (subtitleAnimationHasMotion(item.animation) ||
+        subtitleAnimationHasFade(item.animation) ||
+        subtitleAnimationHasStyleTransitions(item.animation)) {
+        return true;
+    }
+    return std::any_of(item.runs.begin(), item.runs.end(), [](const subtitle::SubtitleTextRun& run) {
+        return run.karaoke_mode != subtitle::SubtitleKaraokeMode::None &&
+               run.karaoke_end_centiseconds > run.karaoke_start_centiseconds;
+    });
+}
+
+bool subtitleItemsHaveAnimatedRuns(const std::vector<subtitle::SubtitleItem>& items) {
+    return std::any_of(items.begin(), items.end(), [](const subtitle::SubtitleItem& item) {
+        return subtitleItemHasAnimatedRuns(item);
+    });
+}
+
+enum class OpenGLPresentMode {
+    Auto,
+    Paced,
+    Immediate,
+};
+
+enum class OpenGLHdrBridgeMode {
+    Auto,
+    Off,
+    Force,
+};
+
+enum class OpenGLHdrBridgeDecision {
+    NotEvaluated = 0,
+    FrameSdr,
+    DisabledByMode,
+    UnsupportedPlatform,
+    ProbeUnavailable,
+    DisplayHdrInactive,
+    ForceEnabled,
+    AutoEnabled,
+};
+
+bool readOpenGLForceInitFail() {
+    const auto value = readEnvVar("MVP_OPENGL_FORCE_INIT_FAIL");
+    if (!value) {
+        return false;
+    }
+    std::string normalized = toLowerAscii(*value);
+    normalized.erase(
+        std::remove_if(normalized.begin(), normalized.end(), [](unsigned char ch) {
+            return std::isspace(ch) != 0;
+        }),
+        normalized.end());
+    return normalized == "1" ||
+           normalized == "true" ||
+           normalized == "yes" ||
+           normalized == "on" ||
+           normalized == "force";
+}
+
+OpenGLPresentMode readOpenGLPresentMode() {
+    const auto value = readEnvVar("MVP_OPENGL_PRESENT_MODE");
+    if (!value) {
+        return OpenGLPresentMode::Auto;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    if (normalized == "paced" || normalized == "vsync" || normalized == "sync") {
+        return OpenGLPresentMode::Paced;
+    }
+    if (normalized == "immediate" || normalized == "async" || normalized == "nosync" ||
+        normalized == "off" || normalized == "0") {
+        return OpenGLPresentMode::Immediate;
+    }
+    return OpenGLPresentMode::Auto;
+}
+
+const char* openGLPresentModeName(OpenGLPresentMode value) {
+    switch (value) {
+    case OpenGLPresentMode::Paced:
+        return "paced";
+    case OpenGLPresentMode::Immediate:
+        return "immediate";
+    default:
+        return "auto";
+    }
+}
+
+OpenGLHdrBridgeMode readOpenGLHdrBridgeMode() {
+    const auto value = readEnvVar("MVP_OPENGL_HDR_OUTPUT_MODE");
+    if (!value) {
+        return OpenGLHdrBridgeMode::Auto;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    if (normalized == "0" || normalized == "off" || normalized == "false" ||
+        normalized == "disable" || normalized == "disabled" || normalized == "sdr") {
+        return OpenGLHdrBridgeMode::Off;
+    }
+    if (normalized == "1" || normalized == "on" || normalized == "true" ||
+        normalized == "force" || normalized == "forced" || normalized == "hdr") {
+        return OpenGLHdrBridgeMode::Force;
+    }
+    return OpenGLHdrBridgeMode::Auto;
+}
+
+const char* openGLHdrBridgeModeName(OpenGLHdrBridgeMode value) {
+    switch (value) {
+    case OpenGLHdrBridgeMode::Off:
+        return "off";
+    case OpenGLHdrBridgeMode::Force:
+        return "force";
+    default:
+        return "auto";
+    }
+}
+
+const char* openGLHdrBridgeDecisionName(OpenGLHdrBridgeDecision value) {
+    switch (value) {
+    case OpenGLHdrBridgeDecision::FrameSdr:
+        return "frame-sdr";
+    case OpenGLHdrBridgeDecision::DisabledByMode:
+        return "disabled-by-mode";
+    case OpenGLHdrBridgeDecision::UnsupportedPlatform:
+        return "unsupported-platform";
+    case OpenGLHdrBridgeDecision::ProbeUnavailable:
+        return "probe-unavailable";
+    case OpenGLHdrBridgeDecision::DisplayHdrInactive:
+        return "display-hdr-inactive";
+    case OpenGLHdrBridgeDecision::ForceEnabled:
+        return "force-enabled";
+    case OpenGLHdrBridgeDecision::AutoEnabled:
+        return "auto-enabled";
+    default:
+        return "not-evaluated";
+    }
+}
+
+std::string readOpenGLOutputLutPath() {
+    const auto value = readEnvVar("MVP_OPENGL_3DLUT_FILE");
+    return value ? *value : std::string{};
+}
+
+std::string readOpenGLIccProfilePath() {
+    const auto value = readEnvVar("MVP_OPENGL_ICC_PROFILE_FILE");
+    return value ? *value : std::string{};
+}
+
+bool readOpenGLAutoIccProfileEnabled() {
+    const auto value = readEnvVar("MVP_OPENGL_AUTO_ICC");
+    if (!value) {
+        return false;
+    }
+    const std::string normalized = toLowerAscii(*value);
+    return normalized == "1" || normalized == "true" || normalized == "on" ||
+           normalized == "yes" || normalized == "auto" || normalized == "enable" ||
+           normalized == "enabled";
+}
+
+std::string describeOpenGLSwapInterval(int interval) {
+    switch (interval) {
+    case 1:
+        return "paced";
+    case 0:
+        return "immediate";
+    case -1:
+        return "adaptive";
+    default:
+        return "interval(" + std::to_string(interval) + ")";
+    }
+}
+
+std::string trimAscii(const std::string& text) {
+    size_t start = 0;
+    while (start < text.size() && std::isspace(static_cast<unsigned char>(text[start])) != 0) {
+        ++start;
+    }
+    size_t end = text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(text[end - 1])) != 0) {
+        --end;
+    }
+    return text.substr(start, end - start);
+}
+
+struct OutputDisplayBindingState {
+    bool binding_succeeded{false};
+    int sdl_display_index{-1};
+    std::string sdl_display_name{"unknown"};
+    std::string output_device_name{"unknown"};
+    bool icc_profile_available{false};
+    std::string icc_profile_path{};
+    std::string binding_error{};
+};
+
+OutputDisplayBindingState resolveOutputDisplayBinding(SDL_Window* window) {
+    OutputDisplayBindingState state;
+    if (!window) {
+        state.binding_error = "window unavailable";
+        return state;
+    }
+
+    const int display_index = SDL_GetWindowDisplayIndex(window);
+    state.sdl_display_index = display_index;
+    if (display_index >= 0) {
+        state.binding_succeeded = true;
+        if (const char* display_name = SDL_GetDisplayName(display_index)) {
+            state.sdl_display_name = display_name;
+            state.output_device_name = display_name;
+        }
+    } else {
+        state.binding_error = "SDL_GetWindowDisplayIndex failed";
+    }
+    return state;
+}
+#endif
+
 }  // namespace
 
 class OpenGLVideoRenderer::Impl {
