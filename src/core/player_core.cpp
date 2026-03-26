@@ -57,6 +57,7 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 
 #include <libswresample/swresample.h>
+#include <libswresample/version.h>
 
 #include <libswscale/swscale.h>
 
@@ -85,6 +86,8 @@ extern "C" {
 #include "platform/hw_device_factory.h"
 
 #include "render/renderer_factory.h"
+
+#include "media/ffmpeg_channel_layout_compat.h"
 
 #include "subtitle/embedded_subtitle_loader.h"
 
@@ -380,9 +383,9 @@ AVSampleFormat toAvSampleFormat(SDL_AudioFormat fmt) {
 
 
 
-bool channelLayoutEquals(const AVChannelLayout& lhs, const AVChannelLayout& rhs) {
+bool channelLayoutEquals(uint64_t lhs_layout, int lhs_channels, uint64_t rhs_layout, int rhs_channels) {
 
-    return av_channel_layout_compare(&lhs, &rhs) == 0;
+    return lhs_layout == rhs_layout && lhs_channels == rhs_channels;
 
 }
 
@@ -6078,39 +6081,25 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
 
     const int out_sample_rate = std::max(1, audio_player_->outputSampleRate());
 
+    const int codec_channels = media::ffmpeg_compat::codecContextChannels(audio_codec_ctx_, 2);
+    const int in_channels = std::max(1, media::ffmpeg_compat::frameChannels(frame, codec_channels));
     const int out_channels = std::max(1, audio_player_->outputChannels());
 
-
-
-    AVChannelLayout desired_in_layout{};
-
-    if (frame->ch_layout.nb_channels > 0) {
-
-        if (av_channel_layout_copy(&desired_in_layout, &frame->ch_layout) < 0) {
-
-            return false;
-
-        }
-
-    } else {
-
-        const int fallback_channels = (audio_codec_ctx_ && audio_codec_ctx_->ch_layout.nb_channels > 0)
-
-                                          ? audio_codec_ctx_->ch_layout.nb_channels
-
-                                          : 2;
-
-        av_channel_layout_default(&desired_in_layout, std::max(1, fallback_channels));
-
+    uint64_t desired_in_layout = media::ffmpeg_compat::frameChannelLayout(frame);
+    if (desired_in_layout == 0) {
+        desired_in_layout = media::ffmpeg_compat::codecContextChannelLayout(audio_codec_ctx_);
+    }
+    if (desired_in_layout == 0) {
+        desired_in_layout = media::ffmpeg_compat::defaultChannelLayout(in_channels);
     }
 
-
-
-    AVChannelLayout desired_out_layout{};
-
-    av_channel_layout_default(&desired_out_layout, out_channels);
-
-
+    uint64_t desired_out_layout = media::ffmpeg_compat::defaultChannelLayout(out_channels);
+    if (desired_out_layout == 0) {
+        desired_out_layout = media::ffmpeg_compat::codecContextChannelLayout(audio_codec_ctx_);
+    }
+    if (desired_out_layout == 0) {
+        return false;
+    }
 
     bool need_reinit = (audio_swr_ctx_ == nullptr) ||
 
@@ -6122,17 +6111,13 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
 
                        (swr_out_sample_rate_ != out_sample_rate) ||
 
-                       !channelLayoutEquals(swr_in_layout_, desired_in_layout) ||
+                       !channelLayoutEquals(swr_in_channel_layout_, swr_in_channels_, desired_in_layout, in_channels) ||
 
-                       !channelLayoutEquals(swr_out_layout_, desired_out_layout);
+                       !channelLayoutEquals(swr_out_channel_layout_, swr_out_channels_, desired_out_layout, out_channels);
 
 
 
     if (!need_reinit) {
-
-        av_channel_layout_uninit(&desired_in_layout);
-
-        av_channel_layout_uninit(&desired_out_layout);
 
         return true;
 
@@ -6142,25 +6127,10 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
 
     releaseAudioResampler();
 
-
-
-    if (av_channel_layout_copy(&swr_in_layout_, &desired_in_layout) < 0 ||
-
-        av_channel_layout_copy(&swr_out_layout_, &desired_out_layout) < 0) {
-
-        av_channel_layout_uninit(&desired_in_layout);
-
-        av_channel_layout_uninit(&desired_out_layout);
-
-        releaseAudioResampler();
-
-        return false;
-
-    }
-
-    av_channel_layout_uninit(&desired_in_layout);
-
-    av_channel_layout_uninit(&desired_out_layout);
+    swr_in_channel_layout_ = desired_in_layout;
+    swr_out_channel_layout_ = desired_out_layout;
+    swr_in_channels_ = in_channels;
+    swr_out_channels_ = out_channels;
 
 
 
@@ -6174,17 +6144,41 @@ bool PlayerCore::ensureAudioResampler(const AVFrame* frame) {
 
 
 
-    if (swr_alloc_set_opts2(&audio_swr_ctx_,
+#if LIBSWRESAMPLE_VERSION_MAJOR >= 4 && LIBAVUTIL_VERSION_MAJOR >= 57
+    AVChannelLayout swr_in_layout{};
+    AVChannelLayout swr_out_layout{};
+    if (av_channel_layout_from_mask(&swr_in_layout, swr_in_channel_layout_) < 0 ||
+        av_channel_layout_from_mask(&swr_out_layout, swr_out_channel_layout_) < 0) {
+        av_channel_layout_uninit(&swr_in_layout);
+        av_channel_layout_uninit(&swr_out_layout);
+        releaseAudioResampler();
+        return false;
+    }
 
-                            &swr_out_layout_, swr_out_sample_fmt_, swr_out_sample_rate_,
-
-                            &swr_in_layout_, swr_in_sample_fmt_, swr_in_sample_rate_,
-
-                            0, nullptr) < 0 ||
-
-        !audio_swr_ctx_ ||
-
-        swr_init(audio_swr_ctx_) < 0) {
+    const int swr_alloc_ret = swr_alloc_set_opts2(&audio_swr_ctx_,
+                                                  &swr_out_layout,
+                                                  swr_out_sample_fmt_,
+                                                  swr_out_sample_rate_,
+                                                  &swr_in_layout,
+                                                  swr_in_sample_fmt_,
+                                                  swr_in_sample_rate_,
+                                                  0,
+                                                  nullptr);
+    av_channel_layout_uninit(&swr_in_layout);
+    av_channel_layout_uninit(&swr_out_layout);
+    if (swr_alloc_ret < 0 || !audio_swr_ctx_ || swr_init(audio_swr_ctx_) < 0) {
+#else
+    audio_swr_ctx_ = swr_alloc_set_opts(nullptr,
+                                        static_cast<int64_t>(swr_out_channel_layout_),
+                                        swr_out_sample_fmt_,
+                                        swr_out_sample_rate_,
+                                        static_cast<int64_t>(swr_in_channel_layout_),
+                                        swr_in_sample_fmt_,
+                                        swr_in_sample_rate_,
+                                        0,
+                                        nullptr);
+    if (!audio_swr_ctx_ || swr_init(audio_swr_ctx_) < 0) {
+#endif
 
         releaseAudioResampler();
 
@@ -6212,9 +6206,13 @@ void PlayerCore::releaseAudioResampler() {
 
     }
 
-    av_channel_layout_uninit(&swr_in_layout_);
+    swr_in_channel_layout_ = 0;
 
-    av_channel_layout_uninit(&swr_out_layout_);
+    swr_out_channel_layout_ = 0;
+
+    swr_in_channels_ = 0;
+
+    swr_out_channels_ = 0;
 
     swr_in_sample_fmt_ = AV_SAMPLE_FMT_NONE;
 
@@ -7625,9 +7623,10 @@ bool PlayerCore::decodeVideoFrame(VideoFrame& out) {
 
             out.pts = framePtsSeconds(out.frame, video_time_base_);
 
-            if (out.frame->duration > 0) {
+            const int64_t frame_duration = media::ffmpeg_compat::frameDuration(out.frame);
+            if (frame_duration > 0) {
 
-                out.duration = out.frame->duration * av_q2d(video_time_base_);
+                out.duration = frame_duration * av_q2d(video_time_base_);
 
             } else if (video_codec_ctx_->framerate.num > 0 && video_codec_ctx_->framerate.den > 0) {
 
@@ -8130,7 +8129,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
 
 
 
-    const int channels = std::max(1, swr_out_layout_.nb_channels);
+    const int channels = std::max(1, swr_out_channels_);
 
     const int64_t dst_nb_samples_i64 = av_rescale_rnd(
 
@@ -8213,7 +8212,7 @@ bool PlayerCore::decodeAudioFrame(AudioFrame& out) {
 
         out.pts = frame->pts * av_q2d(audio_time_base_);
 
-        out.duration = frame->duration * av_q2d(audio_time_base_);
+        out.duration = media::ffmpeg_compat::frameDuration(frame) * av_q2d(audio_time_base_);
 
     } else {
 

@@ -1,5 +1,5 @@
 # CROSS PLATFORM MASTER TASKLIST
-Date: 2026-03-25
+Date: 2026-03-26
 Scope: Windows + Linux (current execution scope), macOS explicitly deferred
 Owner: modern-video-player
 
@@ -223,6 +223,8 @@ Acceptance:
 1. Execute full Linux gate (`tools/run_linux_mvp_checks.sh`) on a real Linux host and archive results.
 2. Monitor CI adoption of `.github/workflows/cross-platform-gate.yml`:
   - Linux lane now runs strict optional checks (`CP-507` / `CP-508`) with auto-generated CP-508 media fixture.
+  - Windows/Linux lanes now auto-generate probe media when missing (`samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4`).
+  - Build stage now includes `sample_logger_plugin` target required by package install path.
   - Linux lane now archives machine-readable gate summary: `logs/linux-mvp-gate-summary.env`.
   - Archive and review Linux gate artifacts from the first green run.
 3. Keep appending real adapter samples into `docs/reference/DRIVER_QUIRK_SAMPLE_LIBRARY.csv`.

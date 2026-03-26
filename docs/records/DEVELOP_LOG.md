@@ -1,5 +1,82 @@
 ﻿# DEVELOP_LOG
 
+## 索引说明（2026-03-26 编码清理批次）
+
+- 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
+- 最新开发日志条目位于文件顶部（`Issue 126` 到 `Issue 122`）。
+- 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 126: Workflow log FFmpeg duration compatibility closure
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Parsed `log` workflow error output and closed remaining FFmpeg-old compile compatibility gap.
+- Added `AVFrame` duration compatibility fallback (`duration` / `pkt_duration`) and updated decode timing reads.
+
+### Log
+```text
+Build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Regression:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Result: PASS
+
+CP-508 command:
+.\build\Release\modern-video-player.exe --embedded-subtitle-live-packet-check .\build\tmp\embedded-ass-validation.mkv -1 120
+Result: PASS
+
+Linux shell syntax check:
+C:\Program Files\Git\bin\bash.exe -n tools/run_linux_mvp_checks.sh
+Result: PASS
+```
+
+### Notes
+1. This closes the unresolved compile error subset from the provided workflow `log` file.
+2. Final Linux runtime gate PASS still requires remote CI run after push.
+## Issue 125: Linux CI compatibility stabilization (FFmpeg/libass + workflow determinism)
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Closed Linux CI compatibility regressions found after previous cross-platform closure.
+- Landed FFmpeg channel-layout compatibility migration, Linux compile blocker fixes, and workflow-level deterministic gate inputs.
+
+### Log
+```text
+Build:
+C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Regression:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Result: PASS
+
+CP-508 command:
+.\build\Release\modern-video-player.exe --embedded-subtitle-live-packet-check .\build\tmp\embedded-ass-validation.mkv -1 120
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+Linux shell syntax check:
+C:\Program Files\Git\bin\bash.exe -n tools/run_linux_mvp_checks.sh
+Result: PASS
+
+Linux gate runtime dispatch check:
+C:\Program Files\Git\bin\bash.exe tools/run_linux_mvp_checks.sh
+Result: expected FAIL on Windows host (`This gate script only supports Linux.`)
+```
+
+### Notes
+1. `CP-101 ~ CP-106` remain complete; this round is Linux CI compatibility/stability closure, not scope expansion.
+2. macOS items `CP-1001 ~ CP-1005` stay deferred by scope decision.
+3. Final Linux runtime PASS evidence still requires CI/Linux runner execution after push.
 ## Issue 124: Linux gate reporting/artifact closure for CI evidence reuse
 
 **Date**: 2026-03-26
@@ -7701,6 +7778,8 @@ PASS
 - `docs/records/CHANGELOG.md`
 - `docs/records/VERSION.md`
 - `docs/records/DEVELOP_LOG.md`
+
+
 
 
 

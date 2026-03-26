@@ -1,5 +1,55 @@
 ﻿# VERSION
 
+## 索引说明（2026-03-26 编码清理批次）
+
+- 本轮仅清理 `records/readme` 索引范围，不批量改写历史版本正文。
+- 最新版本更新记录位于文件顶部，按时间倒序排列。
+- 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+### 2026-03-26 Update: Workflow-log FFmpeg duration compatibility closure
+- Closed remaining workflow-log Linux compile error:
+  - old FFmpeg `AVFrame` lacks `duration` field (`pkt_duration` fallback required)
+- Added compatibility accessor in `include/media/ffmpeg_channel_layout_compat.h`:
+  - `frameDuration(const AVFrame* frame)`
+- Replaced direct `frame->duration` usage in `src/core/player_core.cpp` decode timing paths.
+- Synced docs/records for this round:
+  - analysis: `PLAYERCORE_DAY60_LOG_WORKFLOW_ERROR_CLOSURE.md`
+  - design: `CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--performance-log-check` PASS
+  - `--embedded-subtitle-live-packet-check` PASS
+  - Linux gate script syntax check PASS
+- Linux runner evidence still requires push + CI execution.
+### 2026-03-26 Update: Linux CI compatibility stabilization (FFmpeg/libass + workflow gate determinism)
+- Added FFmpeg channel-layout compatibility layer:
+  - `include/media/ffmpeg_channel_layout_compat.h`
+  - migrated channel-layout usage in `player_core`, `main`, and `demuxer`
+- Updated `PlayerCore` audio resampler compatibility path:
+  - state moved to layout-mask/channel-count cache fields
+  - modern swresample path uses `swr_alloc_set_opts2`
+  - legacy swresample path keeps `swr_alloc_set_opts`
+- Fixed Linux-specific build blockers:
+  - `libass` header compatibility (`ass/ass.h` / `libass/ass.h`)
+  - OpenGL enum token rename (`ColorGamutMode::Disabled`) to avoid macro collision risk
+- Hardened CI workflow `.github/workflows/cross-platform-gate.yml`:
+  - generate probe media fixture automatically when missing (Windows/Linux)
+  - build `sample_logger_plugin` alongside `modern-video-player`
+- Synced docs/records for this round:
+  - analysis: `PLAYERCORE_DAY59_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION.md`
+  - design: `CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--performance-log-check` PASS
+  - `--embedded-subtitle-live-packet-check` PASS
+  - `--d3d11-diagnostics` PASS
+  - Linux gate script syntax check PASS
+  - Linux gate script runtime dispatch expected non-Linux FAIL on Windows host
+- Linux CI green evidence still requires push + runner execution.
 ### 2026-03-26 Update: Linux gate reporting/artifact closure
 - Added machine-readable Linux gate report contract in `tools/run_linux_mvp_checks.sh`:
   - arg #10 / env `MVP_LINUX_GATE_REPORT_FILE`
@@ -64,7 +114,7 @@
   - `--d3d11-diagnostics` PASS
   - `--embedded-subtitle-live-packet-check` PASS
   - `--libass-shaping-check` returns expected non-Linux FAIL on this Windows host.
-# 椤圭洰鐗堟湰璁板綍
+## 历史版本记录（旧档保留）
 
 ### 2026-03-26 Update: CP-801 and CP-901 ~ CP-905 HDR present / observability / CI closure
 - Landed the real D3D11 HDR present/runtime diagnostics closure:
@@ -4007,6 +4057,8 @@ make -j$(nproc)
 - Added corresponding analysis document `docs/analysis/PLAYERCORE_DAY46_CROSS_PLATFORM_MASTER_TASKLIST_CONSOLIDATION.md`.
 - Rebuilt `docs/plans/README.md` to expose the new master tasklist as default plans entry.
 - Validation: doc reference check PASS, local `Release` build PASS.
+
+
 
 
 

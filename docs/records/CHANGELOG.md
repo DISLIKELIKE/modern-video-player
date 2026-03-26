@@ -1,5 +1,109 @@
 ﻿# CHANGELOG
 
+## 索引说明（2026-03-26 编码清理批次）
+
+- 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
+- 最近收口条目位于文件顶部（`Issue 126` 到 `Issue 122`）。
+- 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 126: Workflow log remaining FFmpeg duration compatibility closure
+
+**Date**: 2026-03-26
+
+### Problem Description
+- The `log` file still reported Linux compile failures after previous compatibility fixes.
+- Remaining hard failure was old-FFmpeg `AVFrame` duration field mismatch:
+  - `AVFrame has no member duration; did you mean pkt_duration`
+
+### Root Cause Analysis
+- `PlayerCore` decode output timing still read `frame->duration` directly.
+- Existing FFmpeg compatibility layer covered channel-layout API drift but not frame-duration field drift.
+
+### Solution
+- Extended `include/media/ffmpeg_channel_layout_compat.h` with `frameDuration(const AVFrame*)`.
+- Added compile-time branch:
+  - newer FFmpeg -> `frame->duration`
+  - older FFmpeg -> `frame->pkt_duration`
+- Replaced direct frame duration access in `src/core/player_core.cpp` video/audio decode timing paths.
+
+### Validation
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin` -> PASS
+- `.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200` -> PASS
+- `.\build\Release\modern-video-player.exe --embedded-subtitle-live-packet-check .\build\tmp\embedded-ass-validation.mkv -1 120` -> PASS
+- `C:\Program Files\Git\bin\bash.exe -n tools/run_linux_mvp_checks.sh` -> PASS
+
+### Modified Files
+- `include/media/ffmpeg_channel_layout_compat.h`
+- `src/core/player_core.cpp`
+- `docs/analysis/PLAYERCORE_DAY60_LOG_WORKFLOW_ERROR_CLOSURE.md`
+- `docs/design/CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_DESIGN_2026-03-26.md`
+- `docs/plans/CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_PLAN_2026-03-26.md`
+- `docs/reports/CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+## Issue 125: Linux CI compatibility stabilization (FFmpeg/libass + gate workflow determinism)
+
+**Date**: 2026-03-26
+
+### Problem Description
+- Cross-platform task matrix was marked complete for Windows/Linux (`CP-001 ~ CP-905`), but CI gate still failed on Linux and Windows lanes.
+- Linux compile failed on FFmpeg channel-layout API drift and `libass` header path mismatch.
+- Windows CI gate/packaging could fail when probe media fixture and plugin build output were absent in CI workspace.
+
+### Root Cause Analysis
+- Audio channel layout usage mixed old/new FFmpeg field assumptions directly in runtime code.
+- `libass` include path was Linux-distribution dependent (`ass/ass.h` vs `libass/ass.h`).
+- OpenGL color enum used `None`, which has macro collision risk on Linux stacks.
+- CI workflow built only `modern-video-player` but packaging/install path also required `sample_logger_plugin`, and probe media presence was assumed.
+
+### Solution
+- Added `include/media/ffmpeg_channel_layout_compat.h` and migrated channel-layout access in:
+  - `src/core/player_core.cpp`
+  - `src/main.cpp`
+  - `src/demuxer.cpp`
+- Updated `PlayerCore` resampler state/initialization to support old/new swresample interfaces:
+  - modern path: `swr_alloc_set_opts2`
+  - legacy path: `swr_alloc_set_opts`
+- Fixed Linux compile blockers:
+  - `src/subtitle/libass_probe.cpp` include fallback (`ass/ass.h` first)
+  - `src/render/opengl_video_renderer.cpp` enum rename (`None` -> `Disabled`)
+- Hardened CI workflow `.github/workflows/cross-platform-gate.yml`:
+  - generate probe media fixture when missing (Windows + Linux lanes)
+  - build `sample_logger_plugin` together with `modern-video-player`
+
+### Validation
+- `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player sample_logger_plugin` -> PASS
+- `.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200` -> PASS
+- `.\build\Release\modern-video-player.exe --embedded-subtitle-live-packet-check .\build\tmp\embedded-ass-validation.mkv -1 120` -> PASS
+- `.\build\Release\modern-video-player.exe --d3d11-diagnostics` -> PASS
+- `C:\Program Files\Git\bin\bash.exe -n tools/run_linux_mvp_checks.sh` -> PASS
+- `C:\Program Files\Git\bin\bash.exe tools/run_linux_mvp_checks.sh` -> expected FAIL on Windows host (`This gate script only supports Linux.`)
+
+### Modified Files
+- `include/media/ffmpeg_channel_layout_compat.h`
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `src/demuxer.cpp`
+- `src/subtitle/libass_probe.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `.github/workflows/cross-platform-gate.yml`
+- `docs/analysis/PLAYERCORE_DAY59_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION.md`
+- `docs/design/CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_DESIGN_2026-03-26.md`
+- `docs/plans/CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_PLAN_2026-03-26.md`
+- `docs/reports/CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
 ## Issue 124: Linux gate reporting/artifact closure for CI evidence reuse
 
 **Date**: 2026-03-26
@@ -13476,6 +13580,8 @@ void VideoPlayer::play() {
 - `docs/records/CHANGELOG.md`
 - `docs/records/VERSION.md`
 - `docs/records/DEVELOP_LOG.md`
+
+
 
 
 

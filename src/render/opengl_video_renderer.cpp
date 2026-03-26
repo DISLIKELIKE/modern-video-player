@@ -285,7 +285,7 @@ enum class ColorTransferMode {
 };
 
 enum class ColorGamutMode {
-    None = 0,
+    Disabled = 0,
     Bt2020ToBt709 = 1,
 };
 
@@ -317,7 +317,7 @@ struct ColorCoefficients {
 struct ColorPipelineConfig {
     ColorCoefficients coeffs{};
     float transfer_mode{static_cast<float>(ColorTransferMode::Sdr)};
-    float gamut_mode{static_cast<float>(ColorGamutMode::None)};
+    float gamut_mode{static_cast<float>(ColorGamutMode::Disabled)};
     bool hdr_tone_mapping{false};
     bool gamut_mapping{false};
     ColorMatrixKind matrix_kind{ColorMatrixKind::Bt709};

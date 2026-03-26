@@ -1,29 +1,28 @@
-# Records 文档入口
+﻿# Records 文档入口
 
-本目录存放版本记录、修复记录和开发日志，适合需要查历史变更、回溯决策或同步记录时查看。
+用于记录版本演进、问题修复和开发过程留痕。
 
-## 适合什么时候看
+## 推荐阅读顺序
 
-- 需要查看某次修复做了什么
-- 需要回溯版本演进和里程碑
-- 需要记录或跟进开发中的问题
-
-## 推荐使用方式
-
-- 看版本演进：先读 [VERSION.md](./VERSION.md)
-- 看问题修复：再读 [CHANGELOG.md](./CHANGELOG.md)
-- 看过程留痕：按需查 [DEVELOP_LOG.md](./DEVELOP_LOG.md)
+1. [VERSION.md](./VERSION.md)（版本与阶段更新）
+2. [CHANGELOG.md](./CHANGELOG.md)（问题级修复记录）
+3. [DEVELOP_LOG.md](./DEVELOP_LOG.md)（开发执行日志）
 
 ## 文档清单
 
 | 文档 | 用途 |
-|------|------|
-| [VERSION.md](./VERSION.md) | 项目版本记录与依赖说明 |
-| [CHANGELOG.md](./CHANGELOG.md) | 问题修复记录 |
-| [DEVELOP_LOG.md](./DEVELOP_LOG.md) | 开发日志与问题跟踪 |
+| --- | --- |
+| [VERSION.md](./VERSION.md) | 版本里程碑、依赖和范围更新 |
+| [CHANGELOG.md](./CHANGELOG.md) | 按 Issue 记录问题、原因、方案与验证 |
+| [DEVELOP_LOG.md](./DEVELOP_LOG.md) | 按轮次记录执行日志与结论 |
 
-## 相关入口
+## 本轮说明
 
-- 工作流规范：[../workflows/WORKFLOW.md](../workflows/WORKFLOW.md)
-- 当前功能总览：[../guides/PLAYER_FEATURES_USAGE_VALIDATION.md](../guides/PLAYER_FEATURES_USAGE_VALIDATION.md)
-- 差距分析：[../analysis/MPC_HC_GAP_ANALYSIS.md](../analysis/MPC_HC_GAP_ANALYSIS.md)
+- 2026-03-26：执行 records/readme 索引范围编码清理。
+- 历史正文暂不做批量重写，避免高风险修改。
+
+## 关联入口
+
+- [../workflows/WORKFLOW.md](../workflows/WORKFLOW.md)
+- [../analysis/README.md](../analysis/README.md)
+- [../README.md](../README.md)

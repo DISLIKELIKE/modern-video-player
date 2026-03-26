@@ -7,6 +7,8 @@ This directory tracks execution plans, tasklists, and phased TODO documents.
 | Document | Purpose |
 | --- | --- |
 | [CROSS_PLATFORM_MASTER_TASKLIST.md](./CROSS_PLATFORM_MASTER_TASKLIST.md) | Main cross-platform execution board (default entry). |
+| [CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_PLAN_2026-03-26.md](./CROSS_PLATFORM_LOG_WORKFLOW_ERROR_FIX_PLAN_2026-03-26.md) | Execution plan/result for workflow-log error closure (`AVFrame` duration compatibility). |
+| [CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_PLAN_2026-03-26.md](./CROSS_PLATFORM_LINUX_CI_COMPATIBILITY_AND_GATE_STABILIZATION_PLAN_2026-03-26.md) | Execution plan/result for Linux CI compatibility stabilization (FFmpeg/libass compatibility + workflow fixture/plugin hardening). |
 | [CROSS_PLATFORM_LINUX_GATE_REPORTING_PLAN_2026-03-26.md](./CROSS_PLATFORM_LINUX_GATE_REPORTING_PLAN_2026-03-26.md) | Execution plan/result for Linux gate reporting and artifact closure. |
 | [CROSS_PLATFORM_LINUX_GATE_STRICT_OPTIONAL_CHECKS_PLAN_2026-03-26.md](./CROSS_PLATFORM_LINUX_GATE_STRICT_OPTIONAL_CHECKS_PLAN_2026-03-26.md) | Execution plan/result for Linux gate strict optional checks (`CP-507` / `CP-508`). |
 | [CROSS_PLATFORM_PHASE5_BACKLOG_CP507_CP508_PLAN_2026-03-26.md](./CROSS_PLATFORM_PHASE5_BACKLOG_CP507_CP508_PLAN_2026-03-26.md) | Execution plan/result for `CP-507 ~ CP-508`. |

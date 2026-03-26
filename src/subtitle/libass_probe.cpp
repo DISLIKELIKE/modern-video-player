@@ -10,7 +10,13 @@
 #include <vector>
 
 #if defined(__linux__)
+#if __has_include(<ass/ass.h>)
+#include <ass/ass.h>
+#elif __has_include(<libass/ass.h>)
 #include <libass/ass.h>
+#else
+#error "libass headers not found"
+#endif
 #endif
 
 namespace vp::subtitle {

@@ -1,5 +1,6 @@
 #include "demuxer.h"
 #include "logger.h"
+#include "media/ffmpeg_channel_layout_compat.h"
 
 #include <algorithm>
 #include <string>
@@ -153,7 +154,7 @@ void Demuxer::detectStreams() {
         media_info_.audio_stream_idx < static_cast<int>(format_ctx_->nb_streams)) {
         AVStream* stream = format_ctx_->streams[media_info_.audio_stream_idx];
         media_info_.sample_rate = stream->codecpar->sample_rate;
-        media_info_.channels = std::max(1, stream->codecpar->ch_layout.nb_channels);
+        media_info_.channels = std::max(1, media::ffmpeg_compat::codecParametersChannels(stream->codecpar, 2));
         media_info_.audio_time_base = stream->time_base;
     }
 

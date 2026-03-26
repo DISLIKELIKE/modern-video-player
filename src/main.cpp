@@ -7,6 +7,7 @@
 #include "filters/filter_registry.h"
 
 #include "media/format_support.h"
+#include "media/ffmpeg_channel_layout_compat.h"
 
 #include "playlist/playlist_manager.h"
 
@@ -1013,7 +1014,7 @@ ProbeReport collectFileProbeReport(const std::string& path) {
 
         report.audio_status = audio_status_ok ? "PASS" : "PARTIAL";
 
-        report.audio_channels = std::max(1, audio_stream->codecpar->ch_layout.nb_channels);
+        report.audio_channels = std::max(1, media::ffmpeg_compat::codecParametersChannels(audio_stream->codecpar, 2));
 
     } else {
 

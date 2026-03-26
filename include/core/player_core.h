@@ -954,9 +954,13 @@ private:
 
     SwrContext* audio_swr_ctx_{nullptr};
 
-    AVChannelLayout swr_in_layout_{};
+    uint64_t swr_in_channel_layout_{0};
 
-    AVChannelLayout swr_out_layout_{};
+    uint64_t swr_out_channel_layout_{0};
+
+    int swr_in_channels_{0};
+
+    int swr_out_channels_{0};
 
     AVSampleFormat swr_in_sample_fmt_{AV_SAMPLE_FMT_NONE};
 
