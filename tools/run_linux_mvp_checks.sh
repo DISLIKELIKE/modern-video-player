@@ -15,6 +15,7 @@ REQUIRE_OPTIONAL_CHECKS="${7:-${MVP_REQUIRE_OPTIONAL_CHECKS:-0}}"
 EMBEDDED_SUBTITLE_BASE_MEDIA_FILE="${8:-${PROBE_FILE}}"
 EMBEDDED_ASS_SUBTITLE_FILE="${9:-samples/subtitles/opengl_ass_transform_transition_validation.ass}"
 REPORT_FILE="${10:-${MVP_LINUX_GATE_REPORT_FILE:-}}"
+REQUIRE_VULKAN_CHECKS="${11:-${MVP_REQUIRE_VULKAN_CHECKS:-0}}"
 
 REPORT_PATH=""
 GATE_RESULT_RECORDED=0
@@ -196,6 +197,56 @@ run_check() {
   echo "Status: PASS"
 }
 
+probe_vulkan_check_availability() {
+  local output=""
+  local exit_code=0
+  local supported_platform="unknown"
+  local compiled_in="unknown"
+  local runtime_available="unknown"
+
+  set +e
+  output="$("${EXE_PATH}" --vulkan-diagnostics 2>&1)"
+  exit_code=$?
+  set -e
+
+  print_summary_lines "${output}" 'vulkan-diagnostics\.(supported_platform|compiled_in|runtime_available|result)='
+  echo "Vulkan diagnostics probe exit code: ${exit_code}"
+
+  local line=""
+  line="$(printf '%s\n' "${output}" | grep -E '^vulkan-diagnostics\.supported_platform=' | tail -n1 || true)"
+  if [[ -n "${line}" ]]; then
+    supported_platform="${line#*=}"
+  fi
+
+  line="$(printf '%s\n' "${output}" | grep -E '^vulkan-diagnostics\.compiled_in=' | tail -n1 || true)"
+  if [[ -n "${line}" ]]; then
+    compiled_in="${line#*=}"
+  fi
+
+  line="$(printf '%s\n' "${output}" | grep -E '^vulkan-diagnostics\.runtime_available=' | tail -n1 || true)"
+  if [[ -n "${line}" ]]; then
+    runtime_available="${line#*=}"
+  fi
+
+  write_report_line "gate.vulkan_probe_exit_code=${exit_code}"
+  write_report_line "gate.vulkan_supported_platform=$(escape_report_value "${supported_platform}")"
+  write_report_line "gate.vulkan_compiled_in=$(escape_report_value "${compiled_in}")"
+  write_report_line "gate.vulkan_runtime_available=$(escape_report_value "${runtime_available}")"
+
+  if [[ "${supported_platform}" == "true" && "${compiled_in}" == "true" && "${runtime_available}" == "true" && ${exit_code} -eq 0 ]]; then
+    HAS_VK010=1
+    VULKAN_SKIP_REASON="none"
+    return 0
+  fi
+
+  HAS_VK010=0
+  VULKAN_SKIP_REASON="supported_platform=${supported_platform}, compiled_in=${compiled_in}, runtime_available=${runtime_available}, exit_code=${exit_code}"
+  if is_truthy "${REQUIRE_VULKAN_CHECKS}"; then
+    report_fail_and_exit "VK-010 check is required but unavailable (${VULKAN_SKIP_REASON})."
+  fi
+  return 0
+}
+
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "This gate script only supports Linux."
   exit 1
@@ -217,6 +268,7 @@ if [[ -n "${REPORT_PATH}" ]]; then
   write_report_line "gate.probe_media=$(escape_report_value "${MEDIA_PATH}")"
   write_report_line "gate.sample_ms=${SAMPLE_MS}"
   write_report_line "gate.require_optional_checks=$(escape_report_value "${REQUIRE_OPTIONAL_CHECKS}")"
+  write_report_line "gate.require_vulkan_checks=$(escape_report_value "${REQUIRE_VULKAN_CHECKS}")"
   write_report_line "gate.ass_subtitle_file=$(escape_report_value "${ASS_SUBTITLE_PATH}")"
   write_report_line "gate.embedded_subtitle_media_file=$(escape_report_value "${EMBEDDED_SUBTITLE_MEDIA_PATH}")"
   write_report_line "gate.embedded_subtitle_base_media_file=$(escape_report_value "${EMBEDDED_SUBTITLE_BASE_MEDIA_PATH}")"
@@ -254,9 +306,15 @@ if is_truthy "${REQUIRE_OPTIONAL_CHECKS}"; then
   fi
 fi
 
-EXTRA_CHECKS=$((HAS_CP507 + HAS_CP508))
+HAS_VK010=0
+VULKAN_SKIP_REASON="not-probed"
+probe_vulkan_check_availability
+
+EXTRA_CHECKS=$((HAS_CP507 + HAS_CP508 + HAS_VK010))
 write_report_line "gate.has_cp507=${HAS_CP507}"
 write_report_line "gate.has_cp508=${HAS_CP508}"
+write_report_line "gate.has_vk010=${HAS_VK010}"
+write_report_line "gate.vulkan_skip_reason=$(escape_report_value "${VULKAN_SKIP_REASON}")"
 
 TOTAL=$((8 + EXTRA_CHECKS))
 INDEX=1
@@ -322,6 +380,26 @@ run_check "${INDEX}" "${TOTAL}" "cp406_ui_interaction_stability" "CP-406 UI inte
   'ui-interaction-check\.stability_ok=true' \
   'ui-interaction-check\.result=PASS' \
   -- --ui-interaction-check "${MEDIA_PATH}" "${SAMPLE_MS}"
+
+if [[ ${HAS_VK010} -eq 1 ]]; then
+  INDEX=$((INDEX + 1))
+  run_check "${INDEX}" "${TOTAL}" "vk010_vulkan_diagnostics" "VK-010 Vulkan diagnostics baseline" "" \
+    'vulkan-diagnostics\.(supported_platform|compiled_in|runtime_available|startup_renderer_candidates|startup_renderer_plan_reason|selected_renderer|fallback_target|result)=' \
+    'vulkan-diagnostics\.supported_platform=true' \
+    'vulkan-diagnostics\.compiled_in=true' \
+    'vulkan-diagnostics\.runtime_available=true' \
+    'vulkan-diagnostics\.startup_renderer_candidates=Vulkan -> OpenGL -> SoftwareSDL' \
+    'vulkan-diagnostics\.startup_renderer_plan_reason=.*linux-vulkan-fallback-chain.*' \
+    'vulkan-diagnostics\.selected_renderer=Vulkan' \
+    'vulkan-diagnostics\.fallback_target=OpenGL' \
+    'vulkan-diagnostics\.result=PASS' \
+    -- --vulkan-diagnostics
+else
+  echo
+  echo "Skipping VK-010 check: ${VULKAN_SKIP_REASON}"
+  write_report_line "check.vk010_vulkan_diagnostics.status=SKIPPED"
+  write_report_line "check.vk010_vulkan_diagnostics.reason=$(escape_report_value "${VULKAN_SKIP_REASON}")"
+fi
 
 if [[ -f "${ASS_SUBTITLE_PATH}" ]]; then
   INDEX=$((INDEX + 1))

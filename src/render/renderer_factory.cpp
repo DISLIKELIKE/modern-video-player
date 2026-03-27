@@ -11,6 +11,9 @@
 #if defined(MVP_HAVE_SOFTWARE_SDL_RENDERER) && MVP_HAVE_SOFTWARE_SDL_RENDERER
 #include "render/sdl_video_renderer.h"
 #endif
+#if defined(MVP_HAVE_VULKAN_RENDERER) && MVP_HAVE_VULKAN_RENDERER
+#include "render/vulkan_video_renderer.h"
+#endif
 
 namespace vp::render {
 
@@ -32,6 +35,8 @@ const char* RendererFactory::rendererName(VideoRendererType type) {
         return "D3D11";
     case VideoRendererType::OpenGL:
         return "OpenGL";
+    case VideoRendererType::Vulkan:
+        return "Vulkan";
     default:
         return "Unknown";
     }
@@ -59,6 +64,12 @@ VideoRendererPtr RendererFactory::create(VideoRendererType type) {
     case VideoRendererType::OpenGL:
 #if defined(MVP_HAVE_OPENGL_RENDERER) && MVP_HAVE_OPENGL_RENDERER
         return std::make_unique<OpenGLVideoRenderer>();
+#else
+        return nullptr;
+#endif
+    case VideoRendererType::Vulkan:
+#if defined(MVP_HAVE_VULKAN_RENDERER) && MVP_HAVE_VULKAN_RENDERER
+        return std::make_unique<VulkanVideoRenderer>();
 #else
         return nullptr;
 #endif

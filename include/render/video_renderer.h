@@ -12,7 +12,8 @@ enum class VideoRendererType {
     Auto,
     SoftwareSDL,
     D3D11,
-    OpenGL
+    OpenGL,
+    Vulkan
 };
 
 struct VideoRendererConfig {

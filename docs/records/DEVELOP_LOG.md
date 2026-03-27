@@ -3,8 +3,2957 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 127` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 171` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 171: Vulkan chain VK-043 Windows strict-diag-exit-nonzero expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic strict-diag-exit-nonzero expected-fail canary for Windows Vulkan gate.
+- Wired strict-diag-exit-nonzero canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_strict_diag_exit_nonzero_canary.cmd
+- diagnostics path emits contract-valid and runtime-available state, then exits non-zero intentionally
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+  - process exit code=9
+- strict mode requested via gate CLI
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate mode=strict
+  - gate strict_mode_effective=true
+  - gate failure_reason=vulkan-not-available-in-strict-mode
+  - gate vulkan_availability_failure_detail=diag-exit-nonzero
+  - gate playback_check_executed=false
+  - gate diag_exit_code=9
+- emits windows-vulkan-strict-diag-exit-nonzero-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run strict-diag-exit-nonzero canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1 ...
+- parse strict-diag-exit-nonzero canary summary and append section:
+  "Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary"
+- fail-fast:
+  if ($vulkanStrictDiagExitNonzeroCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk043-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Strict-runtime-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-runtime-unavailable-canary.result=PASS
+
+Strict-diag-exit-nonzero canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-gate-vk043.env"
+Result: PASS
+Key lines:
+- windows-vulkan-strict-diag-exit-nonzero-canary.actual_gate_exit_code=2
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_result=FAIL
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_mode=strict
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_strict_mode_effective=true
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_vulkan_availability_failure_detail=diag-exit-nonzero
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_playback_check_executed=false
+- windows-vulkan-strict-diag-exit-nonzero-canary.gate_diag_exit_code=9
+- windows-vulkan-strict-diag-exit-nonzero-canary.validation_failure_reason=none
+- windows-vulkan-strict-diag-exit-nonzero-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Playback-plan-reason semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+
+Playback-result-not-pass canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-result-not-pass-canary.result=PASS
+
+Playback-command-exit-nonzero canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-summary-vk043.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-gate-vk043.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-command-exit-nonzero-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_strict_diag_exit_nonzero_canary|vulkanStrictDiagExitNonzeroCanaryExitCode|Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary|windows-vulkan-strict-diag-exit-nonzero-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic strict diag-exit-nonzero branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now also covers strict diag-exit-nonzero availability detail branch on top of existing canaries.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 170: Vulkan chain VK-042 Windows strict-runtime-unavailable expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic strict-runtime-unavailable expected-fail canary for Windows Vulkan gate.
+- Wired strict-runtime-unavailable canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_strict_runtime_unavailable_canary.cmd
+- diagnostics path emits contract-valid state with runtime unavailable
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=false
+  - result=FAIL
+  - dependency_source=find_package
+- strict mode requested via gate CLI
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate mode=strict
+  - gate strict_mode_effective=true
+  - gate failure_reason=vulkan-not-available-in-strict-mode
+  - gate vulkan_availability_failure_detail=runtime-unavailable
+  - gate playback_check_executed=false
+- emits windows-vulkan-strict-runtime-unavailable-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run strict-runtime-unavailable canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1 ...
+- parse strict-runtime-unavailable canary summary and append section:
+  "Windows Vulkan Gate Strict Runtime-Unavailable Canary"
+- fail-fast:
+  if ($vulkanStrictRuntimeUnavailableCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk042-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Strict-runtime-unavailable canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-gate-vk042.env"
+Result: PASS
+Key lines:
+- windows-vulkan-strict-runtime-unavailable-canary.actual_gate_exit_code=2
+- windows-vulkan-strict-runtime-unavailable-canary.gate_result=FAIL
+- windows-vulkan-strict-runtime-unavailable-canary.gate_mode=strict
+- windows-vulkan-strict-runtime-unavailable-canary.gate_strict_mode_effective=true
+- windows-vulkan-strict-runtime-unavailable-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-strict-runtime-unavailable-canary.gate_vulkan_availability_failure_detail=runtime-unavailable
+- windows-vulkan-strict-runtime-unavailable-canary.gate_playback_check_executed=false
+- windows-vulkan-strict-runtime-unavailable-canary.validation_failure_reason=none
+- windows-vulkan-strict-runtime-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Playback-plan-reason semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+
+Playback-result-not-pass canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-result-not-pass-canary.result=PASS
+
+Playback-command-exit-nonzero canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-summary-vk042.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-gate-vk042.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-command-exit-nonzero-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_strict_runtime_unavailable_canary|vulkanStrictRuntimeUnavailableCanaryExitCode|Windows Vulkan Gate Strict Runtime-Unavailable Canary|windows-vulkan-strict-runtime-unavailable-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic strict runtime-unavailable branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now also covers strict runtime-unavailable availability detail branch on top of existing canaries.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 169: Vulkan chain VK-041 Windows playback-command-exit-nonzero expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-command-exit-nonzero expected-fail canary for Windows Vulkan gate.
+- Wired playback-command-exit-nonzero canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_command_exit_nonzero_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid payload and exits non-zero intentionally
+  - result=PASS
+  - startup_selected_renderer=Vulkan
+  - renderer_backend=Vulkan
+  - startup_renderer_candidates=Vulkan > D3D11 > SoftwareSDL
+  - startup_renderer_plan_reason=renderer-override-env
+  - process exit code=7
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=command-exit-nonzero
+  - gate playback_result=PASS
+- emits windows-vulkan-playback-command-exit-nonzero-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-command-exit-nonzero canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1 ...
+- parse playback-command-exit-nonzero canary summary and append section:
+  "Windows Vulkan Gate Playback Command-Exit-Nonzero Canary"
+- fail-fast:
+  if ($vulkanPlaybackCommandExitNonzeroCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk041-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Playback-plan-reason semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+
+Playback-result-not-pass canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-gate-vk041.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-result-not-pass-canary.result=PASS
+
+Playback-command-exit-nonzero canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-summary-vk041.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-gate-vk041.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-command-exit-nonzero-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_result=FAIL
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_playback_failure_detail=command-exit-nonzero
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_playback_result=PASS
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_playback_selected_renderer=Vulkan
+- windows-vulkan-playback-command-exit-nonzero-canary.gate_playback_renderer_backend=Vulkan
+- windows-vulkan-playback-command-exit-nonzero-canary.validation_failure_reason=none
+- windows-vulkan-playback-command-exit-nonzero-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_command_exit_nonzero_canary|vulkanPlaybackCommandExitNonzeroCanaryExitCode|Windows Vulkan Gate Playback Command-Exit-Nonzero Canary|windows-vulkan-playback-command-exit-nonzero-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback command-exit branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now also covers command-exit-nonzero branch on top of previous diagnostics/playback contract and semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 168: Vulkan chain VK-040 Windows playback-result-not-pass expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-result-not-pass expected-fail canary for Windows Vulkan gate.
+- Wired playback-result-not-pass canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_result_not_pass_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_result_not_pass_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid but result mismatch state
+  - result=FAIL
+  - startup_selected_renderer=Vulkan
+  - renderer_backend=Vulkan
+  - startup_renderer_candidates=Vulkan > D3D11 > SoftwareSDL
+  - startup_renderer_plan_reason=renderer-override-env
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=result-not-pass
+  - gate playback_result=FAIL
+- emits windows-vulkan-playback-result-not-pass-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-result-not-pass canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 ...
+- parse playback-result-not-pass canary summary and append section:
+  "Windows Vulkan Gate Playback Result-Not-Pass Canary"
+- fail-fast:
+  if ($vulkanPlaybackResultNotPassCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk040-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Playback-plan-reason semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk040.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+
+Playback-result-not-pass canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-summary-vk040.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-gate-vk040.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-result-not-pass-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-result-not-pass-canary.gate_result=FAIL
+- windows-vulkan-playback-result-not-pass-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-result-not-pass-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-result-not-pass-canary.gate_playback_failure_detail=result-not-pass
+- windows-vulkan-playback-result-not-pass-canary.gate_playback_result=FAIL
+- windows-vulkan-playback-result-not-pass-canary.gate_playback_selected_renderer=Vulkan
+- windows-vulkan-playback-result-not-pass-canary.gate_playback_renderer_backend=Vulkan
+- windows-vulkan-playback-result-not-pass-canary.validation_failure_reason=none
+- windows-vulkan-playback-result-not-pass-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_result_not_pass_canary|vulkanPlaybackResultNotPassCanaryExitCode|Windows Vulkan Gate Playback Result-Not-Pass Canary|windows-vulkan-playback-result-not-pass-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_result_not_pass_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback `result-not-pass` branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now also covers playback-result mismatch branch on top of previous diagnostics/playback contract and semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 167: Vulkan chain VK-039 Windows playback-plan-reason semantic expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-plan-reason semantic expected-fail canary for Windows Vulkan gate.
+- Wired playback-plan-reason semantic canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_plan_reason_semantic_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid but semantic mismatch state
+  - startup_selected_renderer=Vulkan
+  - renderer_backend=Vulkan
+  - startup_renderer_candidates=Vulkan > D3D11 > SoftwareSDL
+  - startup_renderer_plan_reason=strategy-default
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=plan-reason-not-renderer-override-env
+- emits windows-vulkan-playback-plan-reason-semantic-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-plan-reason semantic canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 ...
+- parse playback-plan-reason semantic canary summary and append section:
+  "Windows Vulkan Gate Playback Plan Reason Semantic Canary"
+- fail-fast:
+  if ($vulkanPlaybackPlanReasonSemanticCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk039-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk039.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Playback-plan-reason semantic canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk039.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk039.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-plan-reason-semantic-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_result=FAIL
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_playback_failure_detail=plan-reason-not-renderer-override-env
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_playback_selected_renderer=Vulkan
+- windows-vulkan-playback-plan-reason-semantic-canary.gate_playback_renderer_backend=Vulkan
+- windows-vulkan-playback-plan-reason-semantic-canary.validation_failure_reason=none
+- windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_plan_reason_semantic_canary|vulkanPlaybackPlanReasonSemanticCanaryExitCode|Windows Vulkan Gate Playback Plan Reason Semantic Canary|windows-vulkan-playback-plan-reason-semantic-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback-plan-reason semantic branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback contract expected-fail, strict PASS, strict-unavailable expected-fail, optional-skip, unsupported-platform expected-fail, selected-renderer semantic expected-fail, backend semantic expected-fail, candidates semantic expected-fail, and plan-reason semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 166: Vulkan chain VK-038 Windows playback-candidates semantic expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-candidates semantic expected-fail canary for Windows Vulkan gate.
+- Wired playback-candidates semantic canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_candidates_semantic_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid but semantic mismatch state
+  - startup_selected_renderer=Vulkan
+  - renderer_backend=Vulkan
+  - startup_renderer_candidates=D3D11 > SoftwareSDL
+  - startup_renderer_plan_reason=renderer-override-env
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=candidates-missing-vulkan
+- emits windows-vulkan-playback-candidates-semantic-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-candidates semantic canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 ...
+- parse playback-candidates semantic canary summary and append section:
+  "Windows Vulkan Gate Playback Candidates Semantic Canary"
+- fail-fast:
+  if ($vulkanPlaybackCandidatesSemanticCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk038-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk038.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Playback-candidates semantic canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk038.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk038.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-candidates-semantic-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-candidates-semantic-canary.gate_result=FAIL
+- windows-vulkan-playback-candidates-semantic-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-candidates-semantic-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-candidates-semantic-canary.gate_playback_failure_detail=candidates-missing-vulkan
+- windows-vulkan-playback-candidates-semantic-canary.gate_playback_selected_renderer=Vulkan
+- windows-vulkan-playback-candidates-semantic-canary.gate_playback_renderer_backend=Vulkan
+- windows-vulkan-playback-candidates-semantic-canary.validation_failure_reason=none
+- windows-vulkan-playback-candidates-semantic-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_candidates_semantic_canary|vulkanPlaybackCandidatesSemanticCanaryExitCode|Windows Vulkan Gate Playback Candidates Semantic Canary|windows-vulkan-playback-candidates-semantic-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback-candidates semantic branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback contract expected-fail, strict PASS, strict-unavailable expected-fail, optional-skip, unsupported-platform expected-fail, selected-renderer semantic expected-fail, backend semantic expected-fail, and candidate-chain semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 165: Vulkan chain VK-037 Windows playback-backend semantic expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-backend semantic expected-fail canary for Windows Vulkan gate.
+- Wired playback-backend semantic canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_backend_semantic_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_backend_semantic_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid but semantic mismatch state
+  - startup_selected_renderer=Vulkan
+  - renderer_backend=OpenGL
+  - startup_renderer_plan_reason=renderer-override-env
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=renderer-backend-not-vulkan
+- emits windows-vulkan-playback-backend-semantic-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-backend semantic canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 ...
+- parse playback-backend semantic canary summary and append section:
+  "Windows Vulkan Gate Playback Backend Semantic Canary"
+- fail-fast:
+  if ($vulkanPlaybackBackendSemanticCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk037-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk037.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Playback-backend semantic canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk037.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk037.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-backend-semantic-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-backend-semantic-canary.gate_result=FAIL
+- windows-vulkan-playback-backend-semantic-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-backend-semantic-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-backend-semantic-canary.gate_playback_failure_detail=renderer-backend-not-vulkan
+- windows-vulkan-playback-backend-semantic-canary.gate_playback_selected_renderer=Vulkan
+- windows-vulkan-playback-backend-semantic-canary.gate_playback_renderer_backend=OpenGL
+- windows-vulkan-playback-backend-semantic-canary.validation_failure_reason=none
+- windows-vulkan-playback-backend-semantic-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_backend_semantic_canary|vulkanPlaybackBackendSemanticCanaryExitCode|Windows Vulkan Gate Playback Backend Semantic Canary|windows-vulkan-playback-backend-semantic-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_backend_semantic_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback-backend semantic branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback contract expected-fail, strict PASS, strict-unavailable expected-fail, optional-skip, unsupported-platform expected-fail, selected-renderer semantic expected-fail, and backend semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 164: Vulkan chain VK-036 Windows playback-semantic expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic playback-semantic expected-fail canary for Windows Vulkan gate.
+- Wired playback-semantic canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_semantic_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_semantic_canary.cmd
+- diagnostics path emits contract-valid and available Vulkan state
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=PASS
+  - dependency_source=find_package
+- playback path emits contract-valid but semantic mismatch state
+  - startup_selected_renderer=D3D11
+  - renderer_backend=Vulkan
+  - startup_renderer_plan_reason=selected_vulkan
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=vulkan-playback-check-failed
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=selected-renderer-not-vulkan
+- emits windows-vulkan-playback-semantic-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-semantic canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 ...
+- parse playback-semantic canary summary and append section:
+  "Windows Vulkan Gate Playback Semantic Canary"
+- fail-fast:
+  if ($vulkanPlaybackSemanticCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk036-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk036.env"
+Result: PASS
+Key line:
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Playback-semantic canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk036.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk036.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-semantic-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-semantic-canary.gate_result=FAIL
+- windows-vulkan-playback-semantic-canary.gate_failure_reason=vulkan-playback-check-failed
+- windows-vulkan-playback-semantic-canary.gate_playback_contract_valid=true
+- windows-vulkan-playback-semantic-canary.gate_playback_failure_detail=selected-renderer-not-vulkan
+- windows-vulkan-playback-semantic-canary.gate_playback_selected_renderer=D3D11
+- windows-vulkan-playback-semantic-canary.validation_failure_reason=none
+- windows-vulkan-playback-semantic-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_semantic_canary|vulkanPlaybackSemanticCanaryExitCode|Windows Vulkan Gate Playback Semantic Canary|windows-vulkan-playback-semantic-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_semantic_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback-semantic branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback contract expected-fail, strict PASS, strict-unavailable expected-fail, optional-skip, unsupported-platform expected-fail, and playback-semantic expected-fail branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 163: Vulkan chain VK-035 Windows unsupported-platform expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic unsupported-platform expected-fail canary for Windows Vulkan gate.
+- Wired unsupported-platform canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_unsupported_platform_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_unsupported_platform_canary.cmd
+- diagnostics path emits contract-valid unsupported-platform state
+  - platform=Linux
+  - supported_platform=false
+  - compiled_in=false
+  - runtime_available=false
+  - result=FAIL
+  - dependency_source=find_package
+- invokes gate in default optional mode
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate failure_reason=unsupported-platform
+  - gate skip_reason empty
+  - gate playback_check_executed=false
+- emits windows-vulkan-unsupported-platform-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run unsupported-platform canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 ...
+- parse unsupported-platform canary summary and append section:
+  "Windows Vulkan Gate Unsupported Platform Canary"
+- fail-fast:
+  if ($vulkanUnsupportedPlatformCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk035-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk035.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk035.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk035.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk035.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk035.env"
+Result: PASS
+Key line:
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Unsupported-platform canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk035.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk035.env"
+Result: PASS
+Key lines:
+- windows-vulkan-unsupported-platform-canary.actual_gate_exit_code=2
+- windows-vulkan-unsupported-platform-canary.gate_result=FAIL
+- windows-vulkan-unsupported-platform-canary.gate_mode=optional
+- windows-vulkan-unsupported-platform-canary.gate_failure_reason=unsupported-platform
+- windows-vulkan-unsupported-platform-canary.gate_skip_reason=
+- windows-vulkan-unsupported-platform-canary.gate_playback_check_executed=false
+- windows-vulkan-unsupported-platform-canary.validation_failure_reason=none
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_unsupported_platform_canary|vulkanUnsupportedPlatformCanaryExitCode|Windows Vulkan Gate Unsupported Platform Canary|windows-vulkan-unsupported-platform-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_unsupported_platform_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic unsupported-platform branch coverage only; policy behavior unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback expected-fail, strict PASS, strict-unavailable expected-fail, optional-skip, and unsupported-platform expected-fail.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 162: Vulkan chain VK-034 Windows optional-unavailable skip canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic optional-unavailable skip canary for Windows Vulkan gate optional-policy branch.
+- Wired optional-skip canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_optional_skip_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_optional_skip_canary.cmd
+- diagnostics path emits contract-valid but unavailable Vulkan state
+  - supported_platform=true
+  - compiled_in=false
+  - runtime_available=false
+  - result=FAIL
+  - dependency_source=find_package
+- invokes gate without strict override (optional mode expected)
+- validates:
+  - gate exit code=0
+  - gate result=SKIPPED
+  - gate mode=optional
+  - gate strict_mode_effective=false
+  - gate skip_reason=vulkan-not-available
+  - gate failure_reason empty
+  - gate playback_check_executed=false
+  - gate vulkan_availability_failure_detail=compiled-in-false
+- emits windows-vulkan-optional-skip-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run optional-skip canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 ...
+- parse optional-skip canary summary and append section:
+  "Windows Vulkan Gate Optional Skip Canary"
+- fail-fast:
+  if ($vulkanOptionalSkipCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk034-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk034.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk034.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk034.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk034.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk034.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk034.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk034.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk034.env"
+Result: PASS
+Key line:
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Optional-skip canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk034.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk034.env"
+Result: PASS
+Key lines:
+- windows-vulkan-optional-skip-canary.actual_gate_exit_code=0
+- windows-vulkan-optional-skip-canary.gate_result=SKIPPED
+- windows-vulkan-optional-skip-canary.gate_mode=optional
+- windows-vulkan-optional-skip-canary.gate_strict_mode_effective=false
+- windows-vulkan-optional-skip-canary.gate_skip_reason=vulkan-not-available
+- windows-vulkan-optional-skip-canary.gate_failure_reason=
+- windows-vulkan-optional-skip-canary.gate_vulkan_availability_failure_detail=compiled-in-false
+- windows-vulkan-optional-skip-canary.gate_playback_check_executed=false
+- windows-vulkan-optional-skip-canary.validation_failure_reason=none
+- windows-vulkan-optional-skip-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_optional_skip_canary|vulkanOptionalSkipCanaryExitCode|Windows Vulkan Gate Optional Skip Canary|windows-vulkan-optional-skip-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_optional_skip_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic optional-skip branch coverage only; policy behavior unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback expected-fail, strict PASS, strict-unavailable expected-fail, and optional-unavailable SKIPPED branch.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 161: Vulkan chain VK-033 Windows strict-unavailable expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic strict-unavailable expected-fail canary for Windows Vulkan gate strict-policy branch.
+- Wired strict-unavailable canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_strict_unavailable_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_strict_unavailable_canary.cmd
+- diagnostics path emits contract-valid but unavailable Vulkan state
+  - supported_platform=true
+  - compiled_in=false
+  - runtime_available=false
+  - result=FAIL
+  - dependency_source=find_package
+- invokes gate in strict mode (-RequireVulkanAvailable)
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate mode=strict
+  - gate failure_reason=vulkan-not-available-in-strict-mode
+  - gate playback_check_executed=false
+  - gate vulkan_availability_failure_detail=compiled-in-false
+- emits windows-vulkan-strict-unavailable-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run strict-unavailable canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 ...
+- parse strict-unavailable canary summary and append section:
+  "Windows Vulkan Gate Strict Unavailable Canary"
+- fail-fast:
+  if ($vulkanStrictUnavailableCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk033-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk033.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk033.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk033.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk033.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk033.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk033.env"
+Result: PASS
+Key line:
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Strict-unavailable canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk033.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk033.env"
+Result: PASS
+Key lines:
+- windows-vulkan-strict-unavailable-canary.actual_gate_exit_code=2
+- windows-vulkan-strict-unavailable-canary.gate_result=FAIL
+- windows-vulkan-strict-unavailable-canary.gate_mode=strict
+- windows-vulkan-strict-unavailable-canary.gate_strict_mode_effective=true
+- windows-vulkan-strict-unavailable-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-strict-unavailable-canary.gate_vulkan_availability_failure_detail=compiled-in-false
+- windows-vulkan-strict-unavailable-canary.gate_playback_check_executed=false
+- windows-vulkan-strict-unavailable-canary.validation_failure_reason=none
+- windows-vulkan-strict-unavailable-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_strict_unavailable_canary|vulkanStrictUnavailableCanaryExitCode|Windows Vulkan Gate Strict Unavailable Canary|windows-vulkan-strict-unavailable-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_unavailable_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic strict-unavailable branch coverage only; policy behavior unchanged.
+2. CI canary matrix now covers diagnostics expected-fail, playback expected-fail, strict PASS, and strict-unavailable expected-fail.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 160: Vulkan chain VK-032 Windows PASS-contract canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic PASS-contract canary for Windows Vulkan gate strict-path success semantics.
+- Wired PASS canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_pass_contract_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_pass_contract_canary.cmd
+- diagnostics path emits valid Vulkan availability contract
+- playback path emits complete Vulkan PASS contract fields
+- invokes gate in strict mode (-RequireVulkanAvailable)
+- validates:
+  - gate exit code=0
+  - gate result=PASS
+  - gate mode=strict
+  - gate playback_contract_valid=true
+  - gate playback_failure_detail=none
+- emits windows-vulkan-pass-contract-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run pass-contract canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 ...
+- parse pass canary summary and append section:
+  "Windows Vulkan Gate PASS Contract Canary"
+- fail-fast:
+  if ($vulkanPassCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk032-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Diagnostics expected-fail canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk032.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk032.env"
+Result: PASS
+Key line:
+- windows-vulkan-contract-canary.result=PASS
+
+Playback expected-fail canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk032.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk032.env"
+Result: PASS
+Key line:
+- windows-vulkan-playback-contract-canary.result=PASS
+
+PASS-contract canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk032.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk032.env"
+Result: PASS
+Key lines:
+- windows-vulkan-pass-contract-canary.actual_gate_exit_code=0
+- windows-vulkan-pass-contract-canary.gate_result=PASS
+- windows-vulkan-pass-contract-canary.gate_mode=strict
+- windows-vulkan-pass-contract-canary.gate_strict_mode_effective=true
+- windows-vulkan-pass-contract-canary.gate_playback_contract_valid=true
+- windows-vulkan-pass-contract-canary.gate_playback_failure_detail=none
+- windows-vulkan-pass-contract-canary.validation_failure_reason=none
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_pass_contract_canary|vulkanPassCanaryExitCode|Windows Vulkan Gate PASS Contract Canary|windows-vulkan-pass-contract-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_pass_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic PASS branch contract coverage only; policy behavior unchanged.
+2. CI now has deterministic canary guards for diagnostics expected-fail, playback expected-fail, and strict PASS branch.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 159: Vulkan chain VK-031 Windows playback-contract expected-fail canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic expected-fail canary for Windows Vulkan playback-contract branch.
+- Wired playback-contract canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_playback_contract_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_playback_contract_canary.cmd
+- diagnostics path emits valid Vulkan availability contract
+- playback path intentionally omits required keys to trigger playback-contract-broken
+- validates:
+  - gate exit code=2
+  - gate failure_reason=vulkan-playback-contract-broken
+  - gate playback_contract_valid=false
+  - required missing fields are reported
+- emits windows-vulkan-playback-contract-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run playback-contract canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 ...
+- parse playback canary summary and append section:
+  "Windows Vulkan Gate Playback Contract Canary"
+- fail-fast:
+  if ($vulkanPlaybackCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk031-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Playback-contract canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk031.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk031.env"
+Result: PASS
+Key lines:
+- windows-vulkan-playback-contract-canary.actual_gate_exit_code=2
+- windows-vulkan-playback-contract-canary.gate_summary_file_present=true
+- windows-vulkan-playback-contract-canary.gate_result=FAIL
+- windows-vulkan-playback-contract-canary.gate_failure_reason=vulkan-playback-contract-broken
+- windows-vulkan-playback-contract-canary.gate_playback_contract_valid=false
+- windows-vulkan-playback-contract-canary.gate_playback_failure_detail=contract-missing-required-fields
+- windows-vulkan-playback-contract-canary.validation_failure_reason=none
+- windows-vulkan-playback-contract-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_playback_contract_canary|vulkanPlaybackCanaryExitCode|Windows Vulkan Gate Playback Contract Canary|windows-vulkan-playback-contract-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_playback_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic playback-contract canary coverage only; policy behavior unchanged.
+2. CI now has deterministic canary guards for both diagnostics-contract and playback-contract branches.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 158: Vulkan chain VK-030 Windows gate contract-canary Step Summary observability
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added CI Step Summary publication for Windows Vulkan contract-canary outputs.
+- Extended canary summary payload with gate-summary file presence signal.
+
+### Log
+```text
+Workflow change:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- parse logs/windows-vulkan-gate-contract-canary-summary.env
+- append "Windows Vulkan Gate Contract Canary" markdown table to GITHUB_STEP_SUMMARY
+- fallback message when canary summary env is missing
+- keep fail-fast:
+  if ($vulkanCanaryExitCode -ne 0) { throw ... }
+
+Canary script change:
+tools/run_windows_vulkan_gate_contract_canary.ps1
+- added output:
+  windows-vulkan-contract-canary.gate_summary_file_present=true|false
+- added validation branch:
+  gate-summary-file-missing
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk030-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Canary run:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk030.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk030.env"
+Result: PASS
+Key lines:
+- windows-vulkan-contract-canary.actual_gate_exit_code=2
+- windows-vulkan-contract-canary.gate_summary_file_present=true
+- windows-vulkan-contract-canary.gate_result=FAIL
+- windows-vulkan-contract-canary.gate_failure_reason=vulkan-diagnostics-contract-broken
+- windows-vulkan-contract-canary.gate_diag_contract_valid=false
+- windows-vulkan-contract-canary.result=PASS
+
+Local Step Summary preview:
+generated logs/windows-vulkan-canary-step-summary-preview-vk030.md
+Key lines:
+- | result | PASS |
+- | actual_gate_exit_code | 2 |
+- | gate_summary_file_present | true |
+- | gate_failure_reason | vulkan-diagnostics-contract-broken |
+
+Static scan:
+rg -n "Windows Vulkan Gate Contract Canary|gate_summary_file_present|vulkanCanarySummaryPath|vulkanCanaryExitCode|run_windows_vulkan_gate_contract_canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round is observability-only for canary outputs; no policy behavior changes.
+2. Contract-canary fail-fast semantics remain unchanged.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 157: Vulkan chain VK-029 Windows gate expected-fail contract canary
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added deterministic expected-fail contract canary for Windows Vulkan gate.
+- Wired canary into CI Windows gate with explicit non-zero propagation check.
+
+### Log
+```text
+New canary script:
+tools/run_windows_vulkan_gate_contract_canary.ps1
+- invokes run_windows_vulkan_checks.ps1 with cmd.exe diagnostics path
+- validates deterministic failure contract:
+  - gate exit code = 2
+  - windows-vulkan-check.result=FAIL
+  - windows-vulkan-check.failure_reason=vulkan-diagnostics-contract-broken
+  - windows-vulkan-check.diag_contract_valid=false
+- emits windows-vulkan-contract-canary.* summary fields
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- executes:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 ...
+- captures:
+  $vulkanCanaryExitCode = $LASTEXITCODE
+- fail-fast:
+  if ($vulkanCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk029-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Canary run:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk029.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk029.env"
+Result: PASS
+Key lines:
+- windows-vulkan-contract-canary.actual_gate_exit_code=2
+- windows-vulkan-contract-canary.gate_result=FAIL
+- windows-vulkan-contract-canary.gate_failure_reason=vulkan-diagnostics-contract-broken
+- windows-vulkan-contract-canary.gate_diag_contract_valid=false
+- windows-vulkan-contract-canary.result=PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_contract_canary|vulkanCanaryExitCode|windows-vulkan-gate-contract-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds contract canary coverage and does not change strict/optional policy semantics.
+2. Canary uses deterministic expected-fail path, so it remains stable across runner hardware differences.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 156: Vulkan chain VK-028 Windows gate exit-code propagation hardening
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Hardened Windows Vulkan CI gate so non-zero gate exit code is no longer swallowed by PowerShell pipeline logging.
+- Preserved `VK-027` Step Summary rendering behavior while enforcing fail-fast on Vulkan gate failure.
+
+### Log
+```text
+Workflow change:
+.github/workflows/cross-platform-gate.yml
+- after Vulkan gate pipeline command:
+  $vulkanGateExitCode = $LASTEXITCODE
+- after Step Summary rendering:
+  if ($vulkanGateExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk028-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Legacy behavior reproduction (no guard):
+powershell -NoProfile -Command '$env:MVP_REQUIRE_WINDOWS_VULKAN_CHECKS="1"; powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 ... 2>&1 | Tee-Object ...; Write-Host "legacy-last=$LASTEXITCODE"'
+Observed:
+- windows-vulkan-check.result=FAIL
+- legacy-last=2
+- outer process exit=0
+
+Guarded behavior reproduction:
+powershell -NoProfile -Command '$env:MVP_REQUIRE_WINDOWS_VULKAN_CHECKS="1"; powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 ... 2>&1 | Tee-Object ...; $vulkanGateExitCode = $LASTEXITCODE; if ($vulkanGateExitCode -ne 0) { throw (''Windows Vulkan gate failed with exit code {0}'' -f $vulkanGateExitCode) }'
+Observed:
+- windows-vulkan-check.result=FAIL
+- Windows Vulkan gate failed with exit code 2
+- outer process exit=1
+
+Static scan:
+rg -n "vulkanGateExitCode|Windows Vulkan gate failed with exit code|windows-vulkan-gate-summary.env" .github/workflows/cross-platform-gate.yml
+Result: PASS
+```
+
+### Notes
+1. This round hardens gate semantics; strict/optional policy behavior is unchanged.
+2. Step Summary remains generated before fail-fast throw.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 155: Vulkan chain VK-027 Windows CI step summary observability
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added Windows Vulkan gate key-signal publication to GitHub Actions Step Summary.
+- Added fallback summary message when Vulkan summary env file is missing.
+
+### Log
+```text
+Workflow change:
+.github/workflows/cross-platform-gate.yml (Windows gate step)
+- parse logs/windows-vulkan-gate-summary.env
+- append Step Summary table with key fields:
+  result/mode/strict policy + SDK/runtime probe + contract validity + failure details
+- add missing-file fallback message
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline env generation:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk027-baseline.env"
+Result: PASS
+
+Local parser preview:
+logs/windows-vulkan-step-summary-preview-vk027.md
+Key lines:
+- | result | SKIPPED |
+- | mode | optional |
+- | strict_mode_effective | false |
+- | diag_contract_valid | true |
+- | playback_contract_valid | n/a |
+- | vulkan_availability_failure_detail | compiled-in-disabled |
+
+Static scan:
+rg -n "Windows Vulkan Gate Summary|GITHUB_STEP_SUMMARY|windows-vulkan-gate-summary.env|runner_vulkan_runtime_probe_detail|playback_contract_valid|vulkan_availability_failure_detail" .github/workflows/cross-platform-gate.yml
+Result: PASS
+```
+
+### Notes
+1. This round is observability-only and does not change gate decision policy.
+2. CI triage can read Vulkan gate key signals directly from Step Summary.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 154: Vulkan chain VK-026 Windows playback contract validation
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added required-key contract validation for playback-check output in Windows Vulkan gate.
+- Added machine-readable playback contract fields and playback contract-broken failure path.
+
+### Log
+```text
+Static path scan:
+rg -n "playback_contract_valid|playback_missing_required_fields|playback_failure_detail|vulkan-playback-contract-broken|contract-missing-required-fields" tools/run_windows_vulkan_checks.ps1
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk026-baseline.env"
+Key lines:
+- windows-vulkan-check.playback_check_executed=false
+- windows-vulkan-check.playback_contract_valid=n/a
+- windows-vulkan-check.playback_missing_required_fields=n/a
+- windows-vulkan-check.playback_failure_detail=not-executed
+- windows-vulkan-check.result=SKIPPED
+
+Playback contract-broken simulation:
+mock executable: logs/mock_windows_vulkan_gate_player.cmd
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "logs/mock_windows_vulkan_gate_player.cmd" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk026-playback-contract-broken.env"
+Result: expected FAIL (exit 2)
+Key lines:
+- windows-vulkan-check.playback_check_executed=true
+- windows-vulkan-check.playback_contract_valid=false
+- windows-vulkan-check.playback_missing_required_fields=performance-log-check.startup_selected_renderer,performance-log-check.renderer_backend,performance-log-check.startup_renderer_candidates,performance-log-check.startup_renderer_plan_reason
+- windows-vulkan-check.playback_failure_detail=contract-missing-required-fields
+- windows-vulkan-check.failure_reason=vulkan-playback-contract-broken
+- windows-vulkan-check.result=FAIL
+
+Compatibility spot-check:
+1) auto + sdk=1 + runtime_probe=0 -> result=SKIPPED (exit 0)
+2) auto + sdk=1 + runtime_probe=1 -> result=FAIL (exit 2, expected on current host)
+```
+
+### Notes
+1. This round hardens playback contract observability; availability/strict policy logic remains unchanged.
+2. Gate now separates playback contract regressions from generic playback semantic failures.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 153: Vulkan chain VK-025 Windows diagnostics contract validation
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added required-key contract validation for `--vulkan-diagnostics` output in Windows Vulkan gate.
+- Added machine-readable diagnostics contract observability fields and contract-broken failure path.
+
+### Log
+```text
+Static path scan:
+rg -n "diag_contract_valid|diag_missing_required_fields|vulkan-diagnostics-contract-broken|diag-contract-missing-required-fields" tools/run_windows_vulkan_checks.ps1
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk025-baseline.env"
+Key lines:
+- windows-vulkan-check.diag_contract_valid=true
+- windows-vulkan-check.diag_missing_required_fields=none
+- windows-vulkan-check.result=SKIPPED
+
+Contract-broken simulation:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "C:/Windows/System32/cmd.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk025-contract-broken.env"
+Result: expected FAIL (exit 2)
+Key lines:
+- windows-vulkan-check.diag_contract_valid=false
+- windows-vulkan-check.diag_missing_required_fields=vulkan-diagnostics.platform,vulkan-diagnostics.supported_platform,vulkan-diagnostics.compiled_in,vulkan-diagnostics.runtime_available,vulkan-diagnostics.result
+- windows-vulkan-check.failure_reason=vulkan-diagnostics-contract-broken
+- windows-vulkan-check.vulkan_availability_failure_detail=diag-contract-missing-required-fields
+- windows-vulkan-check.result=FAIL
+
+Compatibility spot-check:
+1) auto + sdk=1 + runtime_probe=0 -> result=SKIPPED (exit 0)
+2) auto + sdk=1 + runtime_probe=1 -> result=FAIL (exit 2, expected on current host)
+```
+
+### Notes
+1. This round adds diagnostics-contract safety and observability, not policy behavior changes.
+2. Gate now fails fast for malformed diagnostics output to avoid silent misclassification.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 152: Vulkan chain VK-024 Windows availability failure detail classification
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added machine-readable availability-stage failure classification fields to Windows Vulkan gate.
+- Preserved strict/optional behavior and legacy result/failure contracts.
+
+### Log
+```text
+Static path scan:
+rg -n "vulkan_availability_probe_passed|vulkan_availability_failure_detail|compiled-in-disabled|diag-result-not-pass" tools/run_windows_vulkan_checks.ps1
+Result: PASS
+
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk024-baseline.env"
+Key lines:
+- windows-vulkan-check.vulkan_availability_probe_passed=false
+- windows-vulkan-check.vulkan_availability_failure_detail=compiled-in-disabled
+- windows-vulkan-check.result=SKIPPED
+
+Policy matrix:
+1) auto + sdk=1 + runtime_probe=0
+- strict_mode_auto_prerequisites_met=false
+- mode=optional
+- vulkan_availability_failure_detail=compiled-in-disabled
+- result=SKIPPED
+- exit=0
+
+2) auto + sdk=1 + runtime_probe=1
+- strict_mode_auto_prerequisites_met=true
+- mode=strict
+- vulkan_availability_failure_detail=compiled-in-disabled
+- failure_reason=vulkan-not-available-in-strict-mode
+- result=FAIL
+- exit=2 (expected on current host)
+```
+
+### Notes
+1. This round improves classification observability only; it does not change decision behavior.
+2. Availability failure detail now provides stable machine-readable triage signal for CI artifacts.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 151: Vulkan chain VK-023 Windows runtime probe detail observability
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added machine-readable runtime probe detail publication for Windows Vulkan CI/gate diagnostics.
+- Preserved `VK-022` strict-policy behavior while improving root-cause observability.
+
+### Log
+```text
+Static path scan:
+rg -n "MVP_WINDOWS_VULKAN_RUNTIME_PROBE_DETAIL|runner_vulkan_runtime_probe_detail" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_checks.ps1
+Result: PASS
+
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk023-baseline.env"
+Key lines:
+- windows-vulkan-check.runner_vulkan_runtime_probe_detail=unknown
+- windows-vulkan-check.result=SKIPPED
+
+Policy matrix:
+1) auto + sdk=1 + runtime_probe=0 + detail=vulkaninfo-missing
+- strict_mode_auto_prerequisites_met=false
+- mode=optional
+- runner_vulkan_runtime_probe_detail=vulkaninfo-missing
+- result=SKIPPED
+- exit=0
+
+2) auto + sdk=1 + runtime_probe=1 + detail=vulkaninfo-path
+- strict_mode_auto_prerequisites_met=true
+- mode=strict
+- runner_vulkan_runtime_probe_detail=vulkaninfo-path
+- result=FAIL
+- exit=2 (expected on current host)
+```
+
+### Notes
+1. This round is observability-only; strict policy logic remains unchanged.
+2. Summary artifacts now carry enough signal to classify runtime probe failure reasons directly.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 150: Vulkan chain VK-022 Windows auto strict runtime probe guard
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Hardened Windows Vulkan `auto` strict promotion with runtime-probe guard to prevent SDK-only false strict escalation.
+- Added runtime-probe observability fields in Vulkan gate summary and workflow runtime probe signal export.
+
+### Log
+```text
+Static path scan:
+rg -n "MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE|strict_mode_auto_basis|strict_mode_auto_prerequisites_met|sdk_and_runtime_probe|vulkaninfo" tools/run_windows_vulkan_checks.ps1 .github/workflows/cross-platform-gate.yml
+Result: PASS
+
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+
+Policy matrix:
+1) auto + sdk=1 + runtime_probe=0
+- strict_mode_auto_prerequisites_met=false
+- mode=optional
+- result=SKIPPED
+- exit=0
+
+2) auto + sdk=1 + runtime_probe=1
+- strict_mode_auto_prerequisites_met=true
+- mode=strict
+- failure_reason=vulkan-not-available-in-strict-mode
+- result=FAIL
+- exit=2 (expected on current host)
+```
+
+### Notes
+1. `auto` policy now aligns with true runner readiness (SDK + runtime probe), not SDK-only inference.
+2. Safe downgrade behavior on non-Vulkan hosts remains unchanged.
+3. Strict PASS-path still requires a Vulkan-ready Windows runner/workstation.
+
+## Issue 149: Vulkan chain VK-021 Windows dependency-source observability and find_package hardening
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Hardened Windows Vulkan dependency-resolution decision with complete/incomplete package metadata handling.
+- Added machine-readable dependency-source observability in both Vulkan diagnostics and Windows gate summary.
+
+### Log
+```text
+Static path scan:
+rg -n "vulkan-diagnostics\.dependency_source|diag_dependency_source|MVP_VULKAN_DEPENDENCY_SOURCE|find_package\(Vulkan\) returned incomplete package info" CMakeLists.txt src/main.cpp tools/run_windows_vulkan_checks.ps1
+Result: PASS
+
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.dependency_source=disabled
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+
+Windows Vulkan gate check:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk021.env"
+Result: PASS
+Key lines:
+- windows-vulkan-check.diag_dependency_source=disabled
+- windows-vulkan-check.skip_reason=vulkan-not-available
+- windows-vulkan-check.result=SKIPPED
+```
+
+### Notes
+1. This round improves dependency-resolution observability and robustness, not runtime strict PASS proof.
+2. Safe downgrade contract remains unchanged for non-Vulkan hosts.
+3. Strict runtime PASS still requires Vulkan-ready Windows runner/runtime.
+
+## Issue 148: Vulkan chain VK-020 Windows CMake SDK fallback and CMake prefix-path closure
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Hardened Windows Vulkan dependency resolution with explicit SDK fallback in CMake.
+- Added workflow `CMAKE_PREFIX_PATH` injection when Vulkan SDK is detected.
+
+### Log
+```text
+Static path scan:
+rg -n "VULKAN_SDK fallback|CMAKE_PREFIX_PATH|VULKAN_SDK_ROOT|MVP_WINDOWS_VULKAN_SDK_AVAILABLE|find_package\(Vulkan\) failed and VULKAN_SDK fallback is incomplete" CMakeLists.txt .github/workflows/cross-platform-gate.yml
+Result: PASS
+
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.platform=Windows
+- vulkan-diagnostics.supported_platform=true
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+
+Windows Vulkan gate check:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary.env"
+Result: PASS
+Key lines:
+- windows-vulkan-check.strict_mode_policy=off
+- windows-vulkan-check.compiled_in=false
+- windows-vulkan-check.runtime_available=false
+- windows-vulkan-check.skip_reason=vulkan-not-available
+- windows-vulkan-check.result=SKIPPED
+```
+
+### Notes
+1. This round closes Windows Vulkan CMake dependency-resolution robustness, not runtime strict PASS proof.
+2. Safe downgrade behavior is preserved for non-Vulkan hosts.
+3. Runtime strict PASS still requires a Vulkan-ready Windows runner.
+
+## Issue 147: Vulkan chain VK-019 Windows Vulkan auto strict policy promotion
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Promoted Windows Vulkan strict policy to auto mode based on runner SDK readiness signal.
+- Added strict policy/effective-state machine-readable fields for diagnostics and CI traceability.
+
+### Log
+```text
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Policy matrix:
+1) auto + sdk=0
+- mode=optional
+- strict_mode_effective=false
+- result=SKIPPED
+- exit=0
+
+2) auto + sdk=1
+- mode=strict
+- strict_mode_effective=true
+- failure_reason=vulkan-not-available-in-strict-mode
+- result=FAIL
+- exit=2 (expected on current host)
+
+3) off + sdk=1
+- mode=optional
+- strict_mode_effective=false
+- result=SKIPPED
+- exit=0
+```
+
+### Notes
+1. Workflow default policy now uses `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`.
+2. Auto mode ensures strict promotion only when runner SDK availability signal is true.
+3. Strict PASS-path still depends on Vulkan-ready Windows runner/runtime.
+
+## Issue 146: Vulkan chain VK-018 Windows Vulkan SDK provisioning and CI observability
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added optional Windows Vulkan SDK provisioning stage into CI workflow.
+- Extended Windows Vulkan gate summary output with SDK observability fields.
+
+### Log
+```text
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Windows Vulkan check summary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary.env"
+Result: PASS
+Key lines:
+- windows-vulkan-check.vulkan_sdk_present=false
+- windows-vulkan-check.vulkan_sdk_path=
+- windows-vulkan-check.runner_vulkan_sdk_available=false
+- windows-vulkan-check.result=SKIPPED
+```
+
+### Notes
+1. Workflow now attempts Windows Vulkan SDK provisioning and exports runner SDK availability signal.
+2. Gate summary now includes SDK context fields for easier diagnosis of compiled/runtime Vulkan state.
+3. PASS-path Vulkan runtime proof remains dependent on Vulkan-ready Windows runner.
+
+## Issue 145: Vulkan chain VK-017 Windows Vulkan gate strict policy and summary artifact
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Extended Windows Vulkan gate script with persisted summary artifact output.
+- Added env-driven strict policy hook and integrated summary/log capture in CI Windows lane.
+
+### Log
+```text
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Optional mode with summary output:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary.env"
+Result: PASS (exit code 0)
+Key lines:
+- windows-vulkan-check.mode=optional
+- windows-vulkan-check.strict_mode_env_requested=false
+- windows-vulkan-check.result=SKIPPED
+
+Env strict mode with summary output:
+MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=1 + same command
+Result: expected FAIL (exit code 2)
+Key lines:
+- windows-vulkan-check.mode=strict
+- windows-vulkan-check.strict_mode_env_requested=true
+- windows-vulkan-check.failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-check.result=FAIL
+
+Summary outputs:
+- logs/windows-vulkan-gate-summary.env generated
+- logs/windows-vulkan-gate-summary-strict.env generated
+```
+
+### Notes
+1. Windows Vulkan gate now supports both stdout machine-readable lines and persisted summary artifact files.
+2. Strict policy can be toggled via environment (`MVP_REQUIRE_WINDOWS_VULKAN_CHECKS`) without script argument changes.
+3. Strict PASS-path verification still needs Vulkan-ready Windows host/runner.
+
+## Issue 144: Vulkan chain VK-016 Windows Vulkan gate and CI integration
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added a dedicated Windows Vulkan gate command with machine-readable output and optional/strict mode policy.
+- Integrated Windows Vulkan gate command into GitHub Actions Windows lane.
+
+### Log
+```text
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Windows Vulkan check (optional mode):
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200
+Result: PASS (exit code 0)
+Key lines:
+- windows-vulkan-check.supported_platform=true
+- windows-vulkan-check.compiled_in=false
+- windows-vulkan-check.runtime_available=false
+- windows-vulkan-check.skip_reason=vulkan-not-available
+- windows-vulkan-check.result=SKIPPED
+
+Windows Vulkan check (strict mode):
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -RequireVulkanAvailable
+Result: expected FAIL (exit code 2)
+Key lines:
+- windows-vulkan-check.failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-check.result=FAIL
+```
+
+### Notes
+1. Windows Vulkan gate contract is now machine-readable and CI-integrated.
+2. Optional mode keeps current non-Vulkan hosts non-blocking; strict mode is ready for enforced environments.
+3. PASS-path runtime proof still requires Windows host/runner with Vulkan dependency/runtime available.
+
+## Issue 143: Vulkan chain VK-015 Windows link/runtime probe closure
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Closed Windows Vulkan enablement gaps in link-stage dependency wiring and capability runtime truth publication.
+- Kept diagnostics/fallback contracts stable while making runtime availability probe-driven.
+
+### Log
+```text
+Configure with Vulkan ON:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.platform=Windows
+- vulkan-diagnostics.supported_platform=true
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+
+Vulkan override fallback observability:
+$env:MVP_RENDERER_BACKEND='vulkan'; .\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200; Remove-Item Env:MVP_RENDERER_BACKEND
+Result: PASS
+Key lines:
+- performance-log-check.startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- performance-log-check.startup_renderer_fallback_reason=fallback-after-renderer-failure
+- performance-log-check.result=PASS
+
+Windows baseline diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+```
+
+### Notes
+1. Windows final link stage now consumes Vulkan-resolved platform libraries when available.
+2. Vulkan runtime availability publication is now probe-based instead of static.
+3. Current host still lacks Vulkan package; true `compiled_in=true` runtime path needs validation on Vulkan-equipped Windows host.
+
+## Issue 142: Vulkan chain VK-015 Windows enablement implementation
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Enabled Windows-side Vulkan build contract with safe dependency downgrade behavior.
+- Extended Vulkan diagnostics supported-platform contract from Linux-only to Windows+Linux.
+
+### Log
+```text
+Configure with Vulkan ON:
+cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON
+Result: PASS
+Key warning:
+- ENABLE_VULKAN_RENDERER requested on Windows but Vulkan SDK/runtime package is missing (find_package(Vulkan)); forcing OFF
+
+Build:
+cmake --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.platform=Windows
+- vulkan-diagnostics.supported_platform=true
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+
+Vulkan override fallback observability:
+$env:MVP_RENDERER_BACKEND='vulkan'; .\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200; Remove-Item Env:MVP_RENDERER_BACKEND
+Result: PASS
+Key lines:
+- performance-log-check.startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- performance-log-check.startup_renderer_fallback_reason=fallback-after-renderer-failure
+```
+
+### Notes
+1. Current workstation lacks Vulkan SDK/runtime package, so Windows Vulkan remains compile-disabled by designed fallback.
+2. Platform contract for Vulkan diagnostics is now correct on Windows.
+3. Next step is validation on a Windows host with Vulkan package installed (`compiled_in=true` path).
+
+## Issue 141: Vulkan chain VK-014 documentation and release closure
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Completed final documentation and release closure for Vulkan chain.
+- Synchronized fixed records and index entrances after `VK-013` matrix report.
+
+### Log
+```text
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Index/record path scan:
+rg -n "DAY75_VK014|DAY74_VK013|REGRESSION_MATRIX_EXECUTION|DOCUMENTATION_AND_RELEASE_CLOSURE" docs/analysis/README.md docs/design/README.md docs/plans/README.md docs/reports/README.md docs/records/VERSION.md docs/records/CHANGELOG.md docs/records/DEVELOP_LOG.md
+Result: PASS
+
+Workspace status check:
+git status --short
+Result: PASS (expected modified/untracked working set, no commit/push)
+```
+
+### Notes
+1. `VK-014` closes local documentation/release synchronization for Vulkan chain.
+2. Linux Vulkan runtime PASS evidence remains runner-dependent.
+3. No commit/push executed in this round.
+
+## Issue 140: Vulkan chain VK-013 regression matrix execution
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Executed Vulkan-stage regression matrix for open/play/pause/seek/subtitle/fallback coverage.
+- Archived results into dedicated `VK-013` local-check report.
+
+### Log
+```text
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Open/play baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Result: PASS
+
+Seek burst serial:
+.\build\Release\modern-video-player.exe --seek-burst-serial-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 6
+Result: first run FAIL, immediate rerun PASS
+
+Paused seek serial:
+.\build\Release\modern-video-player.exe --paused-seek-serial-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 4
+Result: PASS
+
+Subtitle style:
+.\build\Release\modern-video-player.exe --subtitle-style-check .\samples\subtitles\opengl_ass_style_validation.ass
+Result: PASS
+
+Subtitle sync:
+.\build\Release\modern-video-player.exe --subtitle-sync-check .\samples\subtitles\opengl_ass_style_validation.ass
+Result: PASS
+
+Renderer fallback:
+.\build\Release\modern-video-player.exe --renderer-fallback-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4
+Result: PASS
+
+Vulkan override fallback observability:
+$env:MVP_RENDERER_BACKEND='vulkan'; .\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200; Remove-Item Env:MVP_RENDERER_BACKEND
+Result: PASS
+
+Vulkan diagnostics:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.supported_platform=false
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+Result: expected FAIL on Windows host
+```
+
+### Notes
+1. Matrix coverage for `VK-013` is archived and linked.
+2. Seek-burst first-run FAIL with rerun PASS is retained as residual nondeterministic risk.
+3. Next step in sequence is `VK-014` documentation/release closure.
+
+## Issue 139: Vulkan chain VK-012 GitHub Actions Linux Vulkan lane
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Wired Vulkan build/check enforcement into GitHub Actions Linux lane.
+- Connected workflow lane to strict Vulkan gate mode introduced in `VK-011`.
+
+### Log
+```text
+Workflow field scan:
+rg -n "libvulkan-dev|mesa-vulkan-drivers|ENABLE_VULKAN_RENDERER=ON|logs/linux-mvp-gate-summary.env|Run Linux gate|Install Linux dependencies|Configure Linux build" .github/workflows/cross-platform-gate.yml
+Result: PASS
+
+Linux gate script syntax:
+& "C:\Program Files\Git\bin\bash.exe" -n tools/run_linux_mvp_checks.sh
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics baseline:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.supported_platform=false
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+```
+
+### Notes
+1. Local Windows host validates workflow/script/build consistency only; CI Linux runner still needed for runtime proof.
+2. Linux lane now installs Vulkan packages and explicitly enables Vulkan renderer at configure time.
+3. Next step in sequence is `VK-013` (regression matrix execution).
+
+## Issue 138: Vulkan chain VK-011 Linux gate Vulkan checks
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added Vulkan diagnostics integration stage into Linux gate script.
+- Added capability-aware probe/skip/fail policy and machine-readable report fields for Vulkan gate.
+
+### Log
+```text
+Script path scan:
+rg -n "REQUIRE_VULKAN_CHECKS|probe_vulkan_check_availability|gate.has_vk010|vk010_vulkan_diagnostics|vulkan_skip_reason|--vulkan-diagnostics" tools/run_linux_mvp_checks.sh
+Result: PASS
+
+Script syntax:
+& "C:\Program Files\Git\bin\bash.exe" -n tools/run_linux_mvp_checks.sh
+Result: PASS
+
+Non-Linux dispatch guard:
+& "C:\Program Files\Git\bin\bash.exe" tools/run_linux_mvp_checks.sh
+Output: This gate script only supports Linux.
+Result: expected FAIL on Windows host
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Vulkan diagnostics baseline:
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.supported_platform=false
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.result=FAIL
+```
+
+### Notes
+1. Windows host cannot execute Linux gate runtime checks; only syntax/dispatch validation is available locally.
+2. Vulkan gate stage is now integrated with capability-aware skip behavior and strict-mode hook.
+3. Next step in sequence is `VK-012` (GitHub Actions Linux Vulkan lane).
+
+## Issue 137: Vulkan chain VK-010 Vulkan diagnostics CLI
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added dedicated `--vulkan-diagnostics` machine-readable command path.
+- Reused startup strategy/capability projection to expose Vulkan compile/runtime/fallback observability.
+
+### Log
+```text
+Code-path scan:
+rg -n "runVulkanDiagnostics|--vulkan-diagnostics|vulkan-diagnostics\.|rendererCandidateChainToString" src/main.cpp
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- performance-log-check.startup_renderer_candidates=D3D11 -> SoftwareSDL -> OpenGL
+- performance-log-check.startup_renderer_plan_reason=platform-default-order
+- performance-log-check.startup_decoder_plan_reason=hardware-first
+- performance-log-check.result=PASS
+
+Vulkan diagnostics (default env, Windows host):
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.supported_platform=false
+- vulkan-diagnostics.compiled_in=false
+- vulkan-diagnostics.runtime_available=false
+- vulkan-diagnostics.selected_renderer=D3D11
+- vulkan-diagnostics.result=FAIL
+
+Vulkan override observability (Windows host):
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --vulkan-diagnostics
+Key lines:
+- vulkan-diagnostics.requested_renderer_override=vulkan
+- vulkan-diagnostics.startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- vulkan-diagnostics.startup_renderer_plan_reason=renderer-override-env
+- vulkan-diagnostics.selected_renderer=D3D11
+- vulkan-diagnostics.fallback_target=D3D11
+- vulkan-diagnostics.result=FAIL
+```
+
+### Notes
+1. Non-Linux host result is expected `FAIL`; machine-readable unsupported signal is intentional.
+2. Linux host/runner execution remains required for `vulkan-diagnostics.result=PASS`.
+3. Next step in sequence is `VK-011` (Linux gate Vulkan checks).
+
+## Issue 136: Vulkan chain VK-009 fallback chain and startup policy
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added explicit Linux Vulkan fallback-chain normalization in startup strategy.
+- Added machine-readable startup plan-reason fields in diagnostics/performance output.
+
+### Log
+```text
+Policy/observability code-path scan:
+rg -n "normalizeLinuxVulkanFallbackChain|linux-vulkan-fallback-chain|startup_renderer_plan_reason|startup_decoder_plan_reason" src/core/playback_strategy.cpp include/core/player_core.h src/core/player_core.cpp src/main.cpp
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- performance-log-check.startup_renderer_plan_reason=platform-default-order
+- performance-log-check.startup_decoder_plan_reason=hardware-first
+- result=PASS
+
+Vulkan override fallback observability on Windows:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- performance-log-check.startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- performance-log-check.startup_renderer_plan_reason=renderer-override-env
+- performance-log-check.startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. Startup policy observability now includes strategy reason metadata, not only candidates/fallback result.
+2. Linux-specific Vulkan fallback-chain runtime proof still requires Linux host/runner.
+3. Next step in sequence is `VK-010` (Vulkan diagnostics CLI).
+
+## Issue 135: Vulkan chain VK-008 sync and present pacing
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Added Vulkan present-mode request/selection/fallback path for pacing policy control.
+- Hardened in-flight fence wait with timeout and recovery to avoid unbounded blocking.
+- Added sync/pacing counters and periodic runtime snapshot logging.
+
+### Log
+```text
+Sync/pacing code-path scan:
+rg -n "MVP_VULKAN_PRESENT_MODE|present_mode_requested|present_mode_active|kFrameFenceWaitTimeoutNs|fence_wait_timeout|Vulkan pacing stats|choosePresentMode\(" src/render/vulkan_video_renderer.cpp
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=none
+- result=PASS
+
+Vulkan override + present-mode override fallback observability on Windows:
+$env:MVP_RENDERER_BACKEND='vulkan'
+$env:MVP_VULKAN_PRESENT_MODE='immediate'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. Windows baseline regressions remain stable after Vulkan sync/pacing code changes.
+2. Linux runner validation is still required for real Vulkan runtime pacing behavior.
+3. Next step in sequence is `VK-009` (fallback chain and startup policy closure).
+
+## Issue 134: Vulkan chain VK-007 frame upload YUV path
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Completed Vulkan baseline frame upload chain for decoded YUV frames.
+- Wired upload payload into present-stage command path and completed Vulkan direct-format contract.
+
+### Log
+```text
+Code path scan:
+rg -n "recordClearCommandBuffer|recordPresentCommandBuffer|supportsDirectFrameFormat\(" src/render/vulkan_video_renderer.cpp include/render/vulkan_video_renderer.h
+Result: PASS
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=none
+- result=PASS
+
+Vulkan override fallback observability on Windows:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. Windows regression checks remain stable after Vulkan path code updates.
+2. Linux host/runner execution is still required for real Vulkan upload/display runtime proof.
+3. Next step in sequence is `VK-008` (sync and present pacing).
+
+## Issue 133: Vulkan chain VK-006 clear/present and swapchain recreate
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Implemented Vulkan minimal clear/present frame loop and swapchain recreate baseline.
+- Added frame sync objects and resize-triggered swapchain rebuild flow.
+
+### Log
+```text
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=none
+- result=PASS
+
+Vulkan override fallback observability on Windows:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. Existing Windows runtime paths remain stable.
+2. Vulkan clear/present/recreate behavior still needs Linux host/runner runtime proof.
+3. `VK-007` will build frame upload path on top of this baseline.
+
+## Issue 132: Vulkan chain VK-005 instance/surface/device/swapchain init
+
+**Date**: 2026-03-27
+**Status**: Resolved
+
+### Description
+- Implemented Vulkan runtime initialization baseline in `VulkanVideoRenderer`.
+- Added full init/close lifecycle for SDL/Vulkan core objects and baseline event handling.
+
+### Log
+```text
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Performance baseline:
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=none
+- result=PASS
+
+Vulkan override fallback observability on Windows:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. Windows host validates no regression in existing paths.
+2. Vulkan code path is Linux-first and requires Linux host/runner for compile/runtime proof.
+3. `VK-006` will continue from this lifecycle baseline with clear/present/swapchain recreate.
+
+## Issue 131: Vulkan chain VK-004 renderer skeleton and factory wiring
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Added Vulkan renderer skeleton backend and wired it through enum/factory/capability/strategy.
+- Kept staged behavior conservative: skeleton `init()` returns `false`, forcing observable fallback.
+
+### Log
+```text
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+
+Vulkan override fallback:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Key lines:
+- startup_renderer_candidates=Vulkan -> D3D11 -> SoftwareSDL -> OpenGL
+- startup_renderer_fallback_reason=fallback-after-renderer-failure
+- result=PASS
+```
+
+### Notes
+1. `VK-004` closes compile/wiring baseline only.
+2. Real Vulkan init chain starts at `VK-005`.
+
+## Issue 130: Vulkan chain VK-003 CMake switches and dependency detect
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Added Vulkan renderer build switch and compile macro contract.
+- Added unsupported-host and missing-dependency downgrade behavior.
+
+### Log
+```text
+Configure (forced-on on Windows host):
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -S . -B build-vk-on-win -G "Visual Studio 17 2022" -A x64 -DENABLE_VULKAN_RENDERER=ON
+Key lines:
+- ENABLE_VULKAN_RENDERER requires Linux/Unix non-Apple; forcing OFF
+- Feature switches: ... VULKAN_RENDERER=OFF ...
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+```
+
+### Notes
+1. Switch path is deterministic and safe on unsupported hosts.
+2. Linux dependency probe path is ready for runner-side Vulkan package verification.
+
+## Issue 129: Vulkan chain VK-002 architecture and strategy integration
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Finalized Vulkan architecture integration through existing strategy/factory contracts.
+- Kept `PlayerCore` policy-neutral, fallback observable.
+
+### Log
+```text
+Integration scan:
+rg -n "enum class VideoRendererType|VideoRendererType::|RendererFactory::create|RendererFactory::isSupported|MVP_RENDERER_BACKEND|renderer_candidates" include src CMakeLists.txt -S
+Result: PASS
+
+Runtime observability:
+$env:MVP_RENDERER_BACKEND='vulkan'
+.\build\Release\modern-video-player.exe --performance-log-check .\samples\mp4\demo__h264_aac__1920x1080__60fps__2ch.mp4 1200
+Result: PASS
+```
+
+### Notes
+1. Architecture boundary is stable for next implementation steps.
+2. No `PlayerCore` policy fork introduced.
+
+## Issue 128: Vulkan chain VK-001 scope and acceptance freeze
+
+**Date**: 2026-03-26
+**Status**: Resolved
+
+### Description
+- Started Vulkan implementation sequence with `VK-001` scope/DoD freeze before code changes.
+- Confirmed repository baseline has no existing Vulkan backend/switch/diagnostics path.
+- Synced full documentation chain (`analysis/design/plan/report` + indexes + records).
+
+### Log
+```text
+Vulkan baseline probe:
+rg -n "Vulkan|vulkan|ENABLE_VULKAN_RENDERER|MVP_HAVE_VULKAN_RENDERER|--vulkan-diagnostics|vk" include src tools .github/workflows CMakeLists.txt -S
+Result: PASS (no existing Vulkan path found)
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+D3D11 diagnostics:
+.\build\Release\modern-video-player.exe --d3d11-diagnostics
+Result: PASS
+
+OpenGL diagnostics:
+.\build\Release\modern-video-player.exe --opengl-diagnostics
+Result: PASS
+```
+
+### Notes
+1. `VK-001` is documentation/contract freeze only; no code implementation started.
+2. `VK-002` (architecture and strategy integration design) is the next execution step.
+3. Code changes remain queued from `VK-003` onward after confirmation.
 
 ## Issue 127: Linux workflow Build Linux Release compile blocker closure
 

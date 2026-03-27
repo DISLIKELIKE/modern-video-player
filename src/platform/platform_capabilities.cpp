@@ -4,6 +4,10 @@
 
 #include "platform/hw_device_factory.h"
 
+#if defined(MVP_HAVE_VULKAN_RENDERER) && MVP_HAVE_VULKAN_RENDERER
+#include <vulkan/vulkan.h>
+#endif
+
 namespace vp::platform {
 
 namespace {
@@ -20,9 +24,51 @@ PlatformKind detectPlatformKind() {
 #endif
 }
 
+#if defined(MVP_HAVE_VULKAN_RENDERER) && MVP_HAVE_VULKAN_RENDERER
+bool probeVulkanRuntimeAvailability(PlatformKind platform) {
+    if (platform != PlatformKind::Linux && platform != PlatformKind::Windows) {
+        return false;
+    }
+
+    uint32_t extension_count = 0;
+    const VkResult extension_result =
+        vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
+    if (extension_result != VK_SUCCESS) {
+        return false;
+    }
+
+    VkApplicationInfo app_info{};
+    app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    app_info.pApplicationName = "modern-video-player-capability-probe";
+    app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    app_info.pEngineName = "modern-video-player";
+    app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
+#if defined(VK_API_VERSION_1_0)
+    app_info.apiVersion = VK_API_VERSION_1_0;
+#else
+    app_info.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+#endif
+
+    VkInstanceCreateInfo instance_info{};
+    instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    instance_info.pApplicationInfo = &app_info;
+
+    VkInstance instance = VK_NULL_HANDLE;
+    if (vkCreateInstance(&instance_info, nullptr, &instance) != VK_SUCCESS || instance == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    uint32_t physical_device_count = 0;
+    const VkResult physical_device_result =
+        vkEnumeratePhysicalDevices(instance, &physical_device_count, nullptr);
+    vkDestroyInstance(instance, nullptr);
+    return physical_device_result == VK_SUCCESS && physical_device_count > 0;
+}
+#endif
+
 std::vector<RendererSupport> detectRendererSupport(PlatformKind platform) {
     std::vector<RendererSupport> result;
-    result.reserve(3);
+    result.reserve(4);
 
 #if defined(MVP_HAVE_D3D11_RENDERER) && MVP_HAVE_D3D11_RENDERER
     result.push_back({render::VideoRendererType::D3D11, true, true, 100});
@@ -32,6 +78,13 @@ std::vector<RendererSupport> detectRendererSupport(PlatformKind platform) {
     // Prefer OpenGL first on non-Windows platforms as Linux-first baseline.
     const int opengl_priority = platform == PlatformKind::Windows ? 20 : 100;
     result.push_back({render::VideoRendererType::OpenGL, true, true, opengl_priority});
+#endif
+
+#if defined(MVP_HAVE_VULKAN_RENDERER) && MVP_HAVE_VULKAN_RENDERER
+    // Linux-first Vulkan rollout: keep Vulkan above OpenGL in default renderer order.
+    const int vulkan_priority = platform == PlatformKind::Linux ? 120 : 30;
+    const bool vulkan_runtime_available = probeVulkanRuntimeAvailability(platform);
+    result.push_back({render::VideoRendererType::Vulkan, true, vulkan_runtime_available, vulkan_priority});
 #endif
 
 #if defined(MVP_HAVE_SOFTWARE_SDL_RENDERER) && MVP_HAVE_SOFTWARE_SDL_RENDERER

@@ -46,6 +46,10 @@
 #include "render/opengl_video_renderer.h"
 #endif
 
+#ifndef MVP_VULKAN_DEPENDENCY_SOURCE
+#define MVP_VULKAN_DEPENDENCY_SOURCE "unknown"
+#endif
+
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
 #elif __has_include(<SDL.h>)
@@ -2687,6 +2691,10 @@ const char* rendererTypeName(render::VideoRendererType type) {
 
         return "OpenGL";
 
+    case render::VideoRendererType::Vulkan:
+
+        return "Vulkan";
+
     case render::VideoRendererType::Auto:
 
     default:
@@ -2695,6 +2703,20 @@ const char* rendererTypeName(render::VideoRendererType type) {
 
     }
 
+}
+
+std::string rendererCandidateChainToString(const std::vector<render::VideoRendererType>& candidates) {
+    if (candidates.empty()) {
+        return "none";
+    }
+    std::ostringstream oss;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        if (i > 0) {
+            oss << " -> ";
+        }
+        oss << render::RendererFactory::rendererName(candidates[i]);
+    }
+    return oss.str();
 }
 
 bool tryResolveInteractiveMediaInput(const std::string& raw_input,
@@ -6400,6 +6422,12 @@ bool runPerformanceLogCheck(const std::string& media_file, int sample_ms = 1500)
 
     std::cout << "performance-log-check.startup_decoder_candidates="
               << diag.startup_decoder_candidates << std::endl;
+
+    std::cout << "performance-log-check.startup_renderer_plan_reason="
+              << diag.startup_renderer_plan_reason << std::endl;
+
+    std::cout << "performance-log-check.startup_decoder_plan_reason="
+              << diag.startup_decoder_plan_reason << std::endl;
 
     std::cout << "performance-log-check.startup_selected_renderer="
               << diag.startup_selected_renderer << std::endl;
@@ -11258,6 +11286,98 @@ bool runD3D11HdrOutputCheck(const std::string& media_file, int sample_ms = 1200)
     return false;
 #endif
 }
+
+bool runVulkanDiagnostics() {
+    const platform::PlatformCapabilities capabilities = platform::PlatformCapabilitiesProbe::detect();
+    const bool supported_platform =
+        capabilities.platform == platform::PlatformKind::Linux ||
+        capabilities.platform == platform::PlatformKind::Windows;
+
+    const auto read_env = [](const char* key) -> std::string {
+        if (!key || key[0] == '\0') {
+            return {};
+        }
+#if defined(_WIN32)
+        char* value = nullptr;
+        size_t length = 0;
+        if (_dupenv_s(&value, &length, key) != 0 || !value) {
+            return {};
+        }
+        std::string copy(value);
+        std::free(value);
+        return copy;
+#else
+        const char* value = std::getenv(key);
+        return value ? std::string(value) : std::string{};
+#endif
+    };
+
+    bool compiled_in = false;
+    bool runtime_available = false;
+    for (const platform::RendererSupport& support : capabilities.renderer_support) {
+        if (support.type == render::VideoRendererType::Vulkan) {
+            compiled_in = support.compiled_in;
+            runtime_available = support.runtime_available;
+            break;
+        }
+    }
+
+    std::string requested_renderer_override = "none";
+    const std::string raw_override = read_env("MVP_RENDERER_BACKEND");
+    if (!raw_override.empty()) {
+        requested_renderer_override = toLower(raw_override);
+    }
+
+    core::PlaybackOpenRequest open_request{};
+    open_request.media_info.video_stream_idx = 0;
+    open_request.preferences.prefer_hardware_decode = true;
+    open_request.platform_capabilities = capabilities;
+    const core::PlaybackOpenPlan open_plan = core::PlaybackStrategy::buildOpenPlan(open_request);
+
+    std::string selected_renderer = "None";
+    for (render::VideoRendererType candidate : open_plan.renderer_candidates) {
+        if (!render::RendererFactory::isSupported(candidate, capabilities)) {
+            continue;
+        }
+        selected_renderer = render::RendererFactory::rendererName(candidate);
+        break;
+    }
+
+    std::string fallback_target = "none";
+    const auto vulkan_it = std::find(open_plan.renderer_candidates.begin(),
+                                     open_plan.renderer_candidates.end(),
+                                     render::VideoRendererType::Vulkan);
+    if (vulkan_it != open_plan.renderer_candidates.end()) {
+        for (auto it = vulkan_it; it != open_plan.renderer_candidates.end();) {
+            ++it;
+            if (it == open_plan.renderer_candidates.end()) {
+                break;
+            }
+            if (render::RendererFactory::isSupported(*it, capabilities)) {
+                fallback_target = render::RendererFactory::rendererName(*it);
+                break;
+            }
+        }
+    }
+
+    const bool result = supported_platform && compiled_in && runtime_available;
+
+    std::cout << "vulkan-diagnostics.platform=" << platform::platformKindName(capabilities.platform) << std::endl;
+    std::cout << "vulkan-diagnostics.supported_platform=" << (supported_platform ? "true" : "false") << std::endl;
+    std::cout << "vulkan-diagnostics.compiled_in=" << (compiled_in ? "true" : "false") << std::endl;
+    std::cout << "vulkan-diagnostics.runtime_available=" << (runtime_available ? "true" : "false") << std::endl;
+    std::cout << "vulkan-diagnostics.dependency_source=" << MVP_VULKAN_DEPENDENCY_SOURCE << std::endl;
+    std::cout << "vulkan-diagnostics.requested_renderer_override=" << requested_renderer_override << std::endl;
+    std::cout << "vulkan-diagnostics.startup_renderer_candidates="
+              << rendererCandidateChainToString(open_plan.renderer_candidates) << std::endl;
+    std::cout << "vulkan-diagnostics.startup_renderer_plan_reason="
+              << open_plan.renderer_plan_reason << std::endl;
+    std::cout << "vulkan-diagnostics.selected_renderer=" << selected_renderer << std::endl;
+    std::cout << "vulkan-diagnostics.fallback_target=" << fallback_target << std::endl;
+    std::cout << "vulkan-diagnostics.result=" << (result ? "PASS" : "FAIL") << std::endl;
+    return result;
+}
+
 bool runOpenGLDiagnostics() {
 #if defined(_WIN32) && defined(MVP_HAVE_OPENGL_RENDERER) && MVP_HAVE_OPENGL_RENDERER
     const render::OpenGLDiagnosticsSnapshot diag = render::OpenGLVideoRenderer::probeSystemDiagnostics();
@@ -12241,6 +12361,7 @@ void printUsage(const char* program_name) {
     std::cout << "       " << program_name << " --d3d11-diagnostics" << std::endl;
     std::cout << "       " << program_name << " --d3d11-hdr-output-check <media_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --opengl-diagnostics" << std::endl;
+    std::cout << "       " << program_name << " --vulkan-diagnostics" << std::endl;
     std::cout << "       " << program_name << " --opengl-output-color-check <media_file> <cube_lut_file> [sample_ms]" << std::endl;
     std::cout << "       " << program_name << " --opengl-output-color-icc-check <media_file> [sample_ms]" << std::endl;
 
@@ -13046,6 +13167,19 @@ int main(int argc, char* argv[]) {
         }
 
         return runOpenGLDiagnostics() ? 0 : 2;
+
+    }
+    if (argc >= 2 && std::string(argv[1]) == "--vulkan-diagnostics") {
+
+        if (argc != 2) {
+
+            printUsage(argv[0]);
+
+            return 1;
+
+        }
+
+        return runVulkanDiagnostics() ? 0 : 2;
 
     }
     if (argc >= 2 && std::string(argv[1]) == "--opengl-output-color-check") {

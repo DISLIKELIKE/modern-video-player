@@ -173,6 +173,10 @@ struct DiagnosticsSnapshot {
 
     std::string startup_decoder_candidates{"none"};
 
+    std::string startup_renderer_plan_reason{"none"};
+
+    std::string startup_decoder_plan_reason{"none"};
+
     std::string startup_selected_renderer{"None"};
 
     std::string startup_selected_decoder{"Unknown"};
@@ -899,6 +903,10 @@ private:
     std::string startup_renderer_candidates_{"none"};
 
     std::string startup_decoder_candidates_{"none"};
+
+    std::string startup_renderer_plan_reason_{"none"};
+
+    std::string startup_decoder_plan_reason_{"none"};
 
     std::string startup_selected_renderer_{"None"};
 

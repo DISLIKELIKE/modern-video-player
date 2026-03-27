@@ -6,6 +6,1392 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-27 Update: Vulkan chain VK-043 Windows strict-diag-exit-nonzero expected-fail canary
+- Landed deterministic strict-diag-exit-nonzero expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid and reports:
+      - `compiled_in=true`
+      - `runtime_available=true`
+      - `result=PASS`
+    - diagnostics command exits non-zero intentionally (`diag_exit_code=9`)
+    - strict mode executes expected unavailable failure branch without playback check
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.mode=strict`
+    - `windows-vulkan-check.failure_reason=vulkan-not-available-in-strict-mode`
+    - `windows-vulkan-check.vulkan_availability_failure_detail=diag-exit-nonzero`
+    - `windows-vulkan-check.playback_check_executed=false`
+    - `windows-vulkan-check.diag_exit_code=9`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes strict-diag-exit-nonzero canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanStrictDiagExitNonzeroCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY105_VK043_WINDOWS_VULKAN_STRICT_DIAG_EXIT_NONZERO_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_DIAG_EXIT_NONZERO_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_DIAG_EXIT_NONZERO_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_DIAG_EXIT_NONZERO_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary (`compiled-in-false`): PASS
+  - strict-runtime-unavailable canary: PASS
+  - strict-diag-exit-nonzero canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_mode=strict`
+    - `gate_failure_reason=vulkan-not-available-in-strict-mode`
+    - `gate_vulkan_availability_failure_detail=diag-exit-nonzero`
+    - `gate_playback_check_executed=false`
+    - `gate_diag_exit_code=9`
+    - `result=PASS`
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS (`result=PASS`)
+  - playback-plan-reason semantic canary: PASS (`result=PASS`)
+  - playback-result-not-pass canary: PASS (`result=PASS`)
+  - playback-command-exit-nonzero canary: PASS (`result=PASS`)
+  - workflow/static scan for strict-diag-exit-nonzero canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-042 Windows strict-runtime-unavailable expected-fail canary
+- Landed deterministic strict-runtime-unavailable expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid and reports:
+      - `compiled_in=true`
+      - `runtime_available=false`
+      - `result=FAIL`
+    - strict mode executes expected unavailable failure branch without playback check
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.mode=strict`
+    - `windows-vulkan-check.failure_reason=vulkan-not-available-in-strict-mode`
+    - `windows-vulkan-check.vulkan_availability_failure_detail=runtime-unavailable`
+    - `windows-vulkan-check.playback_check_executed=false`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes strict-runtime-unavailable canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Strict Runtime-Unavailable Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanStrictRuntimeUnavailableCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY104_VK042_WINDOWS_VULKAN_STRICT_RUNTIME_UNAVAILABLE_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_RUNTIME_UNAVAILABLE_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_RUNTIME_UNAVAILABLE_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_RUNTIME_UNAVAILABLE_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary (`compiled-in-false`): PASS
+  - strict-runtime-unavailable canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_mode=strict`
+    - `gate_failure_reason=vulkan-not-available-in-strict-mode`
+    - `gate_vulkan_availability_failure_detail=runtime-unavailable`
+    - `gate_playback_check_executed=false`
+    - `result=PASS`
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS (`result=PASS`)
+  - playback-plan-reason semantic canary: PASS (`result=PASS`)
+  - playback-result-not-pass canary: PASS (`result=PASS`)
+  - playback-command-exit-nonzero canary: PASS (`result=PASS`)
+  - workflow/static scan for strict-runtime-unavailable canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-041 Windows playback-command-exit-nonzero expected-fail canary
+- Landed deterministic playback-command-exit-nonzero expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid and reports PASS fields, then exits non-zero intentionally
+    - optional mode executes expected playback failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=command-exit-nonzero`
+    - `windows-vulkan-check.playback_result=PASS`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-command-exit-nonzero canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Command-Exit-Nonzero Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackCommandExitNonzeroCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY103_VK041_WINDOWS_VULKAN_PLAYBACK_COMMAND_EXIT_NONZERO_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_COMMAND_EXIT_NONZERO_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_COMMAND_EXIT_NONZERO_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_COMMAND_EXIT_NONZERO_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS (`result=PASS`)
+  - playback-plan-reason semantic canary: PASS (`result=PASS`)
+  - playback-result-not-pass canary: PASS (`result=PASS`)
+  - playback-command-exit-nonzero canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=command-exit-nonzero`
+    - `gate_playback_result=PASS`
+    - `result=PASS`
+  - workflow/static scan for playback-command-exit-nonzero canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-040 Windows playback-result-not-pass expected-fail canary
+- Landed deterministic playback-result-not-pass expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_result_not_pass_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid but intentionally reports `performance-log-check.result=FAIL`
+    - optional mode executes expected playback failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=result-not-pass`
+    - `windows-vulkan-check.playback_result=FAIL`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-result-not-pass canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Result-Not-Pass Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackResultNotPassCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY102_VK040_WINDOWS_VULKAN_PLAYBACK_RESULT_NOT_PASS_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_RESULT_NOT_PASS_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_RESULT_NOT_PASS_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_RESULT_NOT_PASS_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS (`result=PASS`)
+  - playback-plan-reason semantic canary: PASS (`result=PASS`)
+  - playback-result-not-pass canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=result-not-pass`
+    - `gate_playback_result=FAIL`
+    - `result=PASS`
+  - workflow/static scan for playback-result-not-pass canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-039 Windows playback-plan-reason semantic expected-fail canary
+- Landed deterministic playback-plan-reason semantic expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid but intentionally violates plan-reason semantic (`startup_renderer_plan_reason` is not `renderer-override-env`)
+    - optional mode executes expected playback semantic failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=plan-reason-not-renderer-override-env`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-plan-reason semantic canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Plan Reason Semantic Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackPlanReasonSemanticCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY101_VK039_WINDOWS_VULKAN_PLAYBACK_PLAN_REASON_SEMANTIC_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_PLAN_REASON_SEMANTIC_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_PLAN_REASON_SEMANTIC_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_PLAN_REASON_SEMANTIC_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS (`result=PASS`)
+  - playback-plan-reason semantic canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=plan-reason-not-renderer-override-env`
+    - `result=PASS`
+  - workflow/static scan for playback-plan-reason semantic canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-038 Windows playback-candidates semantic expected-fail canary
+- Landed deterministic playback-candidates semantic expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid but intentionally violates candidate-chain semantic (`startup_renderer_candidates` does not include Vulkan)
+    - optional mode executes expected playback semantic failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=candidates-missing-vulkan`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-candidates semantic canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Candidates Semantic Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackCandidatesSemanticCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY100_VK038_WINDOWS_VULKAN_PLAYBACK_CANDIDATES_SEMANTIC_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CANDIDATES_SEMANTIC_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CANDIDATES_SEMANTIC_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CANDIDATES_SEMANTIC_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS (`result=PASS`)
+  - playback-candidates semantic canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=candidates-missing-vulkan`
+    - `result=PASS`
+  - workflow/static scan for playback-candidates semantic canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-037 Windows playback-backend semantic expected-fail canary
+- Landed deterministic playback-backend semantic expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_backend_semantic_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid but intentionally violates backend semantic (`renderer_backend=OpenGL`)
+    - optional mode executes expected playback semantic failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=renderer-backend-not-vulkan`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-backend semantic canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Backend Semantic Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackBackendSemanticCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY99_VK037_WINDOWS_VULKAN_PLAYBACK_BACKEND_SEMANTIC_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_BACKEND_SEMANTIC_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_BACKEND_SEMANTIC_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_BACKEND_SEMANTIC_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS (`result=PASS`)
+  - playback-backend semantic canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=renderer-backend-not-vulkan`
+    - `result=PASS`
+  - workflow/static scan for playback-backend semantic canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-036 Windows playback-semantic expected-fail canary
+- Landed deterministic playback-semantic expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_semantic_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid (`compiled_in=true`, `runtime_available=true`)
+    - playback contract remains valid but intentionally violates renderer semantic (`startup_selected_renderer=D3D11`)
+    - optional mode executes expected playback semantic failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-check-failed`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=selected-renderer-not-vulkan`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-semantic canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Semantic Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPlaybackSemanticCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY98_VK036_WINDOWS_VULKAN_PLAYBACK_SEMANTIC_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_SEMANTIC_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_SEMANTIC_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_SEMANTIC_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS (`result=PASS`)
+  - playback-semantic canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-check-failed`
+    - `gate_playback_contract_valid=true`
+    - `gate_playback_failure_detail=selected-renderer-not-vulkan`
+    - `result=PASS`
+  - workflow/static scan for playback-semantic canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-035 Windows unsupported-platform expected-fail canary
+- Landed deterministic unsupported-platform expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_unsupported_platform_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid
+    - platform support is explicitly disabled (`supported_platform=false`)
+    - optional mode executes expected unsupported-platform failure branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=unsupported-platform`
+    - `windows-vulkan-check.playback_check_executed=false`
+    - `windows-vulkan-check.skip_reason` empty
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes unsupported-platform canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Unsupported Platform Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanUnsupportedPlatformCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY97_VK035_WINDOWS_VULKAN_UNSUPPORTED_PLATFORM_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_UNSUPPORTED_PLATFORM_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_UNSUPPORTED_PLATFORM_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_UNSUPPORTED_PLATFORM_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS (`result=PASS`)
+  - unsupported-platform canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=unsupported-platform`
+    - `gate_skip_reason` empty
+    - `result=PASS`
+  - workflow/static scan for unsupported-platform canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-034 Windows optional-unavailable skip canary
+- Landed deterministic optional-unavailable skip canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_optional_skip_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid
+    - availability probe is unavailable (`compiled_in=false`, `runtime_available=false`)
+    - strict override is not enabled (optional mode expected)
+  - canary validates:
+    - gate exit code `0`
+    - `windows-vulkan-check.result=SKIPPED`
+    - `windows-vulkan-check.mode=optional`
+    - `windows-vulkan-check.skip_reason=vulkan-not-available`
+    - `windows-vulkan-check.failure_reason` empty
+    - `windows-vulkan-check.playback_check_executed=false`
+    - `windows-vulkan-check.vulkan_availability_failure_detail=compiled-in-false`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes optional-skip canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Optional Skip Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanOptionalSkipCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY96_VK034_WINDOWS_VULKAN_OPTIONAL_UNAVAILABLE_SKIP_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_OPTIONAL_UNAVAILABLE_SKIP_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_OPTIONAL_UNAVAILABLE_SKIP_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_OPTIONAL_UNAVAILABLE_SKIP_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS (`result=PASS`)
+  - optional-skip canary: PASS
+    - `actual_gate_exit_code=0`
+    - `gate_result=SKIPPED`
+    - `gate_mode=optional`
+    - `gate_skip_reason=vulkan-not-available`
+    - `gate_vulkan_availability_failure_detail=compiled-in-false`
+    - `result=PASS`
+  - workflow/static scan for optional-skip canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-033 Windows strict-unavailable expected-fail canary
+- Landed deterministic strict-unavailable expected-fail canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_strict_unavailable_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics contract remains valid
+    - availability probe is unavailable (`compiled_in=false`, `runtime_available=false`)
+    - strict policy is enforced via CLI (`-RequireVulkanAvailable`)
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.mode=strict`
+    - `windows-vulkan-check.failure_reason=vulkan-not-available-in-strict-mode`
+    - `windows-vulkan-check.playback_check_executed=false`
+    - `windows-vulkan-check.vulkan_availability_failure_detail=compiled-in-false`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes strict-unavailable canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Strict Unavailable Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanStrictUnavailableCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY95_VK033_WINDOWS_VULKAN_STRICT_UNAVAILABLE_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_UNAVAILABLE_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_UNAVAILABLE_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_STRICT_UNAVAILABLE_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS (`result=PASS`)
+  - strict-unavailable canary: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_mode=strict`
+    - `gate_failure_reason=vulkan-not-available-in-strict-mode`
+    - `gate_vulkan_availability_failure_detail=compiled-in-false`
+    - `result=PASS`
+  - workflow/static scan for strict-unavailable canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-032 Windows PASS-contract canary
+- Landed deterministic PASS-contract canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_pass_contract_canary.ps1`
+  - script builds deterministic mock executable scenario:
+    - diagnostics path emits valid Vulkan availability contract (`compiled_in/runtime_available=true`)
+    - playback path emits complete Vulkan PASS contract fields
+  - canary validates:
+    - gate exit code `0`
+    - `windows-vulkan-check.result=PASS`
+    - `windows-vulkan-check.mode=strict`
+    - `windows-vulkan-check.playback_contract_valid=true`
+    - `windows-vulkan-check.playback_failure_detail=none`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes PASS-contract canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate PASS Contract Canary`
+  - fail-fast enforcement:
+    - checks `$vulkanPassCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY94_VK032_WINDOWS_VULKAN_PASS_CONTRACT_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PASS_CONTRACT_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PASS_CONTRACT_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PASS_CONTRACT_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - diagnostics expected-fail canary: PASS (`result=PASS`)
+  - playback expected-fail canary: PASS (`result=PASS`)
+  - PASS-contract canary: PASS
+    - `actual_gate_exit_code=0`
+    - `gate_result=PASS`
+    - `gate_mode=strict`
+    - `gate_playback_contract_valid=true`
+    - `result=PASS`
+  - workflow/static scan for PASS canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-031 Windows playback-contract expected-fail canary
+- Landed deterministic playback-contract canary coverage for Windows Vulkan gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_playback_contract_canary.ps1`
+  - script builds a deterministic mock executable scenario:
+    - diagnostics path emits valid Vulkan availability contract (`compiled_in/runtime_available=true`)
+    - playback path intentionally omits required keys to trigger playback-contract-broken branch
+  - canary validates:
+    - gate exit code `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-playback-contract-broken`
+    - `windows-vulkan-check.playback_contract_valid=false`
+    - required missing keys are reported
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now executes playback-contract canary.
+  - publishes Step Summary section:
+    - `Windows Vulkan Gate Playback Contract Canary`
+  - fail-fast enforcement retained:
+    - checks `$vulkanPlaybackCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY93_VK031_WINDOWS_VULKAN_PLAYBACK_CONTRACT_EXPECTED_FAIL_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_EXPECTED_FAIL_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_EXPECTED_FAIL_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_EXPECTED_FAIL_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate command: PASS (`result=SKIPPED` on current host)
+  - playback-contract canary command: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_summary_file_present=true`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-playback-contract-broken`
+    - `gate_playback_contract_valid=false`
+    - `gate_playback_failure_detail=contract-missing-required-fields`
+    - `result=PASS`
+  - workflow/static scan for playback canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-030 Windows gate contract-canary Step Summary observability
+- Landed CI summary observability for Windows Vulkan contract canary:
+  - `.github/workflows/cross-platform-gate.yml` now parses:
+    - `logs/windows-vulkan-gate-contract-canary-summary.env`
+  - appends dedicated section to `GITHUB_STEP_SUMMARY`:
+    - `Windows Vulkan Gate Contract Canary`
+  - includes key rows:
+    - `result`
+    - `expected_gate_exit_code`
+    - `actual_gate_exit_code`
+    - `gate_summary_file_present`
+    - `gate_result`
+    - `gate_failure_reason`
+    - `gate_diag_contract_valid`
+    - `validation_failure_reason`
+  - fallback message added when canary summary env is missing.
+- Extended canary script summary payload:
+  - `tools/run_windows_vulkan_gate_contract_canary.ps1` now emits:
+    - `windows-vulkan-contract-canary.gate_summary_file_present=true|false`
+- Compatibility:
+  - canary fail-fast semantics remain unchanged:
+    - workflow still checks `$vulkanCanaryExitCode` and throws on non-zero.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY92_VK030_WINDOWS_VULKAN_GATE_CONTRACT_CANARY_STEP_SUMMARY_OBSERVABILITY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_CONTRACT_CANARY_STEP_SUMMARY_OBSERVABILITY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_CONTRACT_CANARY_STEP_SUMMARY_OBSERVABILITY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_CONTRACT_CANARY_STEP_SUMMARY_OBSERVABILITY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate summary generation: PASS (`result=SKIPPED` on current host)
+  - canary command: PASS (`result=PASS`, `actual_gate_exit_code=2`, `gate_summary_file_present=true`)
+  - local Step Summary preview:
+    - `logs/windows-vulkan-canary-step-summary-preview-vk030.md`
+    - key rows rendered as expected
+  - static scan for canary summary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof for real Vulkan playback still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-029 Windows gate expected-fail contract canary
+- Landed deterministic contract-canary check for Windows Vulkan CI gate:
+  - added new script:
+    - `tools/run_windows_vulkan_gate_contract_canary.ps1`
+  - canary intentionally runs gate against `cmd.exe` diagnostics path and validates:
+    - child gate exit code is `2`
+    - `windows-vulkan-check.result=FAIL`
+    - `windows-vulkan-check.failure_reason=vulkan-diagnostics-contract-broken`
+    - `windows-vulkan-check.diag_contract_valid=false`
+  - canary publishes machine-readable fields:
+    - `windows-vulkan-contract-canary.*`
+- Workflow integration:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate now runs canary command:
+    - writes logs and canary summary env under `logs/`
+    - captures `$vulkanCanaryExitCode = $LASTEXITCODE`
+    - fail-fast throws on non-zero canary exit
+- Effect:
+  - CI continuously guards Vulkan gate failure-contract semantics independent of real Vulkan hardware/runtime availability.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY91_VK029_WINDOWS_VULKAN_GATE_EXPECTED_FAIL_CONTRACT_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXPECTED_FAIL_CONTRACT_CANARY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXPECTED_FAIL_CONTRACT_CANARY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXPECTED_FAIL_CONTRACT_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline Windows Vulkan gate: PASS (`result=SKIPPED` on current host)
+  - canary run: PASS
+    - `actual_gate_exit_code=2`
+    - `gate_result=FAIL`
+    - `gate_failure_reason=vulkan-diagnostics-contract-broken`
+    - `result=PASS`
+  - static scan for workflow/script canary wiring: PASS
+- Remaining:
+  - strict PASS runtime proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-028 Windows gate exit-code propagation hardening
+- Landed CI gate-semantics hardening for Windows Vulkan lane:
+  - `.github/workflows/cross-platform-gate.yml` now captures:
+    - `$vulkanGateExitCode = $LASTEXITCODE`
+    - immediately after `run_windows_vulkan_checks.ps1` pipeline (`... | Tee-Object`).
+  - keeps `VK-027` Step Summary rendering behavior unchanged.
+  - adds explicit fail-fast guard before downstream checks:
+    - `if ($vulkanGateExitCode -ne 0) { throw ... }`
+- Effect:
+  - non-zero Windows Vulkan gate result can no longer be swallowed by PowerShell pipeline behavior.
+  - CI step now blocks deterministically on Vulkan gate `FAIL`.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY90_VK028_WINDOWS_VULKAN_GATE_EXIT_CODE_PROPAGATION_HARDENING.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXIT_CODE_PROPAGATION_HARDENING_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXIT_CODE_PROPAGATION_HARDENING_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_EXIT_CODE_PROPAGATION_HARDENING_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate summary generation: PASS (`result=SKIPPED` on current host)
+  - legacy pipeline reproduction:
+    - gate `result=FAIL`, but outer process exit remained `0` (failure swallowed)
+  - guarded pipeline reproduction:
+    - gate `result=FAIL` + explicit throw, outer process exit becomes non-zero (failure propagated)
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-027 Windows CI step summary observability
+- Landed CI observability enhancement for Windows Vulkan gate:
+  - `.github/workflows/cross-platform-gate.yml` Windows gate step now parses:
+    - `logs/windows-vulkan-gate-summary.env`
+  - appends compact table to `GITHUB_STEP_SUMMARY` with key Vulkan gate signals.
+- Step Summary key fields include:
+  - `result`, `mode`, `strict_mode_effective`, `strict_mode_policy`
+  - `runner_vulkan_sdk_available`, `runner_vulkan_runtime_probe_available`, `runner_vulkan_runtime_probe_detail`
+  - `diag_contract_valid`, `playback_contract_valid`
+  - `failure_reason`, `vulkan_availability_failure_detail`, `playback_failure_detail`
+- Missing summary fallback:
+  - workflow writes explicit message when env summary file is absent.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY89_VK027_WINDOWS_VULKAN_CI_STEP_SUMMARY_OBSERVABILITY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_CI_STEP_SUMMARY_OBSERVABILITY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_CI_STEP_SUMMARY_OBSERVABILITY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_CI_STEP_SUMMARY_OBSERVABILITY_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline summary env generation: PASS
+  - local parser preview output:
+    - `logs/windows-vulkan-step-summary-preview-vk027.md`
+    - key fields rendered as expected (`result=SKIPPED`, `mode=optional`, etc.)
+  - workflow static scan for Step Summary logic: PASS
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-026 Windows playback contract validation
+- Landed Windows Vulkan playback-stage contract hardening:
+  - `tools/run_windows_vulkan_checks.ps1` now validates required playback keys when playback check executes.
+  - added summary fields:
+    - `windows-vulkan-check.playback_contract_valid`
+    - `windows-vulkan-check.playback_missing_required_fields`
+    - `windows-vulkan-check.playback_failure_detail`
+  - playback contract-broken path now fails with:
+    - `failure_reason=vulkan-playback-contract-broken`
+    - `playback_failure_detail=contract-missing-required-fields`
+- Compatibility:
+  - non-playback paths now explicitly emit:
+    - `playback_contract_valid=n/a`
+    - `playback_missing_required_fields=n/a`
+    - `playback_failure_detail=not-executed`
+  - strict/optional availability behavior remains unchanged.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY88_VK026_WINDOWS_VULKAN_PLAYBACK_CONTRACT_VALIDATION.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_VALIDATION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_VALIDATION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_PLAYBACK_CONTRACT_VALIDATION_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate output includes playback contract fields as `n/a`/`not-executed`
+  - playback contract-broken simulation via mock executable expected FAIL:
+    - `playback_contract_valid=false`
+    - `failure_reason=vulkan-playback-contract-broken`
+    - `playback_failure_detail=contract-missing-required-fields`
+  - auto policy compatibility unchanged:
+    - `auto + sdk=1 + runtime_probe=0` -> `SKIPPED`
+    - `auto + sdk=1 + runtime_probe=1` -> strict expected `FAIL` on current host
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-025 Windows diagnostics contract validation
+- Landed Windows Vulkan gate diagnostics-contract hardening:
+  - `tools/run_windows_vulkan_checks.ps1` now validates required diagnostics keys:
+    - `vulkan-diagnostics.platform`
+    - `vulkan-diagnostics.supported_platform`
+    - `vulkan-diagnostics.compiled_in`
+    - `vulkan-diagnostics.runtime_available`
+    - `vulkan-diagnostics.result`
+  - added summary fields:
+    - `windows-vulkan-check.diag_contract_valid`
+    - `windows-vulkan-check.diag_missing_required_fields`
+  - contract-broken path now fails with:
+    - `failure_reason=vulkan-diagnostics-contract-broken`
+    - `vulkan_availability_failure_detail=diag-contract-missing-required-fields`
+- Compatibility:
+  - valid-diagnostics strict/optional behavior remains unchanged.
+  - existing result/failure/skip fields remain backward compatible.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY87_VK025_WINDOWS_VULKAN_DIAGNOSTICS_CONTRACT_VALIDATION.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_DIAGNOSTICS_CONTRACT_VALIDATION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_DIAGNOSTICS_CONTRACT_VALIDATION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_DIAGNOSTICS_CONTRACT_VALIDATION_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate:
+    - `diag_contract_valid=true`
+    - `diag_missing_required_fields=none`
+    - `result=SKIPPED` (current host expected)
+  - contract-broken simulation (`ExecutablePath=cmd.exe`) expected FAIL:
+    - `diag_contract_valid=false`
+    - `failure_reason=vulkan-diagnostics-contract-broken`
+    - `vulkan_availability_failure_detail=diag-contract-missing-required-fields`
+  - auto policy compatibility remains unchanged:
+    - `auto + sdk=1 + runtime_probe=0` -> `SKIPPED`
+    - `auto + sdk=1 + runtime_probe=1` -> strict expected `FAIL` on current host
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-024 Windows availability failure detail classification
+- Landed Windows Vulkan gate observability refinement:
+  - `tools/run_windows_vulkan_checks.ps1` adds:
+    - `windows-vulkan-check.vulkan_availability_probe_passed`
+    - `windows-vulkan-check.vulkan_availability_failure_detail`
+  - availability failure detail is now classified (e.g. `compiled-in-disabled`, `runtime-unavailable`, `diag-exit-nonzero`).
+- Compatibility:
+  - existing `result/failure_reason/skip_reason` semantics remain unchanged.
+  - strict policy behavior from `VK-022` remains unchanged.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY86_VK024_WINDOWS_VULKAN_AVAILABILITY_FAILURE_DETAIL_CLASSIFICATION.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_AVAILABILITY_FAILURE_DETAIL_CLASSIFICATION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_AVAILABILITY_FAILURE_DETAIL_CLASSIFICATION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_AVAILABILITY_FAILURE_DETAIL_CLASSIFICATION_LOCAL_CHECK.md`
+- Local validation:
+  - configure with Vulkan ON: PASS (expected host warning: Vulkan missing -> forcing OFF)
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - baseline gate output includes:
+    - `vulkan_availability_probe_passed=false`
+    - `vulkan_availability_failure_detail=compiled-in-disabled`
+  - policy matrix behavior unchanged:
+    - `auto + sdk=1 + runtime_probe=0` -> optional / `SKIPPED` (exit 0)
+    - `auto + sdk=1 + runtime_probe=1` -> strict / expected `FAIL` (exit 2 on current host)
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-023 Windows runtime probe detail observability
+- Landed Windows Vulkan runtime-probe observability follow-up:
+  - `.github/workflows/cross-platform-gate.yml` now exports:
+    - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_DETAIL=<detail>`
+  - `tools/run_windows_vulkan_checks.ps1` now publishes:
+    - `windows-vulkan-check.runner_vulkan_runtime_probe_detail`
+  - when detail env is missing, script normalizes to `unknown`.
+- Policy behavior compatibility:
+  - `VK-022` auto strict guard (`sdk + runtime_probe`) remains unchanged.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY85_VK023_WINDOWS_VULKAN_RUNTIME_PROBE_DETAIL_OBSERVABILITY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_RUNTIME_PROBE_DETAIL_OBSERVABILITY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_RUNTIME_PROBE_DETAIL_OBSERVABILITY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_RUNTIME_PROBE_DETAIL_OBSERVABILITY_LOCAL_CHECK.md`
+- Local validation:
+  - configure with Vulkan ON: PASS (expected host warning: Vulkan missing -> forcing OFF)
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - policy matrix remains unchanged:
+    - `auto + sdk=1 + runtime_probe=0` -> optional / `SKIPPED` (exit 0)
+    - `auto + sdk=1 + runtime_probe=1` -> strict / expected `FAIL` (exit 2 on current host)
+  - new detail field verified:
+    - baseline (no env): `runner_vulkan_runtime_probe_detail=unknown`
+    - simulated cases: `vulkaninfo-missing`, `vulkaninfo-path`
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-022 Windows auto strict runtime probe guard
+- Landed Windows Vulkan strict auto policy hardening follow-up:
+  - `run_windows_vulkan_checks.ps1` now promotes `auto` to strict only when both are true:
+    - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1`
+    - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=1`
+  - keeps CLI/env explicit strict override behavior unchanged.
+- Added machine-readable policy observability fields:
+  - `windows-vulkan-check.runner_vulkan_runtime_probe_available`
+  - `windows-vulkan-check.strict_mode_auto_basis=sdk_and_runtime_probe`
+  - `windows-vulkan-check.strict_mode_auto_prerequisites_met`
+- Workflow runtime probe publication extension:
+  - `.github/workflows/cross-platform-gate.yml` Windows Vulkan SDK step now probes `vulkaninfo --summary`.
+  - exports `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=1|0`.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY84_VK022_WINDOWS_VULKAN_AUTO_STRICT_RUNTIME_PROBE_GUARD.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_RUNTIME_PROBE_GUARD_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_RUNTIME_PROBE_GUARD_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_RUNTIME_PROBE_GUARD_LOCAL_CHECK.md`
+- Local validation:
+  - configure with Vulkan ON: PASS (expected host warning: Vulkan missing -> forcing OFF)
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - `--vulkan-diagnostics`: expected FAIL on current host (`compiled_in=false`, `runtime_available=false`)
+  - policy matrix:
+    - `auto + sdk=1 + runtime_probe=0` -> optional / `SKIPPED` (exit 0)
+    - `auto + sdk=1 + runtime_probe=1` -> strict / expected `FAIL` (exit 2 on current host)
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-021 Windows dependency-source observability and find_package hardening
+- Landed Windows Vulkan dependency-resolution hardening follow-up:
+  - `CMakeLists.txt` now validates `find_package(Vulkan)` completeness before acceptance.
+  - if package metadata is incomplete, fallback to `VULKAN_SDK` probe.
+  - publish build-time source marker:
+    - `MVP_VULKAN_DEPENDENCY_SOURCE=find_package|vulkan_sdk_fallback|disabled`
+- Diagnostics and gate observability extension:
+  - `--vulkan-diagnostics` adds:
+    - `vulkan-diagnostics.dependency_source`
+  - `run_windows_vulkan_checks.ps1` adds:
+    - `windows-vulkan-check.diag_dependency_source`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY83_VK021_WINDOWS_VULKAN_DEPENDENCY_SOURCE_OBSERVABILITY_AND_FIND_PACKAGE_HARDENING.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_VULKAN_DEPENDENCY_SOURCE_OBSERVABILITY_AND_FIND_PACKAGE_HARDENING_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_VULKAN_DEPENDENCY_SOURCE_OBSERVABILITY_AND_FIND_PACKAGE_HARDENING_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_VULKAN_DEPENDENCY_SOURCE_OBSERVABILITY_AND_FIND_PACKAGE_HARDENING_LOCAL_CHECK.md`
+- Local validation:
+  - configure with Vulkan ON: PASS (expected host warning: Vulkan missing -> forcing OFF)
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - `--vulkan-diagnostics`: expected FAIL on current host, with `dependency_source=disabled`
+  - `run_windows_vulkan_checks.ps1`: PASS with `diag_dependency_source=disabled` and `result=SKIPPED`
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-020 Windows CMake SDK fallback and CMake prefix-path closure
+- Landed Windows Vulkan dependency-resolution closure follow-up:
+  - `CMakeLists.txt` adds Windows `VULKAN_SDK` explicit fallback when `find_package(Vulkan)` fails:
+    - requires `${VULKAN_SDK}/Include/vulkan/vulkan.h`
+    - requires `${VULKAN_SDK}/Lib/vulkan-1.lib`
+    - complete fallback keeps Vulkan enabled; incomplete fallback warns and forces OFF.
+  - `.github/workflows/cross-platform-gate.yml` now prepends `CMAKE_PREFIX_PATH` with detected Vulkan SDK root.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY82_VK020_WINDOWS_VULKAN_CMAKE_SDK_FALLBACK_AND_PREFIX_PATH.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_CMAKE_VULKAN_SDK_FALLBACK_AND_PREFIX_PATH_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_CMAKE_VULKAN_SDK_FALLBACK_AND_PREFIX_PATH_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_CMAKE_VULKAN_SDK_FALLBACK_AND_PREFIX_PATH_LOCAL_CHECK.md`
+- Local validation:
+  - configure with Vulkan ON: PASS (current host expected warning: Vulkan package missing -> forcing OFF)
+  - Release build (`modern-video-player` + `sample_logger_plugin`): PASS
+  - `--vulkan-diagnostics`: expected FAIL on current host (`supported_platform=true`, `compiled_in=false`)
+  - `run_windows_vulkan_checks.ps1`: PASS (`result=SKIPPED`)
+- Remaining:
+  - strict PASS proof still depends on Vulkan-ready Windows runner/runtime.
+
+### 2026-03-27 Update: Vulkan chain VK-019 Windows Vulkan auto strict policy promotion
+- Landed Windows Vulkan policy promotion follow-up:
+  - `run_windows_vulkan_checks.ps1` now supports policy env with `auto` semantics:
+    - `auto`: strict when `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1`
+    - `on`: strict
+    - `off`: optional
+  - CLI switch `-RequireVulkanAvailable` remains strict override.
+- Added machine-readable strict-state fields:
+  - `windows-vulkan-check.strict_mode_policy`
+  - `windows-vulkan-check.strict_mode_cli_requested`
+  - `windows-vulkan-check.strict_mode_effective`
+- CI workflow default promoted:
+  - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY81_VK019_WINDOWS_VULKAN_AUTO_STRICT_POLICY_PROMOTION.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_POLICY_PROMOTION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_POLICY_PROMOTION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_POLICY_PROMOTION_LOCAL_CHECK.md`
+- Local validation (policy matrix):
+  - auto + sdk=0 => optional/`SKIPPED` (exit 0)
+  - auto + sdk=1 => strict/expected `FAIL` (exit 2 on current host)
+  - off + sdk=1 => optional/`SKIPPED` (exit 0)
+- Remaining:
+  - strict PASS-path still requires Vulkan-ready Windows runner with runtime availability.
+
+### 2026-03-27 Update: Vulkan chain VK-018 Windows Vulkan SDK provisioning and CI observability
+- Landed Windows Vulkan CI provisioning/observability follow-up:
+  - workflow adds optional Windows Vulkan SDK provisioning stage:
+    - tries `choco install vulkan-sdk`
+    - probes `C:\\VulkanSDK` and exports `VULKAN_SDK` when found
+    - exports `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1|0`
+  - Vulkan gate summary extended with SDK context fields:
+    - `windows-vulkan-check.vulkan_sdk_present`
+    - `windows-vulkan-check.vulkan_sdk_path`
+    - `windows-vulkan-check.runner_vulkan_sdk_available`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY80_VK018_WINDOWS_VULKAN_SDK_PROVISIONING_AND_CI_OBSERVABILITY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_SDK_PROVISIONING_AND_CI_OBSERVABILITY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_SDK_PROVISIONING_AND_CI_OBSERVABILITY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_SDK_PROVISIONING_AND_CI_OBSERVABILITY_LOCAL_CHECK.md`
+- Local validation:
+  - `cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON` PASS (expected warning on current host)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `run_windows_vulkan_checks.ps1` summary output includes new SDK fields and remains deterministic (`result=SKIPPED` on current host)
+- Remaining:
+  - Runtime PASS proof still depends on Vulkan-ready Windows runner (SDK + runtime/device).
+
+### 2026-03-27 Update: Vulkan chain VK-017 Windows Vulkan gate strict policy and summary artifact
+- Landed Windows Vulkan gate operational follow-up:
+  - added summary output parameter in script:
+    - `run_windows_vulkan_checks.ps1 -SummaryOutputPath <path>`
+  - added env-driven strict policy hook:
+    - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=1`
+  - added output field:
+    - `windows-vulkan-check.strict_mode_env_requested`
+- CI integration refinements:
+  - workflow job env now includes default:
+    - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=0`
+  - Windows gate writes:
+    - `logs/windows-vulkan-gate-summary.env`
+    - `logs/windows-vulkan-gate.log`
+  - both are covered by existing artifact upload patterns.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY79_VK017_WINDOWS_VULKAN_GATE_STRICT_POLICY_AND_SUMMARY_ARTIFACT.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_STRICT_POLICY_AND_SUMMARY_ARTIFACT_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_STRICT_POLICY_AND_SUMMARY_ARTIFACT_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_STRICT_POLICY_AND_SUMMARY_ARTIFACT_LOCAL_CHECK.md`
+- Local validation:
+  - `cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON` PASS (expected warning on host without Vulkan package)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - optional mode + summary file output PASS (`result=SKIPPED`)
+  - env strict mode + summary file output expected FAIL (`result=FAIL`, exit code `2`)
+- Remaining:
+  - strict PASS-path still requires Vulkan-ready Windows host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-016 Windows Vulkan gate and CI integration
+- Landed Windows Vulkan gate/CI integration follow-up:
+  - added new command wrapper script: `tools/run_windows_vulkan_checks.ps1`
+  - added machine-readable output contract: `windows-vulkan-check.*`
+  - added optional/strict mode policy (`-RequireVulkanAvailable`)
+- CI integration updates:
+  - Windows configure is now explicit with `-DENABLE_VULKAN_RENDERER=ON`
+  - Windows gate now executes Vulkan check script before OpenGL checks
+- Round docs:
+  - analysis: `PLAYERCORE_DAY78_VK016_WINDOWS_VULKAN_GATE_AND_CI_INTEGRATION.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_AND_CI_INTEGRATION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_AND_CI_INTEGRATION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_GATE_AND_CI_INTEGRATION_LOCAL_CHECK.md`
+- Local validation:
+  - `cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON` PASS (current host shows expected Vulkan missing warning)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `run_windows_vulkan_checks.ps1` optional mode => `windows-vulkan-check.result=SKIPPED`
+  - `run_windows_vulkan_checks.ps1 -RequireVulkanAvailable` strict mode => expected FAIL with exit code `2`
+- Remaining:
+  - CI/runtime proof of `windows-vulkan-check.result=PASS` requires a Windows host/runner with Vulkan dependency/runtime available.
+
+### 2026-03-27 Update: Vulkan chain VK-015 Windows link/runtime probe closure
+- Landed follow-up closure for Windows Vulkan enablement:
+  - fixed Windows link closure by wiring `${PLATFORM_EXTRA_LIBRARIES}` into final target link stage.
+  - added probe-driven Vulkan runtime availability publication in `PlatformCapabilitiesProbe`.
+- Runtime truth contract update:
+  - Vulkan capability no longer assumes runtime availability when compiled.
+  - probe path checks loader/instance/device availability before publishing `runtime_available=true`.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY77_VK015_WINDOWS_VULKAN_LINK_AND_RUNTIME_PROBE_CLOSURE.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_LINK_AND_RUNTIME_PROBE_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_LINK_AND_RUNTIME_PROBE_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_LINK_AND_RUNTIME_PROBE_LOCAL_CHECK.md`
+- Local validation:
+  - `cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON` PASS (expected downgrade warning on host without Vulkan package)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--vulkan-diagnostics` keeps truthful Windows output (`supported_platform=true`, `compiled_in=false`, `runtime_available=false`)
+  - `MVP_RENDERER_BACKEND=vulkan --performance-log-check` fallback observability PASS
+  - `--d3d11-diagnostics` PASS
+- Remaining:
+  - validate `compiled_in=true` + runtime-available Vulkan path on a Windows machine with Vulkan SDK/runtime package installed.
+
+### 2026-03-27 Update: Vulkan chain VK-015 Windows enablement implementation
+- Landed Windows Vulkan enablement baseline:
+  - CMake now allows `ENABLE_VULKAN_RENDERER` on Windows.
+  - Windows dependency detection added via `find_package(Vulkan)`.
+  - missing Vulkan package now degrades safely with warning and forced OFF.
+- Vulkan diagnostics platform contract updated:
+  - `--vulkan-diagnostics` now treats Windows and Linux as supported platform set.
+  - current host output: `supported_platform=true`, `compiled_in=false` (expected due missing Vulkan package).
+- Startup override observability retained:
+  - `MVP_RENDERER_BACKEND=vulkan` still shows deterministic fallback on Windows.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY76_VK015_WINDOWS_VULKAN_ENABLEMENT_SCOPE_AND_IMPLEMENTATION_PLANNER.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_ENABLEMENT_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_ENABLEMENT_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_ENABLEMENT_LOCAL_CHECK.md`
+- Local validation:
+  - `cmake -S . -B build -DENABLE_VULKAN_RENDERER=ON` PASS (graceful downgrade warning observed)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--vulkan-diagnostics` reflects Windows platform support contract PASS
+  - `MVP_RENDERER_BACKEND=vulkan --performance-log-check` fallback observability PASS
+- Remaining:
+  - validate on a Windows host with Vulkan SDK/runtime installed for `compiled_in=true` runtime path proof.
+
+### 2026-03-27 Update: Vulkan chain VK-014 documentation and release closure
+- Landed final closure sync for Vulkan chain (`VK-001` ~ `VK-014`):
+  - completed `VK-014` analysis/design/plan/report documents
+  - synced record chain:
+    - `VERSION.md`
+    - `CHANGELOG.md`
+    - `DEVELOP_LOG.md`
+  - synced index chain:
+    - `analysis/README.md`
+    - `design/README.md`
+    - `plans/README.md`
+    - `reports/README.md`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY75_VK014_DOCUMENTATION_AND_RELEASE_CLOSURE.md`
+  - design: `CROSS_PLATFORM_VULKAN_DOCUMENTATION_AND_RELEASE_CLOSURE_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_DOCUMENTATION_AND_RELEASE_CLOSURE_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_DOCUMENTATION_AND_RELEASE_CLOSURE_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - index/record path scan PASS
+- Remaining:
+  - Linux Vulkan runtime PASS evidence still requires real Linux runner execution.
+
+### 2026-03-27 Update: Vulkan chain VK-013 regression matrix execution
+- Landed stage-level runtime regression closure report for Vulkan chain:
+  - open/play: PASS
+  - pause/seek: PASS (seek-burst observed first-run FAIL, rerun PASS)
+  - subtitle style/sync: PASS
+  - fallback and override observability: PASS
+  - Vulkan diagnostics on Windows host: expected FAIL (`supported_platform=false`)
+- Round docs:
+  - analysis: `PLAYERCORE_DAY74_VK013_REGRESSION_MATRIX_EXECUTION.md`
+  - design: `CROSS_PLATFORM_VULKAN_REGRESSION_MATRIX_EXECUTION_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_REGRESSION_MATRIX_EXECUTION_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_REGRESSION_MATRIX_EXECUTION_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - regression matrix command set executed and archived
+- Remaining:
+  - Linux Vulkan runtime PASS proof still requires Linux host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-012 GitHub Actions Linux Vulkan lane
+- Landed CI Linux lane Vulkan wiring in `.github/workflows/cross-platform-gate.yml`:
+  - added Linux Vulkan dependencies:
+    - `libvulkan-dev`
+    - `mesa-vulkan-drivers`
+  - explicit Linux configure switch:
+    - `-DENABLE_VULKAN_RENDERER=ON`
+  - strict Vulkan gate requirement:
+    - Linux gate arg `11=1` (`REQUIRE_VULKAN_CHECKS`)
+- CI outcome expectation:
+  - Linux lane now fails early if Vulkan check cannot run/pass.
+  - gate summary artifact keeps machine-readable Vulkan check fields from `VK-011`.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY73_VK012_GITHUB_ACTIONS_LINUX_VULKAN_LANE.md`
+  - design: `CROSS_PLATFORM_VULKAN_GITHUB_ACTIONS_LINUX_VULKAN_LANE_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_GITHUB_ACTIONS_LINUX_VULKAN_LANE_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_GITHUB_ACTIONS_LINUX_VULKAN_LANE_LOCAL_CHECK.md`
+- Local validation:
+  - workflow field scan PASS
+  - `bash -n tools/run_linux_mvp_checks.sh` PASS
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--vulkan-diagnostics` expected FAIL on Windows host (`supported_platform=false`)
+- Remaining:
+  - real Linux runner proof for strict Vulkan lane is required via GitHub Actions run.
+
+### 2026-03-27 Update: Vulkan chain VK-011 Linux gate Vulkan checks
+- Landed Linux gate Vulkan check integration in `tools/run_linux_mvp_checks.sh`:
+  - added Vulkan availability probe (`--vulkan-diagnostics`)
+  - added conditional gate stage `vk010_vulkan_diagnostics`
+  - added machine-readable report fields for Vulkan probe/check metadata
+- Added strict-mode hook for Vulkan gate requirement:
+  - arg `11`: `REQUIRE_VULKAN_CHECKS`
+  - env fallback: `MVP_REQUIRE_VULKAN_CHECKS`
+- Gate behavior:
+  - run Vulkan check when Vulkan is supported+compiled+runtime-available
+  - otherwise emit `SKIPPED` with machine-readable skip reason
+  - fail-fast when strict Vulkan mode is enabled and Vulkan probe is unavailable
+- Round docs:
+  - analysis: `PLAYERCORE_DAY72_VK011_LINUX_GATE_VULKAN_CHECKS.md`
+  - design: `CROSS_PLATFORM_VULKAN_LINUX_GATE_VULKAN_CHECKS_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_LINUX_GATE_VULKAN_CHECKS_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_LINUX_GATE_VULKAN_CHECKS_LOCAL_CHECK.md`
+- Local validation:
+  - script path scan PASS
+  - `bash -n tools/run_linux_mvp_checks.sh` PASS
+  - non-Linux dispatch expected FAIL (`This gate script only supports Linux.`)
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--vulkan-diagnostics` expected FAIL on Windows host (`supported_platform=false`)
+- Remaining:
+  - Linux host/runner proof for `vk010_vulkan_diagnostics` PASS is required.
+
+### 2026-03-27 Update: Vulkan chain VK-010 Vulkan diagnostics CLI
+- Landed dedicated Vulkan diagnostics CLI:
+  - new command `--vulkan-diagnostics`
+  - machine-readable output prefix: `vulkan-diagnostics.*`
+- Reused existing startup strategy/capability abstractions:
+  - `PlatformCapabilitiesProbe`
+  - `PlaybackStrategy::buildOpenPlan`
+  - `RendererFactory::isSupported`
+- Exported key fields:
+  - `supported_platform`
+  - `compiled_in`
+  - `runtime_available`
+  - `requested_renderer_override`
+  - `startup_renderer_candidates`
+  - `startup_renderer_plan_reason`
+  - `selected_renderer`
+  - `fallback_target`
+  - `result`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY71_VK010_VULKAN_DIAGNOSTICS_CLI.md`
+  - design: `CROSS_PLATFORM_VULKAN_VULKAN_DIAGNOSTICS_CLI_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_VULKAN_DIAGNOSTICS_CLI_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_VULKAN_DIAGNOSTICS_CLI_LOCAL_CHECK.md`
+- Local validation:
+  - code-path scan PASS
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS
+  - `--vulkan-diagnostics` expected FAIL on Windows host (`supported_platform=false`)
+  - `MVP_RENDERER_BACKEND=vulkan --vulkan-diagnostics` fallback observability PASS on Windows host
+- Remaining:
+  - Linux host/runner proof is required for `vulkan-diagnostics.result=PASS`.
+
+### 2026-03-27 Update: Vulkan chain VK-009 fallback chain and startup policy
+- Landed explicit Linux Vulkan fallback-chain policy in `PlaybackStrategy`:
+  - when Linux startup candidate head is Vulkan, normalize prefix to:
+    - `Vulkan -> OpenGL -> SoftwareSDL` (runtime-available subset)
+  - strategy reason tag: `linux-vulkan-fallback-chain`
+- Landed machine-readable startup policy observability extension:
+  - `startup_renderer_plan_reason`
+  - `startup_decoder_plan_reason`
+  - both exported by `--performance-log-check`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY70_VK009_FALLBACK_CHAIN_AND_STARTUP_POLICY.md`
+  - design: `CROSS_PLATFORM_VULKAN_FALLBACK_CHAIN_AND_STARTUP_POLICY_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_FALLBACK_CHAIN_AND_STARTUP_POLICY_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_FALLBACK_CHAIN_AND_STARTUP_POLICY_LOCAL_CHECK.md`
+- Local validation:
+  - policy/observability code-path scan PASS
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS (new plan-reason fields present)
+  - `MVP_RENDERER_BACKEND=vulkan` fallback observability PASS on Windows host
+- Remaining:
+  - Linux Vulkan runtime fallback chain proof still requires Linux host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-008 sync and present pacing
+- Landed Vulkan sync/pacing hardening baseline:
+  - present-mode request contract via env `MVP_VULKAN_PRESENT_MODE`
+  - selection/fallback policy (`auto|fifo|mailbox|immediate|fifo_relaxed`)
+  - requested/active present-mode observability in startup/swapchain logs
+- Landed frame-wait robustness:
+  - in-flight fence wait timeout budget (`250ms`)
+  - timeout recovery path (`vkDeviceWaitIdle` + swapchain recreate request)
+- Landed pacing counters/logging:
+  - submitted/presented frame counters
+  - fence wait total/max/timeout counters
+  - periodic pacing snapshot logs
+- Round docs:
+  - analysis: `PLAYERCORE_DAY69_VK008_SYNC_AND_PRESENT_PACING.md`
+  - design: `CROSS_PLATFORM_VULKAN_SYNC_AND_PRESENT_PACING_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_SYNC_AND_PRESENT_PACING_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_SYNC_AND_PRESENT_PACING_LOCAL_CHECK.md`
+- Local validation:
+  - sync/pacing code-path scan PASS
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS
+  - `MVP_RENDERER_BACKEND=vulkan` + `MVP_VULKAN_PRESENT_MODE=immediate` fallback observability PASS on Windows host
+- Remaining:
+  - Linux Vulkan runtime pacing verification still requires Linux host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-007 frame upload YUV path
+- Landed baseline Vulkan CPU frame upload path:
+  - direct frame format contract for `YUV420P` / `NV12`
+  - `swscale` conversion to RGBA in `renderFrame()`
+  - present-stage staging upload (`map/copy/unmap`) and optional `vkCmdCopyBufferToImage`
+- Unified Vulkan present command path:
+  - `recordPresentCommandBuffer(...)` now serves both clear-only and frame-upload cases
+  - stale `recordClearCommandBuffer` call path removed
+- Round docs:
+  - analysis: `PLAYERCORE_DAY68_VK007_FRAME_UPLOAD_YUV_PATH.md`
+  - design: `CROSS_PLATFORM_VULKAN_FRAME_UPLOAD_YUV_PATH_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_FRAME_UPLOAD_YUV_PATH_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_FRAME_UPLOAD_YUV_PATH_LOCAL_CHECK.md`
+- Local validation:
+  - code-path scan (`recordPresentCommandBuffer` + `supportsDirectFrameFormat`) PASS
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS
+  - `MVP_RENDERER_BACKEND=vulkan` fallback observability PASS on Windows host
+- Remaining:
+  - Linux Vulkan compile/runtime verification still requires Linux host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-006 clear/present and swapchain recreate
+- Landed minimal Vulkan visible render loop:
+  - frame sync resources (`command pool/buffer`, acquire/present semaphores, in-flight fence)
+  - `acquire -> clear -> submit -> present` frame path
+  - `clear()` wired to present path for observable initial/idle clear
+- Landed swapchain recreate behavior:
+  - SDL resize/minimize/maximize/restore event triggers
+  - `VK_ERROR_OUT_OF_DATE_KHR` / `VK_SUBOPTIMAL_KHR` handling
+  - deferred recreate while drawable size is zero
+- Round docs:
+  - analysis: `PLAYERCORE_DAY67_VK006_CLEAR_PRESENT_AND_SWAPCHAIN_RECREATE.md`
+  - design: `CROSS_PLATFORM_VULKAN_CLEAR_PRESENT_AND_SWAPCHAIN_RECREATE_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_CLEAR_PRESENT_AND_SWAPCHAIN_RECREATE_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_CLEAR_PRESENT_AND_SWAPCHAIN_RECREATE_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS
+  - `MVP_RENDERER_BACKEND=vulkan` fallback observability PASS on Windows host
+- Remaining:
+  - Linux Vulkan runtime verification still requires Linux host/runner.
+
+### 2026-03-27 Update: Vulkan chain VK-005 instance/surface/device/swapchain init
+- Landed Vulkan initialization lifecycle baseline in renderer backend:
+  - SDL subsystem bring-up (`VIDEO|AUDIO`) with owned-subsystem tracking
+  - SDL Vulkan window creation
+  - Vulkan instance creation with SDL-required instance extensions
+  - surface creation (`SDL_Vulkan_CreateSurface`)
+  - physical/logical device selection and queue binding
+  - swapchain creation and image acquisition
+- Landed deterministic teardown order:
+  - `vkDeviceWaitIdle -> swapchain -> device -> surface -> instance -> window -> owned SDL subsystems`
+- Added baseline event handling for quit and drag-drop open-file request.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY66_VK005_INSTANCE_SURFACE_DEVICE_SWAPCHAIN_INIT.md`
+  - design: `CROSS_PLATFORM_VULKAN_INSTANCE_SURFACE_DEVICE_SWAPCHAIN_INIT_DESIGN_2026-03-27.md`
+  - plan: `CROSS_PLATFORM_VULKAN_INSTANCE_SURFACE_DEVICE_SWAPCHAIN_INIT_PLAN_2026-03-27.md`
+  - report: `CROSS_PLATFORM_VULKAN_INSTANCE_SURFACE_DEVICE_SWAPCHAIN_INIT_LOCAL_CHECK.md`
+- Local validation:
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS
+  - `--d3d11-diagnostics` PASS
+  - `--opengl-diagnostics` PASS
+  - `--performance-log-check` PASS
+  - `MVP_RENDERER_BACKEND=vulkan` fallback observability PASS on Windows host
+- Remaining:
+  - Linux Vulkan compile/runtime evidence still requires Linux host/runner.
+
+### 2026-03-26 Update: Vulkan chain VK-004 renderer skeleton and factory wiring
+- Landed Vulkan backend skeleton and renderer-path wiring:
+  - `VideoRendererType::Vulkan`
+  - `RendererFactory` Vulkan name/create branch
+  - `PlatformCapabilities` Vulkan support publication (Linux-first priority)
+  - `PlaybackStrategy` env parser support (`MVP_RENDERER_BACKEND=vulkan|vk`)
+- Added Vulkan skeleton backend files:
+  - `include/render/vulkan_video_renderer.h`
+  - `src/render/vulkan_video_renderer.cpp`
+- Skeleton stage behavior:
+  - `VulkanVideoRenderer::init()` intentionally returns `false` (real init starts at `VK-005`)
+  - fallback observability validated via `--performance-log-check`
+- Round docs:
+  - analysis: `PLAYERCORE_DAY65_VK004_VULKAN_RENDERER_SKELETON_AND_FACTORY_WIRING.md`
+  - design: `CROSS_PLATFORM_VULKAN_VULKAN_RENDERER_SKELETON_AND_FACTORY_WIRING_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_VULKAN_VULKAN_RENDERER_SKELETON_AND_FACTORY_WIRING_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_VULKAN_VULKAN_RENDERER_SKELETON_AND_FACTORY_WIRING_LOCAL_CHECK.md`
+
+### 2026-03-26 Update: Vulkan chain VK-003 CMake switches and dependency detect
+- Added `ENABLE_VULKAN_RENDERER` switch and compile macro `MVP_HAVE_VULKAN_RENDERER`.
+- Linux-first dependency behavior:
+  - Linux: Vulkan switch default `ON`
+  - non-Linux: force `OFF` with warning
+  - Linux missing `pkg-config vulkan`: force `OFF` with warning
+- Conditional Vulkan source compilation wired into player target.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY64_VK003_CMAKE_SWITCHES_AND_DEPENDENCY_DETECT.md`
+  - design: `CROSS_PLATFORM_VULKAN_CMAKE_SWITCHES_AND_DEPENDENCY_DETECT_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_VULKAN_CMAKE_SWITCHES_AND_DEPENDENCY_DETECT_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_VULKAN_CMAKE_SWITCHES_AND_DEPENDENCY_DETECT_LOCAL_CHECK.md`
+
+### 2026-03-26 Update: Vulkan chain VK-002 architecture and strategy integration
+- Frozen and landed architecture integration contract:
+  - Vulkan enters existing strategy/factory capability path
+  - `PlayerCore` remains policy-neutral
+  - fallback observability remains on startup diagnostics fields
+- Round docs:
+  - analysis: `PLAYERCORE_DAY63_VK002_ARCHITECTURE_AND_STRATEGY_INTEGRATION.md`
+  - design: `CROSS_PLATFORM_VULKAN_ARCHITECTURE_AND_STRATEGY_INTEGRATION_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_VULKAN_ARCHITECTURE_AND_STRATEGY_INTEGRATION_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_VULKAN_ARCHITECTURE_AND_STRATEGY_INTEGRATION_LOCAL_CHECK.md`
+
+### 2026-03-26 Update: Vulkan chain VK-001 scope and acceptance freeze
+- Started Vulkan execution track with Linux-first boundary and acceptance freeze (`VK-001`).
+- Frozen goals:
+  - Linux x64 first-class Vulkan renderer path
+  - observable fallback target: `Vulkan -> OpenGL -> SoftwareSDL`
+  - machine-readable diagnostics target: `--vulkan-diagnostics`
+- Frozen non-goals:
+  - macOS renderer work remains deferred
+  - no decoder architecture rewrite in this wave
+- Added round documents:
+  - analysis: `PLAYERCORE_DAY62_VK001_SCOPE_AND_ACCEPTANCE_FREEZE.md`
+  - design: `CROSS_PLATFORM_VULKAN_SCOPE_AND_ACCEPTANCE_FREEZE_DESIGN_2026-03-26.md`
+  - plan: `CROSS_PLATFORM_VULKAN_SCOPE_AND_ACCEPTANCE_FREEZE_PLAN_2026-03-26.md`
+  - report: `CROSS_PLATFORM_VULKAN_SCOPE_AND_ACCEPTANCE_FREEZE_LOCAL_CHECK.md`
+- Local validation:
+  - Vulkan baseline probe (`rg`) confirms no existing Vulkan path before implementation.
+  - Release build (`modern-video-player` + `sample_logger_plugin`) PASS.
+  - `--d3d11-diagnostics` PASS.
+  - `--opengl-diagnostics` PASS.
+- Next:
+  - move to `VK-002` architecture design after confirmation, then start code from `VK-003`.
+
 ### 2026-03-26 Update: Linux workflow Build Linux Release compile blocker closure
 - Closed Linux compile failures observed in workflow runs `23601824744` and `23601841417`:
   - `libass_probe`: mixed `int`/`long long` in timestamp clamp path

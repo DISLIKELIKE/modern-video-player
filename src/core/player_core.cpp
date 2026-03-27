@@ -2008,6 +2008,8 @@ bool PlayerCore::open(const std::string& filename) {
     startup_decoder_runtime_set_ = decoderAvailabilitySetToString(platform_capabilities.decoder_support, true);
     startup_renderer_candidates_ = rendererOrderToString(open_plan.renderer_candidates);
     startup_decoder_candidates_ = backendOrderToString(open_plan.video_decoder_candidates);
+    startup_renderer_plan_reason_ = open_plan.renderer_plan_reason;
+    startup_decoder_plan_reason_ = open_plan.decoder_plan_reason;
     startup_selected_renderer_ = "None";
     startup_selected_decoder_ = "Unknown";
     startup_renderer_fallback_reason_ = "none";
@@ -3875,6 +3877,10 @@ DiagnosticsSnapshot PlayerCore::getDiagnosticsSnapshot() const {
     snapshot.startup_renderer_candidates = startup_renderer_candidates_;
 
     snapshot.startup_decoder_candidates = startup_decoder_candidates_;
+
+    snapshot.startup_renderer_plan_reason = startup_renderer_plan_reason_;
+
+    snapshot.startup_decoder_plan_reason = startup_decoder_plan_reason_;
 
     snapshot.startup_selected_renderer = startup_selected_renderer_;
 
@@ -7046,6 +7052,8 @@ void PlayerCore::applySessionReleaseSideEffects(const char* reason) {
     startup_decoder_runtime_set_ = "none";
     startup_renderer_candidates_ = "none";
     startup_decoder_candidates_ = "none";
+    startup_renderer_plan_reason_ = "none";
+    startup_decoder_plan_reason_ = "none";
     startup_selected_renderer_ = "None";
     startup_selected_decoder_ = "Unknown";
     startup_renderer_fallback_reason_ = "none";

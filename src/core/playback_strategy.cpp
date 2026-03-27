@@ -64,6 +64,9 @@ std::optional<render::VideoRendererType> parseRendererOverride(const std::option
     if (normalized == "opengl" || normalized == "gl") {
         return render::VideoRendererType::OpenGL;
     }
+    if (normalized == "vulkan" || normalized == "vk") {
+        return render::VideoRendererType::Vulkan;
+    }
     return std::nullopt;
 }
 
@@ -76,6 +79,61 @@ std::vector<platform::RendererSupport> sortedRendererSupport(
                   return lhs.default_priority > rhs.default_priority;
               });
     return sorted;
+}
+
+bool rendererTypeAvailable(const std::vector<platform::RendererSupport>& sorted_support,
+                           render::VideoRendererType type) {
+    for (const platform::RendererSupport& support : sorted_support) {
+        if (support.type == type && support.compiled_in && support.runtime_available) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void appendPlanReasonTag(std::string& reason, const char* tag) {
+    if (!tag || tag[0] == '\0') {
+        return;
+    }
+    if (reason.empty() || reason == "default") {
+        reason = tag;
+        return;
+    }
+    if (reason.find(tag) != std::string::npos) {
+        return;
+    }
+    reason += "+";
+    reason += tag;
+}
+
+bool normalizeLinuxVulkanFallbackChain(const platform::PlatformCapabilities& capabilities,
+                                       const std::vector<platform::RendererSupport>& sorted_support,
+                                       std::vector<render::VideoRendererType>& renderer_candidates) {
+    if (capabilities.platform != platform::PlatformKind::Linux || renderer_candidates.empty()) {
+        return false;
+    }
+    if (renderer_candidates.front() != render::VideoRendererType::Vulkan) {
+        return false;
+    }
+    if (!rendererTypeAvailable(sorted_support, render::VideoRendererType::Vulkan)) {
+        return false;
+    }
+
+    std::vector<render::VideoRendererType> normalized_candidates;
+    normalized_candidates.reserve(renderer_candidates.size());
+    normalized_candidates.push_back(render::VideoRendererType::Vulkan);
+    if (rendererTypeAvailable(sorted_support, render::VideoRendererType::OpenGL)) {
+        normalized_candidates.push_back(render::VideoRendererType::OpenGL);
+    }
+    if (rendererTypeAvailable(sorted_support, render::VideoRendererType::SoftwareSDL)) {
+        normalized_candidates.push_back(render::VideoRendererType::SoftwareSDL);
+    }
+
+    for (render::VideoRendererType type : renderer_candidates) {
+        appendRendererUnique(normalized_candidates, type);
+    }
+    renderer_candidates = std::move(normalized_candidates);
+    return true;
 }
 
 }  // namespace
@@ -122,6 +180,10 @@ PlaybackOpenPlan PlaybackStrategy::buildOpenPlan(const PlaybackOpenRequest& requ
             continue;
         }
         appendRendererUnique(renderer_candidates, support.type);
+    }
+
+    if (normalizeLinuxVulkanFallbackChain(request.platform_capabilities, sorted_support, renderer_candidates)) {
+        appendPlanReasonTag(plan.renderer_plan_reason, "linux-vulkan-fallback-chain");
     }
     plan.renderer_candidates = std::move(renderer_candidates);
 
