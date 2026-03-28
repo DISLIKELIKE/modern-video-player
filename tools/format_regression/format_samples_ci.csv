@@ -1,0 +1,14 @@
+sample_path,expected_container,expected_video_codec,expected_audio_codec,notes
+juren-30s.mp4,mp4,h264,aac,repo baseline sample
+samples/mp4/demo__hevc_aac__1920x1080__30fps__2ch.mp4,mp4,hevc,aac,ci lite hevc coverage
+samples/webm/demo__vp9_opus__1920x1080__30fps__2ch.webm,webm,vp9,opus,ci lite vp9 + opus coverage
+samples/flv/demo__h264_aac__1280x720__30fps__2ch.flv,flv,h264,aac,ci lite flv baseline compatibility
+samples/ts/demo__h264_aac__1920x1080__25fps__2ch.ts,ts,h264,aac,ci lite mpeg-ts baseline compatibility
+samples/ts/demo__mpeg2video_ac3__1920x1080__30fps__2ch.ts,ts,mpeg2video,ac3,ci lite mpeg2 video decoder compatibility
+samples/mkv/demo__h264_eac3__1920x1080__30fps__2ch.mkv,mkv,h264,eac3,ci lite eac3 audio decoder compatibility
+samples/webm/demo__vp9_vorbis__1920x1080__30fps__2ch.webm,webm,vp9,vorbis,ci lite vorbis audio decoder compatibility
+samples/mov/demo__h264_pcm_s16le__1920x1080__30fps__2ch.mov,mov,h264,pcm_s16le,ci lite pcm audio decoder compatibility
+samples/mov/demo__h264_aac__1920x1080__30fps__2ch.mov,mov,h264,aac,ci lite mov baseline compatibility
+samples/avi/demo__h264_mp3__1280x720__30fps__2ch.avi,avi,h264,mp3,ci lite avi baseline compatibility
+samples/m2ts/demo__h264_ac3__1920x1080__30fps__2ch.m2ts,m2ts,h264,ac3,ci lite m2ts baseline compatibility
+samples/mp4/demo__av1_aac__1920x1080__30fps__2ch.mp4,mp4,av1,aac,ci lite av1 coverage

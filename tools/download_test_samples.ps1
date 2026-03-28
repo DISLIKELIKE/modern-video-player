@@ -1,6 +1,9 @@
 param(
     [string]$FfmpegPath = "external/ffmpeg/bin/ffmpeg.exe",
-    [int]$DurationSec = 4
+    [int]$DurationSec = 4,
+    [string]$SamplesFile = "",
+    [switch]$SkipExisting,
+    [int]$ProcessTimeoutSec = 0
 )
 
 Set-StrictMode -Version Latest
@@ -45,18 +48,158 @@ function Resolve-ExecutablePath {
     return $repoCandidate
 }
 
+function Resolve-PowerShellExecutable {
+    $windowsPowerShell = Get-Command -Name "powershell" -CommandType Application -ErrorAction SilentlyContinue
+    if ($null -ne $windowsPowerShell -and -not [string]::IsNullOrWhiteSpace($windowsPowerShell.Source)) {
+        return $windowsPowerShell.Source
+    }
+
+    throw "No PowerShell executable found for child process invocation."
+}
+
+function Normalize-RelativePath {
+    param([string]$PathValue)
+
+    if ([string]::IsNullOrWhiteSpace($PathValue)) {
+        return ""
+    }
+
+    return $PathValue.Trim().Replace("\", "/")
+}
+
+function Stop-ProcessTree {
+    param([int]$ProcessId)
+
+    if ($ProcessId -le 0) {
+        return
+    }
+
+    $taskKill = Get-Command -Name "taskkill.exe" -ErrorAction SilentlyContinue
+    if ($null -ne $taskKill) {
+        & $taskKill.Source /PID $ProcessId /T /F *> $null
+        return
+    }
+
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 function Invoke-CheckedProcess {
     param(
         [Parameter(Mandatory = $true)]
         [string]$FilePath,
         [Parameter(Mandatory = $true)]
-        [string[]]$Arguments
+        [string[]]$Arguments,
+        [Parameter(Mandatory = $true)]
+        [string]$Description,
+        [int]$TimeoutSec = 0
     )
 
-    & $FilePath @Arguments
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -ne 0) {
-        throw "Process failed ($FilePath), exit code: $exitCode"
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    $exitCodeFile = [System.IO.Path]::GetTempFileName()
+    $process = $null
+
+    try {
+        $childPowerShell = Resolve-PowerShellExecutable
+        $escapedFilePath = $FilePath.Replace("'", "''")
+        $escapedExitCodePath = $exitCodeFile.Replace("'", "''")
+        $argumentLines = @()
+        foreach ($argument in $Arguments) {
+            $argumentLines += ("    '" + ([string]$argument).Replace("'", "''") + "'")
+        }
+        $wrapperScript = @"
+`$ErrorActionPreference = 'Stop'
+`$ProgressPreference = 'SilentlyContinue'
+`$arguments = @(
+$($argumentLines -join ",`n")
+)
+& '$escapedFilePath' @arguments
+`$code = `$LASTEXITCODE
+if (`$null -eq `$code) {
+    `$code = 0
+}
+Set-Content -Path '$escapedExitCodePath' -Value ([string]`$code) -Encoding ASCII
+exit [int]`$code
+"@
+        $encodedCommand = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($wrapperScript))
+
+        $process = Start-Process -FilePath $childPowerShell `
+            -ArgumentList @("-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encodedCommand) `
+            -NoNewWindow `
+            -PassThru `
+            -RedirectStandardOutput $stdoutFile `
+            -RedirectStandardError $stderrFile
+
+        $timedOut = $false
+        if ($TimeoutSec -gt 0) {
+            $waitTimeoutMs = [Math]::Max(1, $TimeoutSec) * 1000
+            if (-not $process.WaitForExit($waitTimeoutMs)) {
+                $timedOut = $true
+                Stop-ProcessTree -ProcessId $process.Id
+                $process.WaitForExit()
+            }
+        } else {
+            $process.WaitForExit()
+        }
+
+        if (-not $timedOut) {
+            $process.WaitForExit()
+        }
+
+        $stdoutRaw = ""
+        $stderrRaw = ""
+        if (Test-Path $stdoutFile) {
+            $stdoutContent = Get-Content -Path $stdoutFile -Raw -ErrorAction SilentlyContinue
+            if ($null -ne $stdoutContent) {
+                $stdoutRaw = [string]$stdoutContent
+            }
+        }
+        if (Test-Path $stderrFile) {
+            $stderrContent = Get-Content -Path $stderrFile -Raw -ErrorAction SilentlyContinue
+            if ($null -ne $stderrContent) {
+                $stderrRaw = [string]$stderrContent
+            }
+        }
+
+        if ($timedOut) {
+            if (-not [string]::IsNullOrWhiteSpace($stdoutRaw)) {
+                Write-Output $stdoutRaw.TrimEnd()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($stderrRaw)) {
+                Write-Output $stderrRaw.TrimEnd()
+            }
+            throw "Process timed out ($Description), timeout=${TimeoutSec}s"
+        }
+
+        $exitCode = -1
+        if (Test-Path $exitCodeFile) {
+            $exitCodeRaw = Get-Content -Path $exitCodeFile -Raw -ErrorAction SilentlyContinue
+            $parsedExitCode = 0
+            if (-not [string]::IsNullOrWhiteSpace($exitCodeRaw) -and
+                [int]::TryParse($exitCodeRaw.Trim(), [ref]$parsedExitCode)) {
+                $exitCode = $parsedExitCode
+            }
+        }
+        if ($exitCode -ne 0) {
+            if (-not [string]::IsNullOrWhiteSpace($stdoutRaw)) {
+                Write-Output $stdoutRaw.TrimEnd()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($stderrRaw)) {
+                Write-Output $stderrRaw.TrimEnd()
+            }
+            throw "Process failed ($Description), exit code: $exitCode"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace($stdoutRaw)) {
+            Write-Output $stdoutRaw.TrimEnd()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($stderrRaw)) {
+            Write-Output $stderrRaw.TrimEnd()
+        }
+    } finally {
+        Remove-Item -Path $stdoutFile -ErrorAction SilentlyContinue
+        Remove-Item -Path $stderrFile -ErrorAction SilentlyContinue
+        Remove-Item -Path $exitCodeFile -ErrorAction SilentlyContinue
     }
 }
 
@@ -66,6 +209,61 @@ Set-Location $repoRoot
 $ffmpeg = Resolve-ExecutablePath -Root $repoRoot -PathValue $FfmpegPath
 if (-not (Test-Path $ffmpeg)) {
     throw "ffmpeg not found: $ffmpeg"
+}
+
+$requestedSamples = $null
+if (-not [string]::IsNullOrWhiteSpace($SamplesFile)) {
+    $samplesManifestPath = Resolve-ProjectPath -Root $repoRoot -PathValue $SamplesFile
+    if (-not (Test-Path $samplesManifestPath)) {
+        throw "Samples manifest not found: $samplesManifestPath"
+    }
+
+    $requestedSamples = New-Object 'System.Collections.Generic.HashSet[string]' ([System.StringComparer]::OrdinalIgnoreCase)
+    Import-Csv -Path $samplesManifestPath | ForEach-Object {
+        $samplePath = ""
+        if ($null -ne $_.sample_path) {
+            $samplePath = Normalize-RelativePath ([string]$_.sample_path)
+        }
+        if (-not [string]::IsNullOrWhiteSpace($samplePath)) {
+            [void]$requestedSamples.Add($samplePath)
+        }
+    }
+
+    Write-Output ("Sample manifest loaded: " + $samplesManifestPath + " (" + $requestedSamples.Count + " requested entries)")
+}
+
+function Should-GenerateSample {
+    param([string]$RelativePath)
+
+    if ($null -eq $requestedSamples) {
+        return $true
+    }
+
+    return $requestedSamples.Contains((Normalize-RelativePath $RelativePath))
+}
+
+function Invoke-SampleGeneration {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RelativePath,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Arguments
+    )
+
+    $normalizedRelativePath = Normalize-RelativePath $RelativePath
+    if (-not (Should-GenerateSample -RelativePath $normalizedRelativePath)) {
+        Write-Output ("Skipping unrequested sample: " + $normalizedRelativePath)
+        return
+    }
+
+    $resolvedOutputPath = Resolve-ProjectPath -Root $repoRoot -PathValue $RelativePath
+    if ($SkipExisting -and (Test-Path $resolvedOutputPath)) {
+        Write-Output ("Skipping existing sample: " + $normalizedRelativePath)
+        return
+    }
+
+    Write-Output ("Generating sample: " + $normalizedRelativePath)
+    Invoke-CheckedProcess -FilePath $ffmpeg -Arguments $Arguments -Description $normalizedRelativePath -TimeoutSec $ProcessTimeoutSec
 }
 
 $baseSourceDir = Resolve-ProjectPath -Root $repoRoot -PathValue "samples/source"
@@ -122,7 +320,7 @@ $filterVp9OpusMa2 = "[0:v]scale=1920:1080,fps=30[v];" +
     "[1:a]aformat=sample_rates=48000:channel_layouts=mono,pan=stereo|c0<c0|c1<c0[a1];" +
     "[2:a]aformat=sample_rates=48000:channel_layouts=mono,pan=stereo|c0<c0|c1<c0[a2]"
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mp4_hevc_aac -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=$d",
@@ -133,7 +331,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_hevc_aac)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mp4_h264_aac_1080p60 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=$d",
@@ -144,7 +342,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_h264_aac_1080p60)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mp4_h264_aac_hi100m -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=48000:duration=$d",
@@ -157,7 +355,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_h264_aac_hi100m)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mkv_hevc_ac3_ma2 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=700:sample_rate=48000:duration=$d",
@@ -172,7 +370,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_hevc_ac3_ma2)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.webm_vp9_opus -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=950:sample_rate=48000:duration=$d",
@@ -183,7 +381,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.webm_vp9_opus)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.flv_h264_aac -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000:duration=$d",
@@ -194,7 +392,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.flv_h264_aac)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.ts_h264_aac -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=820:sample_rate=48000:duration=$d",
@@ -206,7 +404,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.ts_h264_aac)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.ts_mpeg2video_ac3 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=640:sample_rate=48000:duration=$d",
@@ -218,7 +416,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.ts_mpeg2video_ac3)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mkv_h264_eac3 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=990:sample_rate=48000:duration=$d",
@@ -229,7 +427,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_h264_eac3)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mkv_h264_dts -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=720:sample_rate=48000:duration=$d",
@@ -240,7 +438,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_h264_dts)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.webm_vp9_vorbis -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=960:sample_rate=48000:duration=$d",
@@ -251,7 +449,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.webm_vp9_vorbis)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mov_h264_pcm_s16le -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=845:sample_rate=48000:duration=$d",
@@ -262,7 +460,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mov_h264_pcm_s16le)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mov_h264_aac -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=910:sample_rate=48000:duration=$d",
@@ -274,7 +472,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mov_h264_aac)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.avi_h264_mp3 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=730:sample_rate=48000:duration=$d",
@@ -285,7 +483,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.avi_h264_mp3)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.m2ts_h264_ac3 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=860:sample_rate=48000:duration=$d",
@@ -297,7 +495,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.m2ts_h264_ac3)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mp4_av1_aac -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=1020:sample_rate=48000:duration=$d",
@@ -308,7 +506,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mp4_av1_aac)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mkv_av1_flac_ma2 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=680:sample_rate=48000:duration=$d",
@@ -323,7 +521,7 @@ Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
     "-shortest", (Resolve-ProjectPath -Root $repoRoot -PathValue $outputFiles.mkv_av1_flac_ma2)
 )
 
-Invoke-CheckedProcess -FilePath $ffmpeg -Arguments @(
+Invoke-SampleGeneration -RelativePath $outputFiles.mkv_vp9_opus_ma2 -Arguments @(
     "-y", "-hide_banner", "-loglevel", "error",
     "-i", $baseFile,
     "-f", "lavfi", "-i", "sine=frequency=760:sample_rate=48000:duration=$d",

@@ -67,12 +67,30 @@ jobs:
       - name: Run sample prep and regression
         shell: pwsh
         run: |
-          powershell -ExecutionPolicy Bypass -File .\tools\download_test_samples.ps1 -DurationSec 3
+          New-Item -ItemType Directory -Path logs -Force | Out-Null
+
+          powershell -ExecutionPolicy Bypass -File .\tools\download_test_samples.ps1 `
+            -DurationSec 2 `
+            -SamplesFile "tools/format_regression/format_samples_ci.csv" `
+            -SkipExisting `
+            -ProcessTimeoutSec 420 2>&1 | Tee-Object -FilePath "logs/format-regression-sample-prep.log"
+          $samplePrepExitCode = $LASTEXITCODE
+          if ($samplePrepExitCode -ne 0) {
+            throw "Sample preparation failed with exit code $samplePrepExitCode. See logs/format-regression-sample-prep.log."
+          }
+
           powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 `
             -ExecutablePath "build/Debug/modern-video-player.exe" `
             -ProbeFile "juren-30s.mp4" `
-            -SamplesFile "tools/format_regression/format_samples.csv" `
-            -RegressionOutputFile "docs/reports/FORMAT_REGRESSION_CI.md"
+            -SamplesFile "tools/format_regression/format_samples_ci.csv" `
+            -RegressionOutputFile "docs/reports/FORMAT_REGRESSION_CI.md" `
+            -ProbeTimeoutSec 120 `
+            -ForcedFailSessionTimeoutSec 240 `
+            -RegressionTimeoutSec 900 2>&1 | Tee-Object -FilePath "logs/format-regression-run-all-checks.log"
+          $runAllChecksExitCode = $LASTEXITCODE
+          if ($runAllChecksExitCode -ne 0) {
+            throw "run_all_checks.ps1 failed with exit code $runAllChecksExitCode. See logs/format-regression-run-all-checks.log."
+          }
 
       - name: Upload regression report
         if: always()
