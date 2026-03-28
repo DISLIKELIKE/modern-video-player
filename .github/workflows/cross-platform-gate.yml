@@ -159,10 +159,26 @@ jobs:
             $externalRoot = Join-Path $PWD "external"
             New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
 
-            $versions = Invoke-RestMethod -Uri "https://github.com/jakoch/rasterizers/releases/latest/download/versions.json"
-            $swiftShaderMeta = $versions.latest.'swiftshader-win64'
-            if ($null -eq $swiftShaderMeta -or [string]::IsNullOrWhiteSpace([string]$swiftShaderMeta.url)) {
-              throw "swiftshader-win64 metadata missing from rasterizers versions.json."
+            $fallbackSwiftShaderUrl = "https://github.com/jakoch/rasterizers/releases/download/20260302/swiftshader-win64-5.0.0.1.zip"
+            $swiftShaderTag = "unknown"
+            $downloadCandidates = @()
+            try {
+              $versions = Invoke-RestMethod -Uri "https://github.com/jakoch/rasterizers/releases/latest/download/versions.json"
+              $swiftShaderMeta = $versions.latest.'swiftshader-win64'
+              if ($null -ne $swiftShaderMeta -and -not [string]::IsNullOrWhiteSpace([string]$swiftShaderMeta.url)) {
+                $downloadCandidates += [string]$swiftShaderMeta.url
+                if (-not [string]::IsNullOrWhiteSpace([string]$swiftShaderMeta.tag)) {
+                  $swiftShaderTag = [string]$swiftShaderMeta.tag
+                }
+              }
+            } catch {
+              Write-Warning "Failed to fetch latest SwiftShader metadata: $($_.Exception.Message)"
+            }
+            if (-not ($downloadCandidates -contains $fallbackSwiftShaderUrl)) {
+              $downloadCandidates += $fallbackSwiftShaderUrl
+            }
+            if ($downloadCandidates.Count -eq 0) {
+              throw "No download candidates available for SwiftShader."
             }
 
             $swiftShaderZip = Join-Path $env:RUNNER_TEMP "swiftshader-win64.zip"
@@ -170,7 +186,21 @@ jobs:
             if (Test-Path $swiftShaderRoot) {
               Remove-Item -Path $swiftShaderRoot -Recurse -Force
             }
-            Invoke-WebRequest -Uri ([string]$swiftShaderMeta.url) -OutFile $swiftShaderZip
+
+            $downloadSucceeded = $false
+            foreach ($candidateUrl in $downloadCandidates) {
+              try {
+                Invoke-WebRequest -Uri $candidateUrl -OutFile $swiftShaderZip
+                $downloadSucceeded = $true
+                Write-Host "Downloaded SwiftShader package: $candidateUrl"
+                break
+              } catch {
+                Write-Warning "SwiftShader download failed from $candidateUrl : $($_.Exception.Message)"
+              }
+            }
+            if (-not $downloadSucceeded) {
+              throw "Failed to download SwiftShader package from all candidate URLs."
+            }
             Expand-Archive -Path $swiftShaderZip -DestinationPath $swiftShaderRoot -Force
 
             $swiftShaderIcd = Join-Path $swiftShaderRoot "vk_swiftshader_icd.json"
@@ -182,7 +212,7 @@ jobs:
             "VK_ICD_FILENAMES=$swiftShaderIcd" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             "MVP_WINDOWS_VULKAN_SWIFTSHADER_AVAILABLE=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             "MVP_WINDOWS_VULKAN_SWIFTSHADER_ICD=$swiftShaderIcd" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-            "MVP_WINDOWS_VULKAN_SWIFTSHADER_TAG=$([string]$swiftShaderMeta.tag)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_TAG=$swiftShaderTag" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
             "$swiftShaderRoot" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
             $env:VK_ICD_FILENAMES = $swiftShaderIcd
