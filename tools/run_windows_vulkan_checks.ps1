@@ -191,6 +191,20 @@ $runnerRuntimeProbeDetail = [Environment]::GetEnvironmentVariable("MVP_WINDOWS_V
 if ([string]::IsNullOrWhiteSpace($runnerRuntimeProbeDetail)) {
     $runnerRuntimeProbeDetail = "unknown"
 }
+$swiftShaderAvailable = Is-TruthyFlagValue([Environment]::GetEnvironmentVariable("MVP_WINDOWS_VULKAN_SWIFTSHADER_AVAILABLE"))
+$swiftShaderIcd = [Environment]::GetEnvironmentVariable("MVP_WINDOWS_VULKAN_SWIFTSHADER_ICD")
+if ([string]::IsNullOrWhiteSpace($swiftShaderIcd)) {
+    $swiftShaderIcd = ""
+}
+$swiftShaderProbeAvailable = Is-TruthyFlagValue([Environment]::GetEnvironmentVariable("MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE"))
+$swiftShaderProbeDetail = [Environment]::GetEnvironmentVariable("MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_DETAIL")
+if ([string]::IsNullOrWhiteSpace($swiftShaderProbeDetail)) {
+    $swiftShaderProbeDetail = "unknown"
+}
+$vkIcdFilenames = [Environment]::GetEnvironmentVariable("VK_ICD_FILENAMES")
+if ([string]::IsNullOrWhiteSpace($vkIcdFilenames)) {
+    $vkIcdFilenames = ""
+}
 $platform = Value-OrDefault -Map $diagMap -Key "vulkan-diagnostics.platform" -DefaultValue "unknown"
 $supportedPlatform = Is-TrueValue (Value-OrDefault -Map $diagMap -Key "vulkan-diagnostics.supported_platform" -DefaultValue "false")
 $compiledIn = Is-TrueValue (Value-OrDefault -Map $diagMap -Key "vulkan-diagnostics.compiled_in" -DefaultValue "false")
@@ -333,6 +347,11 @@ $summary = [ordered]@{
     "windows-vulkan-check.runner_vulkan_sdk_available" = if ($runnerSdkAvailable) { "true" } else { "false" }
     "windows-vulkan-check.runner_vulkan_runtime_probe_available" = if ($runnerRuntimeProbeAvailable) { "true" } else { "false" }
     "windows-vulkan-check.runner_vulkan_runtime_probe_detail" = $runnerRuntimeProbeDetail
+    "windows-vulkan-check.runner_vulkan_swiftshader_available" = if ($swiftShaderAvailable) { "true" } else { "false" }
+    "windows-vulkan-check.runner_vulkan_swiftshader_icd" = $swiftShaderIcd
+    "windows-vulkan-check.runner_vulkan_swiftshader_runtime_probe_available" = if ($swiftShaderProbeAvailable) { "true" } else { "false" }
+    "windows-vulkan-check.runner_vulkan_swiftshader_runtime_probe_detail" = $swiftShaderProbeDetail
+    "windows-vulkan-check.vk_icd_filenames" = $vkIcdFilenames
     "windows-vulkan-check.strict_mode_policy" = $strictPolicy
     "windows-vulkan-check.strict_mode_cli_requested" = if ($RequireVulkanAvailable.IsPresent) { "true" } else { "false" }
     "windows-vulkan-check.strict_mode_auto_basis" = "sdk_and_runtime_probe"
