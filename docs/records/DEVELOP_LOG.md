@@ -3,8 +3,59 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 180` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 181` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 181: Vulkan chain VK-051 Windows auto optional no-probe canary
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Added deterministic no-probe downgrade canary for Windows Vulkan auto policy.
+- Integrated new canary into `run_windows_ci_gate.ps1` and Step Summary output.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1
+   - new scenario:
+     auto + sdk=1 + native_probe=0 + swiftshader_probe=0
+   - key assertions:
+     gate_mode=optional
+     gate_strict_mode_effective=false
+     gate_strict_mode_auto_prerequisites_met=false
+     gate_strict_mode_auto_runtime_probe_source=none
+     gate_result=SKIPPED
+     result=PASS
+
+2) tools/run_windows_ci_gate.ps1
+   - add no-probe auto canary execution
+   - add Step Summary table:
+     Windows Vulkan Gate Auto Optional No-Probe Canary
+
+No-probe canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1
+Result: PASS
+Key lines:
+- windows-vulkan-auto-optional-no-probe-canary.gate_mode=optional
+- windows-vulkan-auto-optional-no-probe-canary.gate_strict_mode_auto_prerequisites_met=false
+- windows-vulkan-auto-optional-no-probe-canary.gate_strict_mode_auto_runtime_probe_source=none
+- windows-vulkan-auto-optional-no-probe-canary.result=PASS
+
+Regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1
+Result: PASS
+
+Regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. Windows Vulkan auto-policy canary matrix now covers no-probe downgrade and both strict promotion sources.
+2. This round is branch-coverage/observability hardening; production policy logic is unchanged.
+3. End-to-end strict PASS runtime evidence still depends on GitHub Windows runner execution.
 
 ## Issue 180: Vulkan chain VK-050 Windows auto strict native runtime probe canary
 

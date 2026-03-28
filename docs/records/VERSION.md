@@ -6,6 +6,42 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-28 Update: Vulkan chain VK-051 Windows auto optional no-probe canary
+- Added deterministic canary coverage for auto-policy downgrade branch:
+  - new script:
+    - `tools/run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1`
+  - scenario:
+    - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+    - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1`
+    - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=0`
+    - `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0`
+  - key assertions:
+    - `windows-vulkan-check.mode=optional`
+    - `windows-vulkan-check.strict_mode_effective=false`
+    - `windows-vulkan-check.strict_mode_auto_prerequisites_met=false`
+    - `windows-vulkan-check.strict_mode_auto_runtime_probe_source=none`
+    - `windows-vulkan-check.result=SKIPPED`
+- CI gate integration:
+  - `tools/run_windows_ci_gate.ps1` now executes:
+    - `Windows Vulkan Gate Auto Optional No-Probe Canary`
+  - Step Summary includes no-probe auto canary table.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY114_VK051_WINDOWS_VULKAN_AUTO_OPTIONAL_NO_PROBE_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_DESIGN_2026-03-28.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_PLAN_2026-03-28.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - auto optional no-probe canary: PASS
+    - `gate_mode=optional`
+    - `gate_strict_mode_auto_prerequisites_met=false`
+    - `gate_strict_mode_auto_runtime_probe_source=none`
+    - `result=PASS`
+  - regression canaries: PASS
+    - `windows-vulkan-auto-strict-native-probe-canary.result=PASS`
+    - `windows-vulkan-auto-strict-swiftshader-probe-canary.result=PASS`
+- Remaining:
+  - End-to-end strict PASS runtime proof still depends on GitHub Windows runner execution results.
+
 ### 2026-03-28 Update: Vulkan chain VK-050 Windows auto strict native runtime probe canary
 - Added deterministic Windows Vulkan auto strict native-probe branch canary:
   - new script:

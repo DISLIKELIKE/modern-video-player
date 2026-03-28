@@ -3,8 +3,69 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 180` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 181` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 181: Vulkan chain VK-051 Windows auto optional no-probe canary
+
+**Date**: 2026-03-28
+
+### Problem Description
+- Auto strict promotion branches (`native` / `swiftshader`) were covered.
+- Auto no-probe downgrade branch still lacked dedicated canary coverage.
+
+### Root Cause Analysis
+- Existing optional-skip canary was policy `off` path, not `auto` downgrade path.
+- No direct assertion existed for:
+  - `strict_mode_auto_prerequisites_met=false`
+  - `strict_mode_auto_runtime_probe_source=none`
+  under `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`.
+
+### Solution
+- Added new canary:
+  - `tools/run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1`
+- Scenario:
+  - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+  - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1`
+  - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=0`
+  - `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0`
+- Assertions:
+  - `gate_mode=optional`
+  - `gate_strict_mode_effective=false`
+  - `gate_strict_mode_auto_prerequisites_met=false`
+  - `gate_strict_mode_auto_runtime_probe_source=none`
+  - `gate_result=SKIPPED`
+- Integrated into:
+  - `tools/run_windows_ci_gate.ps1`
+  - with dedicated Step Summary section:
+    - `Windows Vulkan Gate Auto Optional No-Probe Canary`
+
+### Validation
+- Auto no-probe canary:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1` -> PASS
+  - key lines:
+    - `windows-vulkan-auto-optional-no-probe-canary.gate_mode=optional`
+    - `windows-vulkan-auto-optional-no-probe-canary.gate_strict_mode_auto_prerequisites_met=false`
+    - `windows-vulkan-auto-optional-no-probe-canary.gate_strict_mode_auto_runtime_probe_source=none`
+    - `windows-vulkan-auto-optional-no-probe-canary.result=PASS`
+- Regression:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1` -> PASS
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1` -> PASS
+
+### Modified Files
+- `tools/run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1`
+- `tools/run_windows_ci_gate.ps1`
+- `docs/analysis/PLAYERCORE_DAY114_VK051_WINDOWS_VULKAN_AUTO_OPTIONAL_NO_PROBE_CANARY.md`
+- `docs/design/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_DESIGN_2026-03-28.md`
+- `docs/plans/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_PLAN_2026-03-28.md`
+- `docs/reports/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_NO_PROBE_CANARY_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 180: Vulkan chain VK-050 Windows auto strict native runtime probe canary
 
