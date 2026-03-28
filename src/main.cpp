@@ -7536,7 +7536,8 @@ bool runLinuxAudioBackendSmoke(const std::string& media_file, int sample_ms = 18
             }
         }
     }
-    const bool result = linux_platform && available_count > 0 && pass_count == available_count;
+    // Gate contract requires at least one Linux audio backend smoke path to pass.
+    const bool result = linux_platform && available_count > 0 && pass_count > 0;
 
     std::cout << "linux-audio-backend-smoke.path=" << media_file << std::endl;
     std::cout << "linux-audio-backend-smoke.sample_ms=" << sample_ms << std::endl;

@@ -3,8 +3,62 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 171` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 172` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 172: Linux WSL gate build/playback chain stabilization
+
+**Date**: 2026-03-28
+
+### Problem Description
+- 在 Windows + WSL2 (`Ubuntu-24.04`) 首次执行 Linux 构建时，若把构建目录放在 `/mnt/d/...` 下，CMake 在 `configure_file` 阶段多次报错 `Operation not permitted`，无法完成配置。
+- 切换到 Linux 文件系统构建后，暴露出 Linux 专属编译与运行问题：
+  - `include/streaming/http_stream_downloader.h` 缺少 `uint8_t` 头文件声明；
+  - OpenGL 渲染实现受到 X11 宏污染（`None`/`Complex`）影响；
+  - Linux gate 的 CP-902 在 `avcodec_send_packet` 路径触发崩溃；
+  - CP-404（Linux audio backend smoke）在 WSL 环境下因“并非全部后端可通过”而被错误判定失败。
+
+### Root Cause Analysis
+- WSL 的 DrvFs 挂载目录（`/mnt/d`）在当前环境下不适合作为 CMake 配置输出目录，`configure_file` 写入出现权限语义冲突。
+- Linux 编译链比 Windows 更严格地暴露出头文件显式依赖与宏命名污染问题。
+- `PlayerCore` 在软件解码路径把 `AVCodecContext::get_format` 清空为 `nullptr`，而 FFmpeg 在部分构建下会在首包发送时延迟触发该回调，导致不安全调用路径。
+- CP-404 代码侧成功条件与 gate 脚本契约不一致：脚本要求“至少一个可用后端通过”，代码却要求“所有可用后端都通过”。
+
+### Solution
+- 将 Linux 构建目录固定到 WSL Linux 文件系统（例如 `/home/u1133/mvp-build-linux`）。
+- 修复 Linux 编译与运行稳定性：
+  - `include/streaming/http_stream_downloader.h` 增加 `#include <cstdint>`；
+  - `src/render/opengl_video_renderer.cpp` 在非 Windows 路径显式 `#undef None` / `#undef Complex`；
+  - `src/core/player_core.cpp` 保持软件/硬件路径都使用有效 `get_format` 回调，并设置 `opaque=this`；
+  - `src/main.cpp` 将 CP-404 判定修正为 `available_count > 0 && pass_count > 0`。
+- 新增 `.gitattributes` 规则 `*.sh text eol=lf`，避免 WSL 下脚本被 CRLF 破坏。
+
+### Validation
+- Linux configure/build（WSL）：
+  - `cmake -S . -B /home/u1133/mvp-build-linux -DCMAKE_BUILD_TYPE=Release -DDEBUG_MODE=OFF -DENABLE_D3D11_RENDERER=OFF -DENABLE_D3D11VA=OFF -DENABLE_DXVA2=OFF -DENABLE_OPENGL_RENDERER=ON -DENABLE_SDL_RENDERER=ON -DENABLE_VAAPI=ON -DENABLE_VIDEOTOOLBOX=OFF` -> PASS
+  - `cmake --build /home/u1133/mvp-build-linux --parallel --target modern-video-player sample_logger_plugin` -> PASS
+- Linux gate（WSL/Xvfb）：
+  - `xvfb-run -a bash ./tools/run_linux_mvp_checks.sh /home/u1133/mvp-build-linux/modern-video-player ... /home/u1133/mvp-logs/linux-mvp-gate-summary-20260328.env 0` -> PASS
+  - 关键结果：
+    - `linux-audio-backend-smoke.available_target_count=3`
+    - `linux-audio-backend-smoke.pass_target_count=1`
+    - `linux-audio-backend-smoke.result=PASS`
+    - `Linux MVP gate result: PASS`
+- Linux packaging（WSL）：
+  - `bash ./tools/package_linux.sh /home/u1133/mvp-package-build-20260328` -> PASS
+  - 产物：
+    - `modern-video-player_1.0.0_amd64.deb`
+    - `modern-video-player-1.0.0-rc1-linux-x64.tar.gz`
+
+### Modified Files
+- `.gitattributes`
+- `include/streaming/http_stream_downloader.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `src/render/opengl_video_renderer.cpp`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 171: Vulkan chain VK-043 Windows strict-diag-exit-nonzero expected-fail canary
 

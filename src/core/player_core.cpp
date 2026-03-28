@@ -5087,9 +5087,11 @@ bool PlayerCore::initDecoders(const PlaybackOpenPlan& plan) {
 
                 }
 
-                video_codec_ctx_->get_format = nullptr;
+                // Keep a valid pixel-format callback for software and hardware paths.
+                // Some FFmpeg builds may call get_format lazily on first send_packet.
+                video_codec_ctx_->get_format = &PlayerCore::selectVideoPixelFormat;
 
-                video_codec_ctx_->opaque = nullptr;
+                video_codec_ctx_->opaque = this;
 
             }
 
@@ -5306,9 +5308,10 @@ bool PlayerCore::initDecoders(const PlaybackOpenPlan& plan) {
 
                 }
 
-            video_codec_ctx_->get_format = nullptr;
+            // Preserve a non-null format-selection callback on software decode path.
+            video_codec_ctx_->get_format = &PlayerCore::selectVideoPixelFormat;
 
-            video_codec_ctx_->opaque = nullptr;
+            video_codec_ctx_->opaque = this;
 
         }
 

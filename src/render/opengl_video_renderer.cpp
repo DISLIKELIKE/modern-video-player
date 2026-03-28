@@ -39,6 +39,15 @@
 #error "SDL2 headers not found"
 #endif
 
+#if !defined(_WIN32)
+#ifdef None
+#undef None
+#endif
+#ifdef Complex
+#undef Complex
+#endif
+#endif
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <d3d11.h>

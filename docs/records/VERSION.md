@@ -6,6 +6,45 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-28 Update: Linux WSL gate build/playback chain stabilization
+- Completed first end-to-end Linux gate validation on Windows host via WSL2 (`Ubuntu-24.04`) and landed blocking fixes:
+  - build/tooling stability:
+    - confirmed Linux build must use WSL filesystem path (for example `/home/u1133/mvp-build-linux`) to avoid DrvFs `configure_file: Operation not permitted` failures.
+    - added `.gitattributes` rule:
+      - `*.sh text eol=lf`
+  - compile/runtime fixes:
+    - `include/streaming/http_stream_downloader.h`:
+      - added missing `#include <cstdint>` for `uint8_t`.
+    - `src/render/opengl_video_renderer.cpp`:
+      - added non-Windows `#undef None` / `#undef Complex` to avoid X11 macro collision.
+    - `src/core/player_core.cpp`:
+      - preserved valid FFmpeg pixel-format callback on software decode path:
+        - `video_codec_ctx_->get_format = &PlayerCore::selectVideoPixelFormat`
+        - `video_codec_ctx_->opaque = this`
+      - fixed Linux gate CP-902 crash path observed near `avcodec_send_packet`.
+    - `src/main.cpp`:
+      - aligned CP-404 result contract with gate expectation:
+        - from `pass_count == available_count`
+        - to `available_count > 0 && pass_count > 0`.
+- Linux validation:
+  - configure/build:
+    - `cmake -S . -B /home/u1133/mvp-build-linux ...` -> PASS
+    - `cmake --build /home/u1133/mvp-build-linux --parallel --target modern-video-player sample_logger_plugin` -> PASS
+  - gate:
+    - `xvfb-run -a bash ./tools/run_linux_mvp_checks.sh /home/u1133/mvp-build-linux/modern-video-player ... /home/u1133/mvp-logs/linux-mvp-gate-summary-20260328.env 0` -> PASS
+    - key lines:
+      - `linux-audio-backend-smoke.available_target_count=3`
+      - `linux-audio-backend-smoke.pass_target_count=1`
+      - `linux-audio-backend-smoke.result=PASS`
+      - `Linux MVP gate result: PASS`
+  - packaging:
+    - `bash ./tools/package_linux.sh /home/u1133/mvp-package-build-20260328` -> PASS
+    - generated:
+      - `modern-video-player_1.0.0_amd64.deb`
+      - `modern-video-player-1.0.0-rc1-linux-x64.tar.gz`
+- Remaining:
+  - Linux Vulkan check remains expected-skip on this environment (`compiled_in=false`, `runtime_available=false`).
+
 ### 2026-03-27 Update: Vulkan chain VK-043 Windows strict-diag-exit-nonzero expected-fail canary
 - Landed deterministic strict-diag-exit-nonzero expected-fail canary coverage for Windows Vulkan gate:
   - added new script:
