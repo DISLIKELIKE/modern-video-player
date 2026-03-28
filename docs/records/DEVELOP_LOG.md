@@ -3,8 +3,69 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 178` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 179` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 179: Vulkan chain VK-049 Windows auto strict SwiftShader runtime probe promotion
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Promoted Windows Vulkan auto strict mode to include SwiftShader runtime probe path.
+- Added probe-source observability fields for strict auto decisions.
+- Added dedicated canary and wired it into `run_windows_ci_gate.ps1`.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_checks.ps1
+   - strict auto prerequisite:
+     sdk && (native_runtime_probe || swiftshader_runtime_probe)
+   - strict_mode_auto_basis:
+     sdk_and_runtime_probe_or_swiftshader_probe
+   - new summary fields:
+     strict_mode_auto_runtime_probe_any_available
+     strict_mode_auto_runtime_probe_source
+
+2) tools/run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1
+   - new canary:
+     auto + sdk=1 + native_probe=0 + swiftshader_probe=1
+   - assertions:
+     mode=strict
+     strict_mode_effective=true
+     strict_mode_auto_runtime_probe_source=swiftshader
+     result=PASS
+
+3) tools/run_windows_ci_gate.ps1
+   - baseline summary rows add strict auto probe-source fields
+   - add new canary stage + Step Summary section
+
+Static scan:
+rg -n "sdk_and_runtime_probe_or_swiftshader_probe|strict_mode_auto_runtime_probe_any_available|strict_mode_auto_runtime_probe_source|auto_strict_swiftshader_probe_canary" tools/run_windows_vulkan_checks.ps1 tools/run_windows_ci_gate.ps1 tools/run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1
+Result: PASS
+
+New canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1
+Result: PASS
+Key lines:
+- windows-vulkan-auto-strict-swiftshader-probe-canary.gate_mode=strict
+- windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_auto_runtime_probe_source=swiftshader
+- windows-vulkan-auto-strict-swiftshader-probe-canary.result=PASS
+
+Regression canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1
+Result: PASS
+
+Regression canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This closes the policy gap where SwiftShader runtime readiness could not promote `auto` strict mode.
+2. Existing explicit strict controls (CLI/env) are unchanged.
+3. End-to-end strict PASS runtime evidence still depends on GitHub Windows runner execution.
 
 ## Issue 178: Forced FailSession deferred release and headless logging override
 

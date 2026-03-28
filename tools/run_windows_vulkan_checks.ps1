@@ -219,8 +219,17 @@ $strictPolicyRaw = [Environment]::GetEnvironmentVariable("MVP_REQUIRE_WINDOWS_VU
 $strictPolicy = Normalize-PolicyValue($strictPolicyRaw)
 $strictFromEnv = $false
 $strictAutoPrerequisitesMet = $false
+$strictAutoRuntimeProbeAnyAvailable = $runnerRuntimeProbeAvailable -or $swiftShaderProbeAvailable
+$strictAutoRuntimeProbeSource = "none"
+if ($runnerRuntimeProbeAvailable -and $swiftShaderProbeAvailable) {
+    $strictAutoRuntimeProbeSource = "native+swiftshader"
+} elseif ($runnerRuntimeProbeAvailable) {
+    $strictAutoRuntimeProbeSource = "native"
+} elseif ($swiftShaderProbeAvailable) {
+    $strictAutoRuntimeProbeSource = "swiftshader"
+}
 if ($strictPolicy -eq "auto") {
-    $strictAutoPrerequisitesMet = $runnerSdkAvailable -and $runnerRuntimeProbeAvailable
+    $strictAutoPrerequisitesMet = $runnerSdkAvailable -and $strictAutoRuntimeProbeAnyAvailable
     $strictFromEnv = $strictAutoPrerequisitesMet
 } elseif ($strictPolicy -eq "1" -or $strictPolicy -eq "true" -or $strictPolicy -eq "yes" -or $strictPolicy -eq "on") {
     $strictFromEnv = $true
@@ -354,8 +363,10 @@ $summary = [ordered]@{
     "windows-vulkan-check.vk_icd_filenames" = $vkIcdFilenames
     "windows-vulkan-check.strict_mode_policy" = $strictPolicy
     "windows-vulkan-check.strict_mode_cli_requested" = if ($RequireVulkanAvailable.IsPresent) { "true" } else { "false" }
-    "windows-vulkan-check.strict_mode_auto_basis" = "sdk_and_runtime_probe"
+    "windows-vulkan-check.strict_mode_auto_basis" = "sdk_and_runtime_probe_or_swiftshader_probe"
     "windows-vulkan-check.strict_mode_auto_prerequisites_met" = if ($strictPolicy -eq "auto") { if ($strictAutoPrerequisitesMet) { "true" } else { "false" } } else { "n/a" }
+    "windows-vulkan-check.strict_mode_auto_runtime_probe_any_available" = if ($strictAutoRuntimeProbeAnyAvailable) { "true" } else { "false" }
+    "windows-vulkan-check.strict_mode_auto_runtime_probe_source" = $strictAutoRuntimeProbeSource
     "windows-vulkan-check.mode" = $strictMode
     "windows-vulkan-check.strict_mode_effective" = if ($strictModeEnabled) { "true" } else { "false" }
     "windows-vulkan-check.strict_mode_env_requested" = if ($strictFromEnv) { "true" } else { "false" }

@@ -3,8 +3,66 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 178` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 179` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 179: Vulkan chain VK-049 Windows auto strict SwiftShader runtime probe promotion
+
+**Date**: 2026-03-28
+
+### Problem Description
+- Windows Vulkan gate already captured SwiftShader runtime-probe signals.
+- But `auto` strict mode still only depended on native runtime probe:
+  - `sdk && native_runtime_probe`
+- This left CI strict-mode promotion disconnected from SwiftShader-only runtime-available cases.
+
+### Root Cause Analysis
+- `run_windows_vulkan_checks.ps1` strict auto prerequisite did not include `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE`.
+- No dedicated canary asserted the branch:
+  - `auto + sdk=1 + native_probe=0 + swiftshader_probe=1`.
+
+### Solution
+- Updated `tools/run_windows_vulkan_checks.ps1`:
+  - auto strict prerequisite now:
+    - `sdk && (native_runtime_probe || swiftshader_runtime_probe)`
+  - updated summary basis:
+    - `windows-vulkan-check.strict_mode_auto_basis=sdk_and_runtime_probe_or_swiftshader_probe`
+  - added summary fields:
+    - `windows-vulkan-check.strict_mode_auto_runtime_probe_any_available`
+    - `windows-vulkan-check.strict_mode_auto_runtime_probe_source`
+- Added canary:
+  - `tools/run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1`
+- Integrated canary and summary table rows into:
+  - `tools/run_windows_ci_gate.ps1`
+
+### Validation
+- Static scan:
+  - `rg -n "sdk_and_runtime_probe_or_swiftshader_probe|strict_mode_auto_runtime_probe_any_available|strict_mode_auto_runtime_probe_source|auto_strict_swiftshader_probe_canary" tools/run_windows_vulkan_checks.ps1 tools/run_windows_ci_gate.ps1 tools/run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1` -> PASS
+- New canary:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1` -> PASS
+  - key lines:
+    - `gate_mode=strict`
+    - `gate_strict_mode_auto_runtime_probe_source=swiftshader`
+    - `result=PASS`
+- Regression canaries:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1` -> PASS
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1` -> PASS
+
+### Modified Files
+- `tools/run_windows_vulkan_checks.ps1`
+- `tools/run_windows_ci_gate.ps1`
+- `tools/run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1`
+- `docs/analysis/PLAYERCORE_DAY112_VK049_WINDOWS_VULKAN_AUTO_STRICT_SWIFTSHADER_RUNTIME_PROBE_PROMOTION.md`
+- `docs/design/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_SWIFTSHADER_RUNTIME_PROBE_PROMOTION_DESIGN_2026-03-28.md`
+- `docs/plans/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_SWIFTSHADER_RUNTIME_PROBE_PROMOTION_PLAN_2026-03-28.md`
+- `docs/reports/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_SWIFTSHADER_RUNTIME_PROBE_PROMOTION_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 178: Forced FailSession deferred release and headless logging override
 

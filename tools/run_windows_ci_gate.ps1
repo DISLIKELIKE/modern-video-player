@@ -52,6 +52,10 @@ if (Test-Path $vulkanSummaryPath) {
     @("mode", $vulkanSummary["windows-vulkan-check.mode"]),
     @("strict_mode_effective", $vulkanSummary["windows-vulkan-check.strict_mode_effective"]),
     @("strict_mode_policy", $vulkanSummary["windows-vulkan-check.strict_mode_policy"]),
+    @("strict_mode_auto_basis", $vulkanSummary["windows-vulkan-check.strict_mode_auto_basis"]),
+    @("strict_mode_auto_prerequisites_met", $vulkanSummary["windows-vulkan-check.strict_mode_auto_prerequisites_met"]),
+    @("strict_mode_auto_runtime_probe_any_available", $vulkanSummary["windows-vulkan-check.strict_mode_auto_runtime_probe_any_available"]),
+    @("strict_mode_auto_runtime_probe_source", $vulkanSummary["windows-vulkan-check.strict_mode_auto_runtime_probe_source"]),
     @("runner_vulkan_sdk_available", $vulkanSummary["windows-vulkan-check.runner_vulkan_sdk_available"]),
     @("runner_vulkan_runtime_probe_available", $vulkanSummary["windows-vulkan-check.runner_vulkan_runtime_probe_available"]),
     @("runner_vulkan_runtime_probe_detail", $vulkanSummary["windows-vulkan-check.runner_vulkan_runtime_probe_detail"]),
@@ -303,6 +307,55 @@ if (Test-Path $vulkanStrictRuntimeUnavailableCanarySummaryPath) {
 }
 if ($vulkanStrictRuntimeUnavailableCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-runtime-unavailable canary failed with exit code $vulkanStrictRuntimeUnavailableCanaryExitCode. See logs/windows-vulkan-gate-strict-runtime-unavailable-canary.log and logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env."
+}
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary.log'
+$vulkanAutoStrictSwiftShaderProbeCanaryExitCode = $LASTEXITCODE
+$vulkanAutoStrictSwiftShaderProbeCanarySummaryPath = 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env'
+if (Test-Path $vulkanAutoStrictSwiftShaderProbeCanarySummaryPath) {
+  $vulkanAutoStrictSwiftShaderProbeCanarySummary = @{}
+  Get-Content -Path $vulkanAutoStrictSwiftShaderProbeCanarySummaryPath | ForEach-Object {
+    if ($_ -match '^\s*([^=]+)=(.*)$') {
+      $key = $matches[1].Trim()
+      $value = $matches[2].Trim()
+      if (-not [string]::IsNullOrWhiteSpace($key)) {
+        $vulkanAutoStrictSwiftShaderProbeCanarySummary[$key] = $value
+      }
+    }
+  }
+
+  $autoStrictSwiftShaderProbeCanaryRows = @(
+    @("result", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.result"]),
+    @("expected_gate_exit_code", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.expected_gate_exit_code"]),
+    @("actual_gate_exit_code", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.actual_gate_exit_code"]),
+    @("gate_summary_file_present", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_summary_file_present"]),
+    @("gate_result", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_result"]),
+    @("gate_mode", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_mode"]),
+    @("gate_strict_mode_effective", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_effective"]),
+    @("gate_strict_mode_auto_basis", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_auto_basis"]),
+    @("gate_strict_mode_auto_prerequisites_met", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_auto_prerequisites_met"]),
+    @("gate_strict_mode_auto_runtime_probe_any_available", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_auto_runtime_probe_any_available"]),
+    @("gate_strict_mode_auto_runtime_probe_source", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_strict_mode_auto_runtime_probe_source"]),
+    @("gate_playback_contract_valid", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_playback_contract_valid"]),
+    @("gate_playback_failure_detail", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_playback_failure_detail"]),
+    @("gate_failure_reason", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.gate_failure_reason"]),
+    @("validation_failure_reason", $vulkanAutoStrictSwiftShaderProbeCanarySummary["windows-vulkan-auto-strict-swiftshader-probe-canary.validation_failure_reason"])
+  )
+
+  "### Windows Vulkan Gate Auto Strict SwiftShader Probe Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  foreach ($row in $autoStrictSwiftShaderProbeCanaryRows) {
+    $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  }
+} else {
+  "### Windows Vulkan Gate Auto Strict SwiftShader Probe Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+}
+if ($vulkanAutoStrictSwiftShaderProbeCanaryExitCode -ne 0) {
+  throw "Windows Vulkan gate auto-strict-swiftshader-probe canary failed with exit code $vulkanAutoStrictSwiftShaderProbeCanaryExitCode. See logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary.log and logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env."
 }
 powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary.log'
 $vulkanStrictDiagExitNonzeroCanaryExitCode = $LASTEXITCODE
