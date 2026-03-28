@@ -1646,6 +1646,136 @@ bool PlayerCore::consumeDeferredStopPending(const char* reason) {
 
 
 
+void PlayerCore::armDeferredFailSession(ErrorCode code, const char* message, const char* reason) {
+
+    bool armed = false;
+
+    {
+
+        std::lock_guard<std::mutex> lock(deferred_fail_session_mutex_);
+
+        if (!deferred_fail_session_.pending) {
+
+            deferred_fail_session_.pending = true;
+
+            deferred_fail_session_.code = code;
+
+            deferred_fail_session_.message = message ? message : "runtime failure";
+
+            deferred_fail_session_.reason = reason ? reason : "unspecified";
+
+            armed = true;
+
+        }
+
+    }
+
+
+
+    if (armed) {
+
+        LOG_INFO("PlayerCore deferred fail-session armed"
+
+                 << " reason=" << (reason ? reason : "unspecified")
+
+                 << " code=" << static_cast<int>(code)
+
+                 << " message=" << (message ? message : "runtime failure"));
+
+    }
+
+}
+
+
+
+bool PlayerCore::consumeDeferredFailSession(ErrorCode& code, std::string& message, std::string& reason) {
+
+    {
+
+        std::lock_guard<std::mutex> lock(deferred_fail_session_mutex_);
+
+        if (!deferred_fail_session_.pending) {
+
+            return false;
+
+        }
+
+
+
+        code = deferred_fail_session_.code;
+
+        message = deferred_fail_session_.message;
+
+        reason = deferred_fail_session_.reason;
+
+        deferred_fail_session_.pending = false;
+
+        deferred_fail_session_.code = ErrorCode::None;
+
+        deferred_fail_session_.message.clear();
+
+        deferred_fail_session_.reason = "unspecified";
+
+    }
+
+
+
+    LOG_INFO("PlayerCore deferred fail-session consumed"
+
+             << " reason=" << reason
+
+             << " code=" << static_cast<int>(code)
+
+             << " message=" << message);
+
+    return true;
+
+}
+
+
+
+void PlayerCore::clearDeferredFailSession(const char* reason) {
+
+    bool cleared = false;
+
+    {
+
+        std::lock_guard<std::mutex> lock(deferred_fail_session_mutex_);
+
+        if (!deferred_fail_session_.pending) {
+
+            return;
+
+        }
+
+
+
+        deferred_fail_session_.pending = false;
+
+        deferred_fail_session_.code = ErrorCode::None;
+
+        deferred_fail_session_.message.clear();
+
+        deferred_fail_session_.reason = "unspecified";
+
+        cleared = true;
+
+    }
+
+
+
+    if (cleared) {
+
+        LOG_INFO("PlayerCore deferred fail-session cleared"
+
+                 << " reason=" << (reason ? reason : "unspecified"));
+
+    }
+
+}
+
+
+
 void PlayerCore::publishPlaybackStateFromInternalState(const char* reason) {
 
     const auto playback_state_name = [](PlaybackState state) {
@@ -1886,6 +2016,8 @@ bool PlayerCore::open(const std::string& filename) {
     clearPendingSeekSerial("open requested");
 
     setDeferredStopPending(false, "open requested");
+
+    clearDeferredFailSession("open requested");
 
     setEndedReason(EndedReason::None, "open requested");
 
@@ -2318,6 +2450,7 @@ void PlayerCore::close() {
     publishPlaybackStateFromInternalState("close requested");
 
     stop();
+    clearDeferredFailSession("close completed");
     applySessionReleaseSideEffects("close completed");
 
     setEofReached(false, "close completed");
@@ -7118,6 +7251,8 @@ bool PlayerCore::handleRuntimeFailure(ErrorCode code,
 
         runtime_failure_fail_sessions_.fetch_add(1);
 
+        armDeferredFailSession(code, message, reason);
+
         CoreStateSnapshot snapshot = getCoreStateSnapshot();
 
         if (snapshot.run_state != RunState::Stopped && snapshot.run_state != RunState::Stopping) {
@@ -7136,31 +7271,7 @@ bool PlayerCore::handleRuntimeFailure(ErrorCode code,
 
         }
 
-        if (getCoreStateSnapshot().deferred_stop_pending) {
-
-            applyStopCompletionSideEffects(reason, true, true);
-
-        }
-
-        applySessionReleaseSideEffects(reason);
-
-        setEofReached(false, reason);
-
-        clearPendingSeekSerial(reason);
-
-        setDeferredStopPending(false, reason);
-
-        setEndedReason(EndedReason::None, reason);
-
-        transitionRunState(RunState::Stopped, reason);
-
-        transitionPipelinePhase(PipelinePhase::Idle, reason);
-
-        transitionSessionState(SessionState::Failed, reason);
-
         publishPlaybackStateFromInternalState(reason);
-
-        emitError(code, message ? message : "runtime failure");
 
         return false;
 
@@ -7200,7 +7311,41 @@ void PlayerCore::serviceDeferredStop() {
 
 
 
+    ErrorCode deferred_fail_code = ErrorCode::None;
+
+    std::string deferred_fail_message;
+
+    std::string deferred_fail_reason;
+
     applyStopCompletionSideEffects("service deferred stop", true, true);
+
+    const bool fail_session_pending =
+        consumeDeferredFailSession(deferred_fail_code, deferred_fail_message, deferred_fail_reason);
+
+    if (fail_session_pending) {
+
+        applySessionReleaseSideEffects(deferred_fail_reason.c_str());
+
+        setEofReached(false, deferred_fail_reason.c_str());
+
+        clearPendingSeekSerial(deferred_fail_reason.c_str());
+
+        setEndedReason(EndedReason::None, deferred_fail_reason.c_str());
+
+        transitionRunState(RunState::Stopped, deferred_fail_reason.c_str());
+
+        transitionPipelinePhase(PipelinePhase::Idle, deferred_fail_reason.c_str());
+
+        transitionSessionState(SessionState::Failed, deferred_fail_reason.c_str());
+
+        publishPlaybackStateFromInternalState(deferred_fail_reason.c_str());
+
+        emitError(deferred_fail_code,
+                  deferred_fail_message.empty() ? std::string("runtime failure") : deferred_fail_message);
+
+        return;
+
+    }
 
     transitionRunState(RunState::Stopped, "service deferred stop");
 

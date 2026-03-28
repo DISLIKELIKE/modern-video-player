@@ -167,6 +167,17 @@ std::optional<size_t> parseUnsigned(const std::string& text) {
     }
 }
 
+std::optional<bool> parseBoolEnvValue(const std::string& text) {
+    const std::string normalized = toLower(trimCopy(text));
+    if (normalized == "1" || normalized == "true" || normalized == "yes" || normalized == "on") {
+        return true;
+    }
+    if (normalized == "0" || normalized == "false" || normalized == "no" || normalized == "off") {
+        return false;
+    }
+    return std::nullopt;
+}
+
 /// Read an environment variable without deprecated CRT APIs on Windows.
 std::optional<std::string> readEnvVar(const char* key) {
     if (!key || key[0] == '\0') {
@@ -265,6 +276,15 @@ LogSeverity parseLogLevel(const std::string& raw, std::vector<ConfigNote>& notes
 
 /// 从环境变量覆盖日志配置，优先级高于文件配置。
 void applyEnvOverrides(LoggingConfig& config, std::vector<ConfigNote>& notes) {
+    if (auto disable_quill = readEnvVar("MVP_DISABLE_QUILL_LOGGING")) {
+        auto parsed = parseBoolEnvValue(*disable_quill);
+        if (parsed && *parsed) {
+            config.enable_quill = false;
+            notes.push_back({LogSeverity::Info, "MVP_DISABLE_QUILL_LOGGING override applied"});
+        } else if (!parsed) {
+            notes.push_back({LogSeverity::Warning, "Invalid MVP_DISABLE_QUILL_LOGGING value"});
+        }
+    }
     if (auto log_dir = readEnvVar("MVP_LOG_DIR")) {
         config.log_dir = trimCopy(*log_dir);
         notes.push_back({LogSeverity::Info, "MVP_LOG_DIR override applied"});

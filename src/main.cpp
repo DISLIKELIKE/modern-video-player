@@ -6121,6 +6121,7 @@ bool runForcedFailSessionCheck(const std::string& media_file, int sample_ms = 15
 
     if (open_ok) {
         player.play();
+        entered_playback_loop = player.isPlaying() || player.isPaused();
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(sample_ms);
         while (std::chrono::steady_clock::now() < deadline) {
             player.pumpEvents();
@@ -6133,6 +6134,7 @@ bool runForcedFailSessionCheck(const std::string& media_file, int sample_ms = 15
             if (!fail_session_observed && settled_diag.runtime_failure_fail_sessions > 0) {
                 fail_session_observed = true;
                 first_failure_diag = settled_diag;
+                entered_playback_loop = true;
             }
 
             if (fail_session_observed && !active) {

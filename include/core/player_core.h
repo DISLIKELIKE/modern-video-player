@@ -683,6 +683,18 @@ private:
 
     };
 
+    struct DeferredFailSessionState {
+
+        bool pending{false};
+
+        ErrorCode code{ErrorCode::None};
+
+        std::string message;
+
+        std::string reason{"unspecified"};
+
+    };
+
 
 
     struct AvPacketDeleter {
@@ -852,6 +864,12 @@ private:
 
     bool consumeDeferredStopPending(const char* reason);
 
+    void armDeferredFailSession(ErrorCode code, const char* message, const char* reason);
+
+    bool consumeDeferredFailSession(ErrorCode& code, std::string& message, std::string& reason);
+
+    void clearDeferredFailSession(const char* reason);
+
     CoreStateSnapshot getCoreStateSnapshot() const;
 
     SchedulerControlSnapshot makeSchedulerControlSnapshot() const;
@@ -993,6 +1011,10 @@ private:
     mutable std::mutex core_state_mutex_;
 
     CoreStateSnapshot core_state_{};
+
+    mutable std::mutex deferred_fail_session_mutex_;
+
+    DeferredFailSessionState deferred_fail_session_{};
 
     std::atomic<double> position_{0.0};
 
