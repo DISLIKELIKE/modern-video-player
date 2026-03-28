@@ -22,6 +22,11 @@ if (-not (Test-Path $resolvedExecutablePath)) {
 }
 $env:Path = (Join-Path (Get-Location) 'external/ffmpeg/bin') + ';' + $env:Path
 New-Item -ItemType Directory -Path logs -Force | Out-Null
+$stepSummaryPath = $env:GITHUB_STEP_SUMMARY
+if ([string]::IsNullOrWhiteSpace($stepSummaryPath)) {
+    $stepSummaryPath = Join-Path (Get-Location) 'logs/windows-gate-step-summary.md'
+    Write-Warning "GITHUB_STEP_SUMMARY is not set; writing step summary to $stepSummaryPath"
+}
 & $resolvedExecutablePath --d3d11-diagnostics
 & $resolvedExecutablePath --d3d11-hdr-output-check $ProbeFile $SampleMs
 $env:MVP_RENDERER_BACKEND = 'd3d11'
@@ -61,18 +66,18 @@ if (Test-Path $vulkanSummaryPath) {
     @("playback_failure_detail", $vulkanSummary["windows-vulkan-check.playback_failure_detail"])
   )
 
-  "### Windows Vulkan Gate Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Summary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $summaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Summary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanGateExitCode -ne 0) {
   throw "Windows Vulkan gate failed with exit code $vulkanGateExitCode. See logs/windows-vulkan-gate.log and logs/windows-vulkan-gate-summary.env."
@@ -104,18 +109,18 @@ if (Test-Path $vulkanCanarySummaryPath) {
     @("validation_failure_reason", $vulkanCanarySummary["windows-vulkan-contract-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $canaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-contract-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-contract-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate contract canary failed with exit code $vulkanCanaryExitCode. See logs/windows-vulkan-gate-contract-canary.log and logs/windows-vulkan-gate-contract-canary-summary.env."
@@ -147,18 +152,18 @@ if (Test-Path $vulkanPlaybackCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackCanarySummary["windows-vulkan-playback-contract-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-contract-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-contract-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-contract canary failed with exit code $vulkanPlaybackCanaryExitCode. See logs/windows-vulkan-gate-playback-contract-canary.log and logs/windows-vulkan-gate-playback-contract-canary-summary.env."
@@ -193,18 +198,18 @@ if (Test-Path $vulkanPassCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate PASS Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate PASS Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $passCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate PASS Contract Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-pass-contract-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate PASS Contract Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-pass-contract-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPassCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate pass-contract canary failed with exit code $vulkanPassCanaryExitCode. See logs/windows-vulkan-gate-pass-contract-canary.log and logs/windows-vulkan-gate-pass-contract-canary-summary.env."
@@ -238,18 +243,18 @@ if (Test-Path $vulkanStrictUnavailableCanarySummaryPath) {
     @("validation_failure_reason", $vulkanStrictUnavailableCanarySummary["windows-vulkan-strict-unavailable-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Strict Unavailable Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Unavailable Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $strictUnavailableCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Strict Unavailable Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-strict-unavailable-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Unavailable Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-strict-unavailable-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanStrictUnavailableCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-unavailable canary failed with exit code $vulkanStrictUnavailableCanaryExitCode. See logs/windows-vulkan-gate-strict-unavailable-canary.log and logs/windows-vulkan-gate-strict-unavailable-canary-summary.env."
@@ -283,18 +288,18 @@ if (Test-Path $vulkanStrictRuntimeUnavailableCanarySummaryPath) {
     @("validation_failure_reason", $vulkanStrictRuntimeUnavailableCanarySummary["windows-vulkan-strict-runtime-unavailable-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Strict Runtime-Unavailable Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Runtime-Unavailable Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $strictRuntimeUnavailableCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Strict Runtime-Unavailable Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Runtime-Unavailable Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanStrictRuntimeUnavailableCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-runtime-unavailable canary failed with exit code $vulkanStrictRuntimeUnavailableCanaryExitCode. See logs/windows-vulkan-gate-strict-runtime-unavailable-canary.log and logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env."
@@ -329,18 +334,18 @@ if (Test-Path $vulkanStrictDiagExitNonzeroCanarySummaryPath) {
     @("validation_failure_reason", $vulkanStrictDiagExitNonzeroCanarySummary["windows-vulkan-strict-diag-exit-nonzero-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $strictDiagExitNonzeroCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Diag-Exit-Nonzero Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanStrictDiagExitNonzeroCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-diag-exit-nonzero canary failed with exit code $vulkanStrictDiagExitNonzeroCanaryExitCode. See logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary.log and logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary.env."
@@ -376,18 +381,18 @@ if (Test-Path $vulkanStrictDiagResultNotPassCanarySummaryPath) {
     @("validation_failure_reason", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $strictDiagResultNotPassCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanStrictDiagResultNotPassCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-diag-result-not-pass canary failed with exit code $vulkanStrictDiagResultNotPassCanaryExitCode. See logs/windows-vulkan-gate-strict-diag-result-not-pass-canary.log and logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env."
@@ -423,18 +428,18 @@ if (Test-Path $vulkanStrictCompiledInDisabledCanarySummaryPath) {
     @("validation_failure_reason", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $strictCompiledInDisabledCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanStrictCompiledInDisabledCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-compiled-in-disabled canary failed with exit code $vulkanStrictCompiledInDisabledCanaryExitCode. See logs/windows-vulkan-gate-strict-compiled-in-disabled-canary.log and logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env."
@@ -469,18 +474,18 @@ if (Test-Path $vulkanOptionalSkipCanarySummaryPath) {
     @("validation_failure_reason", $vulkanOptionalSkipCanarySummary["windows-vulkan-optional-skip-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Optional Skip Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Optional Skip Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $optionalSkipCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Optional Skip Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-optional-skip-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Optional Skip Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-optional-skip-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanOptionalSkipCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate optional-skip canary failed with exit code $vulkanOptionalSkipCanaryExitCode. See logs/windows-vulkan-gate-optional-skip-canary.log and logs/windows-vulkan-gate-optional-skip-canary-summary.env."
@@ -514,18 +519,18 @@ if (Test-Path $vulkanUnsupportedPlatformCanarySummaryPath) {
     @("validation_failure_reason", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Unsupported Platform Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Unsupported Platform Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $unsupportedPlatformCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Unsupported Platform Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-unsupported-platform-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Unsupported Platform Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-unsupported-platform-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanUnsupportedPlatformCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate unsupported-platform canary failed with exit code $vulkanUnsupportedPlatformCanaryExitCode. See logs/windows-vulkan-gate-unsupported-platform-canary.log and logs/windows-vulkan-gate-unsupported-platform-canary-summary.env."
@@ -558,18 +563,18 @@ if (Test-Path $vulkanPlaybackSemanticCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackSemanticCanarySummary["windows-vulkan-playback-semantic-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackSemanticCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-semantic-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-semantic-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackSemanticCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-semantic canary failed with exit code $vulkanPlaybackSemanticCanaryExitCode. See logs/windows-vulkan-gate-playback-semantic-canary.log and logs/windows-vulkan-gate-playback-semantic-canary-summary.env."
@@ -603,18 +608,18 @@ if (Test-Path $vulkanPlaybackBackendSemanticCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackBackendSemanticCanarySummary["windows-vulkan-playback-backend-semantic-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Backend Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Backend Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackBackendSemanticCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Backend Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-backend-semantic-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Backend Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-backend-semantic-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackBackendSemanticCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-backend-semantic canary failed with exit code $vulkanPlaybackBackendSemanticCanaryExitCode. See logs/windows-vulkan-gate-playback-backend-semantic-canary.log and logs/windows-vulkan-gate-playback-backend-semantic-canary-summary.env."
@@ -648,18 +653,18 @@ if (Test-Path $vulkanPlaybackCandidatesSemanticCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackCandidatesSemanticCanarySummary["windows-vulkan-playback-candidates-semantic-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Candidates Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Candidates Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackCandidatesSemanticCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Candidates Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-candidates-semantic-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Candidates Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-candidates-semantic-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackCandidatesSemanticCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-candidates-semantic canary failed with exit code $vulkanPlaybackCandidatesSemanticCanaryExitCode. See logs/windows-vulkan-gate-playback-candidates-semantic-canary.log and logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary.env."
@@ -693,18 +698,18 @@ if (Test-Path $vulkanPlaybackPlanReasonSemanticCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackPlanReasonSemanticCanarySummary["windows-vulkan-playback-plan-reason-semantic-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Plan Reason Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Plan Reason Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackPlanReasonSemanticCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Plan Reason Semantic Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-plan-reason-semantic-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Plan Reason Semantic Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-plan-reason-semantic-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackPlanReasonSemanticCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-plan-reason-semantic canary failed with exit code $vulkanPlaybackPlanReasonSemanticCanaryExitCode. See logs/windows-vulkan-gate-playback-plan-reason-semantic-canary.log and logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary.env."
@@ -739,18 +744,18 @@ if (Test-Path $vulkanPlaybackResultNotPassCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackResultNotPassCanarySummary["windows-vulkan-playback-result-not-pass-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Result-Not-Pass Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackResultNotPassCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-result-not-pass-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Result-Not-Pass Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-result-not-pass-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackResultNotPassCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-result-not-pass canary failed with exit code $vulkanPlaybackResultNotPassCanaryExitCode. See logs/windows-vulkan-gate-playback-result-not-pass-canary.log and logs/windows-vulkan-gate-playback-result-not-pass-canary-summary.env."
@@ -785,18 +790,18 @@ if (Test-Path $vulkanPlaybackCommandExitNonzeroCanarySummaryPath) {
     @("validation_failure_reason", $vulkanPlaybackCommandExitNonzeroCanarySummary["windows-vulkan-playback-command-exit-nonzero-canary.validation_failure_reason"])
   )
 
-  "### Windows Vulkan Gate Playback Command-Exit-Nonzero Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Command-Exit-Nonzero Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   foreach ($row in $playbackCommandExitNonzeroCanaryRows) {
     $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
-    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
   }
 } else {
-  "### Windows Vulkan Gate Playback Command-Exit-Nonzero Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
-  "- windows-vulkan-gate-playback-command-exit-nonzero-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+  "### Windows Vulkan Gate Playback Command-Exit-Nonzero Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-playback-command-exit-nonzero-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
 }
 if ($vulkanPlaybackCommandExitNonzeroCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate playback-command-exit-nonzero canary failed with exit code $vulkanPlaybackCommandExitNonzeroCanaryExitCode. See logs/windows-vulkan-gate-playback-command-exit-nonzero-canary.log and logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-summary.env."
@@ -804,4 +809,5 @@ if ($vulkanPlaybackCommandExitNonzeroCanaryExitCode -ne 0) {
 powershell -ExecutionPolicy Bypass -File .\tools\run_opengl_checks.ps1 -ExecutablePath $ExecutablePath -ProbeFile $ProbeFile
 powershell -ExecutionPolicy Bypass -File .\tools\collect_driver_quirk_sample.ps1 -ExecutablePath $ExecutablePath -OutputCsvPath 'build/driver_quirk_samples.csv' -HostLabel 'github-actions-windows' -Notes 'GitHub Actions Windows runner sample'
 powershell -ExecutionPolicy Bypass -File .\tools\package_windows.ps1 -BuildDir $BuildDir -Configuration Release -SkipBuild
+
 
