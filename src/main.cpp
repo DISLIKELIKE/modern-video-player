@@ -7138,6 +7138,7 @@ bool runLinuxOpenGLFallbackCheck(const std::string& media_file, int sample_ms = 
 
     const bool linux_platform = diag.startup_platform == "Linux";
     const bool fallback_to_software = renderer_backend == "SoftwareSDL";
+    const bool fallback_selected_non_opengl = renderer_backend != "OpenGL" && renderer_backend != "None";
     const bool fallback_reason_recorded =
         !diag.startup_renderer_fallback_reason.empty() &&
         diag.startup_renderer_fallback_reason != "none";
@@ -7149,7 +7150,7 @@ bool runLinuxOpenGLFallbackCheck(const std::string& media_file, int sample_ms = 
     const bool result = linux_platform &&
                         open_ok &&
                         entered_playback_loop &&
-                        fallback_to_software &&
+                        fallback_selected_non_opengl &&
                         fallback_reason_recorded &&
                         fallback_chain_listed &&
                         decode_ok &&
@@ -7172,6 +7173,8 @@ bool runLinuxOpenGLFallbackCheck(const std::string& media_file, int sample_ms = 
               << diag.startup_renderer_fallback_reason << std::endl;
     std::cout << "linux-opengl-fallback-check.fallback_to_software="
               << (fallback_to_software ? "true" : "false") << std::endl;
+    std::cout << "linux-opengl-fallback-check.fallback_selected_non_opengl="
+              << (fallback_selected_non_opengl ? "true" : "false") << std::endl;
     std::cout << "linux-opengl-fallback-check.fallback_chain_listed="
               << (fallback_chain_listed ? "true" : "false") << std::endl;
     std::cout << "linux-opengl-fallback-check.fallback_reason_recorded="

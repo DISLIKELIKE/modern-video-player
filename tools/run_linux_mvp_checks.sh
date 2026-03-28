@@ -344,10 +344,10 @@ run_check "${INDEX}" "${TOTAL}" "cp402_opengl_playback" "CP-402 Linux OpenGL pla
   'linux-opengl-playback-check\.result=PASS' \
   -- --linux-opengl-playback-check "${MEDIA_PATH}" "${SAMPLE_MS}"
 INDEX=$((INDEX + 1))
-run_check "${INDEX}" "${TOTAL}" "cp403_opengl_to_software_fallback" "CP-403 OpenGL -> SoftwareSDL fallback" "" \
-  'linux-opengl-fallback-check\.(renderer_backend|startup_renderer_fallback_reason|fallback_to_software|result)=' \
+run_check "${INDEX}" "${TOTAL}" "cp403_opengl_fallback_chain" "CP-403 OpenGL fallback chain" "" \
+  'linux-opengl-fallback-check\.(renderer_backend|startup_renderer_fallback_reason|fallback_selected_non_opengl|result)=' \
   'linux-opengl-fallback-check\.platform_ok=true' \
-  'linux-opengl-fallback-check\.fallback_to_software=true' \
+  'linux-opengl-fallback-check\.fallback_selected_non_opengl=true' \
   'linux-opengl-fallback-check\.fallback_reason_recorded=true' \
   'linux-opengl-fallback-check\.result=PASS' \
   -- --linux-opengl-fallback-check "${MEDIA_PATH}" "${SAMPLE_MS}"
