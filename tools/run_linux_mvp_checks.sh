@@ -328,7 +328,7 @@ run_check "${INDEX}" "${TOTAL}" "cp902_observability_baseline" "CP-902 observabi
   'performance-log-check\.result=PASS' \
   -- --performance-log-check "${MEDIA_PATH}" "${SAMPLE_MS}"
 INDEX=$((INDEX + 1))
-run_check "${INDEX}" "${TOTAL}" "cp401_software_decode_audio" "CP-401 Linux software decode + SDL audio" "" \
+run_check "${INDEX}" "${TOTAL}" "cp401_software_decode_audio" "CP-401 Linux software decode + SDL audio" "SDL_AUDIODRIVER=dummy" \
   'linux-software-audio-check\.(renderer_backend|decoder_backend|active_audio_driver|audio_init_strategy|result)=' \
   'linux-software-audio-check\.platform_ok=true' \
   'linux-software-audio-check\.renderer_backend=SoftwareSDL' \
