@@ -147,6 +147,96 @@ jobs:
           }
           $global:LASTEXITCODE = 0
 
+      - name: Install Windows SwiftShader Vulkan ICD (fallback)
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          $swiftShaderReady = $false
+          $runtimeProbeAvailable = $false
+          $runtimeProbeDetail = "swiftshader-not-run"
+
+          try {
+            $externalRoot = Join-Path $PWD "external"
+            New-Item -ItemType Directory -Path $externalRoot -Force | Out-Null
+
+            $versions = Invoke-RestMethod -Uri "https://github.com/jakoch/rasterizers/releases/latest/download/versions.json"
+            $swiftShaderMeta = $versions.latest.'swiftshader-win64'
+            if ($null -eq $swiftShaderMeta -or [string]::IsNullOrWhiteSpace([string]$swiftShaderMeta.url)) {
+              throw "swiftshader-win64 metadata missing from rasterizers versions.json."
+            }
+
+            $swiftShaderZip = Join-Path $env:RUNNER_TEMP "swiftshader-win64.zip"
+            $swiftShaderRoot = Join-Path $externalRoot "swiftshader"
+            if (Test-Path $swiftShaderRoot) {
+              Remove-Item -Path $swiftShaderRoot -Recurse -Force
+            }
+            Invoke-WebRequest -Uri ([string]$swiftShaderMeta.url) -OutFile $swiftShaderZip
+            Expand-Archive -Path $swiftShaderZip -DestinationPath $swiftShaderRoot -Force
+
+            $swiftShaderIcd = Join-Path $swiftShaderRoot "vk_swiftshader_icd.json"
+            $swiftShaderDll = Join-Path $swiftShaderRoot "vk_swiftshader.dll"
+            if (-not (Test-Path $swiftShaderIcd) -or -not (Test-Path $swiftShaderDll)) {
+              throw "SwiftShader archive missing vk_swiftshader_icd.json or vk_swiftshader.dll."
+            }
+
+            "VK_ICD_FILENAMES=$swiftShaderIcd" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_AVAILABLE=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_ICD=$swiftShaderIcd" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_TAG=$([string]$swiftShaderMeta.tag)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            "$swiftShaderRoot" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+            $env:VK_ICD_FILENAMES = $swiftShaderIcd
+            $env:Path = "$swiftShaderRoot;$env:Path"
+            Write-Host "Installed SwiftShader Vulkan ICD: $swiftShaderIcd"
+            $swiftShaderReady = $true
+
+            $vulkanInfoCandidates = @()
+            if (Test-Path "C:\\VulkanSDK") {
+              $vulkanSdkRoot = Get-ChildItem -Path "C:\\VulkanSDK" -Directory | Sort-Object Name -Descending | Select-Object -First 1
+              if ($vulkanSdkRoot) {
+                $sdkVulkanInfo = Join-Path $vulkanSdkRoot.FullName "Bin\\vulkaninfo.exe"
+                if (Test-Path $sdkVulkanInfo) {
+                  $vulkanInfoCandidates += $sdkVulkanInfo
+                }
+              }
+            }
+            $vulkanInfoCommand = Get-Command vulkaninfo -ErrorAction SilentlyContinue
+            if ($vulkanInfoCommand) {
+              $vulkanInfoCandidates += $vulkanInfoCommand.Source
+            }
+            $vulkanInfoCandidates = @($vulkanInfoCandidates | Select-Object -Unique)
+
+            if ($vulkanInfoCandidates.Count -eq 0) {
+              $runtimeProbeDetail = "swiftshader-vulkaninfo-missing"
+            } else {
+              foreach ($vulkanInfoCandidate in $vulkanInfoCandidates) {
+                & $vulkanInfoCandidate --summary *> $null
+                if ($LASTEXITCODE -eq 0) {
+                  $runtimeProbeAvailable = $true
+                  $runtimeProbeDetail = "swiftshader-vulkaninfo"
+                  break
+                }
+                $runtimeProbeDetail = "swiftshader-vulkaninfo-exit-$LASTEXITCODE"
+              }
+            }
+          } catch {
+            Write-Warning "SwiftShader Vulkan ICD setup failed: $($_.Exception.Message)"
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_AVAILABLE=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            $runtimeProbeDetail = "swiftshader-setup-failed"
+          }
+
+          if ($swiftShaderReady) {
+            if ($runtimeProbeAvailable) {
+              "MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            } else {
+              "MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+              Write-Warning "SwiftShader runtime probe still unavailable; Windows Vulkan checks may remain optional."
+            }
+            "MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_DETAIL=$runtimeProbeDetail" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+            Write-Host "Windows Vulkan runtime probe after SwiftShader: $runtimeProbeAvailable ($runtimeProbeDetail)"
+          }
+          $global:LASTEXITCODE = 0
+
       - name: Install Linux dependencies
         if: matrix.platform == 'linux'
         shell: bash
