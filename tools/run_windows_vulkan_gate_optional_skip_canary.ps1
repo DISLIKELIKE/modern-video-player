@@ -104,12 +104,23 @@ if (-not [string]::IsNullOrWhiteSpace($gateSummaryDir)) {
     New-Item -ItemType Directory -Path $gateSummaryDir -Force | Out-Null
 }
 
-& powershell -ExecutionPolicy Bypass -File $runnerScript `
-    -ExecutablePath $mockExecutable `
-    -ProbeFile $probePath `
-    -SampleMs $SampleMs `
-    -SummaryOutputPath $gateSummaryPath
-$gateExitCode = $LASTEXITCODE
+$previousStrictPolicy = [Environment]::GetEnvironmentVariable("MVP_REQUIRE_WINDOWS_VULKAN_CHECKS")
+$strictPolicyHadValue = $null -ne $previousStrictPolicy
+try {
+    $env:MVP_REQUIRE_WINDOWS_VULKAN_CHECKS = "off"
+    & powershell -ExecutionPolicy Bypass -File $runnerScript `
+        -ExecutablePath $mockExecutable `
+        -ProbeFile $probePath `
+        -SampleMs $SampleMs `
+        -SummaryOutputPath $gateSummaryPath
+    $gateExitCode = $LASTEXITCODE
+} finally {
+    if ($strictPolicyHadValue) {
+        $env:MVP_REQUIRE_WINDOWS_VULKAN_CHECKS = $previousStrictPolicy
+    } else {
+        Remove-Item Env:MVP_REQUIRE_WINDOWS_VULKAN_CHECKS -ErrorAction SilentlyContinue
+    }
+}
 
 $gateSummaryFilePresent = Test-Path $gateSummaryPath
 $gateSummary = Parse-KeyValueFile -Path $gateSummaryPath
