@@ -4,7 +4,7 @@ if(WIN32)
     set(CMAKE_SYSTEM_VERSION "10.0.26100.0")
 endif()
 
-set(MVP_VERSION_PRERELEASE "rc1" CACHE STRING "Prerelease suffix without leading dash")
+set(MVP_VERSION_PRERELEASE "rc2" CACHE STRING "Prerelease suffix without leading dash")
 set(MVP_VERSION_BUILD 0 CACHE STRING "Fourth component for Windows file version")
 set(MVP_PRODUCT_NAME "Modern Video Player")
 set(MVP_PACKAGE_VENDOR "modern-video-player")
