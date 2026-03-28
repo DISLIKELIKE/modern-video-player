@@ -3,8 +3,367 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 172` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 177` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 177: Vulkan chain VK-048 Windows PASS-contract availability detail assertion hardening
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Hardened PASS-contract canary to assert success-path availability detail `none`.
+- Extended workflow PASS-contract canary Step Summary with explicit availability-detail row.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_pass_contract_canary.ps1
+   - parse:
+     windows-vulkan-check.vulkan_availability_failure_detail
+   - assert:
+     gate_vulkan_availability_failure_detail=none
+   - emit summary key:
+     windows-vulkan-pass-contract-canary.gate_vulkan_availability_failure_detail
+
+2) .github/workflows/cross-platform-gate.yml
+   - PASS-contract Canary Step Summary rows add:
+     gate_vulkan_availability_failure_detail
+
+Build:
+cmake --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk048-baseline.env"
+Result: PASS
+
+PASS-contract canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk048.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk048.env"
+Result: PASS
+Key lines:
+- windows-vulkan-pass-contract-canary.actual_gate_exit_code=0
+- windows-vulkan-pass-contract-canary.gate_result=PASS
+- windows-vulkan-pass-contract-canary.gate_mode=strict
+- windows-vulkan-pass-contract-canary.gate_vulkan_availability_failure_detail=none
+- windows-vulkan-pass-contract-canary.gate_playback_contract_valid=true
+- windows-vulkan-pass-contract-canary.gate_playback_failure_detail=none
+- windows-vulkan-pass-contract-canary.validation_failure_reason=none
+- windows-vulkan-pass-contract-canary.result=PASS
+
+Full Windows Vulkan canary matrix batch:
+Result: PASS
+Key line:
+- ALL_VK048_CHECKS_PASS
+
+Static scan:
+rg -n "gate_vulkan_availability_failure_detail|run_windows_vulkan_gate_pass_contract_canary|Windows Vulkan Gate PASS Contract Canary|vulkanPassCanaryExitCode" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_pass_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round is assertion/observability hardening only; PASS path behavior is unchanged.
+2. Success-path availability-detail drift is now explicitly canary-protected.
+3. Real strict PASS runtime proof still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 176: Vulkan chain VK-047 Windows unsupported-platform availability detail assertion hardening
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Hardened unsupported-platform canary to assert availability detail `unsupported-platform`.
+- Extended workflow unsupported-platform canary Step Summary with explicit availability-detail row.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_unsupported_platform_canary.ps1
+   - parse:
+     windows-vulkan-check.vulkan_availability_failure_detail
+   - assert:
+     gate_vulkan_availability_failure_detail=unsupported-platform
+   - emit summary key:
+     windows-vulkan-unsupported-platform-canary.gate_vulkan_availability_failure_detail
+
+2) .github/workflows/cross-platform-gate.yml
+   - Unsupported-platform Canary Step Summary rows add:
+     gate_vulkan_availability_failure_detail
+
+Build:
+cmake --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk047-baseline.env"
+Result: PASS
+
+Unsupported-platform canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk047.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk047.env"
+Result: PASS
+Key lines:
+- windows-vulkan-unsupported-platform-canary.actual_gate_exit_code=2
+- windows-vulkan-unsupported-platform-canary.gate_result=FAIL
+- windows-vulkan-unsupported-platform-canary.gate_failure_reason=unsupported-platform
+- windows-vulkan-unsupported-platform-canary.gate_vulkan_availability_failure_detail=unsupported-platform
+- windows-vulkan-unsupported-platform-canary.gate_playback_check_executed=false
+- windows-vulkan-unsupported-platform-canary.validation_failure_reason=none
+- windows-vulkan-unsupported-platform-canary.result=PASS
+
+Full Windows Vulkan canary matrix batch:
+Result: PASS
+Key line:
+- ALL_VK047_CHECKS_PASS
+
+Static scan:
+rg -n "gate_vulkan_availability_failure_detail|run_windows_vulkan_gate_unsupported_platform_canary|Windows Vulkan Gate Unsupported Platform Canary|vulkanUnsupportedPlatformCanaryExitCode" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_unsupported_platform_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round is assertion/observability hardening only; unsupported-platform policy behavior is unchanged.
+2. Unsupported-platform detail-classification drift is now explicitly canary-protected.
+3. Real strict PASS runtime proof still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 175: Vulkan chain VK-046 Windows diagnostics-contract availability detail assertion hardening
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Hardened diagnostics-contract canary to assert availability detail `diag-contract-missing-required-fields`.
+- Extended workflow contract-canary Step Summary with explicit availability-detail row.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_contract_canary.ps1
+   - parse:
+     windows-vulkan-check.vulkan_availability_failure_detail
+   - assert:
+     gate_vulkan_availability_failure_detail=diag-contract-missing-required-fields
+   - emit summary key:
+     windows-vulkan-contract-canary.gate_vulkan_availability_failure_detail
+
+2) .github/workflows/cross-platform-gate.yml
+   - Contract Canary Step Summary rows add:
+     gate_vulkan_availability_failure_detail
+
+Build:
+cmake --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk046-baseline.env"
+Result: PASS
+
+Contract canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk046.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk046.env"
+Result: PASS
+Key lines:
+- windows-vulkan-contract-canary.actual_gate_exit_code=2
+- windows-vulkan-contract-canary.gate_result=FAIL
+- windows-vulkan-contract-canary.gate_failure_reason=vulkan-diagnostics-contract-broken
+- windows-vulkan-contract-canary.gate_diag_contract_valid=false
+- windows-vulkan-contract-canary.gate_vulkan_availability_failure_detail=diag-contract-missing-required-fields
+- windows-vulkan-contract-canary.validation_failure_reason=none
+- windows-vulkan-contract-canary.result=PASS
+
+Full Windows Vulkan canary matrix batch:
+Result: PASS
+Key line:
+- ALL_VK046_CHECKS_PASS
+
+Static scan:
+rg -n "gate_vulkan_availability_failure_detail|diag-contract-missing-required-fields|run_windows_vulkan_gate_contract_canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_contract_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round is assertion/observability hardening only; policy behavior is unchanged.
+2. Contract branch classification drift is now explicitly canary-protected.
+3. Real strict PASS runtime proof still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 174: Vulkan chain VK-045 Windows strict-compiled-in-disabled expected-fail canary
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Added deterministic strict-compiled-in-disabled expected-fail canary for Windows Vulkan gate.
+- Wired strict-compiled-in-disabled canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_strict_compiled_in_disabled_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_strict_compiled_in_disabled_canary.cmd
+- diagnostics path emits contract-valid disabled-build state:
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=false
+  - runtime_available=false
+  - result=FAIL
+  - dependency_source=disabled
+  - process exit code=0
+- strict mode requested via gate CLI
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate mode=strict
+  - gate strict_mode_effective=true
+  - gate failure_reason=vulkan-not-available-in-strict-mode
+  - gate vulkan_availability_failure_detail=compiled-in-disabled
+  - gate playback_check_executed=false
+  - gate diag_exit_code=0
+  - gate diag_dependency_source=disabled
+- emits windows-vulkan-strict-compiled-in-disabled-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run strict-compiled-in-disabled canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_compiled_in_disabled_canary.ps1 ...
+- parse strict-compiled-in-disabled summary and append section:
+  "Windows Vulkan Gate Strict Compiled-In-Disabled Canary"
+- fail-fast:
+  if ($vulkanStrictCompiledInDisabledCanaryExitCode -ne 0) { throw ... }
+
+Build:
+cmake --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk046-baseline.env"
+Result: PASS
+Key lines:
+- windows-vulkan-check.result=SKIPPED
+- windows-vulkan-check.vulkan_availability_failure_detail=compiled-in-disabled
+- windows-vulkan-check.diag_dependency_source=disabled
+
+Strict-compiled-in-disabled canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_compiled_in_disabled_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-summary-vk046.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-gate-vk046.env"
+Result: PASS
+Key lines:
+- windows-vulkan-strict-compiled-in-disabled-canary.actual_gate_exit_code=2
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_result=FAIL
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_mode=strict
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_strict_mode_effective=true
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_vulkan_availability_failure_detail=compiled-in-disabled
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_playback_check_executed=false
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_diag_exit_code=0
+- windows-vulkan-strict-compiled-in-disabled-canary.gate_diag_dependency_source=disabled
+- windows-vulkan-strict-compiled-in-disabled-canary.validation_failure_reason=none
+- windows-vulkan-strict-compiled-in-disabled-canary.result=PASS
+
+Canary matrix regression:
+Result: PASS
+Key line:
+- ALL_VK046_CHECKS_PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_strict_compiled_in_disabled_canary|vulkanStrictCompiledInDisabledCanaryExitCode|Windows Vulkan Gate Strict Compiled-In-Disabled Canary|windows-vulkan-strict-compiled-in-disabled-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_compiled_in_disabled_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic strict availability-detail `compiled-in-disabled` branch coverage only.
+2. CI canary matrix now covers all strict unavailable availability details emitted by the gate.
+3. Real strict PASS runtime proof still depends on Vulkan-ready Windows runner/workstation.
+
+## Issue 173: Vulkan chain VK-044 Windows strict-diag-result-not-pass expected-fail canary
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Added deterministic strict-diag-result-not-pass expected-fail canary for Windows Vulkan gate.
+- Wired strict-diag-result-not-pass canary into workflow with Step Summary and fail-fast guard.
+
+### Log
+```text
+New script:
+tools/run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1
+- creates mock executable:
+  logs/mock_windows_vulkan_strict_diag_result_not_pass_canary.cmd
+- diagnostics path emits contract-valid and runtime-available state with FAIL result:
+  - platform=Windows
+  - supported_platform=true
+  - compiled_in=true
+  - runtime_available=true
+  - result=FAIL
+  - dependency_source=find_package
+  - process exit code=0
+- strict mode requested via gate CLI
+- validates:
+  - gate exit code=2
+  - gate result=FAIL
+  - gate mode=strict
+  - gate strict_mode_effective=true
+  - gate failure_reason=vulkan-not-available-in-strict-mode
+  - gate vulkan_availability_failure_detail=diag-result-not-pass
+  - gate playback_check_executed=false
+  - gate diag_exit_code=0
+  - gate diag_result=FAIL
+- emits windows-vulkan-strict-diag-result-not-pass-canary.* output
+
+Workflow integration:
+.github/workflows/cross-platform-gate.yml (Run Windows gate)
+- run strict-diag-result-not-pass canary:
+  powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1 ...
+- parse strict-diag-result-not-pass canary summary and append section:
+  "Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary"
+- fail-fast:
+  if ($vulkanStrictDiagResultNotPassCanaryExitCode -ne 0) { throw ... }
+
+Build:
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+Result: PASS
+
+Baseline gate:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk044-baseline.env"
+Result: PASS
+Key line:
+- windows-vulkan-check.result=SKIPPED
+
+Canary matrix regression (VK-044 batch):
+- diagnostics expected-fail canary: PASS
+- playback expected-fail canary: PASS
+- PASS-contract canary: PASS
+- strict-unavailable canary: PASS
+- strict-runtime-unavailable canary: PASS
+- strict-diag-exit-nonzero canary: PASS
+- strict-diag-result-not-pass canary: PASS
+  - windows-vulkan-strict-diag-result-not-pass-canary.actual_gate_exit_code=2
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_result=FAIL
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_mode=strict
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_strict_mode_effective=true
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_vulkan_availability_failure_detail=diag-result-not-pass
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_playback_check_executed=false
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_exit_code=0
+  - windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_result=FAIL
+  - windows-vulkan-strict-diag-result-not-pass-canary.validation_failure_reason=none
+  - windows-vulkan-strict-diag-result-not-pass-canary.result=PASS
+- optional-skip canary: PASS
+- unsupported-platform canary: PASS
+- playback-semantic canary: PASS
+- playback-backend semantic canary: PASS
+- playback-candidates semantic canary: PASS
+- playback-plan-reason semantic canary: PASS
+- playback-result-not-pass canary: PASS
+- playback-command-exit-nonzero canary: PASS
+
+Static scan:
+rg -n "run_windows_vulkan_gate_strict_diag_result_not_pass_canary|vulkanStrictDiagResultNotPassCanaryExitCode|Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary|windows-vulkan-strict-diag-result-not-pass-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. This round adds deterministic strict diag-result-not-pass branch coverage only; gate policy behavior remains unchanged.
+2. CI canary matrix now also covers strict diag-result-not-pass availability detail branch on top of existing canaries.
+3. Strict PASS-path for real Vulkan playback still depends on Vulkan-ready Windows runner/workstation.
 
 ## Issue 172: Linux WSL gate build/playback chain stabilization
 

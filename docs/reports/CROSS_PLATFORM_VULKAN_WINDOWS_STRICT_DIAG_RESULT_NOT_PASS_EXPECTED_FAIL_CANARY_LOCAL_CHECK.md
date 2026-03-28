@@ -1,0 +1,195 @@
+# Cross-platform Vulkan Windows strict-diag-result-not-pass expected-fail canary local check
+
+Date: 2026-03-28  
+Host: Windows workstation
+
+## 1. Scope
+- Validate `VK-044` deterministic strict-diag-result-not-pass expected-fail canary and workflow integration.
+
+## 2. Commands and Results
+
+### Build
+```text
+& "C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" --build build --config Release --target modern-video-player sample_logger_plugin
+```
+Result: PASS
+
+### Baseline Windows Vulkan gate
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_checks.ps1 -ExecutablePath "build/Release/modern-video-player.exe" -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-summary-vk044-baseline.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-check.result=SKIPPED
+```
+
+### Diagnostics expected-fail canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-contract-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-contract-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-contract-canary.result=PASS
+```
+
+### Playback expected-fail canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-contract-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-contract-canary.result=PASS
+```
+
+### PASS-contract canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_pass_contract_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-pass-contract-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-pass-contract-canary.result=PASS
+```
+
+### Strict-unavailable canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-unavailable-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-strict-unavailable-canary.result=PASS
+```
+
+### Strict-runtime-unavailable canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_runtime_unavailable_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-runtime-unavailable-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-strict-runtime-unavailable-canary.result=PASS
+```
+
+### Strict-diag-exit-nonzero canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-strict-diag-exit-nonzero-canary.result=PASS
+```
+
+### Strict-diag-result-not-pass expected-fail canary
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-gate-vk044.env"
+```
+Result: PASS  
+Key lines:
+```text
+windows-vulkan-strict-diag-result-not-pass-canary.actual_gate_exit_code=2
+windows-vulkan-strict-diag-result-not-pass-canary.gate_result=FAIL
+windows-vulkan-strict-diag-result-not-pass-canary.gate_mode=strict
+windows-vulkan-strict-diag-result-not-pass-canary.gate_strict_mode_effective=true
+windows-vulkan-strict-diag-result-not-pass-canary.gate_failure_reason=vulkan-not-available-in-strict-mode
+windows-vulkan-strict-diag-result-not-pass-canary.gate_vulkan_availability_failure_detail=diag-result-not-pass
+windows-vulkan-strict-diag-result-not-pass-canary.gate_playback_check_executed=false
+windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_exit_code=0
+windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_result=FAIL
+windows-vulkan-strict-diag-result-not-pass-canary.validation_failure_reason=none
+windows-vulkan-strict-diag-result-not-pass-canary.result=PASS
+```
+
+### Optional-skip canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-optional-skip-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-optional-skip-canary.result=PASS
+```
+
+### Unsupported-platform canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_unsupported_platform_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-unsupported-platform-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-unsupported-platform-canary.result=PASS
+```
+
+### Playback-semantic canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-semantic-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-semantic-canary.result=PASS
+```
+
+### Playback-backend semantic canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_backend_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-backend-semantic-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-backend-semantic-canary.result=PASS
+```
+
+### Playback-candidates semantic canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_candidates_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-candidates-semantic-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-candidates-semantic-canary.result=PASS
+```
+
+### Playback-plan-reason semantic canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_plan_reason_semantic_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-plan-reason-semantic-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-plan-reason-semantic-canary.result=PASS
+```
+
+### Playback-result-not-pass canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_result_not_pass_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-result-not-pass-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-result-not-pass-canary.result=PASS
+```
+
+### Playback-command-exit-nonzero canary regression
+```text
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_playback_command_exit_nonzero_canary.ps1 -ProbeFile "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4" -SampleMs 1200 -SummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-summary-vk044.env" -GateSummaryOutputPath "logs/windows-vulkan-gate-playback-command-exit-nonzero-canary-gate-vk044.env"
+```
+Result: PASS  
+Key line:
+```text
+windows-vulkan-playback-command-exit-nonzero-canary.result=PASS
+```
+
+### Static scan
+```text
+rg -n "run_windows_vulkan_gate_strict_diag_result_not_pass_canary|vulkanStrictDiagResultNotPassCanaryExitCode|Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary|windows-vulkan-strict-diag-result-not-pass-canary" .github/workflows/cross-platform-gate.yml tools/run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1
+```
+Result: PASS
+
+## 3. Conclusion
+- Windows Vulkan CI now has deterministic coverage for strict availability detail branch `diag-result-not-pass`.
+- Combined canary matrix now covers diagnostics contract fail, playback contract fail, strict PASS, strict unavailable with `compiled-in-false`, strict unavailable with `runtime-unavailable`, strict unavailable with `diag-exit-nonzero`, strict unavailable with `diag-result-not-pass`, optional-skip, unsupported-platform fail, selected-renderer semantic fail, backend semantic fail, candidates semantic fail, plan-reason semantic fail, result-not-pass fail, and command-exit-nonzero fail branches.

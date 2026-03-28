@@ -96,6 +96,7 @@ $gateSummary = Parse-KeyValueFile -Path $gateSummaryPath
 $gateResult = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.result" -DefaultValue "missing"
 $gateFailureReason = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.failure_reason" -DefaultValue "missing"
 $gateDiagContractValid = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.diag_contract_valid" -DefaultValue "missing"
+$gateAvailabilityFailureDetail = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.vulkan_availability_failure_detail" -DefaultValue "missing"
 
 $validationFailureReason = ""
 if ($gateExitCode -ne 2) {
@@ -108,6 +109,8 @@ if ($gateExitCode -ne 2) {
     $validationFailureReason = "unexpected-failure-reason"
 } elseif (-not [string]::Equals($gateDiagContractValid, "false", [System.StringComparison]::OrdinalIgnoreCase)) {
     $validationFailureReason = "unexpected-diag-contract-valid-flag"
+} elseif (-not [string]::Equals($gateAvailabilityFailureDetail, "diag-contract-missing-required-fields", [System.StringComparison]::Ordinal)) {
+    $validationFailureReason = "unexpected-availability-failure-detail"
 }
 
 $result = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "PASS" } else { "FAIL" }
@@ -119,6 +122,7 @@ $summary = [ordered]@{
     "windows-vulkan-contract-canary.gate_result" = $gateResult
     "windows-vulkan-contract-canary.gate_failure_reason" = $gateFailureReason
     "windows-vulkan-contract-canary.gate_diag_contract_valid" = $gateDiagContractValid
+    "windows-vulkan-contract-canary.gate_vulkan_availability_failure_detail" = $gateAvailabilityFailureDetail
     "windows-vulkan-contract-canary.validation_failure_reason" = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "none" } else { $validationFailureReason }
     "windows-vulkan-contract-canary.result" = $result
 }

@@ -327,6 +327,7 @@ jobs:
               @("gate_result", $vulkanCanarySummary["windows-vulkan-contract-canary.gate_result"]),
               @("gate_failure_reason", $vulkanCanarySummary["windows-vulkan-contract-canary.gate_failure_reason"]),
               @("gate_diag_contract_valid", $vulkanCanarySummary["windows-vulkan-contract-canary.gate_diag_contract_valid"]),
+              @("gate_vulkan_availability_failure_detail", $vulkanCanarySummary["windows-vulkan-contract-canary.gate_vulkan_availability_failure_detail"]),
               @("validation_failure_reason", $vulkanCanarySummary["windows-vulkan-contract-canary.validation_failure_reason"])
             )
 
@@ -412,6 +413,7 @@ jobs:
               @("gate_result", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_result"]),
               @("gate_mode", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_mode"]),
               @("gate_strict_mode_effective", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_strict_mode_effective"]),
+              @("gate_vulkan_availability_failure_detail", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_vulkan_availability_failure_detail"]),
               @("gate_playback_contract_valid", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_playback_contract_valid"]),
               @("gate_playback_failure_detail", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_playback_failure_detail"]),
               @("gate_failure_reason", $vulkanPassCanarySummary["windows-vulkan-pass-contract-canary.gate_failure_reason"]),
@@ -570,6 +572,100 @@ jobs:
           if ($vulkanStrictDiagExitNonzeroCanaryExitCode -ne 0) {
             throw "Windows Vulkan gate strict-diag-exit-nonzero canary failed with exit code $vulkanStrictDiagExitNonzeroCanaryExitCode. See logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary.log and logs/windows-vulkan-gate-strict-diag-exit-nonzero-canary-summary.env."
           }
+          powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_diag_result_not_pass_canary.ps1 -ProbeFile '${{ matrix.probe_file }}' -SampleMs 1200 -SummaryOutputPath 'logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-strict-diag-result-not-pass-canary.log'
+          $vulkanStrictDiagResultNotPassCanaryExitCode = $LASTEXITCODE
+          $vulkanStrictDiagResultNotPassCanarySummaryPath = 'logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env'
+          if (Test-Path $vulkanStrictDiagResultNotPassCanarySummaryPath) {
+            $vulkanStrictDiagResultNotPassCanarySummary = @{}
+            Get-Content -Path $vulkanStrictDiagResultNotPassCanarySummaryPath | ForEach-Object {
+              if ($_ -match '^\s*([^=]+)=(.*)$') {
+                $key = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                if (-not [string]::IsNullOrWhiteSpace($key)) {
+                  $vulkanStrictDiagResultNotPassCanarySummary[$key] = $value
+                }
+              }
+            }
+
+            $strictDiagResultNotPassCanaryRows = @(
+              @("result", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.result"]),
+              @("expected_gate_exit_code", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.expected_gate_exit_code"]),
+              @("actual_gate_exit_code", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.actual_gate_exit_code"]),
+              @("gate_summary_file_present", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_summary_file_present"]),
+              @("gate_result", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_result"]),
+              @("gate_mode", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_mode"]),
+              @("gate_strict_mode_effective", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_strict_mode_effective"]),
+              @("gate_failure_reason", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_failure_reason"]),
+              @("gate_vulkan_availability_failure_detail", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_vulkan_availability_failure_detail"]),
+              @("gate_playback_check_executed", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_playback_check_executed"]),
+              @("gate_diag_exit_code", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_exit_code"]),
+              @("gate_diag_result", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_result"]),
+              @("validation_failure_reason", $vulkanStrictDiagResultNotPassCanarySummary["windows-vulkan-strict-diag-result-not-pass-canary.validation_failure_reason"])
+            )
+
+            "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            foreach ($row in $strictDiagResultNotPassCanaryRows) {
+              $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
+              ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            }
+          } else {
+            "### Windows Vulkan Gate Strict Diag-Result-Not-Pass Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "- windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+          if ($vulkanStrictDiagResultNotPassCanaryExitCode -ne 0) {
+            throw "Windows Vulkan gate strict-diag-result-not-pass canary failed with exit code $vulkanStrictDiagResultNotPassCanaryExitCode. See logs/windows-vulkan-gate-strict-diag-result-not-pass-canary.log and logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env."
+          }
+          powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_strict_compiled_in_disabled_canary.ps1 -ProbeFile '${{ matrix.probe_file }}' -SampleMs 1200 -SummaryOutputPath 'logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-strict-compiled-in-disabled-canary.log'
+          $vulkanStrictCompiledInDisabledCanaryExitCode = $LASTEXITCODE
+          $vulkanStrictCompiledInDisabledCanarySummaryPath = 'logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env'
+          if (Test-Path $vulkanStrictCompiledInDisabledCanarySummaryPath) {
+            $vulkanStrictCompiledInDisabledCanarySummary = @{}
+            Get-Content -Path $vulkanStrictCompiledInDisabledCanarySummaryPath | ForEach-Object {
+              if ($_ -match '^\s*([^=]+)=(.*)$') {
+                $key = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                if (-not [string]::IsNullOrWhiteSpace($key)) {
+                  $vulkanStrictCompiledInDisabledCanarySummary[$key] = $value
+                }
+              }
+            }
+
+            $strictCompiledInDisabledCanaryRows = @(
+              @("result", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.result"]),
+              @("expected_gate_exit_code", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.expected_gate_exit_code"]),
+              @("actual_gate_exit_code", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.actual_gate_exit_code"]),
+              @("gate_summary_file_present", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_summary_file_present"]),
+              @("gate_result", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_result"]),
+              @("gate_mode", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_mode"]),
+              @("gate_strict_mode_effective", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_strict_mode_effective"]),
+              @("gate_failure_reason", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_failure_reason"]),
+              @("gate_vulkan_availability_failure_detail", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_vulkan_availability_failure_detail"]),
+              @("gate_playback_check_executed", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_playback_check_executed"]),
+              @("gate_diag_exit_code", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_diag_exit_code"]),
+              @("gate_diag_dependency_source", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.gate_diag_dependency_source"]),
+              @("validation_failure_reason", $vulkanStrictCompiledInDisabledCanarySummary["windows-vulkan-strict-compiled-in-disabled-canary.validation_failure_reason"])
+            )
+
+            "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "| Key | Value |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "| --- | --- |" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            foreach ($row in $strictCompiledInDisabledCanaryRows) {
+              $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
+              ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            }
+          } else {
+            "### Windows Vulkan Gate Strict Compiled-In-Disabled Canary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "- windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env not found." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+          if ($vulkanStrictCompiledInDisabledCanaryExitCode -ne 0) {
+            throw "Windows Vulkan gate strict-compiled-in-disabled canary failed with exit code $vulkanStrictCompiledInDisabledCanaryExitCode. See logs/windows-vulkan-gate-strict-compiled-in-disabled-canary.log and logs/windows-vulkan-gate-strict-compiled-in-disabled-canary-summary.env."
+          }
           powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1 -ProbeFile '${{ matrix.probe_file }}' -SampleMs 1200 -SummaryOutputPath 'logs/windows-vulkan-gate-optional-skip-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-optional-skip-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-optional-skip-canary.log'
           $vulkanOptionalSkipCanaryExitCode = $LASTEXITCODE
           $vulkanOptionalSkipCanarySummaryPath = 'logs/windows-vulkan-gate-optional-skip-canary-summary.env'
@@ -639,6 +735,7 @@ jobs:
               @("gate_result", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_result"]),
               @("gate_mode", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_mode"]),
               @("gate_failure_reason", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_failure_reason"]),
+              @("gate_vulkan_availability_failure_detail", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_vulkan_availability_failure_detail"]),
               @("gate_skip_reason", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_skip_reason"]),
               @("gate_playback_check_executed", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.gate_playback_check_executed"]),
               @("validation_failure_reason", $vulkanUnsupportedPlatformCanarySummary["windows-vulkan-unsupported-platform-canary.validation_failure_reason"])

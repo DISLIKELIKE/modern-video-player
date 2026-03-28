@@ -115,6 +115,7 @@ $gateSummaryFilePresent = Test-Path $gateSummaryPath
 $gateSummary = Parse-KeyValueFile -Path $gateSummaryPath
 $gateResult = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.result" -DefaultValue "missing"
 $gateFailureReason = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.failure_reason" -DefaultValue "missing"
+$gateAvailabilityFailureDetail = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.vulkan_availability_failure_detail" -DefaultValue "missing"
 $gateSkipReason = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.skip_reason" -DefaultValue "missing"
 $gatePlaybackCheckExecuted = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_check_executed" -DefaultValue "missing"
 $gateMode = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.mode" -DefaultValue "missing"
@@ -128,6 +129,8 @@ if ($gateExitCode -ne 2) {
     $validationFailureReason = "unexpected-gate-result"
 } elseif (-not [string]::Equals($gateFailureReason, "unsupported-platform", [System.StringComparison]::Ordinal)) {
     $validationFailureReason = "unexpected-failure-reason"
+} elseif (-not [string]::Equals($gateAvailabilityFailureDetail, "unsupported-platform", [System.StringComparison]::Ordinal)) {
+    $validationFailureReason = "unexpected-availability-failure-detail"
 } elseif (-not [string]::Equals($gatePlaybackCheckExecuted, "false", [System.StringComparison]::OrdinalIgnoreCase)) {
     $validationFailureReason = "unexpected-playback-check-executed-flag"
 } elseif (-not [string]::IsNullOrWhiteSpace($gateSkipReason)) {
@@ -143,6 +146,7 @@ $summary = [ordered]@{
     "windows-vulkan-unsupported-platform-canary.gate_result" = $gateResult
     "windows-vulkan-unsupported-platform-canary.gate_mode" = $gateMode
     "windows-vulkan-unsupported-platform-canary.gate_failure_reason" = $gateFailureReason
+    "windows-vulkan-unsupported-platform-canary.gate_vulkan_availability_failure_detail" = $gateAvailabilityFailureDetail
     "windows-vulkan-unsupported-platform-canary.gate_skip_reason" = $gateSkipReason
     "windows-vulkan-unsupported-platform-canary.gate_playback_check_executed" = $gatePlaybackCheckExecuted
     "windows-vulkan-unsupported-platform-canary.validation_failure_reason" = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "none" } else { $validationFailureReason }

@@ -1,8 +1,8 @@
 param(
     [string]$ProbeFile = "samples/mp4/demo__h264_aac__1920x1080__60fps__2ch.mp4",
     [int]$SampleMs = 1200,
-    [string]$SummaryOutputPath = "logs/windows-vulkan-gate-pass-contract-canary-summary.env",
-    [string]$GateSummaryOutputPath = "logs/windows-vulkan-gate-pass-contract-canary-gate.env"
+    [string]$SummaryOutputPath = "logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-summary.env",
+    [string]$GateSummaryOutputPath = "logs/windows-vulkan-gate-strict-diag-result-not-pass-canary-gate.env"
 )
 
 Set-StrictMode -Version Latest
@@ -74,7 +74,7 @@ if (-not (Test-Path $runnerScript)) {
 $logsDir = Join-Path $repoRoot "logs"
 New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
 
-$mockExecutable = Join-Path $logsDir "mock_windows_vulkan_pass_contract_canary.cmd"
+$mockExecutable = Join-Path $logsDir "mock_windows_vulkan_strict_diag_result_not_pass_canary.cmd"
 @'
 @echo off
 setlocal
@@ -83,19 +83,16 @@ if "%~1"=="--vulkan-diagnostics" (
   echo vulkan-diagnostics.supported_platform=true
   echo vulkan-diagnostics.compiled_in=true
   echo vulkan-diagnostics.runtime_available=true
-  echo vulkan-diagnostics.result=PASS
+  echo vulkan-diagnostics.result=FAIL
   echo vulkan-diagnostics.selected_renderer=Vulkan
   echo vulkan-diagnostics.fallback_target=none
-  echo vulkan-diagnostics.startup_renderer_candidates=Vulkan ^> OpenGL ^> SoftwareSDL
+  echo vulkan-diagnostics.startup_renderer_candidates=Vulkan ^> D3D11 ^> SoftwareSDL
   echo vulkan-diagnostics.dependency_source=find_package
   exit /b 0
 )
 if "%~1"=="--performance-log-check" (
-  echo performance-log-check.result=PASS
-  echo performance-log-check.startup_selected_renderer=Vulkan
-  echo performance-log-check.renderer_backend=Vulkan
-  echo performance-log-check.startup_renderer_candidates=Vulkan ^> OpenGL ^> SoftwareSDL
-  echo performance-log-check.startup_renderer_plan_reason=renderer-override-env
+  rem strict diag-result-not-pass path should skip playback check
+  echo performance-log-check.result=FAIL
   exit /b 0
 )
 exit /b 0
@@ -122,53 +119,49 @@ $gateMode = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.mode" -
 $gateStrictModeEffective = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.strict_mode_effective" -DefaultValue "missing"
 $gateFailureReason = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.failure_reason" -DefaultValue "missing"
 $gateAvailabilityFailureDetail = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.vulkan_availability_failure_detail" -DefaultValue "missing"
-$gatePlaybackContractValid = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_contract_valid" -DefaultValue "missing"
-$gatePlaybackFailureDetail = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_failure_detail" -DefaultValue "missing"
-$gatePlaybackSelectedRenderer = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_selected_renderer" -DefaultValue "missing"
-$gatePlaybackRendererBackend = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_renderer_backend" -DefaultValue "missing"
+$gatePlaybackCheckExecuted = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.playback_check_executed" -DefaultValue "missing"
+$gateDiagExitCode = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.diag_exit_code" -DefaultValue "missing"
+$gateDiagResult = Value-OrDefault -Map $gateSummary -Key "windows-vulkan-check.diag_result" -DefaultValue "missing"
 
 $validationFailureReason = ""
-if ($gateExitCode -ne 0) {
+if ($gateExitCode -ne 2) {
     $validationFailureReason = "unexpected-gate-exit-code"
 } elseif (-not $gateSummaryFilePresent) {
     $validationFailureReason = "gate-summary-file-missing"
-} elseif (-not [string]::Equals($gateResult, "PASS", [System.StringComparison]::OrdinalIgnoreCase)) {
+} elseif (-not [string]::Equals($gateResult, "FAIL", [System.StringComparison]::OrdinalIgnoreCase)) {
     $validationFailureReason = "unexpected-gate-result"
 } elseif (-not [string]::Equals($gateMode, "strict", [System.StringComparison]::OrdinalIgnoreCase)) {
     $validationFailureReason = "unexpected-gate-mode"
 } elseif (-not [string]::Equals($gateStrictModeEffective, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
     $validationFailureReason = "unexpected-strict-mode-effective"
-} elseif (-not [string]::Equals($gatePlaybackContractValid, "true", [System.StringComparison]::OrdinalIgnoreCase)) {
-    $validationFailureReason = "unexpected-playback-contract-valid-flag"
-} elseif (-not [string]::Equals($gatePlaybackFailureDetail, "none", [System.StringComparison]::Ordinal)) {
-    $validationFailureReason = "unexpected-playback-failure-detail"
-} elseif (-not [string]::IsNullOrWhiteSpace($gateFailureReason)) {
+} elseif (-not [string]::Equals($gateFailureReason, "vulkan-not-available-in-strict-mode", [System.StringComparison]::Ordinal)) {
     $validationFailureReason = "unexpected-failure-reason"
-} elseif (-not [string]::Equals($gateAvailabilityFailureDetail, "none", [System.StringComparison]::Ordinal)) {
+} elseif (-not [string]::Equals($gateAvailabilityFailureDetail, "diag-result-not-pass", [System.StringComparison]::Ordinal)) {
     $validationFailureReason = "unexpected-availability-failure-detail"
-} elseif (-not [string]::Equals($gatePlaybackSelectedRenderer, "Vulkan", [System.StringComparison]::OrdinalIgnoreCase)) {
-    $validationFailureReason = "unexpected-playback-selected-renderer"
-} elseif (-not [string]::Equals($gatePlaybackRendererBackend, "Vulkan", [System.StringComparison]::OrdinalIgnoreCase)) {
-    $validationFailureReason = "unexpected-playback-renderer-backend"
+} elseif (-not [string]::Equals($gatePlaybackCheckExecuted, "false", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $validationFailureReason = "unexpected-playback-check-executed-flag"
+} elseif (-not [string]::Equals($gateDiagExitCode, "0", [System.StringComparison]::Ordinal)) {
+    $validationFailureReason = "unexpected-diag-exit-code"
+} elseif (-not [string]::Equals($gateDiagResult, "FAIL", [System.StringComparison]::OrdinalIgnoreCase)) {
+    $validationFailureReason = "unexpected-diag-result"
 }
 
 $result = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "PASS" } else { "FAIL" }
 
 $summary = [ordered]@{
-    "windows-vulkan-pass-contract-canary.expected_gate_exit_code" = "0"
-    "windows-vulkan-pass-contract-canary.actual_gate_exit_code" = [string]$gateExitCode
-    "windows-vulkan-pass-contract-canary.gate_summary_file_present" = if ($gateSummaryFilePresent) { "true" } else { "false" }
-    "windows-vulkan-pass-contract-canary.gate_result" = $gateResult
-    "windows-vulkan-pass-contract-canary.gate_mode" = $gateMode
-    "windows-vulkan-pass-contract-canary.gate_strict_mode_effective" = $gateStrictModeEffective
-    "windows-vulkan-pass-contract-canary.gate_failure_reason" = $gateFailureReason
-    "windows-vulkan-pass-contract-canary.gate_vulkan_availability_failure_detail" = $gateAvailabilityFailureDetail
-    "windows-vulkan-pass-contract-canary.gate_playback_contract_valid" = $gatePlaybackContractValid
-    "windows-vulkan-pass-contract-canary.gate_playback_failure_detail" = $gatePlaybackFailureDetail
-    "windows-vulkan-pass-contract-canary.gate_playback_selected_renderer" = $gatePlaybackSelectedRenderer
-    "windows-vulkan-pass-contract-canary.gate_playback_renderer_backend" = $gatePlaybackRendererBackend
-    "windows-vulkan-pass-contract-canary.validation_failure_reason" = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "none" } else { $validationFailureReason }
-    "windows-vulkan-pass-contract-canary.result" = $result
+    "windows-vulkan-strict-diag-result-not-pass-canary.expected_gate_exit_code" = "2"
+    "windows-vulkan-strict-diag-result-not-pass-canary.actual_gate_exit_code" = [string]$gateExitCode
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_summary_file_present" = if ($gateSummaryFilePresent) { "true" } else { "false" }
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_result" = $gateResult
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_mode" = $gateMode
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_strict_mode_effective" = $gateStrictModeEffective
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_failure_reason" = $gateFailureReason
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_vulkan_availability_failure_detail" = $gateAvailabilityFailureDetail
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_playback_check_executed" = $gatePlaybackCheckExecuted
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_exit_code" = $gateDiagExitCode
+    "windows-vulkan-strict-diag-result-not-pass-canary.gate_diag_result" = $gateDiagResult
+    "windows-vulkan-strict-diag-result-not-pass-canary.validation_failure_reason" = if ([string]::IsNullOrWhiteSpace($validationFailureReason)) { "none" } else { $validationFailureReason }
+    "windows-vulkan-strict-diag-result-not-pass-canary.result" = $result
 }
 
 $summaryLines = @()
