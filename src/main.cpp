@@ -7440,6 +7440,8 @@ bool runLinuxAudioBackendSmoke(const std::string& media_file, int sample_ms = 18
         {"pulseaudio", {"pulseaudio", "pulse"}},
         {"alsa", {"alsa"}},
         {"pipewire", {"pipewire"}},
+        // Keep a deterministic software-audio fallback for headless CI runners.
+        {"dummy", {"dummy"}},
     };
     const std::vector<std::string> available_drivers = collectSdlAudioDrivers();
 
