@@ -3,8 +3,64 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 182` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 183` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 183: Vulkan chain VK-053 Windows auto optional sdk-missing canary
+
+**Date**: 2026-03-28
+
+### Problem Description
+- Auto-policy branch coverage had no explicit canary for sdk-missing boundary with runtime probe present.
+
+### Root Cause Analysis
+- `strict_mode_auto_prerequisites_met` should stay `false` when SDK signal is absent.
+- Without dedicated canary, accidental future strict escalation under `sdk=0` could slip through.
+
+### Solution
+- Added canary:
+  - `tools/run_windows_vulkan_gate_auto_optional_sdk_missing_canary.ps1`
+- Scenario:
+  - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+  - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=0`
+  - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=1`
+  - `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0`
+- Assertions:
+  - `gate_mode=optional`
+  - `gate_strict_mode_effective=false`
+  - `gate_strict_mode_auto_prerequisites_met=false`
+  - `gate_strict_mode_auto_runtime_probe_any_available=true`
+  - `gate_strict_mode_auto_runtime_probe_source=native`
+  - `gate_result=SKIPPED`
+- Integrated into:
+  - `tools/run_windows_ci_gate.ps1`
+  - with Step Summary section:
+    - `Windows Vulkan Gate Auto Optional SDK-Missing Canary`.
+
+### Validation
+- SDK-missing canary:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_optional_sdk_missing_canary.ps1` -> PASS
+  - key lines:
+    - `windows-vulkan-auto-optional-sdk-missing-canary.gate_mode=optional`
+    - `windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_prerequisites_met=false`
+    - `windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_runtime_probe_any_available=true`
+    - `windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_runtime_probe_source=native`
+    - `windows-vulkan-auto-optional-sdk-missing-canary.result=PASS`
+
+### Modified Files
+- `tools/run_windows_vulkan_gate_auto_optional_sdk_missing_canary.ps1`
+- `tools/run_windows_ci_gate.ps1`
+- `docs/analysis/PLAYERCORE_DAY116_VK053_WINDOWS_VULKAN_AUTO_OPTIONAL_SDK_MISSING_CANARY.md`
+- `docs/design/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_DESIGN_2026-03-28.md`
+- `docs/plans/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_PLAN_2026-03-28.md`
+- `docs/reports/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 182: Vulkan chain VK-052 Windows auto strict dual-probe canary
 

@@ -6,6 +6,41 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-28 Update: Vulkan chain VK-053 Windows auto optional sdk-missing canary
+- Added deterministic canary coverage for sdk-missing auto downgrade branch:
+  - new script:
+    - `tools/run_windows_vulkan_gate_auto_optional_sdk_missing_canary.ps1`
+  - scenario:
+    - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+    - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=0`
+    - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=1`
+    - `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0`
+  - key assertions:
+    - `windows-vulkan-check.mode=optional`
+    - `windows-vulkan-check.strict_mode_effective=false`
+    - `windows-vulkan-check.strict_mode_auto_prerequisites_met=false`
+    - `windows-vulkan-check.strict_mode_auto_runtime_probe_any_available=true`
+    - `windows-vulkan-check.strict_mode_auto_runtime_probe_source=native`
+    - `windows-vulkan-check.result=SKIPPED`
+- CI gate integration:
+  - `tools/run_windows_ci_gate.ps1` now executes:
+    - `Windows Vulkan Gate Auto Optional SDK-Missing Canary`
+  - Step Summary includes sdk-missing canary table.
+- Round docs:
+  - analysis: `PLAYERCORE_DAY116_VK053_WINDOWS_VULKAN_AUTO_OPTIONAL_SDK_MISSING_CANARY.md`
+  - design: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_DESIGN_2026-03-28.md`
+  - plan: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_PLAN_2026-03-28.md`
+  - report: `CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_LOCAL_CHECK.md`
+- Local validation:
+  - sdk-missing canary: PASS
+    - `gate_mode=optional`
+    - `gate_strict_mode_auto_prerequisites_met=false`
+    - `gate_strict_mode_auto_runtime_probe_any_available=true`
+    - `gate_strict_mode_auto_runtime_probe_source=native`
+    - `result=PASS`
+- Remaining:
+  - End-to-end strict PASS runtime proof still depends on GitHub Windows runner execution results.
+
 ### 2026-03-28 Update: Vulkan chain VK-052 Windows auto strict dual-probe canary
 - Added deterministic canary coverage for auto-policy dual-probe strict branch:
   - new script:

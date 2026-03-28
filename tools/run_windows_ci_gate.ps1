@@ -308,6 +308,56 @@ if (Test-Path $vulkanStrictRuntimeUnavailableCanarySummaryPath) {
 if ($vulkanStrictRuntimeUnavailableCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-runtime-unavailable canary failed with exit code $vulkanStrictRuntimeUnavailableCanaryExitCode. See logs/windows-vulkan-gate-strict-runtime-unavailable-canary.log and logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env."
 }
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_optional_sdk_missing_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-auto-optional-sdk-missing-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-auto-optional-sdk-missing-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-auto-optional-sdk-missing-canary.log'
+$vulkanAutoOptionalSdkMissingCanaryExitCode = $LASTEXITCODE
+$vulkanAutoOptionalSdkMissingCanarySummaryPath = 'logs/windows-vulkan-gate-auto-optional-sdk-missing-canary-summary.env'
+if (Test-Path $vulkanAutoOptionalSdkMissingCanarySummaryPath) {
+  $vulkanAutoOptionalSdkMissingCanarySummary = @{}
+  Get-Content -Path $vulkanAutoOptionalSdkMissingCanarySummaryPath | ForEach-Object {
+    if ($_ -match '^\s*([^=]+)=(.*)$') {
+      $key = $matches[1].Trim()
+      $value = $matches[2].Trim()
+      if (-not [string]::IsNullOrWhiteSpace($key)) {
+        $vulkanAutoOptionalSdkMissingCanarySummary[$key] = $value
+      }
+    }
+  }
+
+  $autoOptionalSdkMissingCanaryRows = @(
+    @("result", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.result"]),
+    @("expected_gate_exit_code", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.expected_gate_exit_code"]),
+    @("actual_gate_exit_code", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.actual_gate_exit_code"]),
+    @("gate_summary_file_present", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_summary_file_present"]),
+    @("gate_result", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_result"]),
+    @("gate_mode", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_mode"]),
+    @("gate_strict_mode_effective", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_effective"]),
+    @("gate_skip_reason", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_skip_reason"]),
+    @("gate_failure_reason", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_failure_reason"]),
+    @("gate_vulkan_availability_failure_detail", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_vulkan_availability_failure_detail"]),
+    @("gate_playback_check_executed", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_playback_check_executed"]),
+    @("gate_strict_mode_auto_basis", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_basis"]),
+    @("gate_strict_mode_auto_prerequisites_met", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_prerequisites_met"]),
+    @("gate_strict_mode_auto_runtime_probe_any_available", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_runtime_probe_any_available"]),
+    @("gate_strict_mode_auto_runtime_probe_source", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.gate_strict_mode_auto_runtime_probe_source"]),
+    @("validation_failure_reason", $vulkanAutoOptionalSdkMissingCanarySummary["windows-vulkan-auto-optional-sdk-missing-canary.validation_failure_reason"])
+  )
+
+  "### Windows Vulkan Gate Auto Optional SDK-Missing Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  foreach ($row in $autoOptionalSdkMissingCanaryRows) {
+    $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  }
+} else {
+  "### Windows Vulkan Gate Auto Optional SDK-Missing Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-auto-optional-sdk-missing-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+}
+if ($vulkanAutoOptionalSdkMissingCanaryExitCode -ne 0) {
+  throw "Windows Vulkan gate auto-optional-sdk-missing canary failed with exit code $vulkanAutoOptionalSdkMissingCanaryExitCode. See logs/windows-vulkan-gate-auto-optional-sdk-missing-canary.log and logs/windows-vulkan-gate-auto-optional-sdk-missing-canary-summary.env."
+}
 powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_optional_no_probe_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-auto-optional-no-probe-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-auto-optional-no-probe-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-auto-optional-no-probe-canary.log'
 $vulkanAutoOptionalNoProbeCanaryExitCode = $LASTEXITCODE
 $vulkanAutoOptionalNoProbeCanarySummaryPath = 'logs/windows-vulkan-gate-auto-optional-no-probe-canary-summary.env'
