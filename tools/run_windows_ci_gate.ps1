@@ -308,6 +308,55 @@ if (Test-Path $vulkanStrictRuntimeUnavailableCanarySummaryPath) {
 if ($vulkanStrictRuntimeUnavailableCanaryExitCode -ne 0) {
   throw "Windows Vulkan gate strict-runtime-unavailable canary failed with exit code $vulkanStrictRuntimeUnavailableCanaryExitCode. See logs/windows-vulkan-gate-strict-runtime-unavailable-canary.log and logs/windows-vulkan-gate-strict-runtime-unavailable-canary-summary.env."
 }
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-native-probe-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-native-probe-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-auto-strict-native-probe-canary.log'
+$vulkanAutoStrictNativeProbeCanaryExitCode = $LASTEXITCODE
+$vulkanAutoStrictNativeProbeCanarySummaryPath = 'logs/windows-vulkan-gate-auto-strict-native-probe-canary-summary.env'
+if (Test-Path $vulkanAutoStrictNativeProbeCanarySummaryPath) {
+  $vulkanAutoStrictNativeProbeCanarySummary = @{}
+  Get-Content -Path $vulkanAutoStrictNativeProbeCanarySummaryPath | ForEach-Object {
+    if ($_ -match '^\s*([^=]+)=(.*)$') {
+      $key = $matches[1].Trim()
+      $value = $matches[2].Trim()
+      if (-not [string]::IsNullOrWhiteSpace($key)) {
+        $vulkanAutoStrictNativeProbeCanarySummary[$key] = $value
+      }
+    }
+  }
+
+  $autoStrictNativeProbeCanaryRows = @(
+    @("result", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.result"]),
+    @("expected_gate_exit_code", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.expected_gate_exit_code"]),
+    @("actual_gate_exit_code", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.actual_gate_exit_code"]),
+    @("gate_summary_file_present", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_summary_file_present"]),
+    @("gate_result", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_result"]),
+    @("gate_mode", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_mode"]),
+    @("gate_strict_mode_effective", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_effective"]),
+    @("gate_strict_mode_auto_basis", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_basis"]),
+    @("gate_strict_mode_auto_prerequisites_met", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_prerequisites_met"]),
+    @("gate_strict_mode_auto_runtime_probe_any_available", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_runtime_probe_any_available"]),
+    @("gate_strict_mode_auto_runtime_probe_source", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_runtime_probe_source"]),
+    @("gate_playback_contract_valid", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_playback_contract_valid"]),
+    @("gate_playback_failure_detail", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_playback_failure_detail"]),
+    @("gate_failure_reason", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.gate_failure_reason"]),
+    @("validation_failure_reason", $vulkanAutoStrictNativeProbeCanarySummary["windows-vulkan-auto-strict-native-probe-canary.validation_failure_reason"])
+  )
+
+  "### Windows Vulkan Gate Auto Strict Native Probe Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| Key | Value |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "| --- | --- |" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  foreach ($row in $autoStrictNativeProbeCanaryRows) {
+    $rowValue = if ($null -ne $row[1] -and -not [string]::IsNullOrWhiteSpace([string]$row[1])) { [string]$row[1] } else { "n/a" }
+    ("| {0} | {1} |" -f $row[0], $rowValue) | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  }
+} else {
+  "### Windows Vulkan Gate Auto Strict Native Probe Canary" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "" | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+  "- windows-vulkan-gate-auto-strict-native-probe-canary-summary.env not found." | Out-File -FilePath $stepSummaryPath -Encoding utf8 -Append
+}
+if ($vulkanAutoStrictNativeProbeCanaryExitCode -ne 0) {
+  throw "Windows Vulkan gate auto-strict-native-probe canary failed with exit code $vulkanAutoStrictNativeProbeCanaryExitCode. See logs/windows-vulkan-gate-auto-strict-native-probe-canary.log and logs/windows-vulkan-gate-auto-strict-native-probe-canary-summary.env."
+}
 powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1 -ProbeFile $ProbeFile -SampleMs $SampleMs -SummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env' -GateSummaryOutputPath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-gate.env' 2>&1 | Tee-Object -FilePath 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary.log'
 $vulkanAutoStrictSwiftShaderProbeCanaryExitCode = $LASTEXITCODE
 $vulkanAutoStrictSwiftShaderProbeCanarySummaryPath = 'logs/windows-vulkan-gate-auto-strict-swiftshader-probe-canary-summary.env'

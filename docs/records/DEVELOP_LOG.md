@@ -3,8 +3,56 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 179` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 180` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 180: Vulkan chain VK-050 Windows auto strict native runtime probe canary
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Added deterministic native runtime-probe canary coverage for Windows Vulkan auto strict policy.
+- Integrated native auto strict canary into `run_windows_ci_gate.ps1` and Step Summary.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1
+   - new canary scenario:
+     auto + sdk=1 + native_probe=1 + swiftshader_probe=0
+   - key assertions:
+     gate_mode=strict
+     gate_strict_mode_effective=true
+     gate_strict_mode_auto_runtime_probe_source=native
+     result=PASS
+
+2) tools/run_windows_ci_gate.ps1
+   - add native auto strict canary execution
+   - add Step Summary table:
+     Windows Vulkan Gate Auto Strict Native Probe Canary
+
+Native canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1
+Result: PASS
+Key lines:
+- windows-vulkan-auto-strict-native-probe-canary.gate_mode=strict
+- windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_runtime_probe_source=native
+- windows-vulkan-auto-strict-native-probe-canary.result=PASS
+
+Regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1
+Result: PASS
+
+Regression:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1
+Result: PASS
+```
+
+### Notes
+1. Windows Vulkan auto strict probe-source branches now have dedicated canary coverage for both native and SwiftShader paths.
+2. This round is canary/observability hardening; gate behavior remains unchanged.
+3. End-to-end strict PASS runtime evidence still depends on GitHub Windows runner execution.
 
 ## Issue 179: Vulkan chain VK-049 Windows auto strict SwiftShader runtime probe promotion
 

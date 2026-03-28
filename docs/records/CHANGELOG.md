@@ -3,8 +3,63 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 179` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 180` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 180: Vulkan chain VK-050 Windows auto strict native runtime probe canary
+
+**Date**: 2026-03-28
+
+### Problem Description
+- `VK-049` covered SwiftShader branch promotion for auto strict mode.
+- But native runtime-probe auto strict branch still lacked dedicated canary coverage.
+
+### Root Cause Analysis
+- Existing pass-contract canary validates strict PASS path, but it is CLI strict (`-RequireVulkanAvailable`) not auto strict.
+- Native-probe source classification (`strict_mode_auto_runtime_probe_source=native`) had no direct canary assertion.
+
+### Solution
+- Added canary:
+  - `tools/run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1`
+- Canary scenario:
+  - `MVP_REQUIRE_WINDOWS_VULKAN_CHECKS=auto`
+  - `MVP_WINDOWS_VULKAN_SDK_AVAILABLE=1`
+  - `MVP_WINDOWS_VULKAN_RUNTIME_PROBE_AVAILABLE=1`
+  - `MVP_WINDOWS_VULKAN_SWIFTSHADER_RUNTIME_PROBE_AVAILABLE=0`
+- Assertions:
+  - `gate_mode=strict`
+  - `gate_strict_mode_effective=true`
+  - `gate_strict_mode_auto_runtime_probe_source=native`
+  - `result=PASS`
+- Integrated into:
+  - `tools/run_windows_ci_gate.ps1`
+  - with dedicated Step Summary section.
+
+### Validation
+- Native auto strict canary:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1` -> PASS
+  - key lines:
+    - `windows-vulkan-auto-strict-native-probe-canary.gate_mode=strict`
+    - `windows-vulkan-auto-strict-native-probe-canary.gate_strict_mode_auto_runtime_probe_source=native`
+    - `windows-vulkan-auto-strict-native-probe-canary.result=PASS`
+- Regression:
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_swiftshader_probe_canary.ps1` -> PASS
+  - `powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_optional_skip_canary.ps1` -> PASS
+
+### Modified Files
+- `tools/run_windows_vulkan_gate_auto_strict_native_probe_canary.ps1`
+- `tools/run_windows_ci_gate.ps1`
+- `docs/analysis/PLAYERCORE_DAY113_VK050_WINDOWS_VULKAN_AUTO_STRICT_NATIVE_RUNTIME_PROBE_CANARY.md`
+- `docs/design/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_NATIVE_RUNTIME_PROBE_CANARY_DESIGN_2026-03-28.md`
+- `docs/plans/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_NATIVE_RUNTIME_PROBE_CANARY_PLAN_2026-03-28.md`
+- `docs/reports/CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_NATIVE_RUNTIME_PROBE_CANARY_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 179: Vulkan chain VK-049 Windows auto strict SwiftShader runtime probe promotion
 
