@@ -3,8 +3,69 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 177` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 178` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 178: Forced FailSession deferred release and headless logging override
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Moved `FailSession` final teardown off worker threads and into deferred stop servicing.
+- Stabilized forced FailSession canary timing for immediate injected failure.
+- Added local/headless logger override `MVP_DISABLE_QUILL_LOGGING=1` so CLI validation can run without Quill console-handle dependency.
+
+### Log
+```text
+Code changes:
+1) include/core/player_core.h
+   - add DeferredFailSessionState
+   - add arm/consume/clear helpers
+
+2) src/core/player_core.cpp
+   - FailSession now arms deferred failure state and requests stop only
+   - serviceDeferredStop() now performs session release + Failed-state closure
+   - open()/close() clear stale deferred fail-session state
+
+3) src/main.cpp
+   - forced FailSession check now treats observed injected failure as valid playback-path entry
+
+4) src/logger.cpp
+   - add MVP_DISABLE_QUILL_LOGGING=1 env override
+
+Build:
+cmake --build build --config Debug --target modern-video-player
+Result: PASS
+
+Forced FailSession check:
+$env:MVP_DISABLE_QUILL_LOGGING='1'
+$env:SDL_AUDIODRIVER='dummy'
+.\build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200
+Result: PASS
+Key lines:
+- forced-failsession-check.entered_playback_loop=true
+- forced-failsession-check.fail_session_observed=true
+- forced-failsession-check.stopped_after_failure=true
+- forced-failsession-check.runtime_failure_stop_requests=1
+- forced-failsession-check.runtime_failure_fail_sessions=1
+- forced-failsession-check.result=PASS
+
+Aggregate check:
+$env:MVP_DISABLE_QUILL_LOGGING='1'
+$env:SDL_AUDIODRIVER='dummy'
+powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath 'build/Debug/modern-video-player.exe' -ProbeFile 'juren-30s.mp4' -SamplesFile 'tools/format_regression/format_samples_ci.csv' -RegressionOutputFile 'build/FORMAT_REGRESSION_CI_LOCAL_TEST.md' -ProbeTimeoutSec 120 -ForcedFailSessionTimeoutSec 240 -RegressionTimeoutSec 900
+Result: PASS
+Key lines:
+- Probe exit code: 0
+- Forced FailSession exit code: 0
+- Regression exit code: 0
+```
+
+### Notes
+1. This closes the runtime bug behind the remaining format-regression workflow timeout failure point.
+2. Default logging behavior is unchanged; the new logger override is opt-in and only used for headless validation.
+3. GitHub Actions timeout containment remains useful, but it is no longer the only line of defense because the runtime gate now exits cleanly.
 
 ## Issue 177: Vulkan chain VK-048 Windows PASS-contract availability detail assertion hardening
 

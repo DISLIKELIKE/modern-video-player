@@ -6,6 +6,31 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-03-28 Update: Forced FailSession deferred release and headless logging override
+- Closed the remaining runtime issue behind format-regression step-2 timeout:
+  - `FailureRecoveryPolicy::FailSession` no longer performs stop-completion and session-release inline on worker threads
+  - `serviceDeferredStop()` now owns the final release and `SessionState::Failed` closure
+- Hardened forced FailSession canary timing:
+  - immediate injected failure no longer falsely reports `entered_playback_loop=false`
+- Added local/headless validation override:
+  - `MVP_DISABLE_QUILL_LOGGING=1`
+  - forces stdout/stderr logging path without changing default desktop behavior
+- Round docs:
+  - analysis: `PLAYERCORE_DAY111_FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE.md`
+  - design: `FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_DESIGN_2026-03-28.md`
+  - plan: `FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_PLAN_2026-03-28.md`
+  - report: `FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_LOCAL_CHECK.md`
+- Local validation:
+  - Debug build: PASS
+  - forced FailSession check: PASS
+    - `forced-failsession-check.result=PASS`
+    - `forced-failsession-check.runtime_failure_stop_requests=1`
+    - `forced-failsession-check.runtime_failure_fail_sessions=1`
+  - aggregate `run_all_checks.ps1`: PASS
+    - `Probe exit code: 0`
+    - `Forced FailSession exit code: 0`
+    - `Regression exit code: 0`
+
 ### 2026-03-28 Update: Vulkan chain VK-048 Windows PASS-contract availability detail assertion hardening
 - Hardened Windows Vulkan PASS-contract canary assertion coverage:
   - updated script:

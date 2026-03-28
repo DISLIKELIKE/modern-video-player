@@ -3,8 +3,71 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史正文。
-- 最近收口条目位于文件顶部（`Issue 177` 到 `Issue 122`）。
+- 最近收口条目位于文件顶部（`Issue 178` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 178: Forced FailSession deferred release and headless logging override
+
+**Date**: 2026-03-28
+
+### Problem Description
+- Format-regression workflow timeout containment was already landed, but the workflow still failed at step 2:
+  - `--forced-failsession-check`
+- GitHub Actions log stalled after:
+  - `PlayerCore applied stop-completion side effects ...`
+- Local headless validation reproduced the same recovery boundary and also hit Quill console-handle exit failures.
+
+### Root Cause Analysis
+- `FailureRecoveryPolicy::FailSession` executed full stop-completion and session-release inline on worker threads.
+- That recovery path crossed unsafe ownership boundaries around scheduler stop, renderer shutdown, decoder release, and demuxer close.
+- The forced FailSession canary also assumed facade playback-state callbacks would settle before immediate injected failure, which was not guaranteed.
+
+### Solution
+- Added deferred fail-session state to `PlayerCore`.
+- Refactored `handleRuntimeFailure(FailSession)` to:
+  - arm deferred fail-session metadata
+  - request stop
+  - publish stopped playback state
+- Moved final stop-completion follow-up into `serviceDeferredStop()`:
+  - session release
+  - `Stopped / Idle / Failed` closure
+  - final error emission
+- Hardened `runForcedFailSessionCheck()` so immediate injected failure still counts as entering the playback path.
+- Added `MVP_DISABLE_QUILL_LOGGING=1` env override for local/headless validation without changing default logging behavior.
+
+### Validation
+- Build:
+  - `cmake --build build --config Debug --target modern-video-player` -> PASS
+- Forced FailSession:
+  - `$env:MVP_DISABLE_QUILL_LOGGING='1'; $env:SDL_AUDIODRIVER='dummy'; .\build\Debug\modern-video-player.exe --forced-failsession-check .\juren-30s.mp4 2200` -> PASS
+  - key lines:
+    - `forced-failsession-check.entered_playback_loop=true`
+    - `forced-failsession-check.fail_session_observed=true`
+    - `forced-failsession-check.stopped_after_failure=true`
+    - `forced-failsession-check.result=PASS`
+- Aggregate checks:
+  - `$env:MVP_DISABLE_QUILL_LOGGING='1'; $env:SDL_AUDIODRIVER='dummy'; powershell -ExecutionPolicy Bypass -File .\tools\run_all_checks.ps1 -ExecutablePath 'build/Debug/modern-video-player.exe' -ProbeFile 'juren-30s.mp4' -SamplesFile 'tools/format_regression/format_samples_ci.csv' -RegressionOutputFile 'build/FORMAT_REGRESSION_CI_LOCAL_TEST.md' -ProbeTimeoutSec 120 -ForcedFailSessionTimeoutSec 240 -RegressionTimeoutSec 900` -> PASS
+  - key lines:
+    - `Probe exit code: 0`
+    - `Forced FailSession exit code: 0`
+    - `Regression exit code: 0`
+
+### Modified Files
+- `include/core/player_core.h`
+- `src/core/player_core.cpp`
+- `src/main.cpp`
+- `src/logger.cpp`
+- `docs/analysis/PLAYERCORE_DAY111_FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE.md`
+- `docs/design/FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_DESIGN_2026-03-28.md`
+- `docs/plans/FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_PLAN_2026-03-28.md`
+- `docs/reports/FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_LOCAL_CHECK.md`
+- `docs/analysis/README.md`
+- `docs/design/README.md`
+- `docs/plans/README.md`
+- `docs/reports/README.md`
+- `docs/records/VERSION.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/DEVELOP_LOG.md`
 
 ## Issue 177: Vulkan chain VK-048 Windows PASS-contract availability detail assertion hardening
 
