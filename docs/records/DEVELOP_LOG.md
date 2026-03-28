@@ -3,8 +3,49 @@
 ## 索引说明（2026-03-26 编码清理批次）
 
 - 本轮仅清理 `records/readme` 索引范围，不批量改写历史日志正文。
-- 最新开发日志条目位于文件顶部（`Issue 181` 到 `Issue 122`）。
+- 最新开发日志条目位于文件顶部（`Issue 182` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
+
+## Issue 182: Vulkan chain VK-052 Windows auto strict dual-probe canary
+
+**Date**: 2026-03-28
+**Status**: Resolved
+
+### Description
+- Added deterministic dual-probe strict canary for Windows Vulkan auto policy.
+- Integrated canary into `run_windows_ci_gate.ps1` with Step Summary reporting.
+
+### Log
+```text
+Code changes:
+1) tools/run_windows_vulkan_gate_auto_strict_dual_probe_canary.ps1
+   - new scenario:
+     auto + sdk=1 + native_probe=1 + swiftshader_probe=1
+   - key assertions:
+     gate_mode=strict
+     gate_strict_mode_effective=true
+     gate_strict_mode_auto_runtime_probe_source=native+swiftshader
+     gate_result=PASS
+     result=PASS
+
+2) tools/run_windows_ci_gate.ps1
+   - add dual-probe canary execution
+   - add Step Summary table:
+     Windows Vulkan Gate Auto Strict Dual-Probe Canary
+
+Dual-probe canary:
+powershell -ExecutionPolicy Bypass -File .\tools\run_windows_vulkan_gate_auto_strict_dual_probe_canary.ps1
+Result: PASS
+Key lines:
+- windows-vulkan-auto-strict-dual-probe-canary.gate_mode=strict
+- windows-vulkan-auto-strict-dual-probe-canary.gate_strict_mode_auto_runtime_probe_source=native+swiftshader
+- windows-vulkan-auto-strict-dual-probe-canary.result=PASS
+```
+
+### Notes
+1. Auto-policy runtime-probe source classification now has dedicated canary coverage for all states.
+2. This round is branch-coverage hardening; production gate policy remains unchanged.
+3. End-to-end strict PASS runtime evidence still depends on GitHub Windows runner execution.
 
 ## Issue 181: Vulkan chain VK-051 Windows auto optional no-probe canary
 
