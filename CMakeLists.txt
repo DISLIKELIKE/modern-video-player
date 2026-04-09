@@ -446,11 +446,26 @@ endif()
 if(MVP_ENABLE_VULKAN_RENDERER)
     list(APPEND MVP_PLAYER_SOURCES src/render/vulkan_video_renderer.cpp)
 endif()
+
+file(GLOB_RECURSE MVP_PLAYER_HEADERS CONFIGURE_DEPENDS
+    "${CMAKE_SOURCE_DIR}/include/*.h"
+    "${CMAKE_SOURCE_DIR}/include/*.hpp"
+)
+list(SORT MVP_PLAYER_HEADERS)
+
+source_group(TREE "${CMAKE_SOURCE_DIR}" PREFIX "" FILES
+    ${MVP_PLAYER_SOURCES}
+    ${MVP_PLAYER_HEADERS}
+)
+
 if(WIN32 AND MVP_WIN32_RESOURCE)
     list(APPEND MVP_PLAYER_SOURCES ${MVP_WIN32_RESOURCE})
 endif()
 
-add_executable(${PROJECT_NAME} ${MVP_PLAYER_SOURCES})
+add_executable(${PROJECT_NAME}
+    ${MVP_PLAYER_SOURCES}
+    ${MVP_PLAYER_HEADERS}
+)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /utf-8 /external:anglebrackets /external:W0)
@@ -467,8 +482,13 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     MVP_HAVE_VIDEOTOOLBOX_DECODER=${MVP_HAVE_VIDEOTOOLBOX_DECODER}
 )
 
-add_library(sample_logger_plugin SHARED
+set(MVP_SAMPLE_PLUGIN_SOURCES
     src/plugin/sample_logger_plugin.cpp
+)
+source_group("src\\plugin" FILES ${MVP_SAMPLE_PLUGIN_SOURCES})
+
+add_library(sample_logger_plugin SHARED
+    ${MVP_SAMPLE_PLUGIN_SOURCES}
 )
 target_compile_features(sample_logger_plugin PRIVATE cxx_std_17)
 if(MSVC)
