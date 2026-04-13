@@ -396,7 +396,7 @@ set(MVP_PLAYER_SOURCES
     src/core/frame.cpp
     src/core/clock.cpp
     src/core/frame_pool.cpp
-    src/core/decoder_thread.cpp
+    src/core/worker_thread.cpp
     src/core/scheduler.cpp
     src/core/playback_strategy.cpp
     src/core/player_core.cpp
@@ -639,7 +639,6 @@ message(STATUS "SDL2 found: ${SDL2_FOUND}")
 message(STATUS "FFmpeg found: ${FFMPEG_FOUND}")
 
 include(CPack)
-
 
 
 

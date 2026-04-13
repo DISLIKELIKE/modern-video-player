@@ -38,12 +38,10 @@ extern "C" {
 
 #include "core/clock.h"
 #include "core/playback_strategy.h"
-
 #include "core/frame.h"
-
 #include "core/frame_queue.h"
-
 #include "core/scheduler.h"
+#include "core/worker_thread.h"
 
 #include "decoder/decoder_capability.h"
 
@@ -950,13 +948,9 @@ private:
 
 
 
-    std::thread demux_thread_;
+    WorkerThread demux_worker_;
 
-    std::thread audio_consumer_thread_;
-
-    std::atomic<bool> demux_running_{false};
-
-    std::atomic<bool> audio_consumer_running_{false};
+    WorkerThread audio_consumer_worker_;
 
 
 

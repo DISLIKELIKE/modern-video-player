@@ -6,6 +6,26 @@
 - 最新版本更新记录位于文件顶部，按时间倒序排列。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+### 2026-04-10 Update: PlayerCore worker thread consolidation
+- Added `core::WorkerThread` as the mainline worker lifecycle primitive for long-running `PlayerCore` loop workers.
+- Replaced duplicated `demux` / `audio consumer` ownership pairs:
+  - removed separate `std::thread + std::atomic<bool>` storage from `PlayerCore`
+  - switched worker stop/reap/join flow to the shared helper
+- Removed unused legacy thread helper:
+  - `include/core/decoder_thread.h`
+  - `src/core/decoder_thread.cpp`
+- Synced round docs:
+  - analysis: `PLAYERCORE_DAY117_WORKER_THREAD_CONSOLIDATION.md`
+  - plan: `PLAYERCORE_WORKER_THREAD_CONSOLIDATION_PLAN_2026-04-10.md`
+  - report: `PLAYERCORE_WORKER_THREAD_CONSOLIDATION_LOCAL_CHECK.md`
+- Local validation:
+  - Release build: PASS
+  - `--performance-log-check .\juren-30s.mp4 1200`: PASS
+    - `open_ok=true`
+    - `entered_playback_loop=true`
+    - `audio_output_initialized=true`
+    - `result=PASS`
+
 ### 2026-03-28 Update: Vulkan chain VK-053 Windows auto optional sdk-missing canary
 - Added deterministic canary coverage for sdk-missing auto downgrade branch:
   - new script:

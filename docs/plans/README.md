@@ -7,6 +7,7 @@ This directory tracks execution plans, tasklists, and phased TODO documents.
 | Document | Purpose |
 | --- | --- |
 | [CROSS_PLATFORM_MASTER_TASKLIST.md](./CROSS_PLATFORM_MASTER_TASKLIST.md) | Main cross-platform execution board (default entry). |
+| [PLAYERCORE_WORKER_THREAD_CONSOLIDATION_PLAN_2026-04-10.md](./PLAYERCORE_WORKER_THREAD_CONSOLIDATION_PLAN_2026-04-10.md) | PlayerCore demux/audio worker-thread consolidation planner. |
 | [FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_PLAN_2026-03-28.md](./FORCED_FAILSESSION_DEFERRED_RELEASE_AND_HEADLESS_LOGGING_OVERRIDE_PLAN_2026-03-28.md) | PlayerCore forced FailSession deferred-release and headless logging override plan. |
 | [CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_PLAN_2026-03-28.md](./CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_OPTIONAL_SDK_MISSING_CANARY_PLAN_2026-03-28.md) | Windows Vulkan auto optional sdk-missing canary planner (`VK-053`). |
 | [CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_DUAL_PROBE_CANARY_PLAN_2026-03-28.md](./CROSS_PLATFORM_VULKAN_WINDOWS_AUTO_STRICT_DUAL_PROBE_CANARY_PLAN_2026-03-28.md) | Windows Vulkan auto strict dual-probe canary planner (`VK-052`). |

@@ -2425,13 +2425,13 @@ void PlayerCore::close() {
 
     const bool stop_would_early_return = snapshot.run_state == RunState::Stopped &&
 
-                                         !demux_running_.load() &&
+                                         !demux_worker_.isRunning() &&
 
-                                         !audio_consumer_running_.load() &&
+                                         !audio_consumer_worker_.isRunning() &&
 
-                                         !demux_thread_.joinable() &&
+                                         !demux_worker_.isJoinable() &&
 
-                                         !audio_consumer_thread_.joinable();
+                                         !audio_consumer_worker_.isJoinable();
 
 
 
@@ -2590,13 +2590,13 @@ void PlayerCore::stop() {
 
     if (snapshot.run_state == RunState::Stopped &&
 
-        !demux_running_.load() &&
+        !demux_worker_.isRunning() &&
 
-        !audio_consumer_running_.load() &&
+        !audio_consumer_worker_.isRunning() &&
 
-        !demux_thread_.joinable() &&
+        !demux_worker_.isJoinable() &&
 
-        !audio_consumer_thread_.joinable()) {
+        !audio_consumer_worker_.isJoinable()) {
 
         return;
 
@@ -2658,7 +2658,7 @@ void PlayerCore::seek(double timestamp) {
 
     const bool was_playing = snapshot.run_state == RunState::Running;
 
-    const bool demux_was_running = demux_running_.load();
+    const bool demux_was_running = demux_worker_.isRunning();
 
     const TimelineSerial pending_seek_serial = allocateNextTimelineSerial("seek requested");
 
@@ -6418,7 +6418,7 @@ void PlayerCore::startDemuxThread() {
 
     reapCompletedWorkers();
 
-    if (demux_running_.exchange(true)) {
+    if (demux_worker_.isRunning()) {
 
         return;
 
@@ -6427,8 +6427,6 @@ void PlayerCore::startDemuxThread() {
     const TimelineSerial demux_serial = currentTimelineSerial();
 
     if (demux_serial == kInvalidTimelineSerial) {
-
-        demux_running_.store(false);
 
         LOG_WARNING("Demux thread start ignored: no active timeline serial");
 
@@ -6450,7 +6448,7 @@ void PlayerCore::startDemuxThread() {
 
     }
 
-    demux_thread_ = std::thread([this, demux_serial] {
+    demux_worker_.start([this, demux_serial] {
 
         auto ensureQueuedPacketOwnsData = [&](PacketPtr& packet, const char* stream_tag) -> bool {
 
@@ -6490,7 +6488,7 @@ void PlayerCore::startDemuxThread() {
 
         // Demux only reads and dispatches packets; EOF is propagated downstream explicitly.
 
-        while (demux_running_.load() && demuxer_ && !demuxer_->isEof()) {
+        while (!demux_worker_.stopRequested() && demuxer_ && !demuxer_->isEof()) {
 
             if (!video_packet_queue_ && !audio_packet_queue_) {
 
@@ -6550,7 +6548,7 @@ void PlayerCore::startDemuxThread() {
 
                     // On successful push the queue owns the packet lifetime.
 
-                    while (demux_running_.load() && !queued) {
+                    while (!demux_worker_.stopRequested() && !queued) {
 
                         queued = video_packet_queue_->push(DemuxPacket{std::move(packet), demux_serial}, 20);
 
@@ -6580,7 +6578,7 @@ void PlayerCore::startDemuxThread() {
 
                 if (ensureQueuedPacketOwnsData(packet, "audio")) {
 
-                    while (demux_running_.load() && !queued) {
+                    while (!demux_worker_.stopRequested() && !queued) {
 
                         queued = audio_packet_queue_->push(DemuxPacket{std::move(packet), demux_serial}, 20);
 
@@ -6628,8 +6626,6 @@ void PlayerCore::startDemuxThread() {
 
         }
 
-        demux_running_.store(false);
-
     });
 
 }
@@ -6640,7 +6636,7 @@ void PlayerCore::startDemuxThread() {
 
 void PlayerCore::stopDemuxThread() {
 
-    demux_running_.store(false);
+    demux_worker_.requestStop();
 
     if (video_packet_queue_) {
 
@@ -6654,11 +6650,7 @@ void PlayerCore::stopDemuxThread() {
 
     }
 
-    if (demux_thread_.joinable() && demux_thread_.get_id() != std::this_thread::get_id()) {
-
-        demux_thread_.join();
-
-    }
+    demux_worker_.join();
 
     if (video_packet_queue_) {
 
@@ -6682,15 +6674,15 @@ void PlayerCore::startAudioConsumer() {
 
     reapCompletedWorkers();
 
-    if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_running_.exchange(true)) {
+    if (!audio_player_ || !audio_player_->isInitialized() || audio_consumer_worker_.isRunning()) {
 
         return;
 
     }
 
-    audio_consumer_thread_ = std::thread([this] {
+    audio_consumer_worker_.start([this] {
 
-        while (audio_consumer_running_.load()) {
+        while (!audio_consumer_worker_.stopRequested()) {
 
             AudioFrame frame;
 
@@ -6782,8 +6774,6 @@ void PlayerCore::startAudioConsumer() {
 
         }
 
-        audio_consumer_running_.store(false);
-
     });
 
 }
@@ -6794,13 +6784,7 @@ void PlayerCore::startAudioConsumer() {
 
 void PlayerCore::stopAudioConsumer() {
 
-    audio_consumer_running_.store(false);
-
-    if (audio_consumer_thread_.joinable() && audio_consumer_thread_.get_id() != std::this_thread::get_id()) {
-
-        audio_consumer_thread_.join();
-
-    }
+    audio_consumer_worker_.stop();
 
 }
 
@@ -6898,9 +6882,9 @@ void PlayerCore::applyStopRequestSideEffects(const char* reason) {
 
     setEndedReason(EndedReason::None, reason);
 
-    demux_running_.store(false);
+    demux_worker_.requestStop();
 
-    audio_consumer_running_.store(false);
+    audio_consumer_worker_.requestStop();
 
     scheduler_.requestStopAsync();
 
@@ -7359,21 +7343,9 @@ void PlayerCore::serviceDeferredStop() {
 
 void PlayerCore::reapCompletedWorkers() {
 
-    if (!demux_running_.load() && demux_thread_.joinable() && demux_thread_.get_id() != std::this_thread::get_id()) {
+    demux_worker_.joinIfFinished();
 
-        demux_thread_.join();
-
-    }
-
-    if (!audio_consumer_running_.load() &&
-
-        audio_consumer_thread_.joinable() &&
-
-        audio_consumer_thread_.get_id() != std::this_thread::get_id()) {
-
-        audio_consumer_thread_.join();
-
-    }
+    audio_consumer_worker_.joinIfFinished();
 
 }
 
@@ -8534,9 +8506,9 @@ void PlayerCore::onRenderIdle() {
 
 
 
-    demux_running_.store(false);
+    demux_worker_.requestStop();
 
-    audio_consumer_running_.store(false);
+    audio_consumer_worker_.requestStop();
 
     scheduler_.requestStopAsync();
 

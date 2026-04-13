@@ -6,6 +6,51 @@
 - 最新开发日志条目位于文件顶部（`Issue 183` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+## Issue 184: PlayerCore worker thread consolidation
+
+**Date**: 2026-04-10
+**Status**: Resolved
+
+### Description
+- Added a shared `core::WorkerThread` helper for current mainline loop workers.
+- Migrated `PlayerCore` `demux` and `audio consumer` worker ownership to the new helper.
+- Removed the unused legacy `DecoderThread` implementation from the build.
+
+### Log
+```text
+Planner:
+- docs/plans/PLAYERCORE_WORKER_THREAD_CONSOLIDATION_PLAN_2026-04-10.md
+
+Code changes:
+1) include/core/worker_thread.h
+2) src/core/worker_thread.cpp
+3) include/core/player_core.h
+4) src/core/player_core.cpp
+5) CMakeLists.txt
+6) remove include/core/decoder_thread.h
+7) remove src/core/decoder_thread.cpp
+
+Build:
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe' --build build --config Release --target modern-video-player
+Result: PASS
+
+Runtime:
+.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200
+Result: PASS
+Key lines:
+- performance-log-check.open_ok=true
+- performance-log-check.entered_playback_loop=true
+- performance-log-check.audio_output_initialized=true
+- performance-log-check.scheduler_video_restart_attempts=0
+- performance-log-check.scheduler_audio_restart_attempts=0
+- performance-log-check.result=PASS
+```
+
+### Notes
+1. This round only consolidates `PlayerCore` worker ownership; it does not refactor `Scheduler` or renderer-side threads.
+2. Queue semantics (`ThreadSafeQueue` / `FrameQueue`) were intentionally left unchanged to keep the refactor behavior-neutral.
+3. Build still reports unrelated historical source-encoding warnings from `src/video_player.cpp`.
+
 ## Issue 183: Vulkan chain VK-053 Windows auto optional sdk-missing canary
 
 **Date**: 2026-03-28

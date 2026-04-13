@@ -6,6 +6,53 @@
 - 最近收口条目位于文件顶部（`Issue 183` 到 `Issue 122`）。
 - 历史段落若出现旧编码乱码，将在后续专题批次逐步处理。
 
+## Issue 184: PlayerCore worker thread consolidation
+
+**Date**: 2026-04-10
+
+### Problem Description
+- `PlayerCore` kept duplicated `std::thread` and running-flag pairs for `demux` and `audio consumer`.
+- Start/stop/reap/join logic was repeated across both workers.
+- Repository still contained an unused `DecoderThread` implementation that no longer matched the current playback mainline.
+
+### Root Cause Analysis
+- Thread ownership concerns were not extracted into a current mainline helper.
+- Existing `DecoderThread` was a prototype-era abstraction and was not actually used by `PlayerCore`.
+- As `PlayerCore` evolved, worker-loop policy stayed explicit but lifecycle plumbing remained duplicated.
+
+### Solution
+- Added `core::WorkerThread` for shared worker lifecycle ownership.
+- Migrated `PlayerCore` `demux` and `audio consumer` workers to the new helper.
+- Removed the unused legacy `DecoderThread` files.
+- Updated planner/index/docs so this refactor round is traceable end-to-end.
+
+### Validation
+- Build:
+  - `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe --build build --config Release --target modern-video-player` -> PASS
+- Runtime:
+  - `.\build\Release\modern-video-player.exe --performance-log-check .\juren-30s.mp4 1200` -> PASS
+  - key lines:
+    - `performance-log-check.open_ok=true`
+    - `performance-log-check.entered_playback_loop=true`
+    - `performance-log-check.audio_output_initialized=true`
+    - `performance-log-check.result=PASS`
+
+### Modified Files
+- `CMakeLists.txt`
+- `include/core/player_core.h`
+- `include/core/worker_thread.h`
+- `src/core/player_core.cpp`
+- `src/core/worker_thread.cpp`
+- `docs/analysis/PLAYERCORE_DAY117_WORKER_THREAD_CONSOLIDATION.md`
+- `docs/plans/PLAYERCORE_WORKER_THREAD_CONSOLIDATION_PLAN_2026-04-10.md`
+- `docs/plans/README.md`
+- `docs/reports/PLAYERCORE_WORKER_THREAD_CONSOLIDATION_LOCAL_CHECK.md`
+- `docs/reports/README.md`
+- `docs/analysis/README.md`
+- `docs/records/CHANGELOG.md`
+- `docs/records/VERSION.md`
+- `docs/records/DEVELOP_LOG.md`
+
 ## Issue 183: Vulkan chain VK-053 Windows auto optional sdk-missing canary
 
 **Date**: 2026-03-28
