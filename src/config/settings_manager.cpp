@@ -1,4 +1,4 @@
-#include "config/settings_manager.h"
+﻿#include "config/settings_manager.h"
 
 #include <cctype>
 #include <fstream>

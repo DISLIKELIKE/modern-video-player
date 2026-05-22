@@ -1,4 +1,4 @@
-#include "input/hotkey_manager.h"
+﻿#include "input/hotkey_manager.h"
 
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>

@@ -1,4 +1,4 @@
-#include "filters/filter_registry.h"
+﻿#include "filters/filter_registry.h"
 
 namespace vp::filters {
 

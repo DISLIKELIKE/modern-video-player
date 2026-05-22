@@ -1,4 +1,4 @@
-#include "core/frame.h"
+﻿#include "core/frame.h"
 
 extern "C" {
 #include <libavutil/frame.h>

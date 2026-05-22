@@ -1,4 +1,4 @@
-#include "streaming/dash_manifest_parser.h"
+﻿#include "streaming/dash_manifest_parser.h"
 
 #include <algorithm>
 #include <regex>

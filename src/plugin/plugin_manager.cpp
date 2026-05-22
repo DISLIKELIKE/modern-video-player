@@ -1,4 +1,4 @@
-#include "plugin/plugin_manager.h"
+﻿#include "plugin/plugin_manager.h"
 
 #include <algorithm>
 #include <exception>

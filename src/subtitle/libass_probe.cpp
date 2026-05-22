@@ -1,4 +1,4 @@
-#include "subtitle/libass_probe.h"
+﻿#include "subtitle/libass_probe.h"
 
 #include <algorithm>
 #include <cctype>

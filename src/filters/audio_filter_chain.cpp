@@ -1,4 +1,4 @@
-#include "filters/audio_filter_chain.h"
+﻿#include "filters/audio_filter_chain.h"
 
 #include <algorithm>
 

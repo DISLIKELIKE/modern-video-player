@@ -1,4 +1,4 @@
-#if __has_include("logger.h")
+﻿#if __has_include("logger.h")
 #include "logger.h"
 #else
 #include "../include/logger.h"

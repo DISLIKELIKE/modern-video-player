@@ -1,4 +1,4 @@
-#include "core/clock.h"
+﻿#include "core/clock.h"
 
 #include <algorithm>
 

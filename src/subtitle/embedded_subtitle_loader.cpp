@@ -1,4 +1,4 @@
-#include "subtitle/embedded_subtitle_loader.h"
+﻿#include "subtitle/embedded_subtitle_loader.h"
 
 #include <algorithm>
 #include <cctype>

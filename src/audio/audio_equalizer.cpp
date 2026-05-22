@@ -1,4 +1,4 @@
-#include "audio/audio_equalizer.h"
+﻿#include "audio/audio_equalizer.h"
 
 #include <algorithm>
 #include <cmath>

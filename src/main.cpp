@@ -1,4 +1,4 @@
-#include "video_player.h"
+﻿#include "video_player.h"
 
 #include "config/settings_manager.h"
 

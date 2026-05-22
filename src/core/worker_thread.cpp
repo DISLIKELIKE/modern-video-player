@@ -1,4 +1,4 @@
-#include "core/worker_thread.h"
+﻿#include "core/worker_thread.h"
 
 namespace vp::core {
 

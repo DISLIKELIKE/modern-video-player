@@ -1,4 +1,4 @@
-#include "platform/platform_capabilities.h"
+﻿#include "platform/platform_capabilities.h"
 
 #include <algorithm>
 

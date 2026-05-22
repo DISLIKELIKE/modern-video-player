@@ -1,4 +1,4 @@
-#include "filters/builtin_filters.h"
+﻿#include "filters/builtin_filters.h"
 
 #include <algorithm>
 #include <cmath>

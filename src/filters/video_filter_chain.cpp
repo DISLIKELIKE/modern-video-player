@@ -1,4 +1,4 @@
-#include "filters/video_filter_chain.h"
+﻿#include "filters/video_filter_chain.h"
 
 #include <algorithm>
 

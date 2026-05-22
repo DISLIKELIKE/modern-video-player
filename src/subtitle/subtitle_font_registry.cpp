@@ -1,4 +1,4 @@
-#include "subtitle/subtitle_font_registry.h"
+﻿#include "subtitle/subtitle_font_registry.h"
 
 #include <algorithm>
 #include <cctype>

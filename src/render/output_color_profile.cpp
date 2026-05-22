@@ -1,4 +1,4 @@
-#include "render/output_color_profile.h"
+﻿#include "render/output_color_profile.h"
 
 #include <algorithm>
 #include <array>

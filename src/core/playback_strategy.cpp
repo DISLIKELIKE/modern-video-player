@@ -1,4 +1,4 @@
-#include "core/playback_strategy.h"
+﻿#include "core/playback_strategy.h"
 
 #include <algorithm>
 #include <cctype>
