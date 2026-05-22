@@ -1,29 +1,32 @@
-﻿# 文档索引
+# Documentation
 
-`docs/` 目录按用途分类。建议先进入对应子目录的 `README.md`，再查看具体文档。
+This directory keeps the current project documentation plus historical validation records. For current engineering decisions, prefer the documents listed below over older per-day notes.
 
-## 目录入口
+## Read First
 
-| 目录 | 用途 | 入口 |
-| --- | --- | --- |
-| guides | 环境搭建、功能使用与实现说明 | [guides/README.md](./guides/README.md) |
-| design | 架构与模块设计文档 | [design/README.md](./design/README.md) |
-| analysis | 问题分析与阶段收口记录 | [analysis/README.md](./analysis/README.md) |
-| reference | 参考资料与外部能力说明 | [reference/README.md](./reference/README.md) |
-| plans | 路线图与阶段计划 | [plans/README.md](./plans/README.md) |
-| workflows | 开发流程、回归与规范 | [workflows/README.md](./workflows/README.md) |
-| records | 版本、变更与开发日志 | [records/README.md](./records/README.md) |
-| reports | 本地验收与专项验证报告 | [reports/README.md](./reports/README.md) |
+1. [design/ARCHITECTURE.md](design/ARCHITECTURE.md) - current source-level architecture.
+2. [guides/PLAYER_FEATURES_USAGE_VALIDATION.md](guides/PLAYER_FEATURES_USAGE_VALIDATION.md) - user-facing features, CLI checks and validation commands.
+3. [plans/CROSS_PLATFORM_MASTER_TASKLIST.md](plans/CROSS_PLATFORM_MASTER_TASKLIST.md) - current status and remaining TODOs.
+4. [reports/README.md](reports/README.md) - validation report index.
+5. [records/VERSION.md](records/VERSION.md) - version and release notes.
 
-## 快速导航
+## Directory Purpose
 
-- 跨平台主任务清单：[`plans/CROSS_PLATFORM_MASTER_TASKLIST.md`](./plans/CROSS_PLATFORM_MASTER_TASKLIST.md)
-- 工作流规范：[`workflows/WORKFLOW.md`](./workflows/WORKFLOW.md)
-- 版本记录：[`records/VERSION.md`](./records/VERSION.md)
-- 变更记录：[`records/CHANGELOG.md`](./records/CHANGELOG.md)
-- 开发日志：[`records/DEVELOP_LOG.md`](./records/DEVELOP_LOG.md)
+| Directory | Purpose |
+| --- | --- |
+| `guides/` | Setup, usage and feature validation. |
+| `design/` | Current architecture and focused design decisions. |
+| `plans/` | Current roadmap and remaining work. |
+| `reports/` | Local check reports and release readiness evidence. |
+| `records/` | Version, changelog and development log. |
+| `workflows/` | Regression, formatting and source-reading workflows. |
+| `reference/` | External notes and structured reference data. |
+| `analysis/` | Current gap analysis plus historical investigation notes. |
+| `interpretation/` | Project reading notes. |
 
-## 本轮说明
+## Current Documentation Policy
 
-- 2026-03-26：执行“文档编码专项清理（records/readme 索引范围，低风险批次）”。
-- 本轮仅清理索引入口文本编码，不重写历史正文内容。
+- Keep current docs short and source-grounded.
+- Do not preserve obsolete early architecture text in the main entry documents.
+- Historical day-by-day reports can stay as records, but they are not the source of truth for current status.
+- When code changes behavior, update the nearest current guide/architecture/plan document first; append detailed evidence to `reports/` only when validation was actually run.

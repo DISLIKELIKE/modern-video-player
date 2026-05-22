@@ -1,167 +1,59 @@
-# MPC-HC 功能差距评估（截至 2026-03-08）
+# Current Player Gap Analysis
 
-## 1. 评估口径
+This document compares the current source tree with a mature desktop player feature set. It replaces the early 2026-03 prototype-era gap analysis.
 
-本评估用于回答“当前项目距离 MPC-HC 级别播放器还有多少功能未实现”。
+## Current Baseline
 
-评估口径：
+The project now has a usable local playback core with multiple renderer backends, subtitle support, hardware-decode strategy, diagnostics and regression tooling. It is still not an MPC-HC-level product because several features exist as engineering infrastructure rather than complete user-facing workflows.
 
-- 只按“端到端可用”计为已实现（主流程可触达、可运行、可被用户使用）。
-- 只有类/接口/占位代码但未接入主播放链路，计为“骨架/未接入”。
-- 参考基线为桌面播放器常见能力集合（MPC-HC 同类能力），不是学习型最小播放器目标。
-- 本次评估同步参考本地验收报告，而不是只看类/接口是否存在。
+## Module Status
 
-代码核对范围（关键入口）：
+| Module | Current status |
+| --- | --- |
+| Core playback | Strong baseline. `PlayerCore`, `Scheduler`, queues, clock, seek, A-B repeat, screenshot, frame step and diagnostics exist. |
+| Renderer | D3D11, OpenGL, Software SDL and Vulkan implementations exist. Maturity depends on platform/runtime; diagnostics and fallback are important parts of the design. |
+| Decode | Software fallback exists; D3D11VA/VAAPI/VideoToolbox strategy slots exist. Hardware availability is platform and driver dependent. |
+| Audio | SDL audio output is the stable path. Mixer/equalizer helpers exist, but there is no full user-facing audio device/equalizer UI. |
+| Subtitle | External SRT/ASS/SSA, embedded text, PGS/DVD bitmap, font attachment and libass probe paths exist. |
+| Playlist | Multi-file and local `m3u8` flow exists, with previous/next and last-index persistence. |
+| Settings/hotkeys | Settings persistence and hotkey manager exist. |
+| Filters | Filter API, registry, chains and built-ins exist; product UI is missing. |
+| Plugins | API, plugin manager and sample plugin exist; product UI/distribution/isolation are missing. |
+| Streaming | HTTP downloader, HLS/DASH parsers and ABR selection exist; complete online playback integration is missing. |
+| Skin/theme | `SkinEngine` exists as a skeleton only. |
+| Cross-platform | Windows and Linux are active. macOS is deferred. |
 
-- `src/main.cpp`
-- `src/video_player.cpp`
-- `src/core/player_core.cpp`
-- `src/display.cpp`
-- `src/render/*`
-- `src/subtitle/*`
-- `src/playlist/*`
-- `src/config/*`
-- `src/input/*`
-- `src/streaming/*`
-- `src/plugin/*`
-- `docs/reports/*`
+## Main Gaps
 
-## 2. 当前已具备的可用能力
+| Priority | Gap | Why it matters |
+| --- | --- | --- |
+| P0 | Fresh rc2 validation | Source is configured for `1.0.0-rc2`; current binaries/reports may be stale. |
+| P0 | Full current Windows/Linux gate evidence | Historical reports are useful, but current source should have fresh PASS artifacts before release. |
+| P1 | macOS delivery path | Strategy placeholders exist, but compile/playback/package are not complete. |
+| P1 | Online streaming playback | Infrastructure exists but is not integrated as a full playback path. |
+| P1 | Plugin and filter user workflows | Engineering hooks exist, but users cannot manage/tune them cleanly. |
+| P2 | Skin/theme productization | Current implementation is a minimal theme container. |
+| P2 | Larger hardware/driver compatibility corpus | Renderer/hardware fallback quality depends on real adapter samples. |
 
-当前项目已经不再只是“基础本地播放链路”，而是具备一套可连续使用的 Windows 本地播放器主路径：
+## Not Gaps Anymore
 
-- 本地媒体打开、解封装、音视频解码与播放。
-- 播放控制：播放、暂停、停止、拖拽进度 seek、快捷键 seek、数字热键 `10%~90%` 跳转、音量、静音、倍速。
-- 基础交互：全屏、控制条覆盖层、字幕显示、章节导航、A-B Repeat、截图、暂停态帧步进。
-- 字幕：外挂 `SRT` 加载、渲染叠加、播放/暂停/seek 同步、字幕开关、字幕延迟调节。
-- 播放列表：多文件参数 / `m3u8`、上一项/下一项、EOF 自动下一项、恢复上次索引。
-- 设置：音量、倍速、音轨/字幕时延、硬解偏好、恢复播放列表索引、快捷键持久化。
-- 快捷键：默认键位、增强键位（章节 / A-B / 截图 / 帧步进 / 时延调节 / 数字跳转）、持久化、冲突检测、恢复默认。
-- 渲染/解码：`SDL` 主路径可用，`D3D11VA` 解码初始化与失败回退、`D3D11` 渲染最小可用与自动回退 `SDL` 已落地。
-- 格式能力：已有探测入口、回归脚本与本地报告，可输出 `PASS/PARTIAL/FAIL`。
-- 可观测性：新增 `--performance-log-check`，可输出 renderer / decoder backend、CPU 平均占用、队列长度与调度掉帧指标。
-- 高分辨率门禁：`1080p60` 连续播放、`4K` 播放与降级、`>80Mbps` 高码率样本本地验收均已通过。
-- 稳定性门禁：新增 `--long-playback-check`，可验证固定播放窗口内的真实时间推进、播放态保持与 `late_drop / demux drop`。
-- 发布门禁：`6.1 ~ 6.6` 对应的本地验收证据与 `v0.2.0-rc1 / v0.2.0` 里程碑标签已齐备。
-- 插件系统：已具备 `DLL` 动态加载、`API` 版本校验、`load/unload` 生命周期与基础视频滤镜扩展点。
-- 流媒体基础：已具备真实 HTTP 下载器、HLS/DASH 清单解析、自适应码率选择与本地分片下载验收。
+The following items were early gaps but are now represented in source:
 
-## 3. 差距总览（按 14 个模块）
+- OpenGL is no longer just a stub.
+- Renderer choice is no longer directly hardcoded in `PlayerCore`.
+- Embedded subtitle track list/selection and policies exist.
+- PGS/DVD bitmap subtitle model/checks exist.
+- Linux MVP and VAAPI fallback checks exist.
+- Vulkan renderer/diagnostics/gate scripts exist.
+- Startup strategy diagnostics and runtime counters exist.
 
+## Evidence Entry Points
 
-| 模块        | 当前状态                                                                    | 结论     |
-| --------- | ----------------------------------------------------------------------- | ------ |
-| 01 核心播放引擎 | 本地播放主链、调度、基础控制、章节/A-B/截图已可用，但离 MPC-HC 的成熟度仍有差距                          | 部分实现   |
-| 02 滤镜系统   | 管道、注册表、内置亮度/对比度/饱和度/声道平衡已实现，但缺少用户侧控制入口                                  | 部分实现   |
-| 03 视频渲染器  | `SDL` 可用，`D3D11` 最小链路与回退已可用，`OpenGL` 仍是占位                               | 部分实现   |
-| 04 音频渲染器  | `SDL` 音频可用，音轨时延调节已接入主链，但均衡器/混音/设备选择仍缺失                                  | 部分实现   |
-| 05 字幕系统   | 外挂 `SRT` 已接入播放主链并可同步显示，但内嵌字幕/字幕轨切换/ASS 仍缺失                              | 部分实现   |
-| 06 播放列表   | 多文件与 `m3u8`、上一项/下一项、EOF 自动下一项、恢复索引已可用，但无 UI/历史/循环模式                     | 部分实现   |
-| 07 解码器管理  | `DecoderFactory` 已接入真实初始化，`D3D11VA` 与软件回退可运行，结构化性能日志已可导出，但可配置性仍偏基础      | 部分实现   |
-| 08 文件格式支持 | 主力容器/编码矩阵、`1080p60`、`4K`、`>80Mbps` 高码率样本与性能日志入口已补齐，但更高阶格式策略仍可继续完善       | 部分实现   |
-| 09 流媒体支持  | 已具备真实 HTTP 下载器、HLS/DASH 清单解析、自适应码率与本地分片验收，真正播放链路接入仍待补齐                  | 部分实现   |
-| 10 皮肤系统   | 只有主题变量容器，没有资源化主题与组件级样式接入                                                | 骨架/未接入 |
-| 11 快捷键系统  | 默认键位、增强键位、持久化、冲突检测、恢复默认均已接入，但仍缺少更细粒度的用户侧配置体验                            | 部分实现   |
-| 12 设置系统   | 启动加载、退出保存、运行期应用已接入主流程，但覆盖项仍偏少                                           | 部分实现   |
-| 13 插件系统   | 已具备 `DLL` 动态加载、`API` 版本校验、异常保护、`load/unload` 生命周期与基础滤镜扩展点，但仍缺配置/UI/分发策略 | 部分实现   |
-| 14 视频增强   | 算法与管道存在，但没有形成可见、可调、可持久化的产品能力                                            | 部分实现   |
-
-
-模块统计：
-
-- 达到 MPC-HC 等级：`0 / 14`
-- 部分实现：`13 / 14`
-- 骨架或未接入：`1 / 14`
-
-粗略结论：
-
-- 如果只看“Windows 本地主播放链”，当前对齐度约 `60%` 左右。
-- 如果按“MPC-HC 全量桌面播放器能力”评估，当前整体对齐度约 `45%~55%`。
-- 尚未完成或未收敛的能力主要集中在：轨道切换、完整渲染后端、流媒体、插件、皮肤。
-
-## 4. 关键未实现功能清单
-
-### P0（直接影响主力可用性/发布门禁）
-
-- 多音轨切换、字幕轨切换；音轨延迟/字幕延迟调节已接入。
-- 外挂字幕从 `SRT` 扩展到更常见桌面播放器能力（至少明确 `ASS/SSA` 策略）。
-- 渲染后端策略收敛：
-  - 要么完成 `OpenGL` 真正可用；
-  - 要么明确当前阶段只支持 `SDL + D3D11`。
-- 倍速策略继续完善：当前已有倍速控制闭环，但缺少更成熟的音频时伸/音高策略。
-
-### P1（补齐体验，接近 MPC-HC 常用操作）
-
-- 缩放/画幅比切换、旋转、循环模式、播放历史。
-- 渲染器/解码器/音频输出设备可选项。
-- 滤镜参数用户入口与持久化。
-
-### P2（平台化与扩展能力）
-
-- 插件生态：在已落地的 `DLL` 插件框架之上补充更强隔离、配置入口与分发策略。
-- 流媒体：在已落地的真实 HTTP 分片与缓冲基础上，已补齐 DASH 片段明细与自适应码率，真正播放链路接入仍待补齐。
-- 皮肤系统：主题资源化与组件级样式覆盖。
-
-## 5. 代码层证据摘要
-
-以下文件可以直接说明当前“已打通 vs 仍是骨架”的边界：
-
-- 播放主链：`src/core/player_core.cpp`
-- 主程序接入播放列表/设置/快捷键：`src/main.cpp`
-- 外挂字幕接入：`src/video_player.cpp`
-- 字幕时间线：`src/subtitle/srt_parser.cpp`、`src/subtitle/subtitle_timeline.cpp`
-- `SDL` 渲染主路径：`src/render/sdl_video_renderer.cpp`
-- `D3D11` 最小可用与回退：`src/render/d3d11_video_renderer.cpp`
-- `OpenGL` 仍为占位：`src/render/opengl_video_renderer.cpp`
-- 解码后端选择与硬解回退：`src/decoder/decoder_factory.cpp`
-- 设置系统：`src/config/settings_manager.cpp`
-- 快捷键系统：`src/input/hotkey_manager.cpp`
-- 播放列表：`src/playlist/playlist_manager.cpp`
-- 流媒体下载、清单解析与 ABR 选择：`src/streaming/http_stream_downloader.cpp`、`src/streaming/hls_manifest_parser.cpp`、`src/streaming/dash_manifest_parser.cpp`、`src/streaming/adaptive_bitrate_selector.cpp`
-- 插件 API 与动态加载：`include/plugin/plugin_api.h`、`src/plugin/plugin_manager.cpp`
-- 示例插件：`src/plugin/sample_logger_plugin.cpp`
-- 皮肤系统仍为骨架：`src/ui/skin_engine.cpp`
-
-## 6. 验收与报告证据
-
-以下本地报告表明多个原先被评估为“未接入”的模块现在已经具备端到端能力：
-
-- 字幕同步：`docs/reports/SUBTITLE_SYNC_LOCAL_CHECK.md`
-- 播放列表流程：`docs/reports/PLAYLIST_FLOW_LOCAL_CHECK.md`
-- 设置持久化：`docs/reports/SETTINGS_PERSISTENCE_LOCAL_CHECK.md`
-- 渲染失败回退：`docs/reports/RENDER_FALLBACK_LOCAL_CHECK.md`
-- Windows 软解/硬解会话：`docs/reports/WINDOWS_BACKEND_LOCAL_CHECK.md`
-- 章节导航：`docs/reports/CHAPTER_NAV_LOCAL_CHECK.md`
-- A-B Repeat：`docs/reports/AB_REPEAT_LOCAL_CHECK.md`
-- 截图：`docs/reports/SCREENSHOT_LOCAL_CHECK.md`
-- 帧步进：`docs/reports/FRAME_STEP_LOCAL_CHECK.md`
-- 音轨/字幕时延调节：`docs/reports/DELAY_ADJUST_LOCAL_CHECK.md`
-- 数字热键跳转：`docs/reports/NUMERIC_SEEK_LOCAL_CHECK.md`
-- 性能日志：`docs/reports/PERFORMANCE_LOG_LOCAL_CHECK.md`
-- 1080p60 稳定播放：`docs/reports/1080P60_STABILITY_LOCAL_CHECK.md`
-- 4K 播放与降级：`docs/reports/4K_PLAYBACK_LOCAL_CHECK.md`
-- 高码率样本：`docs/reports/HIGH_BITRATE_LOCAL_CHECK.md`
-- 长时播放稳定性：`docs/reports/LONG_PLAYBACK_LOCAL_CHECK.md`
-- 插件系统：`docs/reports/PLUGIN_SYSTEM_LOCAL_CHECK.md`
-- 流媒体 HTTP 分片与缓冲：`docs/reports/STREAMING_BUFFER_LOCAL_CHECK.md`
-- HLS/DASH 自适应码率：`docs/reports/ADAPTIVE_BITRATE_LOCAL_CHECK.md`
-- 格式矩阵：`docs/reports/FORMAT_REGRESSION_LOCAL_CHECK.md`
-
-## 7. 建议里程碑（面向落地）
-
-里程碑 1（先“收敛当前主线”）：
-
-- `M4` 交互增强项（章节 / A-B / 截图 / 帧步进 / 时延调节 / 数字热键跳转）已收口，后续转入发布门禁与轨道能力补齐。
-
-里程碑 2（补“发布门禁”）：
-
-- `M2 2.2`（`1080p60` / `4K` / `>80Mbps` / 性能日志）与 `6.1 ~ 6.6` 发布门禁已收口，`v0.2.0-rc1 / v0.2.0` 里程碑标签已建立；后续转入轨道切换与字幕/渲染策略补齐。
-
-里程碑 3（定平台策略）：
-
-- 明确 `OpenGL` 是继续落地，还是阶段性降级为非目标后端。
-
-里程碑 4（扩展能力）：
-
-- 流媒体播放链路与皮肤系统进入真正产品化阶段，插件系统则继续补充配置/UI/分发能力。
-
+- Architecture: `docs/design/ARCHITECTURE.md`
+- Current task board: `docs/plans/CROSS_PLATFORM_MASTER_TASKLIST.md`
+- Feature guide: `docs/guides/PLAYER_FEATURES_USAGE_VALIDATION.md`
+- CLI implementation: `src/main.cpp`
+- Core implementation: `include/core/player_core.h`, `src/core/player_core.cpp`
+- Renderer interface: `include/render/video_renderer.h`
+- Strategy files: `include/core/playback_strategy.h`, `src/core/playback_strategy.cpp`
+- Platform capability files: `include/platform/platform_capabilities.h`, `src/platform/platform_capabilities.cpp`
