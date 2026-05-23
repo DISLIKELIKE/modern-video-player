@@ -447,6 +447,7 @@ Display::Display()
     , renderer_reset_requested_(false)
     , texture_reset_requested_(false)
     , fullscreen_toggle_requested_(false)
+    , last_fullscreen_toggle_request_ms_(0)
     , event_thread_guard_reported_(false)
     , initialized_(false)
     , texture_width_(0)
@@ -519,6 +520,7 @@ bool Display::init(int width, int height, const std::string& title) {
         return false;
     }
 
+    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
     SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
     
     initialized_ = true;
@@ -526,6 +528,7 @@ bool Display::init(int width, int height, const std::string& title) {
     toggle_pause_requested_.store(false);
     minimized_.store(false);
     fullscreen_toggle_requested_.store(false);
+    last_fullscreen_toggle_request_ms_.store(0);
     event_thread_id_ = std::this_thread::get_id();
     event_thread_guard_reported_.store(false);
     renderer_reset_requested_.store(false);
@@ -622,6 +625,7 @@ void Display::close() {
     texture_format_ = SDL_PIXELFORMAT_UNKNOWN;
     minimized_.store(false);
     fullscreen_toggle_requested_.store(false);
+    last_fullscreen_toggle_request_ms_.store(0);
     event_thread_id_ = std::thread::id{};
     event_thread_guard_reported_.store(false);
     renderer_reset_requested_.store(false);
@@ -1177,6 +1181,11 @@ void Display::handleEvents() {
                     break;
                 }
 
+                if (key_code == SDLK_f || event.key.keysym.scancode == SDL_SCANCODE_F) {
+                    toggleFullscreen();
+                    break;
+                }
+
                 std::optional<input::PlayerAction> action = hotkey_manager_.actionForKey(key_code);
                 if (!action && key_code == SDLK_EQUALS) {
                     action = input::PlayerAction::VolumeUp;
@@ -1370,6 +1379,20 @@ void Display::handleEvents() {
                 }
                 break;
             }
+            case SDL_SYSWMEVENT:
+#if defined(_WIN32)
+                if (event.syswm.msg && event.syswm.msg->subsystem == SDL_SYSWM_WINDOWS) {
+                    constexpr unsigned int kWmKeyDown = 0x0100;
+                    constexpr unsigned int kWmSysKeyDown = 0x0104;
+                    const unsigned int message = event.syswm.msg->msg.win.msg;
+                    const uintptr_t key = static_cast<uintptr_t>(event.syswm.msg->msg.win.wParam);
+                    if ((message == kWmKeyDown || message == kWmSysKeyDown) &&
+                        (key == static_cast<uintptr_t>('F'))) {
+                        toggleFullscreen();
+                    }
+                }
+#endif
+                break;
             case SDL_DROPFILE:
             {
                 std::lock_guard<std::mutex> lock(request_mutex_);
@@ -1892,10 +1915,16 @@ void Display::updateVolumeFromMouse(int mouse_x) {
 
 /// 记录全屏切换请求；实际 SDL 切换由渲染线程执行。
 void Display::toggleFullscreen() {
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+    const int64_t previous_ms = last_fullscreen_toggle_request_ms_.load();
+    if (now_ms - previous_ms < 250) {
+        return;
+    }
+    last_fullscreen_toggle_request_ms_.store(now_ms);
     fullscreen_toggle_requested_.store(true);
     render_queue_cv_.notify_one();
 }
 
 } // namespace vp
-
-

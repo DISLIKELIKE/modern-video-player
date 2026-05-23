@@ -31,6 +31,8 @@ bool VideoPlayer::open(const std::string& filename) {
     if (!core_player_) {
         core_player_ = std::make_unique<core::PlayerCore>();
     }
+    core_player_->setPreferHardwareDecode(prefer_hardware_decode_);
+    core_player_->setPreferredRenderer(preferred_renderer_);
     core_player_->clearExternalSubtitles();
     const bool ok = core_player_->open(filename);
     if (!ok) {
@@ -39,7 +41,6 @@ bool VideoPlayer::open(const std::string& filename) {
     }
     core_player_->setVolume(volume_);
     core_player_->setPlaybackSpeed(playback_speed_);
-    core_player_->setPreferHardwareDecode(prefer_hardware_decode_);
     core_player_->setSubtitleEnabled(subtitle_enabled_);
     if (!subtitle_items_.empty()) {
         core_player_->setExternalSubtitles(subtitle_items_, subtitle_path_);
@@ -255,6 +256,17 @@ bool VideoPlayer::preferHardwareDecode() const {
     return prefer_hardware_decode_;
 }
 
+void VideoPlayer::setPreferredRenderer(render::VideoRendererType renderer_type) {
+    preferred_renderer_ = renderer_type;
+    if (core_player_) {
+        core_player_->setPreferredRenderer(preferred_renderer_);
+    }
+}
+
+render::VideoRendererType VideoPlayer::preferredRenderer() const {
+    return preferred_renderer_;
+}
+
 std::string VideoPlayer::videoRendererBackendName() const {
     return core_player_ ? core_player_->videoRendererBackendName() : "None";
 }
@@ -370,6 +382,4 @@ bool VideoPlayer::toggleSubtitleEnabled() {
 }
 
 }  // namespace vp
-
-
 

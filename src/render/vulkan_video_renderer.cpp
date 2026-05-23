@@ -17,6 +17,7 @@
 
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 #if __has_include(<SDL2/SDL_vulkan.h>)
 #include <SDL2/SDL_vulkan.h>
 #elif __has_include(<SDL_vulkan.h>)
@@ -26,6 +27,7 @@
 #endif
 #elif __has_include(<SDL.h>)
 #include <SDL.h>
+#include <SDL_syswm.h>
 #if __has_include(<SDL_vulkan.h>)
 #include <SDL_vulkan.h>
 #else
@@ -478,6 +480,8 @@ struct VulkanVideoRenderer::VulkanState {
     SDL_Window* window{nullptr};
     uint32_t window_id{0};
     bool should_quit{false};
+    bool fullscreen{false};
+    int64_t last_fullscreen_toggle_ms{0};
     bool initialized{false};
 
     VkInstance instance{VK_NULL_HANDLE};
@@ -1163,6 +1167,7 @@ bool VulkanVideoRenderer::init(const VideoRendererConfig& config) {
         return false;
     }
     state_->window_id = SDL_GetWindowID(state_->window);
+    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
 
     const VulkanPresentModeParseResult present_mode_parse =
         parseVulkanPresentModeRequest(readEnvVar("MVP_VULKAN_PRESENT_MODE"));
@@ -1312,6 +1317,8 @@ bool VulkanVideoRenderer::init(const VideoRendererConfig& config) {
     }
     state_->swapchain_recreate_requested = false;
     state_->should_quit = false;
+    state_->fullscreen = false;
+    state_->last_fullscreen_toggle_ms = 0;
     state_->initialized = true;
 
     LOG_INFO("Vulkan renderer initialized"
@@ -1372,6 +1379,8 @@ void VulkanVideoRenderer::close() {
         state_->open_file_path.clear();
     }
     state_->should_quit = false;
+    state_->fullscreen = false;
+    state_->last_fullscreen_toggle_ms = 0;
     state_->initialized = false;
     state_->swapchain_recreate_requested = false;
     state_->frame_submission_in_flight = false;
@@ -1607,6 +1616,25 @@ void VulkanVideoRenderer::handleEvents() {
         return;
     }
 
+    auto toggle_fullscreen = [&]() {
+        const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                   std::chrono::steady_clock::now().time_since_epoch())
+                                   .count();
+        if (now_ms - state_->last_fullscreen_toggle_ms < 250) {
+            return;
+        }
+        state_->last_fullscreen_toggle_ms = now_ms;
+        const bool next_fullscreen = !state_->fullscreen;
+        if (SDL_SetWindowFullscreen(
+                state_->window,
+                next_fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) == 0) {
+            state_->fullscreen = next_fullscreen;
+            state_->swapchain_recreate_requested = true;
+        } else {
+            LOG_WARNING("Vulkan fullscreen toggle failed: " << SDL_GetError());
+        }
+    };
+
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0) {
         switch (event.type) {
@@ -1637,7 +1665,21 @@ void VulkanVideoRenderer::handleEvents() {
         case SDL_KEYDOWN:
             if (event.key.repeat == 0) {
                 if (event.key.keysym.sym == SDLK_ESCAPE) {
-                    state_->should_quit = true;
+                    if (state_->fullscreen && state_->window) {
+                        if (SDL_SetWindowFullscreen(state_->window, 0) == 0) {
+                            state_->fullscreen = false;
+                            state_->swapchain_recreate_requested = true;
+                        } else {
+                            LOG_WARNING("Vulkan fullscreen exit failed: " << SDL_GetError());
+                        }
+                    } else {
+                        state_->should_quit = true;
+                    }
+                } else if (event.key.keysym.sym == SDLK_RETURN ||
+                           event.key.keysym.sym == SDLK_KP_ENTER ||
+                           event.key.keysym.sym == SDLK_f ||
+                           event.key.keysym.scancode == SDL_SCANCODE_F) {
+                    toggle_fullscreen();
                 } else {
                     const auto action = state_->hotkey_manager.actionForKey(event.key.keysym.sym);
                     if (action && *action == input::PlayerAction::Quit) {
@@ -1645,6 +1687,20 @@ void VulkanVideoRenderer::handleEvents() {
                     }
                 }
             }
+            break;
+        case SDL_SYSWMEVENT:
+#if defined(_WIN32)
+            if (event.syswm.msg && event.syswm.msg->subsystem == SDL_SYSWM_WINDOWS) {
+                constexpr unsigned int kWmKeyDown = 0x0100;
+                constexpr unsigned int kWmSysKeyDown = 0x0104;
+                const unsigned int message = event.syswm.msg->msg.win.msg;
+                const uintptr_t key = static_cast<uintptr_t>(event.syswm.msg->msg.win.wParam);
+                if ((message == kWmKeyDown || message == kWmSysKeyDown) &&
+                    key == static_cast<uintptr_t>('F')) {
+                    toggle_fullscreen();
+                }
+            }
+#endif
             break;
         default:
             break;

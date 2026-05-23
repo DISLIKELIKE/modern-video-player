@@ -2110,6 +2110,8 @@ struct AppSettings {
 
     bool prefer_hardware_decode{true};
 
+    render::VideoRendererType preferred_renderer{render::VideoRendererType::Auto};
+
     bool resume_last_playlist{true};
 
     int last_playlist_index{0};
@@ -2705,6 +2707,47 @@ const char* rendererTypeName(render::VideoRendererType type) {
 
 }
 
+const char* rendererTypeConfigName(render::VideoRendererType type) {
+    switch (type) {
+    case render::VideoRendererType::SoftwareSDL:
+        return "software";
+    case render::VideoRendererType::D3D11:
+        return "d3d11";
+    case render::VideoRendererType::OpenGL:
+        return "opengl";
+    case render::VideoRendererType::Vulkan:
+        return "vulkan";
+    case render::VideoRendererType::Auto:
+    default:
+        return "auto";
+    }
+}
+
+bool parseRendererTypeConfigValue(const std::string& raw_text, render::VideoRendererType& out_type) {
+    const std::string normalized = toLower(raw_text);
+    if (normalized == "auto" || normalized == "default") {
+        out_type = render::VideoRendererType::Auto;
+        return true;
+    }
+    if (normalized == "software" || normalized == "softwaresdl" || normalized == "sdl") {
+        out_type = render::VideoRendererType::SoftwareSDL;
+        return true;
+    }
+    if (normalized == "d3d11" || normalized == "direct3d11") {
+        out_type = render::VideoRendererType::D3D11;
+        return true;
+    }
+    if (normalized == "opengl" || normalized == "gl") {
+        out_type = render::VideoRendererType::OpenGL;
+        return true;
+    }
+    if (normalized == "vulkan" || normalized == "vk") {
+        out_type = render::VideoRendererType::Vulkan;
+        return true;
+    }
+    return false;
+}
+
 std::string rendererCandidateChainToString(const std::vector<render::VideoRendererType>& candidates) {
     if (candidates.empty()) {
         return "none";
@@ -3152,6 +3195,8 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
 
         settings_manager.setBool("decoder.prefer_hardware_decode", true);
 
+        settings_manager.setString("renderer.preferred_backend", rendererTypeConfigName(settings.preferred_renderer));
+
         settings_manager.setBool("player.resume_last_playlist", true);
 
         settings_manager.setInt("player.last_playlist_index", 0);
@@ -3207,6 +3252,15 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
     if (const auto prefer_hardware = settings_manager.getBool("decoder.prefer_hardware_decode")) {
 
         settings.prefer_hardware_decode = *prefer_hardware;
+
+    }
+
+    if (const auto preferred_renderer = settings_manager.getString("renderer.preferred_backend")) {
+
+        render::VideoRendererType parsed_renderer = render::VideoRendererType::Auto;
+        if (parseRendererTypeConfigValue(*preferred_renderer, parsed_renderer)) {
+            settings.preferred_renderer = parsed_renderer;
+        }
 
     }
 
@@ -3267,6 +3321,8 @@ AppSettings loadAppSettings(config::SettingsManager& settings_manager, const std
 
     settings_manager.setBool("decoder.prefer_hardware_decode", settings.prefer_hardware_decode);
 
+    settings_manager.setString("renderer.preferred_backend", rendererTypeConfigName(settings.preferred_renderer));
+
     settings_manager.setBool("player.resume_last_playlist", settings.resume_last_playlist);
 
     settings_manager.setInt("player.last_playlist_index", settings.last_playlist_index);
@@ -3309,6 +3365,8 @@ void saveAppSettings(config::SettingsManager& settings_manager,
 
                      bool prefer_hardware_decode,
 
+                     render::VideoRendererType preferred_renderer,
+
                      bool resume_last_playlist,
 
                      int last_playlist_index,
@@ -3336,6 +3394,8 @@ void saveAppSettings(config::SettingsManager& settings_manager,
     settings_manager.setInt("player.subtitle_delay_ms", static_cast<int>(std::lround(clamped_subtitle_delay * 1000.0)));
 
     settings_manager.setBool("decoder.prefer_hardware_decode", prefer_hardware_decode);
+
+    settings_manager.setString("renderer.preferred_backend", rendererTypeConfigName(preferred_renderer));
 
     settings_manager.setBool("player.resume_last_playlist", resume_last_playlist);
 
@@ -3415,6 +3475,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     constexpr bool expected_prefer_hardware_decode = false;
 
+    constexpr render::VideoRendererType expected_renderer = render::VideoRendererType::OpenGL;
+
     constexpr bool expected_resume_last_playlist = false;
 
     constexpr int expected_playlist_index = 3;
@@ -3454,6 +3516,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
                     expected_prefer_hardware_decode,
 
+                    expected_renderer,
+
                     expected_resume_last_playlist,
 
                     expected_playlist_index,
@@ -3480,6 +3544,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
     const bool decode_pref_ok = restored.prefer_hardware_decode == expected_prefer_hardware_decode;
 
+    const bool renderer_pref_ok = restored.preferred_renderer == expected_renderer;
+
     const bool resume_ok = restored.resume_last_playlist == expected_resume_last_playlist;
 
     const bool index_ok = restored.last_playlist_index == expected_playlist_index;
@@ -3499,7 +3565,7 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
 
 
     const bool result = volume_ok && speed_ok && audio_delay_ok && subtitle_delay_ok &&
-                        decode_pref_ok && resume_ok && index_ok &&
+                        decode_pref_ok && renderer_pref_ok && resume_ok && index_ok &&
                         subtitle_languages_ok && subtitle_forced_policy_ok && subtitle_sdh_policy_ok &&
                         hotkey_ok;
 
@@ -3516,6 +3582,8 @@ bool runSettingsPersistenceCheck(const std::string& settings_path_override) {
     std::cout << "settings-persistence-check.subtitle_delay_ok=" << (subtitle_delay_ok ? "true" : "false") << std::endl;
 
     std::cout << "settings-persistence-check.decode_pref_ok=" << (decode_pref_ok ? "true" : "false") << std::endl;
+
+    std::cout << "settings-persistence-check.renderer_pref_ok=" << (renderer_pref_ok ? "true" : "false") << std::endl;
 
     std::cout << "settings-persistence-check.resume_ok=" << (resume_ok ? "true" : "false") << std::endl;
 
@@ -7841,7 +7909,7 @@ bool runUiInteractionCheck(const std::string& media_file, int sample_ms = 1800) 
                (player.isPlaying() || player.isPaused())) {
             entered_playback_loop = true;
             const int phase = static_cast<int>(pump_iterations % 20);
-            if ((phase == 2 || phase == 12) && push_key_tap(SDLK_RETURN)) {
+            if ((phase == 2 || phase == 12) && push_key_tap(SDLK_f)) {
                 ++injected_fullscreen_toggles;
             }
             if ((phase == 4 || phase == 14) && push_window_event(SDL_WINDOWEVENT_SIZE_CHANGED, 1280, 720)) {
@@ -12458,6 +12526,8 @@ void printUsage(const char* program_name) {
 
     std::cout << "  Custom hotkeys: config/player_settings.ini (hotkey.*)" << std::endl;
 
+    std::cout << "  Renderer preference: config/player_settings.ini (renderer.preferred_backend)" << std::endl;
+
     std::cout << "  Restore defaults: set hotkey.restore_defaults=true then restart" << std::endl;
 
     std::cout << std::endl;
@@ -13871,6 +13941,8 @@ int main(int argc, char* argv[]) {
 
     g_player->setPreferHardwareDecode(app_settings.prefer_hardware_decode);
 
+    g_player->setPreferredRenderer(app_settings.preferred_renderer);
+
     g_player->setHotkeyManager(app_settings.hotkey_manager);
     subtitle::EmbeddedSubtitleSelectionPolicy subtitle_selection_policy =
         app_settings.embedded_subtitle_selection_policy;
@@ -14207,6 +14279,8 @@ int main(int argc, char* argv[]) {
                     final_subtitle_delay,
 
                     app_settings.prefer_hardware_decode,
+
+                    app_settings.preferred_renderer,
 
                     app_settings.resume_last_playlist,
 

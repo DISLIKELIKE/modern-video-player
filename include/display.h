@@ -7,8 +7,10 @@ extern "C" {
 
 #if __has_include(<SDL2/SDL.h>)
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_syswm.h>
 #elif __has_include(<SDL.h>)
 #include <SDL.h>
+#include <SDL_syswm.h>
 #else
 #error "SDL2 headers not found"
 #endif
@@ -144,6 +146,7 @@ private:
     std::atomic<bool> renderer_reset_requested_{false};
     std::atomic<bool> texture_reset_requested_{false};
     std::atomic<bool> fullscreen_toggle_requested_{false};
+    std::atomic<int64_t> last_fullscreen_toggle_request_ms_{0};
     std::thread::id event_thread_id_{};
     std::atomic<bool> event_thread_guard_reported_{false};
     bool initialized_{false};

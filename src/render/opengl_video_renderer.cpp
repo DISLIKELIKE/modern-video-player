@@ -3470,7 +3470,7 @@ private:
     bool refNativeFrame(const AVFrame& frame, PendingVideoFrame& out);
     void renderLoop();
     void pumpEvents();
-    void handleKeyDown(int key_code, unsigned short modifiers, bool is_repeat);
+    void handleKeyDown(int key_code, SDL_Scancode scancode, unsigned short modifiers, bool is_repeat);
     void handleMouseButtonDown(int mouse_x, int mouse_y, uint8_t button);
     void handleMouseMotion(int mouse_x, int mouse_y);
     void handleMouseButtonUp(uint8_t button);
@@ -3577,6 +3577,7 @@ private:
     std::atomic<bool> event_thread_guard_reported_{false};
     std::atomic<bool> should_quit_{false};
     std::atomic<bool> fullscreen_{false};
+    std::atomic<int64_t> last_fullscreen_toggle_request_ms_{0};
     std::atomic<bool> minimized_{false};
     std::atomic<bool> render_running_{false};
     std::atomic<bool> render_initialized_{false};
@@ -3787,12 +3788,14 @@ bool OpenGLVideoRenderer::Impl::init(const VideoRendererConfig& config) {
         SDL_Quit();
         return false;
     }
+    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
     SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
 
     should_quit_.store(false);
     event_thread_id_ = std::this_thread::get_id();
     event_thread_guard_reported_.store(false);
     fullscreen_.store(false);
+    last_fullscreen_toggle_request_ms_.store(0);
     minimized_.store(false);
     render_running_.store(true);
     render_initialized_.store(false);
@@ -3900,6 +3903,7 @@ void OpenGLVideoRenderer::Impl::close() {
     event_thread_id_ = std::thread::id{};
     event_thread_guard_reported_.store(false);
     fullscreen_.store(false);
+    last_fullscreen_toggle_request_ms_.store(0);
     minimized_.store(false);
     render_initialized_.store(false);
     render_init_success_.store(false);
@@ -6777,8 +6781,23 @@ void OpenGLVideoRenderer::Impl::pumpEvents() {
         case SDL_QUIT: should_quit_.store(true); break;
         case SDL_KEYDOWN:
             handleKeyDown(static_cast<int>(event.key.keysym.sym),
+                          event.key.keysym.scancode,
                           static_cast<unsigned short>(event.key.keysym.mod),
                           event.key.repeat != 0);
+            break;
+        case SDL_SYSWMEVENT:
+#if defined(_WIN32)
+            if (event.syswm.msg && event.syswm.msg->subsystem == SDL_SYSWM_WINDOWS) {
+                constexpr unsigned int kWmKeyDown = 0x0100;
+                constexpr unsigned int kWmSysKeyDown = 0x0104;
+                const unsigned int message = event.syswm.msg->msg.win.msg;
+                const uintptr_t key = static_cast<uintptr_t>(event.syswm.msg->msg.win.wParam);
+                if ((message == kWmKeyDown || message == kWmSysKeyDown) &&
+                    key == static_cast<uintptr_t>('F')) {
+                    requestFullscreenToggle();
+                }
+            }
+#endif
             break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED || event.window.event == SDL_WINDOWEVENT_HIDDEN) minimized_.store(true);
@@ -6874,7 +6893,10 @@ void OpenGLVideoRenderer::Impl::handleEvents() {
     }
 }
 
-void OpenGLVideoRenderer::Impl::handleKeyDown(int key_code, unsigned short modifiers, bool is_repeat) {
+void OpenGLVideoRenderer::Impl::handleKeyDown(int key_code,
+                                              SDL_Scancode scancode,
+                                              unsigned short modifiers,
+                                              bool is_repeat) {
     if (is_repeat) return;
     if (key_code == SDLK_ESCAPE) {
         if (fullscreen_.load()) requestFullscreenToggle();
@@ -6882,6 +6904,10 @@ void OpenGLVideoRenderer::Impl::handleKeyDown(int key_code, unsigned short modif
         return;
     }
     if (key_code == SDLK_RETURN || key_code == SDLK_KP_ENTER) {
+        requestFullscreenToggle();
+        return;
+    }
+    if (key_code == SDLK_f || scancode == SDL_SCANCODE_F) {
         requestFullscreenToggle();
         return;
     }
@@ -7059,7 +7085,18 @@ void OpenGLVideoRenderer::Impl::applyAction(input::PlayerAction action, unsigned
     }
 }
 
-void OpenGLVideoRenderer::Impl::requestFullscreenToggle() { fullscreen_toggle_requested_.store(true); frame_cv_.notify_one(); }
+void OpenGLVideoRenderer::Impl::requestFullscreenToggle() {
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+    const int64_t previous_ms = last_fullscreen_toggle_request_ms_.load();
+    if (now_ms - previous_ms < 250) {
+        return;
+    }
+    last_fullscreen_toggle_request_ms_.store(now_ms);
+    fullscreen_toggle_requested_.store(true);
+    frame_cv_.notify_one();
+}
 
 bool OpenGLVideoRenderer::Impl::consumeFlagRequest(bool& flag) {
     std::lock_guard<std::mutex> lock(request_mutex_);
@@ -7706,4 +7743,3 @@ void* OpenGLVideoRenderer::nativeDeviceHandle() const { return impl_->nativeDevi
 const char* OpenGLVideoRenderer::rendererBackendName() const { return "OpenGL"; }
 
 }  // namespace vp::render
-

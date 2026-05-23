@@ -2122,6 +2122,7 @@ bool PlayerCore::open(const std::string& filename) {
 
     PlaybackPreferences preferences{};
     preferences.prefer_hardware_decode = preferHardwareDecode();
+    preferences.preferred_renderer = preferredRenderer();
 
     PlaybackOpenRequest open_request{};
     open_request.media_info = info;
@@ -4423,6 +4424,20 @@ void PlayerCore::setPreferHardwareDecode(bool prefer_hardware_decode) {
 bool PlayerCore::preferHardwareDecode() const {
 
     return prefer_hardware_decode_.load();
+
+}
+
+void PlayerCore::setPreferredRenderer(render::VideoRendererType renderer_type) {
+
+    preferred_renderer_.store(renderer_type);
+
+}
+
+
+
+render::VideoRendererType PlayerCore::preferredRenderer() const {
+
+    return preferred_renderer_.load();
 
 }
 
@@ -8726,4 +8741,3 @@ void PlayerCore::emitError(ErrorCode code, const std::string& message) {
 
 
 }  // namespace vp::core
-

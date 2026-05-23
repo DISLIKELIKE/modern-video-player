@@ -533,6 +533,10 @@ public:
 
     bool preferHardwareDecode() const;
 
+    void setPreferredRenderer(render::VideoRendererType renderer_type);
+
+    render::VideoRendererType preferredRenderer() const;
+
     decoder::DecoderBackend videoDecoderBackend() const;
 
     std::string videoRendererBackendName() const;
@@ -1021,6 +1025,8 @@ private:
     std::atomic<double> subtitle_delay_seconds_{0.0};
 
     std::atomic<bool> prefer_hardware_decode_{true};
+
+    std::atomic<render::VideoRendererType> preferred_renderer_{render::VideoRendererType::Auto};
 
     std::atomic<bool> opened_{false};
 

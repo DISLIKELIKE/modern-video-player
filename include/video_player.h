@@ -60,6 +60,8 @@ public:
     double getSubtitleDelay() const;
     void setPreferHardwareDecode(bool prefer_hardware_decode);
     bool preferHardwareDecode() const;
+    void setPreferredRenderer(render::VideoRendererType renderer_type);
+    render::VideoRendererType preferredRenderer() const;
     std::string videoRendererBackendName() const;
     const char* videoDecoderBackendName() const;
     void setHotkeyManager(const input::HotkeyManager& hotkey_manager);
@@ -117,6 +119,7 @@ private:
     float volume_{1.0f};
     double playback_speed_{1.0};
     bool prefer_hardware_decode_{true};
+    render::VideoRendererType preferred_renderer_{render::VideoRendererType::Auto};
     std::string subtitle_path_;
     std::vector<subtitle::SubtitleItem> subtitle_items_;
     bool subtitle_enabled_{true};

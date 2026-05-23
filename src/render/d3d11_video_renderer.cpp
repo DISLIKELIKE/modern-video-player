@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cwchar>
@@ -2461,6 +2462,7 @@ private:
     std::atomic<int> height_{0};
     std::atomic<bool> should_quit_{false};
     std::atomic<bool> fullscreen_{false};
+    std::atomic<int64_t> last_fullscreen_toggle_ms_{0};
     std::atomic<bool> minimized_{false};
     std::thread::id event_thread_id_{};
     std::atomic<bool> event_thread_guard_reported_{false};
@@ -2603,6 +2605,7 @@ bool D3D11VideoRenderer::Impl::init(const VideoRendererConfig& config) {
         SDL_Quit();
         return false;
     }
+    SDL_EventState(SDL_SYSWMEVENT, SDL_ENABLE);
     SDL_SetWindowMinimumSize(window_, kMinWindowWidth, kMinWindowHeight);
 
     current_frame_ = av_frame_alloc();
@@ -4748,6 +4751,7 @@ void D3D11VideoRenderer::Impl::redrawIfPaused() {
 void D3D11VideoRenderer::Impl::resetRequests() {
     should_quit_.store(false);
     fullscreen_.store(false);
+    last_fullscreen_toggle_ms_.store(0);
     minimized_.store(false);
     toggle_pause_requested_ = false;
     seek_requested_ = false;
@@ -4787,6 +4791,14 @@ void D3D11VideoRenderer::Impl::toggleFullscreen() {
     if (!window_) {
         return;
     }
+    const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now().time_since_epoch())
+                               .count();
+    const int64_t previous_ms = last_fullscreen_toggle_ms_.load();
+    if (now_ms - previous_ms < 250) {
+        return;
+    }
+    last_fullscreen_toggle_ms_.store(now_ms);
     const bool next = !fullscreen_.load();
     if (SDL_SetWindowFullscreen(window_, next ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) != 0) {
         LOG_WARNING("SDL_SetWindowFullscreen failed: " << SDL_GetError());
@@ -4863,6 +4875,10 @@ void D3D11VideoRenderer::Impl::handleEvents() {
                 toggleFullscreen();
                 break;
             }
+            if (key_code == SDLK_f || event.key.keysym.scancode == SDL_SCANCODE_F) {
+                toggleFullscreen();
+                break;
+            }
             std::optional<input::PlayerAction> action = hotkey_manager_.actionForKey(key_code);
             if (!action && key_code == SDLK_EQUALS) action = input::PlayerAction::VolumeUp;
             if (!action && key_code == SDLK_MINUS) action = input::PlayerAction::VolumeDown;
@@ -4899,6 +4915,20 @@ void D3D11VideoRenderer::Impl::handleEvents() {
             }
             break;
         }
+        case SDL_SYSWMEVENT:
+#if defined(_WIN32)
+            if (event.syswm.msg && event.syswm.msg->subsystem == SDL_SYSWM_WINDOWS) {
+                constexpr unsigned int kWmKeyDown = 0x0100;
+                constexpr unsigned int kWmSysKeyDown = 0x0104;
+                const unsigned int message = event.syswm.msg->msg.win.msg;
+                const uintptr_t key = static_cast<uintptr_t>(event.syswm.msg->msg.win.wParam);
+                if ((message == kWmKeyDown || message == kWmSysKeyDown) &&
+                    key == static_cast<uintptr_t>('F')) {
+                    toggleFullscreen();
+                }
+            }
+#endif
+            break;
         case SDL_WINDOWEVENT:
             if (event.window.event == SDL_WINDOWEVENT_MINIMIZED || event.window.event == SDL_WINDOWEVENT_HIDDEN) {
                 minimized_.store(true);
@@ -5111,6 +5141,3 @@ void* D3D11VideoRenderer::nativeDeviceHandle() const { return impl_->nativeDevic
 const char* D3D11VideoRenderer::rendererBackendName() const { return "D3D11"; }
 
 }  // namespace vp::render
-
-
-
